@@ -1,73 +1,47 @@
 # Sentinel
 
-Sentinel 是一個輕量的 Kubernetes 管理 console，專為管理 **Cilium TracingPolicy** 而設計。提供表單式編輯器與原始 YAML 編輯器，並支援叢集層級的 Monitoring / Protect 模式切換。
-
-![UI Style](https://img.shields.io/badge/UI-CoreUI%20%2F%20NeuVector%20Style-2d7dd2)
-![Go](https://img.shields.io/badge/Go-1.22-00ADD8)
-![React](https://img.shields.io/badge/React-19-61DAFB)
-![License](https://img.shields.io/badge/License-Apache%202.0-blue)
+Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管理 console**。透過網頁介面即可建立、編輯、刪除 TracingPolicy，並切換整體叢集的執行模式（Monitoring / Protect），不需要直接操作 `kubectl`。
 
 ---
 
-## 功能特色
+## 功能
 
-- **Dashboard**：Policy 數量、執行模式、Namespace 統計一覽
-- **TracingPolicy 管理**：列表、新增、編輯、刪除，支援搜尋與 Scope 篩選
-- **雙模式編輯器**：表單式 UI（含即時 YAML 預覽）與 Monaco YAML 編輯器
-- **執行模式切換**：Monitoring ↔ Protect，含切換確認對話框
-- **Namespace 檢視**：列出所有 Namespace 與其 Policy 數量
-- **JWT 身份驗證**：bcrypt 密碼雜湊，Session cookie 管理
-
----
-
-## 技術架構
-
-```
-┌─────────────────────────────────────────────────┐
-│  Browser                                        │
-│  React 19 + CoreUI React 5 + Bootstrap 5        │
-│  Monaco Editor (YAML)                           │
-└────────────────────┬────────────────────────────┘
-                     │ HTTP / REST API
-┌────────────────────▼────────────────────────────┐
-│  Go HTTP Server (chi router)                    │
-│  JWT Auth Middleware                            │
-│  ┌─────────────┐  ┌──────────────────────────┐ │
-│  │  Auth       │  │  Policy / Mode / NS      │ │
-│  │  Handler    │  │  Handlers                │ │
-│  └─────────────┘  └──────────┬───────────────┘ │
-└─────────────────────────────-┼─────────────────┘
-                               │ Kubernetes API
-┌──────────────────────────────▼─────────────────┐
-│  Kubernetes Cluster                             │
-│  cilium.io/TracingPolicy CRDs                  │
-│  cilium.io/TracingPolicyNamespaced CRDs        │
-└─────────────────────────────────────────────────┘
-```
+- **Dashboard**：Policy 總數、執行模式、Namespace 數量一覽，並可直接切換模式
+- **TracingPolicy 管理**：列表搜尋、新增、編輯、刪除，支援 namespace 與 cluster 兩種範疇
+- **表單編輯器**：以欄位填寫 Process / File / Network 規則，即時預覽產生的 YAML
+- **YAML 編輯器**：直接貼上或編輯原始 YAML，內建語法驗證
+- **執行模式切換**：Monitoring（觀測，不攔截）↔ Protect（主動 Sigkill 違規行為），切換前需確認
+- **Namespace 檢視**：列出叢集所有 Namespace 與其套用的 Policy 數量
 
 ---
 
-## 前置需求
+## 部署到 Kubernetes
 
-- Kubernetes 1.26+（含 Cilium 與 TracingPolicy CRD）
-- 容器 registry 存取權限（部署時）
-- `kubectl` + `kustomize`（或 `kubectl apply -k`）
+### 前置需求
+
+- Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 TracingPolicy CRD
+- `kubectl` 已設定好 kubeconfig
+- 容器 registry 存取權限（若需自行 build 映像）
 
 ---
 
-## 快速部署
+### 步驟一：設定認證憑證
 
-### 1. 設定認證憑證
-
-編輯 `deploy/base/secret.yaml`，替換預設的密碼 hash 與 JWT Secret：
+Sentinel 使用 bcrypt 雜湊密碼。先產生管理員密碼的 hash：
 
 ```bash
-# 產生 bcrypt 密碼 hash（需安裝 htpasswd 或使用 Python）
-python3 -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt(12)).decode())"
+# 使用 Python（大多數系統均可用）
+python3 -c "
+import bcrypt, getpass
+pw = getpass.getpass('Password: ').encode()
+print(bcrypt.hashpw(pw, bcrypt.gensalt(12)).decode())
+"
 ```
 
+編輯 `deploy/overlays/production/secret-patch.yaml`，填入自訂的密碼 hash 與 JWT Secret：
+
 ```yaml
-# deploy/base/secret.yaml
+# deploy/overlays/production/secret-patch.yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -75,194 +49,145 @@ metadata:
   namespace: sentinel-system
 type: Opaque
 stringData:
-  admin: <bcrypt-hash-of-your-password>
-  jwt-secret: <your-random-jwt-secret>
+  admin: "$2b$12$<your-bcrypt-hash>"      # 替換為上面產生的 hash
+  jwt-secret: "<your-random-secret>"      # 隨機字串，建議 32 字元以上
 ```
 
-> ⚠️ **安全警告**：絕對不要使用預設憑證上生產環境。
-
-### 2. 部署到叢集
-
-```bash
-kubectl apply -k deploy/base/
-```
-
-確認 Pod 正常啟動：
-
-```bash
-kubectl get pods -n sentinel-system
-# NAME                        READY   STATUS    RESTARTS   AGE
-# sentinel-xxxxxxxxx-xxxxx    1/1     Running   0          30s
-```
-
-### 3. 存取 UI
-
-```bash
-# Port-forward 到本機
-kubectl port-forward -n sentinel-system svc/sentinel 8080:8080
-
-# 或透過 Ingress（依叢集設定）
-```
-
-開啟瀏覽器前往 `http://localhost:8080`，使用 `admin` 帳號登入。
+> ⚠️ **安全警告**：絕對不要在生產環境使用預設憑證。請務必替換 `admin` hash 與 `jwt-secret`。
 
 ---
 
-## 容器映像
+### 步驟二：更新容器映像（選用）
 
-預設映像：`quay.io/cooloo9871/sentinel:latest`
+若要使用自行 build 的映像，編輯 `deploy/base/deployment.yaml`：
 
-### 自行 Build 映像
+```yaml
+containers:
+  - name: sentinel
+    image: your-registry/sentinel:your-tag  # 替換此行
+```
+
+Build 並推送映像：
 
 ```bash
-# 從專案根目錄執行
 docker build -t your-registry/sentinel:latest .
 docker push your-registry/sentinel:latest
 ```
 
-更新 `deploy/base/deployment.yaml` 中的 `image` 欄位後重新部署：
+預設使用公開映像 `quay.io/cooloo9871/sentinel:latest`，可直接跳過此步驟。
+
+---
+
+### 步驟三：部署
 
 ```bash
+# 使用 production overlay（含自訂憑證）
+kubectl apply -k deploy/overlays/production/
+
+# 或使用 base（含預設憑證，僅供測試）
 kubectl apply -k deploy/base/
+```
+
+確認所有資源正常建立：
+
+```bash
+kubectl get all -n sentinel-system
+```
+
+```
+NAME                             READY   STATUS    RESTARTS   AGE
+pod/sentinel-xxxxxxxxx-xxxxx     1/1     Running   0          30s
+
+NAME               TYPE        CLUSTER-IP      PORT(S)   AGE
+service/sentinel   ClusterIP   10.96.xxx.xxx   80/TCP    30s
+
+NAME                        READY   UP-TO-DATE   AVAILABLE
+deployment.apps/sentinel    1/1     1            1
+```
+
+---
+
+### 步驟四：存取 UI
+
+**方式 A — Port-forward（快速測試）**
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟瀏覽器：http://localhost:8080
+```
+
+**方式 B — Ingress**
+
+建立 Ingress 資源指向 `sentinel` Service（port 80）：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sentinel
+  namespace: sentinel-system
+spec:
+  rules:
+    - host: sentinel.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinel
+                port:
+                  number: 80
+```
+
+登入帳號為 `admin`，密碼為步驟一設定的密碼。
+
+---
+
+### 部署的 Kubernetes 資源
+
+| 資源 | 名稱 | 說明 |
+|------|------|------|
+| Namespace | `sentinel-system` | 所有資源的命名空間 |
+| ServiceAccount | `sentinel` | Pod 使用的服務帳號 |
+| ClusterRole | `sentinel` | TracingPolicy CRUD + Namespace 讀取權限 |
+| ClusterRoleBinding | `sentinel` | 綁定 ServiceAccount 與 ClusterRole |
+| Deployment | `sentinel` | 應用程式 Pod，1 個 replica |
+| Service | `sentinel` | ClusterIP，port 80 → 8080 |
+| Secret | `sentinel-credentials` | 管理員密碼 hash 與 JWT Secret |
+
+---
+
+### RBAC 權限說明
+
+Sentinel 需要以下叢集層級權限才能正常運作：
+
+| API Group | 資源 | 操作 |
+|-----------|------|------|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | get, list, watch, create, update, patch, delete |
+| `""` (core) | `namespaces` | get, list |
+| `""` (core) | `secrets/sentinel-credentials` | get |
+
+---
+
+### 解除安裝
+
+```bash
+kubectl delete -k deploy/overlays/production/
+# 或
+kubectl delete namespace sentinel-system
 ```
 
 ---
 
 ## 本機開發
 
-### 後端（Go）
-
 ```bash
-# 確保有 kubeconfig 或 in-cluster 設定
+# 後端（需要 kubeconfig）
 go run ./cmd/server/
 
-# 預設監聽 :8080
-# API 路由：/api/...
-# 靜態檔案：/（嵌入 web/dist/）
-```
-
-### 前端（React + Vite）
-
-```bash
-cd web
-npm install
-npm run dev
-# Dev server：http://localhost:5173
-# API proxy：/api → http://localhost:8080
-```
-
-### 測試
-
-```bash
-# Go 後端測試
-go test ./...
-
-# 前端測試
-cd web && npm run test
-```
-
----
-
-## API 參考
-
-所有 API 端點需附帶有效的 JWT cookie（登入後自動設定）。
-
-| Method | Path | 說明 |
-|--------|------|------|
-| `POST` | `/api/auth/login` | 登入，回傳 JWT cookie |
-| `POST` | `/api/auth/logout` | 登出，清除 cookie |
-| `GET` | `/api/policies` | 列出所有 TracingPolicy |
-| `GET` | `/api/policies/:name` | 取得單一 Policy（`?namespace=` 可選） |
-| `POST` | `/api/policies` | 建立 Policy（form 或 yaml 來源） |
-| `PUT` | `/api/policies/:name` | 更新 Policy |
-| `DELETE` | `/api/policies/:name` | 刪除 Policy（`?namespace=` 可選） |
-| `POST` | `/api/policies/preview` | 預覽 form 轉 YAML（不寫入） |
-| `GET` | `/api/mode` | 取得目前執行模式 |
-| `PUT` | `/api/mode` | 切換執行模式（`Monitoring` / `Protect`） |
-| `GET` | `/api/namespaces` | 列出所有 Namespace |
-
-### 建立 Policy 範例
-
-```bash
-# 從表單資料建立
-curl -X POST http://localhost:8080/api/policies \
-  -H "Content-Type: application/json" \
-  -b "token=<jwt>" \
-  -d '{
-    "source": "form",
-    "form": {
-      "name": "my-policy",
-      "namespace": "default",
-      "process": [{"binaries": ["/usr/bin/nginx"]}]
-    },
-    "action": "Post"
-  }'
-
-# 從 YAML 建立
-curl -X POST http://localhost:8080/api/policies \
-  -H "Content-Type: application/json" \
-  -b "token=<jwt>" \
-  -d '{
-    "source": "yaml",
-    "rawYaml": "apiVersion: cilium.io/v1alpha1\nkind: TracingPolicy\n..."
-  }'
-```
-
----
-
-## 執行模式說明
-
-| 模式 | 說明 |
-|------|------|
-| **Monitoring** | 記錄違規行為但不攔截（`Post` action） |
-| **Protect** | 主動終止違規行為（`Sigkill` action） |
-| **Mixed** | 部分 Policy 為 Monitoring，部分為 Protect |
-
-切換模式會影響後續透過表單建立或更新的 Policy 所套用的 action。
-
----
-
-## RBAC 權限
-
-Sentinel 需要以下 ClusterRole 權限：
-
-```yaml
-rules:
-  - apiGroups: ["cilium.io"]
-    resources: ["tracingpolicies", "tracingpoliciesnamespaced"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list"]
-  - apiGroups: [""]
-    resources: ["secrets"]
-    resourceNames: ["sentinel-credentials"]
-    verbs: ["get"]
-```
-
----
-
-## 專案結構
-
-```
-sentinel/
-├── cmd/server/          # Go 應用程式進入點
-├── internal/
-│   ├── auth/            # JWT 驗證與 bcrypt
-│   ├── handler/         # HTTP 路由與 middleware
-│   ├── k8s/             # Kubernetes client 與 CRUD
-│   └── policy/          # TracingPolicy YAML 產生邏輯
-├── web/
-│   ├── src/
-│   │   ├── api/         # Axios client 與型別定義
-│   │   ├── components/  # 可重用 UI 元件
-│   │   ├── layout/      # AppLayout、AppSidebar、AppHeader、AppToaster
-│   │   ├── pages/       # 各頁面元件
-│   │   └── utils/       # formToYaml 工具函式
-│   └── package.json
-├── deploy/
-│   └── base/            # Kustomize 資源（RBAC、Deployment、Service、Secret）
-└── Dockerfile           # 多階段 build（Node → Go → distroless）
+# 前端 Dev Server（自動 proxy /api → localhost:8080）
+cd web && npm install && npm run dev
 ```
 
 ---
