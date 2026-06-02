@@ -11,9 +11,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.2.3",
+    "@coreui/coreui": "^5.7.1",
+    "@coreui/icons": "^3.1.0",
+    "@coreui/icons-react": "^2.3.0",
+    "@coreui/react": "^5.11.0",
     "@monaco-editor/react": "^4.7.0",
-    "antd": "^6.4.3",
     "axios": "^1.16.1",
     "js-yaml": "^4.1.1",
     "react": "^19.2.6",
