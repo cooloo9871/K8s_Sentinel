@@ -1,0 +1,135 @@
+<h2>三種實作方案</h2>
+<p class="subtitle">選擇前端 UI 庫與架構策略</p>
+
+<div class="cards" style="grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 1.5rem;">
+
+  <!-- Approach 1: CoreUI React (Recommended) -->
+  <div class="card" data-choice="coreui" onclick="toggleSelect(this)" style="border: 2px solid #2d7dd2;">
+    <div class="card-image" style="background:#1b2a3b; padding:0.75rem; border-radius:6px 6px 0 0; position:relative;">
+      <div style="position:absolute;top:0.4rem;right:0.4rem;background:#2d7dd2;color:#fff;font-size:0.55rem;padding:2px 6px;border-radius:8px;font-weight:600;">推薦</div>
+      <div style="display:flex; gap:0.4rem; height:150px;">
+        <div style="width:32%; background:#0f1923; border-radius:4px; padding:0.4rem; display:flex; flex-direction:column; gap:0.25rem;">
+          <div style="background:#2d7dd2; height:5px; border-radius:2px;"></div>
+          <div style="height:3px;"></div>
+          <div style="background:#ffffff33; height:3px; border-radius:2px;"></div>
+          <div style="background:#2d7dd2; height:3px; border-radius:2px; padding-left:6px;"></div>
+          <div style="background:#ffffff22; height:3px; border-radius:2px; margin-left:6px;"></div>
+          <div style="background:#ffffff22; height:3px; border-radius:2px; margin-left:6px;"></div>
+          <div style="background:#ffffff33; height:3px; border-radius:2px;"></div>
+          <div style="background:#ffffff22; height:3px; border-radius:2px;"></div>
+        </div>
+        <div style="flex:1; background:#f5f6fa; border-radius:4px; padding:0.4rem; display:flex; flex-direction:column; gap:0.3rem;">
+          <div style="background:#e0e3eb; border-radius:3px; height:8px; width:60%;"></div>
+          <div style="display:flex; gap:0.2rem;">
+            <div style="background:#2d7dd2; border-radius:3px; height:18px; flex:1;"></div>
+            <div style="background:#28a745; border-radius:3px; height:18px; flex:1;"></div>
+            <div style="background:#dc3545; border-radius:3px; height:18px; flex:1;"></div>
+          </div>
+          <div style="background:#ffffff; border-radius:3px; flex:1; border:1px solid #dee2e6;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 A — CoreUI React <span style="font-size:0.7rem;color:#6c757d;">(@coreui/react)</span></h3>
+      <div class="pros-cons" style="margin-top:0.5rem;">
+        <div class="pros">
+          <h4>優點</h4>
+          <ul>
+            <li>與 NeuVector 最接近，CSSidebar 多層導覽開箱即用</li>
+            <li>深色 Sidebar + 淺色 Content 主題內建</li>
+            <li>Bootstrap 5 CSS 加持，表格/表單樣式一致</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>缺點</h4>
+          <ul>
+            <li>需完整替換 Ant Design 所有元件</li>
+            <li>多一個 @coreui 依賴</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach 2: React-Bootstrap custom -->
+  <div class="card" data-choice="react-bootstrap" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1b2a3b; padding:0.75rem; border-radius:6px 6px 0 0;">
+      <div style="display:flex; gap:0.4rem; height:150px;">
+        <div style="width:32%; background:#0f1923; border-radius:4px; padding:0.4rem; display:flex; flex-direction:column; gap:0.25rem;">
+          <div style="background:#6f42c1; height:5px; border-radius:2px;"></div>
+          <div style="height:3px;"></div>
+          <div style="background:#ffffff33; height:3px; border-radius:2px;"></div>
+          <div style="background:#ffffff33; height:3px; border-radius:2px;"></div>
+          <div style="background:#ffffff22; height:3px; border-radius:2px;"></div>
+          <div style="background:#ffffff22; height:3px; border-radius:2px;"></div>
+        </div>
+        <div style="flex:1; background:#f5f6fa; border-radius:4px; padding:0.4rem; display:flex; flex-direction:column; gap:0.3rem;">
+          <div style="background:#e0e3eb; border-radius:3px; height:8px; width:60%;"></div>
+          <div style="background:#ffffff; border-radius:3px; flex:1; border:1px solid #dee2e6;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 B — React-Bootstrap 自建</h3>
+      <div class="pros-cons" style="margin-top:0.5rem;">
+        <div class="pros">
+          <h4>優點</h4>
+          <ul>
+            <li>依賴最輕，只有 react-bootstrap + bootstrap CSS</li>
+            <li>Sidebar/Header 完全自訂，無框架限制</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>缺點</h4>
+          <ul>
+            <li>Sidebar collapse、多層選單需自行實作</li>
+            <li>實作時間較長，視覺一致性靠自己維持</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach 3: Hybrid -->
+  <div class="card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1b2a3b; padding:0.75rem; border-radius:6px 6px 0 0;">
+      <div style="display:flex; gap:0.4rem; height:150px;">
+        <div style="width:32%; background:#0f1923; border-radius:4px; padding:0.4rem; display:flex; flex-direction:column; gap:0.25rem;">
+          <div style="background:#fd7e14; height:5px; border-radius:2px;"></div>
+          <div style="height:3px;"></div>
+          <div style="background:#ffffff33; height:3px; border-radius:2px;"></div>
+          <div style="background:#ffffff22; height:3px; border-radius:2px;"></div>
+        </div>
+        <div style="flex:1; background:#f5f6fa; border-radius:4px; padding:0.4rem; display:flex; flex-direction:column; gap:0.3rem;">
+          <div style="background:#e0e3eb; border-radius:3px; height:8px; width:60%;"></div>
+          <div style="display:flex; gap:0.2rem; flex:1;">
+            <div style="background:#ffffff; border-radius:3px; flex:2; border:1px solid #dee2e6;"></div>
+            <div style="background:#fff9e6; border-radius:3px; flex:1; border:1px solid #ffd666;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 C — 混合 (Ant Design + Bootstrap Shell)</h3>
+      <div class="pros-cons" style="margin-top:0.5rem;">
+        <div class="pros">
+          <h4>優點</h4>
+          <ul>
+            <li>保留 Ant Design Table/Form（已測試穩定）</li>
+            <li>只換最外層 Layout shell，改動範圍最小</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>缺點</h4>
+          <ul>
+            <li>兩套 CSS 系統並存，易有衝突</li>
+            <li>視覺一致性難以做到真正的 NeuVector 感</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1rem;">推薦方案 A（CoreUI React），與 NeuVector 風格最接近且開發效率最高</p>
