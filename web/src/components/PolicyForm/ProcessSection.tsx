@@ -1,35 +1,37 @@
-import { Button, Form, Input, Space, Typography } from 'antd'
-import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons'
-
-const { Text } = Typography
+import { CFormInput, CButton } from '@coreui/react'
 
 interface Props {
-  name: string
+  binaries: string[]
+  onChange: (binaries: string[]) => void
 }
 
-export function ProcessSection({ name }: Props) {
+export function ProcessSection({ binaries, onChange }: Props) {
+  const update = (i: number, val: string) => {
+    const next = [...binaries]
+    next[i] = val
+    onChange(next)
+  }
+  const add = () => onChange([...binaries, ''])
+  const remove = (i: number) => onChange(binaries.filter((_, j) => j !== i))
+
   return (
-    <Form.List name={name}>
-      {(fields, { add, remove }) => (
-        <>
-          <Text strong>Process Rules</Text>
-          {fields.map(({ key, name: fieldName, ...rest }) => (
-            <Space key={key} align="baseline" style={{ display: 'flex', marginBottom: 4 }}>
-              <Form.Item
-                {...rest}
-                name={[fieldName, 'binaries', 0]}
-                rules={[{ required: true, message: 'Enter binary path' }]}
-              >
-                <Input placeholder="/bin/bash" style={{ width: 300 }} />
-              </Form.Item>
-              <MinusCircleOutlined onClick={() => remove(fieldName)} />
-            </Space>
-          ))}
-          <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />} size="small">
-            Add Process Rule
-          </Button>
-        </>
-      )}
-    </Form.List>
+    <div className="mb-3">
+      {binaries.map((b, i) => (
+        <div key={i} className="d-flex align-items-center gap-2 mb-2">
+          <CFormInput
+            placeholder="/usr/bin/nginx"
+            value={b}
+            onChange={(e) => update(i, e.target.value)}
+            size="sm"
+          />
+          <CButton color="danger" variant="ghost" size="sm" onClick={() => remove(i)} style={{ flexShrink: 0 }}>
+            ✕
+          </CButton>
+        </div>
+      ))}
+      <CButton color="primary" variant="outline" size="sm" onClick={add}>
+        + Add
+      </CButton>
+    </div>
   )
 }

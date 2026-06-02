@@ -1,46 +1,47 @@
-import { Button, Form, Input, Select, Space, Typography } from 'antd'
-import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { CFormInput, CFormSelect, CButton } from '@coreui/react'
+import type { FileRule } from '../../api/types'
 
-const { Text } = Typography
+type FileEntry = { path: string; operation: FileRule['operation'] }
 
 interface Props {
-  name: string
+  rules: FileEntry[]
+  onChange: (rules: FileEntry[]) => void
 }
 
-export function FileSection({ name }: Props) {
+export function FileSection({ rules, onChange }: Props) {
+  const update = (i: number, patch: Partial<FileEntry>) => {
+    const next = [...rules]
+    next[i] = { ...next[i], ...patch }
+    onChange(next)
+  }
+  const add = () => onChange([...rules, { path: '', operation: 'read' }])
+  const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
+
   return (
-    <Form.List name={name}>
-      {(fields, { add, remove }) => (
-        <>
-          <Text strong>File Rules</Text>
-          {fields.map(({ key, name: fieldName, ...rest }) => (
-            <Space key={key} align="baseline" style={{ display: 'flex', marginBottom: 4 }}>
-              <Form.Item
-                {...rest}
-                name={[fieldName, 'paths', 0]}
-                rules={[{ required: true, message: 'Enter file path' }]}
-              >
-                <Input placeholder="/etc/passwd" style={{ width: 250 }} />
-              </Form.Item>
-              <Form.Item
-                {...rest}
-                name={[fieldName, 'operation']}
-                rules={[{ required: true, message: 'Select operation' }]}
-              >
-                <Select placeholder="Operation" style={{ width: 110 }}>
-                  <Select.Option value="read">read</Select.Option>
-                  <Select.Option value="write">write</Select.Option>
-                  <Select.Option value="open">open</Select.Option>
-                </Select>
-              </Form.Item>
-              <MinusCircleOutlined onClick={() => remove(fieldName)} />
-            </Space>
-          ))}
-          <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />} size="small">
-            Add File Rule
-          </Button>
-        </>
-      )}
-    </Form.List>
+    <div className="mb-3">
+      {rules.map((r, i) => (
+        <div key={i} className="d-flex align-items-center gap-2 mb-2">
+          <CFormInput
+            placeholder="/etc/nginx/nginx.conf"
+            value={r.path}
+            onChange={(e) => update(i, { path: e.target.value })}
+            size="sm"
+            style={{ flex: 2 }}
+          />
+          <CFormSelect
+            value={r.operation}
+            onChange={(e) => update(i, { operation: e.target.value as FileRule['operation'] })}
+            size="sm"
+            style={{ flex: 1 }}
+          >
+            <option value="read">read</option>
+            <option value="write">write</option>
+            <option value="open">open</option>
+          </CFormSelect>
+          <CButton color="danger" variant="ghost" size="sm" onClick={() => remove(i)}>✕</CButton>
+        </div>
+      ))}
+      <CButton color="primary" variant="outline" size="sm" onClick={add}>+ Add</CButton>
+    </div>
   )
 }
