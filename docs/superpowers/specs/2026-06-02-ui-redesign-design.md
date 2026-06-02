@@ -101,7 +101,7 @@ CLUSTER
 - 4 個統計卡片（水平排列）：
   - Total Policies（藍色左邊框）
   - Current Mode（橘色左邊框，Monitoring / Protect）
-  - Active Namespaces（綠色左邊框）
+  - Active Namespaces（綠色左邊框，`GET /api/namespaces` 回傳的總數量）
   - Cluster-scoped Policies（紅色左邊框）
 - 主區塊（2 欄）：
   - 左（2/3）：Recent Policies 表格（最近 5 筆，欄位：Name / Scope / Namespace / Created）
@@ -145,7 +145,7 @@ CLUSTER
   - 右欄（340px，sticky）：YAML Preview 深色面板（Monaco 風格，顯示即時 YAML + valid/invalid 狀態）
 - **YAML Tab：** Monaco Editor 全寬（保留現有邏輯）
 
-**表單狀態管理：** 從 `Form.useForm()` 改為 `useState` + 手動欄位管理（或引入 React Hook Form）
+**表單狀態管理：** 從 `Form.useForm()` 改為 `useState` 陣列管理，不引入 React Hook Form（避免增加依賴）
 
 ---
 
@@ -162,7 +162,7 @@ CLUSTER
 
 **版面：**
 - CTable 列出所有 namespace
-- 每列顯示 namespace 名稱 + 該 namespace 下 Policy 數量
+- 每列顯示 namespace 名稱 + 該 namespace 下 Policy 數量（客戶端從 `GET /api/policies` 結果計算，無獨立 API）
 
 ---
 
