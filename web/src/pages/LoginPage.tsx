@@ -1,21 +1,30 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Form, Input, Button, Card, Typography, Alert } from 'antd'
+import {
+  CCard,
+  CCardBody,
+  CForm,
+  CFormInput,
+  CFormLabel,
+  CButton,
+  CAlert,
+} from '@coreui/react'
 import { authApi } from '../api/client'
-
-const { Title } = Typography
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const onFinish = async (values: { username: string; password: string }) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setLoading(true)
     setError('')
     try {
-      await authApi.login(values.username, values.password)
-      navigate('/')
+      await authApi.login(username, password)
+      navigate('/dashboard')
     } catch {
       setError('Invalid username or password')
     } finally {
@@ -24,24 +33,50 @@ export function LoginPage() {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f0f2f5' }}>
-      <Card style={{ width: 400 }}>
-        <Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>Sentinel</Title>
-        {error && <Alert message={error} type="error" style={{ marginBottom: 16 }} />}
-        <Form layout="vertical" onFinish={onFinish}>
-          <Form.Item name="username" label="Username" rules={[{ required: true }]}>
-            <Input autoFocus />
-          </Form.Item>
-          <Form.Item name="password" label="Password" rules={[{ required: true }]}>
-            <Input.Password />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block>
-              Login
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: '#f5f6fa',
+      }}
+    >
+      <CCard style={{ width: 400 }}>
+        <CCardBody className="p-4">
+          <h4 className="text-center mb-4" style={{ color: '#1b2a3b', fontWeight: 700 }}>
+            Sentinel
+          </h4>
+          {error && (
+            <CAlert color="danger" className="mb-3">
+              {error}
+            </CAlert>
+          )}
+          <CForm onSubmit={handleSubmit}>
+            <div className="mb-3">
+              <CFormLabel>Username</CFormLabel>
+              <CFormInput
+                autoFocus
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+            <div className="mb-3">
+              <CFormLabel>Password</CFormLabel>
+              <CFormInput
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <CButton type="submit" color="primary" className="w-100" disabled={loading}>
+              {loading ? 'Signing in…' : 'Login'}
+            </CButton>
+          </CForm>
+        </CCardBody>
+      </CCard>
     </div>
   )
 }
