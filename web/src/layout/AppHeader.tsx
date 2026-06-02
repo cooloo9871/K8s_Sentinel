@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useLocation, Link } from 'react-router-dom'
 import {
   CHeader,
   CHeaderNav,
@@ -7,12 +7,8 @@ import {
   CBreadcrumb,
   CBreadcrumbItem,
   CBadge,
-  CDropdown,
-  CDropdownToggle,
-  CDropdownMenu,
-  CDropdownItem,
 } from '@coreui/react'
-import { modeApi, authApi } from '../api/client'
+import { modeApi } from '../api/client'
 import type { Mode } from '../api/types'
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -42,17 +38,11 @@ function useBreadcrumbs() {
 
 export function AppHeader() {
   const [mode, setMode] = useState<Mode>('Monitoring')
-  const navigate = useNavigate()
   const breadcrumbs = useBreadcrumbs()
 
   useEffect(() => {
     modeApi.get().then(setMode).catch(() => {})
   }, [])
-
-  const handleLogout = async () => {
-    await authApi.logout()
-    navigate('/login')
-  }
 
   const modeColor = mode === 'Protect' ? 'danger' : mode === 'Mixed' ? 'warning' : 'success'
 
@@ -80,17 +70,9 @@ export function AppHeader() {
         </CBreadcrumb>
 
         <CHeaderNav className="ms-auto">
-          <CBadge color={modeColor} className="me-3">
+          <CBadge color={modeColor}>
             {mode.toUpperCase()}
           </CBadge>
-          <CDropdown variant="nav-item">
-            <CDropdownToggle caret={false}>admin</CDropdownToggle>
-            <CDropdownMenu>
-              <CDropdownItem onClick={handleLogout} style={{ cursor: 'pointer' }}>
-                Logout
-              </CDropdownItem>
-            </CDropdownMenu>
-          </CDropdown>
         </CHeaderNav>
       </CContainer>
     </CHeader>

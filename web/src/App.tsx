@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './layout/AppLayout'
 import { AppToaster } from './layout/AppToaster'
-import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { PolicyListPage } from './pages/PolicyListPage'
 import { PolicyEditPage } from './pages/PolicyEditPage'
@@ -13,7 +12,6 @@ export default function App() {
     <BrowserRouter>
       <AppToaster>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
