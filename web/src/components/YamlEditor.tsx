@@ -1,47 +1,45 @@
 import { useState } from 'react'
 import MonacoEditor from '@monaco-editor/react'
-import { Button, Alert, Space } from 'antd'
+import { CAlert } from '@coreui/react'
 import yaml from 'js-yaml'
 
 interface Props {
   initialValue?: string
-  onSubmit: (yamlText: string) => Promise<void>
-  loading?: boolean
+  onValueChange: (value: string, valid: boolean) => void
 }
 
-export function YamlEditor({ initialValue = '', onSubmit, loading }: Props) {
-  const [value, setValue] = useState(initialValue)
+export function YamlEditor({ initialValue = '', onValueChange }: Props) {
   const [error, setError] = useState('')
 
-  const handleSubmit = async () => {
-    setError('')
+  const handleChange = (v: string | undefined) => {
+    const text = v ?? ''
+    let valid = true
+    let errMsg = ''
     try {
-      yaml.load(value)
+      yaml.load(text)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Invalid YAML')
-      return
+      valid = false
+      errMsg = e instanceof Error ? e.message : 'Invalid YAML'
     }
-    try {
-      await onSubmit(value)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to apply YAML')
-    }
+    setError(errMsg)
+    onValueChange(text, valid)
   }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }}>
-      {error && <Alert type="error" message={error} showIcon />}
+    <div>
+      {error && (
+        <CAlert color="danger" className="mb-2" style={{ fontSize: '0.8rem' }}>
+          {error}
+        </CAlert>
+      )}
       <MonacoEditor
         height="500px"
         language="yaml"
         theme="vs-dark"
-        value={value}
-        onChange={(v) => setValue(v ?? '')}
+        defaultValue={initialValue}
+        onChange={handleChange}
         options={{ minimap: { enabled: false }, fontSize: 13 }}
       />
-      <Button type="primary" onClick={handleSubmit} loading={loading}>
-        Apply YAML
-      </Button>
-    </Space>
+    </div>
   )
 }
