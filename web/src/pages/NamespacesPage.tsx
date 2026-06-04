@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import {
-  CTable,
-  CTableHead,
-  CTableBody,
-  CTableRow,
-  CTableHeaderCell,
-  CTableDataCell,
-  CSpinner,
-  CCard,
-  CCardBody,
-} from '@coreui/react'
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
 import { namespaceApi, policyApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import type { PolicyRecord } from '../api/types'
@@ -35,42 +34,49 @@ export function NamespacesPage() {
 
   return (
     <>
-      <h4 className="mb-3" style={{ color: '#1b2a3b', fontWeight: 600 }}>Namespaces</h4>
+      <h4 className="mb-6 text-lg font-semibold">Namespaces</h4>
 
-      <CCard>
-        <CCardBody className="p-0">
+      <Card>
+        <CardContent className="p-0">
           {loading ? (
-            <div className="d-flex justify-content-center py-5">
-              <CSpinner color="primary" />
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
             </div>
           ) : (
-            <CTable hover responsive className="mb-0">
-              <CTableHead>
-                <CTableRow style={{ background: '#f8f9fa' }}>
-                  <CTableHeaderCell>Namespace</CTableHeaderCell>
-                  <CTableHeaderCell className="text-center">Policies</CTableHeaderCell>
-                </CTableRow>
-              </CTableHead>
-              <CTableBody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead className="text-center">Policies</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {namespaces.length === 0 ? (
-                  <CTableRow>
-                    <CTableDataCell colSpan={2} className="text-center text-muted py-4">
+                  <TableRow>
+                    <TableCell
+                      colSpan={2}
+                      className="py-8 text-center text-muted-foreground"
+                    >
                       No namespaces found
-                    </CTableDataCell>
-                  </CTableRow>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   namespaces.map((ns) => (
-                    <CTableRow key={ns}>
-                      <CTableDataCell style={{ fontWeight: 500 }}>{ns}</CTableDataCell>
-                      <CTableDataCell className="text-center">{policyCountByNs(ns)}</CTableDataCell>
-                    </CTableRow>
+                    <TableRow key={ns}>
+                      <TableCell className="font-medium">{ns}</TableCell>
+                      <TableCell className="text-center">
+                        {policyCountByNs(ns)}
+                      </TableCell>
+                    </TableRow>
                   ))
                 )}
-              </CTableBody>
-            </CTable>
+              </TableBody>
+            </Table>
           )}
-        </CCardBody>
-      </CCard>
+        </CardContent>
+      </Card>
     </>
   )
 }
