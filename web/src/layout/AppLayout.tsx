@@ -1,20 +1,18 @@
 import { Outlet } from 'react-router-dom'
-import { CContainer } from '@coreui/react'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from './AppSidebar'
 import { AppHeader } from './AppHeader'
 
 export function AppLayout() {
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <SidebarProvider>
       <AppSidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <SidebarInset>
         <AppHeader />
-        <main style={{ flex: 1, background: '#f5f6fa' }}>
-          <CContainer lg className="py-4">
-            <Outlet />
-          </CContainer>
+        <main className="flex-1 p-6">
+          <Outlet />
         </main>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

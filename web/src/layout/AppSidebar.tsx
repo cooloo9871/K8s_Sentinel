@@ -1,72 +1,83 @@
+import { useLocation, NavLink } from 'react-router-dom'
 import {
-  CSidebar,
-  CSidebarBrand,
-  CSidebarNav,
-  CNavTitle,
-  CNavItem,
-  CNavGroup,
-} from '@coreui/react'
-import { NavLink } from 'react-router-dom'
-
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  isActive ? 'nav-link active' : 'nav-link'
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
 
 export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
   return (
-    <CSidebar
-      colorScheme="dark"
-      style={{ background: '#1b2a3b', minHeight: '100vh', width: 240, flexShrink: 0 }}
-    >
-      <CSidebarBrand
-        style={{
-          background: '#142030',
-          color: '#fff',
-          fontWeight: 700,
-          fontSize: '1.1rem',
-          padding: '1rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-        }}
-      >
-        <span
-          style={{
-            width: 28,
-            height: 28,
-            background: '#2d7dd2',
-            borderRadius: 6,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
-          </svg>
-        </span>
-        Sentinel
-      </CSidebarBrand>
+    <Sidebar collapsible="offcanvas">
+      {/* Brand */}
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
 
-      <CSidebarNav>
-        <CNavItem>
-          <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>
-        </CNavItem>
+      <SidebarContent>
+        {/* Dashboard */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        <CNavTitle>Policies</CNavTitle>
-        <CNavGroup toggler="All Policies" visible>
-          <CNavItem>
-            <NavLink to="/policies/tracing" className={navLinkClass}>TracingPolicy</NavLink>
-          </CNavItem>
-        </CNavGroup>
+        {/* Policies */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        <CNavTitle>Cluster</CNavTitle>
-        <CNavItem>
-          <NavLink to="/cluster/mode" className={navLinkClass}>Mode Control</NavLink>
-        </CNavItem>
-        <CNavItem>
-          <NavLink to="/cluster/namespaces" className={navLinkClass}>Namespaces</NavLink>
-        </CNavItem>
-      </CSidebarNav>
-    </CSidebar>
+        {/* Cluster */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/mode')}>
+                  <NavLink to="/cluster/mode">Mode Control</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
   )
 }

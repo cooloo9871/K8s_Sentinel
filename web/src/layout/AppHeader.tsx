@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import {
-  CHeader,
-  CHeaderNav,
-  CContainer,
-  CBreadcrumb,
-  CBreadcrumbItem,
-  CBadge,
-} from '@coreui/react'
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+import { Badge } from '@/components/ui/badge'
+import { SidebarTrigger } from '@/components/ui/sidebar'
+import { Separator } from '@/components/ui/separator'
 import { modeApi } from '../api/client'
 import type { Mode } from '../api/types'
 
@@ -44,37 +47,36 @@ export function AppHeader() {
     modeApi.get().then(setMode).catch(() => {})
   }, [])
 
-  const modeColor = mode === 'Protect' ? 'danger' : mode === 'Mixed' ? 'warning' : 'success'
+  const modeVariant =
+    mode === 'Protect' ? 'destructive' : mode === 'Mixed' ? 'secondary' : 'outline'
 
   return (
-    <CHeader
-      position="sticky"
-      className="mb-4"
-      style={{ background: '#fff', borderBottom: '1px solid #dee2e6' }}
-    >
-      <CContainer fluid>
-        <CBreadcrumb style={{ margin: 0 }}>
-          {breadcrumbs.map((c, i) =>
-            c.to ? (
-              <CBreadcrumbItem key={i}>
-                <Link to={c.to} style={{ color: '#2d7dd2', textDecoration: 'none' }}>
-                  {c.label}
-                </Link>
-              </CBreadcrumbItem>
-            ) : (
-              <CBreadcrumbItem key={i} active>
-                {c.label}
-              </CBreadcrumbItem>
-            )
-          )}
-        </CBreadcrumb>
+    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+      <SidebarTrigger className="-ml-1" />
+      <Separator orientation="vertical" className="mr-2 h-4" />
 
-        <CHeaderNav className="ms-auto">
-          <CBadge color={modeColor}>
-            {mode.toUpperCase()}
-          </CBadge>
-        </CHeaderNav>
-      </CContainer>
-    </CHeader>
+      <Breadcrumb>
+        <BreadcrumbList>
+          {breadcrumbs.map((c, i) => (
+            <Fragment key={i}>
+              {i > 0 && <BreadcrumbSeparator />}
+              <BreadcrumbItem>
+                {c.to ? (
+                  <BreadcrumbLink asChild>
+                    <Link to={c.to}>{c.label}</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage>{c.label}</BreadcrumbPage>
+                )}
+              </BreadcrumbItem>
+            </Fragment>
+          ))}
+        </BreadcrumbList>
+      </Breadcrumb>
+
+      <Badge variant={modeVariant} className="ml-auto">
+        {mode.toUpperCase()}
+      </Badge>
+    </header>
   )
 }
