@@ -17,6 +17,7 @@ import { useToast } from '../layout/AppToaster'
 import { PolicyForm } from '../components/PolicyForm/PolicyForm'
 import { YamlEditor } from '../components/YamlEditor'
 import { formToYaml } from '../utils/formToYaml'
+import { yamlToForm } from '../utils/yamlToForm'
 import type { PolicyFormInput } from '../api/types'
 
 const EMPTY_FORM: PolicyFormInput = {
@@ -52,11 +53,10 @@ export function PolicyEditPage() {
       work.push(
         policyApi.get(name, namespace).then((r) => {
           setYamlContent(r.rawYaml)
-          if (r.mode === 'Protect') {
-            setPolicyMode('Protect')
-          } else {
-            setPolicyMode('Monitoring')
-          }
+          setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          // Pre-populate form from existing policy YAML
+          const parsed = yamlToForm(r.rawYaml)
+          if (parsed) setFormValues(parsed)
         })
       )
     }
