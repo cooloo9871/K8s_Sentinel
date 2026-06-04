@@ -25,7 +25,16 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管�
 
 ---
 
-### 步驟一：更新容器映像（選用）
+### 步驟一：Clone 專案
+
+```bash
+git clone https://github.com/brobridge/sentinel.git
+cd sentinel
+```
+
+---
+
+### 步驟二：更新容器映像（選用）
 
 若要使用自行 build 的映像，編輯 `deploy/base/deployment.yaml`：
 
@@ -46,9 +55,10 @@ docker push your-registry/sentinel:latest
 
 ---
 
-### 步驟二：部署
+### 步驟三：部署
 
 ```bash
+kubectl create namespace sentinel-system
 kubectl apply -k deploy/base/
 ```
 
@@ -71,7 +81,7 @@ deployment.apps/sentinel    1/1     1            1
 
 ---
 
-### 步驟三：存取 UI
+### 步驟四：存取 UI
 
 **方式 A — Port-forward（快速測試）**
 
