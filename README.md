@@ -25,39 +25,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管�
 
 ---
 
-### 步驟一：設定認證憑證
-
-Sentinel 使用 bcrypt 雜湊密碼。先產生管理員密碼的 hash：
-
-```bash
-# 使用 Python（大多數系統均可用）
-python3 -c "
-import bcrypt, getpass
-pw = getpass.getpass('Password: ').encode()
-print(bcrypt.hashpw(pw, bcrypt.gensalt(12)).decode())
-"
-```
-
-編輯 `deploy/overlays/production/secret-patch.yaml`，填入自訂的密碼 hash 與 JWT Secret：
-
-```yaml
-# deploy/overlays/production/secret-patch.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: sentinel-credentials
-  namespace: sentinel-system
-type: Opaque
-stringData:
-  admin: "$2b$12$<your-bcrypt-hash>"      # 替換為上面產生的 hash
-  jwt-secret: "<your-random-secret>"      # 隨機字串，建議 32 字元以上
-```
-
-> ⚠️ **安全警告**：絕對不要在生產環境使用預設憑證。請務必替換 `admin` hash 與 `jwt-secret`。
-
----
-
-### 步驟二：更新容器映像（選用）
+### 步驟一：更新容器映像（選用）
 
 若要使用自行 build 的映像，編輯 `deploy/base/deployment.yaml`：
 
@@ -78,13 +46,9 @@ docker push your-registry/sentinel:latest
 
 ---
 
-### 步驟三：部署
+### 步驟二：部署
 
 ```bash
-# 使用 production overlay（含自訂憑證）
-kubectl apply -k deploy/overlays/production/
-
-# 或使用 base（含預設憑證，僅供測試）
 kubectl apply -k deploy/base/
 ```
 
@@ -107,7 +71,7 @@ deployment.apps/sentinel    1/1     1            1
 
 ---
 
-### 步驟四：存取 UI
+### 步驟三：存取 UI
 
 **方式 A — Port-forward（快速測試）**
 
@@ -140,8 +104,6 @@ spec:
                   number: 80
 ```
 
-登入帳號為 `admin`，密碼為步驟一設定的密碼。
-
 ---
 
 ### 部署的 Kubernetes 資源
@@ -154,7 +116,6 @@ spec:
 | ClusterRoleBinding | `sentinel` | 綁定 ServiceAccount 與 ClusterRole |
 | Deployment | `sentinel` | 應用程式 Pod，1 個 replica |
 | Service | `sentinel` | ClusterIP，port 80 → 8080 |
-| Secret | `sentinel-credentials` | 管理員密碼 hash 與 JWT Secret |
 
 ---
 
@@ -166,14 +127,13 @@ Sentinel 需要以下叢集層級權限才能正常運作：
 |-----------|------|------|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | get, list, watch, create, update, patch, delete |
 | `""` (core) | `namespaces` | get, list |
-| `""` (core) | `secrets/sentinel-credentials` | get |
 
 ---
 
 ### 解除安裝
 
 ```bash
-kubectl delete -k deploy/overlays/production/
+kubectl delete -k deploy/base/
 # 或
 kubectl delete namespace sentinel-system
 ```
