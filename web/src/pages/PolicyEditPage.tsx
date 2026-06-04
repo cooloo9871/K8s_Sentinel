@@ -7,6 +7,7 @@ import { policyApi, namespaceApi, modeApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { PolicyForm } from '../components/PolicyForm/PolicyForm'
 import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
 import type { PolicyFormInput, Mode } from '../api/types'
 
 const EMPTY_FORM: PolicyFormInput = {
@@ -26,9 +27,9 @@ export function PolicyEditPage() {
 
   const [namespaces, setNamespaces] = useState<string[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
-  const [initialYaml, setInitialYaml] = useState('')
   const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
-  const [yamlValue, setYamlValue] = useState('')
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
   const [yamlValid, setYamlValid] = useState(true)
   const [activeTab, setActiveTab] = useState('form')
   const [loading, setLoading] = useState(false)
@@ -42,8 +43,7 @@ export function PolicyEditPage() {
     if (!isNew && name) {
       work.push(
         policyApi.get(name, namespace).then((r) => {
-          setInitialYaml(r.rawYaml)
-          setYamlValue(r.rawYaml)
+          setYamlContent(r.rawYaml)
         })
       )
     }
@@ -51,6 +51,22 @@ export function PolicyEditPage() {
   }, [name, namespace, isNew])
 
   const action = mode === 'Protect' ? 'Sigkill' : 'Post'
+
+  const handleTabChange = (tab: string) => {
+    // Switching Form → YAML: sync editor with current form-generated YAML
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        // fallback: keep existing yaml content
+        setYamlEditorKey((k) => k + 1)
+      }
+    }
+    setActiveTab(tab)
+  }
 
   const handleSave = async () => {
     if (activeTab === 'form') {
@@ -77,7 +93,7 @@ export function PolicyEditPage() {
       }
       setLoading(true)
       try {
-        const payload = { source: 'yaml' as const, rawYaml: yamlValue }
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
         if (isNew) await policyApi.create(payload)
         else await policyApi.update(name!, payload)
         toast.success('Policy applied')
@@ -112,10 +128,7 @@ export function PolicyEditPage() {
           )}
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => navigate('/policies/tracing')}
-          >
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={loading}>
@@ -125,7 +138,7 @@ export function PolicyEditPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
           <TabsTrigger
             value="form"
@@ -150,9 +163,10 @@ export function PolicyEditPage() {
         </TabsContent>
         <TabsContent value="yaml">
           <YamlEditor
-            initialValue={initialYaml}
+            key={yamlEditorKey}
+            initialValue={yamlContent}
             onValueChange={(v, valid) => {
-              setYamlValue(v)
+              setYamlContent(v)
               setYamlValid(valid)
             }}
           />
