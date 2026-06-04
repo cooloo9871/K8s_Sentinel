@@ -3,20 +3,26 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Optional extra Helm flags: EXTRA_HELM_FLAGS=(--set x=y) bash deploy/install.sh
-if [ -z "${EXTRA_HELM_FLAGS+x}" ]; then
-  EXTRA_HELM_FLAGS=()
-fi
+# Pin a specific Tetragon version or leave empty for latest
+# Usage: TETRAGON_VERSION=v1.2.0 bash deploy/install.sh
+TETRAGON_VERSION="${TETRAGON_VERSION:-}"
 
 # ── Tetragon ──────────────────────────────────────────────────────────────────
 
 if kubectl get daemonset tetragon -n kube-system &>/dev/null; then
   echo "[tetragon] already installed, skipping"
 else
-  echo "[tetragon] not found, installing via Helm..."
-  helm repo add cilium https://helm.cilium.io
-  helm repo update
-  helm install tetragon "${EXTRA_HELM_FLAGS[@]}" cilium/tetragon -n kube-system
+  echo "[tetragon] not found, installing via YAML..."
+
+  if [ -n "${TETRAGON_VERSION}" ]; then
+    MANIFEST_URL="https://github.com/cilium/tetragon/releases/download/${TETRAGON_VERSION}/tetragon.yaml"
+  else
+    MANIFEST_URL="https://github.com/cilium/tetragon/releases/latest/download/tetragon.yaml"
+  fi
+
+  echo "[tetragon] applying ${MANIFEST_URL}"
+  kubectl apply -f "${MANIFEST_URL}"
+
   echo "[tetragon] waiting for DaemonSet to be ready..."
   kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s
   echo "[tetragon] ready"
