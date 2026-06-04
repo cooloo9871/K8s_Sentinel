@@ -64,15 +64,17 @@ bash deploy/install.sh
 ```
 
 腳本執行流程：
-1. 偵測 `kube-system` 是否已有 Tetragon DaemonSet，沒有則從 GitHub Releases 下載官方 YAML 安裝
+1. 偵測 `kube-system` 是否已有 Tetragon DaemonSet，沒有則套用 `deploy/tetragon.yaml`（預先 render 好的 Tetragon 1.7.0 manifests，不需要 Helm）
 2. 建立 `sentinel-system` namespace（已存在則跳過）
 3. 套用 Sentinel K8s 資源
 4. 等待 Deployment 就緒
 
-預設安裝最新版 Tetragon，若需要指定版本可透過環境變數：
+若需要升級 Tetragon 版本，在**有 Helm 的環境**重新 render 並提交：
 
 ```bash
-TETRAGON_VERSION=v1.2.0 bash deploy/install.sh
+helm repo add cilium https://helm.cilium.io && helm repo update
+helm template tetragon cilium/tetragon -n kube-system > deploy/tetragon.yaml
+git add deploy/tetragon.yaml && git commit -m "chore: upgrade tetragon manifests"
 ```
 
 確認所有資源正常建立：
@@ -161,7 +163,7 @@ kubectl delete -k deploy/base/
 kubectl delete namespace sentinel-system
 
 # 移除 Tetragon（若是由本腳本安裝）
-kubectl delete -f https://github.com/cilium/tetragon/releases/latest/download/tetragon.yaml
+kubectl delete -f deploy/tetragon.yaml
 ```
 
 ---

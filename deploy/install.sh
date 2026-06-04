@@ -3,26 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Pin a specific Tetragon version or leave empty for latest
-# Usage: TETRAGON_VERSION=v1.2.0 bash deploy/install.sh
-TETRAGON_VERSION="${TETRAGON_VERSION:-}"
-
 # ── Tetragon ──────────────────────────────────────────────────────────────────
+# Manifests are pre-rendered from cilium/tetragon Helm chart v1.7.0.
+# To upgrade, run: helm template tetragon cilium/tetragon -n kube-system > deploy/tetragon.yaml
 
 if kubectl get daemonset tetragon -n kube-system &>/dev/null; then
   echo "[tetragon] already installed, skipping"
 else
-  echo "[tetragon] not found, installing via YAML..."
-
-  if [ -n "${TETRAGON_VERSION}" ]; then
-    MANIFEST_URL="https://github.com/cilium/tetragon/releases/download/${TETRAGON_VERSION}/tetragon.yaml"
-  else
-    MANIFEST_URL="https://github.com/cilium/tetragon/releases/latest/download/tetragon.yaml"
-  fi
-
-  echo "[tetragon] applying ${MANIFEST_URL}"
-  kubectl apply -f "${MANIFEST_URL}"
-
+  echo "[tetragon] not found, installing..."
+  kubectl apply -f "${SCRIPT_DIR}/tetragon.yaml"
   echo "[tetragon] waiting for DaemonSet to be ready..."
   kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s
   echo "[tetragon] ready"
