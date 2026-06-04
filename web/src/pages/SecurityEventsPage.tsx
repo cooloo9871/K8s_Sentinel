@@ -65,7 +65,7 @@ export function SecurityEventsPage() {
         <div>
           <h4 className="text-lg font-semibold">Security Events</h4>
           <p className="text-sm text-muted-foreground">
-            叢集違規行為紀錄（Warning 事件 + Tetragon 事件）
+            Cluster-wide Warning and Tetragon violation events
           </p>
         </div>
         <Button

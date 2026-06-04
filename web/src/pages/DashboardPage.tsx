@@ -90,7 +90,6 @@ export function DashboardPage() {
     <>
       <h4 className="mb-6 text-lg font-semibold">Dashboard</h4>
 
-      {/* Stat cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           title="Total Policies"
@@ -101,27 +100,24 @@ export function DashboardPage() {
         <StatCard
           title="Current Mode"
           value={mode.toUpperCase()}
-          subtitle={mode === 'Protect' ? '攔截違規行為' : '觀測模式，不攔截'}
+          subtitle={mode === 'Protect' ? 'Actively blocking violations' : 'Monitoring only, no blocking'}
           borderColor={modeColor}
         />
         <StatCard
           title="Namespaces"
           value={namespaceCount}
-          subtitle="已列管的命名空間"
+          subtitle="Active namespaces"
           borderColor="#28a745"
         />
         <StatCard
           title="Cluster-scoped"
           value={clusterCount}
-          subtitle="跨命名空間 Policy"
+          subtitle="Cluster-scoped policies"
           borderColor="#dc3545"
         />
       </div>
 
-      {/* Main content */}
       <div className="grid gap-4 xl:grid-cols-3">
-
-        {/* Recent Policies */}
         <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Recent Policies</CardTitle>
@@ -154,27 +150,17 @@ export function DashboardPage() {
                       key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
                       className="cursor-pointer"
                       onClick={() =>
-                        navigate(
-                          `/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`
-                        )
+                        navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
                       }
                     >
-                      <TableCell className="font-medium text-primary">
-                        {p.name}
-                      </TableCell>
+                      <TableCell className="font-medium text-primary">{p.name}</TableCell>
                       <TableCell>
-                        <Badge
-                          variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}
-                        >
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
                           {p.scope}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {p.namespace ?? '—'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {p.createdAt}
-                      </TableCell>
+                      <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
                     </TableRow>
                   ))
                 )}
@@ -183,7 +169,6 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Mode widget */}
         <Card>
           <CardHeader>
             <CardTitle>Enforcement Mode</CardTitle>
@@ -193,7 +178,7 @@ export function DashboardPage() {
               style={{ border: `2px solid ${modeColor}` }}
               className="rounded-lg p-4"
             >
-              <p className="mb-1 text-xs text-muted-foreground">目前模式</p>
+              <p className="mb-1 text-xs text-muted-foreground">Current mode</p>
               <p className="text-lg font-bold" style={{ color: modeColor }}>
                 {mode.toUpperCase()}
               </p>
@@ -203,36 +188,39 @@ export function DashboardPage() {
               className="w-full"
               onClick={() => setSwitchModal(true)}
             >
-              切換至 {nextMode.toUpperCase()}
+              Switch to {nextMode.toUpperCase()}
             </Button>
             {nextMode === 'Protect' && (
-              <p className="text-xs text-destructive">⚠ 啟用後將攔截違規行為</p>
+              <p className="text-xs text-destructive">
+                ⚠ Will actively block violations when enabled
+              </p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Mode switch confirmation */}
       <AlertDialog open={switchModal} onOpenChange={setSwitchModal}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>切換模式</AlertDialogTitle>
-            <AlertDialogDescription>
-              確定要將模式切換為 <strong>{nextMode.toUpperCase()}</strong> 嗎？
-              {nextMode === 'Protect' && (
-                <span className="mt-2 block text-destructive">
-                  警告：Protect 模式將攔截違規行為。
-                </span>
-              )}
+            <AlertDialogTitle>Switch Mode</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                Switch enforcement mode to <strong>{nextMode.toUpperCase()}</strong>?
+                {nextMode === 'Protect' && (
+                  <p className="mt-2 text-destructive">
+                    Warning: Protect mode will actively kill violating processes.
+                  </p>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant={nextMode === 'Protect' ? 'destructive' : 'default'}
               onClick={handleModeSwitch}
             >
-              切換至 {nextMode}
+              Switch to {nextMode}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

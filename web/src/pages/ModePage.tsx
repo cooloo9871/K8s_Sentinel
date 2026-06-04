@@ -18,9 +18,9 @@ import { useToast } from '../layout/AppToaster'
 import type { Mode } from '../api/types'
 
 const MODE_DESCRIPTIONS: Record<Mode, string> = {
-  Monitoring: '觀測模式：記錄所有行為但不進行攔截，適合初期策略驗證與行為分析。',
-  Protect: '保護模式：主動攔截違反策略的行為（Sigkill），適合生產環境強制執行。',
-  Mixed: '混合模式：部分策略為 Monitoring，部分為 Protect，切換模式將統一套用。',
+  Monitoring: 'Monitors all behavior without blocking. Suitable for initial policy validation and behavioral analysis.',
+  Protect: 'Actively blocks policy violations via Sigkill. Suitable for production enforcement.',
+  Mixed: 'Some policies use Monitoring and others use Protect. Switching will apply the selected mode to all policies.',
 }
 
 export function ModePage() {
@@ -68,64 +68,60 @@ export function ModePage() {
           <CardTitle className="text-sm font-medium">Enforcement Mode</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pt-4">
-          {/* Mode indicator */}
           <div
             className="rounded-lg p-5 text-center"
             style={{ border: `2px solid ${modeColor}` }}
           >
-            <p className="mb-1 text-xs text-muted-foreground">目前模式</p>
+            <p className="mb-1 text-xs text-muted-foreground">Current mode</p>
             <p className="text-3xl font-bold" style={{ color: modeColor }}>
               {mode.toUpperCase()}
             </p>
           </div>
 
-          {/* Description */}
           <p className="text-sm text-muted-foreground">{MODE_DESCRIPTIONS[mode]}</p>
 
-          {/* Mixed mode warning */}
           {mode === 'Mixed' && (
             <Alert>
               <AlertDescription>
-                混合模式：切換後所有 Policy 將統一套用新模式。
+                Mixed mode: switching will apply the new mode to all policies.
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Switch button */}
           <Button
             variant={nextMode === 'Protect' ? 'destructive' : 'outline'}
             className="w-full"
             onClick={() => setSwitchModal(true)}
           >
-            切換至 {nextMode.toUpperCase()}
+            Switch to {nextMode.toUpperCase()}
           </Button>
         </CardContent>
       </Card>
 
-      {/* Confirmation dialog */}
       <AlertDialog open={switchModal} onOpenChange={setSwitchModal}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>切換執行模式</AlertDialogTitle>
+            <AlertDialogTitle>Switch Enforcement Mode</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
-                確定要將模式從 <strong>{mode.toUpperCase()}</strong> 切換為{' '}
-                <strong>{nextMode.toUpperCase()}</strong> 嗎？
+                Switch mode from <strong>{mode.toUpperCase()}</strong> to{' '}
+                <strong>{nextMode.toUpperCase()}</strong>?
                 {nextMode === 'Protect' && (
                   <p className="mt-2 text-destructive">
-                    ⚠ 警告：Protect 模式將主動攔截（Sigkill）違規行為，請確認策略正確後再切換。
+                    ⚠ Warning: Protect mode will actively kill (Sigkill) violating processes.
+                    Ensure all policies are correct before switching.
                   </p>
                 )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant={nextMode === 'Protect' ? 'destructive' : 'default'}
               onClick={handleSwitch}
             >
-              切換至 {nextMode}
+              Switch to {nextMode}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

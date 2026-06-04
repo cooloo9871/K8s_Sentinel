@@ -76,11 +76,10 @@ export function PolicyListPage() {
 
   return (
     <>
-      {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h4 className="text-lg font-semibold">TracingPolicy</h4>
-          <p className="text-sm text-muted-foreground">Cilium 追蹤策略管理</p>
+          <h4 className="mb-0 text-lg font-semibold">TracingPolicy</h4>
+          <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>
         </div>
         <Button onClick={() => navigate('/policies/tracing/new')}>
           + New Policy
@@ -89,10 +88,9 @@ export function PolicyListPage() {
 
       <Card>
         <CardContent className="p-0">
-          {/* Toolbar */}
           <div className="flex items-center gap-2 border-b px-4 py-3">
             <Input
-              placeholder="搜尋 Policy 名稱…"
+              placeholder="Search policy name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-52"
@@ -103,18 +101,17 @@ export function PolicyListPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="all">所有 Scope</SelectItem>
+                  <SelectItem value="all">All Scopes</SelectItem>
                   <SelectItem value="namespaced">namespace</SelectItem>
                   <SelectItem value="cluster">cluster</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
             <span className="ml-auto text-sm text-muted-foreground">
-              共 {filtered.length} 筆
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
             </span>
           </div>
 
-          {/* Table */}
           {loading ? (
             <div className="flex flex-col gap-2 p-4">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -135,10 +132,7 @@ export function PolicyListPage() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="py-8 text-center text-muted-foreground"
-                    >
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                       No policies found
                     </TableCell>
                   </TableRow>
@@ -148,35 +142,27 @@ export function PolicyListPage() {
                       <TableCell
                         className="cursor-pointer font-medium text-primary"
                         onClick={() =>
-                          navigate(
-                            `/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`
-                          )
+                          navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
                         }
                       >
                         {p.name}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}
-                        >
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
                           {p.scope}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {p.namespace ?? '—'}
+                        {p.namespace ?? '-'}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {p.createdAt}
-                      </TableCell>
+                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                              navigate(
-                                `/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`
-                              )
+                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
                             }
                           >
                             Edit
@@ -199,22 +185,22 @@ export function PolicyListPage() {
         </CardContent>
       </Card>
 
-      {/* Delete confirmation */}
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>刪除 Policy</AlertDialogTitle>
+            <AlertDialogTitle>Delete Policy</AlertDialogTitle>
             <AlertDialogDescription>
-              確定要刪除 <strong>{deleteTarget?.name}</strong> 嗎？此操作無法復原。
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={handleDelete}>
-              確認刪除
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
