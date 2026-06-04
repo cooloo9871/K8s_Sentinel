@@ -1,8 +1,6 @@
 package k8s
 
 import (
-	"os"
-
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -24,10 +22,10 @@ var (
 		Version:  "v1",
 		Resource: "namespaces",
 	}
-	secretGVR = schema.GroupVersionResource{
+	eventsGVR = schema.GroupVersionResource{
 		Group:    "",
 		Version:  "v1",
-		Resource: "secrets",
+		Resource: "events",
 	}
 )
 
@@ -38,14 +36,4 @@ func NewDynamicClient() (dynamic.Interface, error) {
 		return nil, err
 	}
 	return dynamic.NewForConfig(cfg)
-}
-
-// CurrentNamespace returns the namespace the pod is running in.
-// Falls back to "default" if the file is not found.
-func CurrentNamespace() string {
-	b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return "default"
-	}
-	return string(b)
 }

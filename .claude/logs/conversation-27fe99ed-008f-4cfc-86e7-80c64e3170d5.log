@@ -70307,3 +70307,4634 @@ export function PolicyEditPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: remove Network Rules from policy form and backend"",
+    "description": "提交所有變更"
+  },
+  "tool_response": {
+    "stdout": "[main 8211cd5] feat: remove Network Rules from policy form and backend
+ 10 files changed, 10259 insertions(+), 216 deletions(-)
+ delete mode 100644 web/src/components/PolicyForm/NetworkSection.tsx",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "8211cd5",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。共修改 7 個地方，測試全部通過：
+
+| 層 | 變更 |
+|---|---|
+| `web/src/api/types.ts` | 刪除 `NetworkRule` interface，移除 `network` 欄位 |
+| `web/src/utils/formToYaml.ts` | 移除 network kprobe 產生邏輯 |
+| `web/src/utils/formToYaml.test.ts` | 移除 2 個 network 測試，更新 mixed rules 測試 |
+| `web/src/components/PolicyForm/PolicyForm.tsx` | 移除 NetworkSection import 及相關 state 轉換 |
+| `web/src/components/PolicyForm/NetworkSection.tsx` | **刪除** |
+| `web/src/pages/PolicyEditPage.tsx` | 移除 `network: []` 初始值 |
+| `internal/policy/types.go` | 刪除 `NetworkRule` struct，移除 `Network` 欄位 |
+| `internal/policy/builder.go` | 移除 `buildNetworkKProbe` 函式及 network 迴圈 |
+| `internal/policy/builder_test.go` | 移除 2 個 network 測試，更新 mixed rules 測試 |"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "我在 TracingPolicy 透過 ui 點選產生的 yaml 內容，如果點上面的 YAML 要可以接者繼續編輯，就是要直接在 yaml 上編輯"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+      "content": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, namespaceApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import type { PolicyFormInput, Mode } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [initialYaml, setInitialYaml] = useState('')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlValue, setYamlValue] = useState('')
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  useEffect(() => {
+    const work: Promise<void>[] = [
+      namespaceApi.list().then(setNamespaces),
+      modeApi.get().then(setMode),
+    ]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setInitialYaml(r.rawYaml)
+          setYamlValue(r.rawYaml)
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const action = mode === 'Protect' ? 'Sigkill' : 'Post'
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlValue }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Page header */}
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/policies/tracing')}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            initialValue={initialYaml}
+            onValueChange={(v, valid) => {
+              setYamlValue(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+",
+      "numLines": 164,
+      "startLine": 1,
+      "totalLines": 164
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, namespaceApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
+import type { PolicyFormInput, Mode } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  useEffect(() => {
+    const work: Promise<void>[] = [
+      namespaceApi.list().then(setNamespaces),
+      modeApi.get().then(setMode),
+    ]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const action = mode === 'Protect' ? 'Sigkill' : 'Post'
+
+  const handleTabChange = (tab: string) => {
+    // Switching Form → YAML: sync editor with current form-generated YAML
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        // fallback: keep existing yaml content
+        setYamlEditorKey((k) => k + 1)
+      }
+    }
+    setActiveTab(tab)
+  }
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Page header */}
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            key={yamlEditorKey}
+            initialValue={yamlContent}
+            onValueChange={(v, valid) => {
+              setYamlContent(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, namespaceApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
+import type { PolicyFormInput, Mode } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  useEffect(() => {
+    const work: Promise<void>[] = [
+      namespaceApi.list().then(setNamespaces),
+      modeApi.get().then(setMode),
+    ]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const action = mode === 'Protect' ? 'Sigkill' : 'Post'
+
+  const handleTabChange = (tab: string) => {
+    // Switching Form → YAML: sync editor with current form-generated YAML
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        // fallback: keep existing yaml content
+        setYamlEditorKey((k) => k + 1)
+      }
+    }
+    setActiveTab(tab)
+  }
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Page header */}
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            key={yamlEditorKey}
+            initialValue={yamlContent}
+            onValueChange={(v, valid) => {
+              setYamlContent(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, namespaceApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
+import type { PolicyFormInput, Mode } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  useEffect(() => {
+    const work: Promise<void>[] = [
+      namespaceApi.list().then(setNamespaces),
+      modeApi.get().then(setMode),
+    ]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const action = mode === 'Protect' ? 'Sigkill' : 'Post'
+
+  const handleTabChange = (tab: string) => {
+    // Switching Form → YAML: sync editor with current form-generated YAML
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        // fallback: keep existing yaml content
+        setYamlEditorKey((k) => k + 1)
+      }
+    }
+    setActiveTab(tab)
+  }
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Page header */}
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            key={yamlEditorKey}
+            initialValue={yamlContent}
+            onValueChange={(v, valid) => {
+              setYamlContent(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 7,
+        "oldLines": 6,
+        "newStart": 7,
+        "newLines": 7,
+        "lines": [
+          " import { useToast } from '../layout/AppToaster'",
+          " import { PolicyForm } from '../components/PolicyForm/PolicyForm'",
+          " import { YamlEditor } from '../components/YamlEditor'",
+          "+import { formToYaml } from '../utils/formToYaml'",
+          " import type { PolicyFormInput, Mode } from '../api/types'",
+          " ",
+          " const EMPTY_FORM: PolicyFormInput = {"
+        ]
+      },
+      {
+        "oldStart": 26,
+        "oldLines": 9,
+        "newStart": 27,
+        "newLines": 9,
+        "lines": [
+          " ",
+          "   const [namespaces, setNamespaces] = useState<string[]>([])",
+          "   const [mode, setMode] = useState<Mode>('Monitoring')",
+          "-  const [initialYaml, setInitialYaml] = useState('')",
+          "   const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)",
+          "-  const [yamlValue, setYamlValue] = useState('')",
+          "+  const [yamlContent, setYamlContent] = useState('')",
+          "+  const [yamlEditorKey, setYamlEditorKey] = useState(0)",
+          "   const [yamlValid, setYamlValid] = useState(true)",
+          "   const [activeTab, setActiveTab] = useState('form')",
+          "   const [loading, setLoading] = useState(false)"
+        ]
+      },
+      {
+        "oldStart": 42,
+        "oldLines": 8,
+        "newStart": 43,
+        "newLines": 7,
+        "lines": [
+          "     if (!isNew && name) {",
+          "       work.push(",
+          "         policyApi.get(name, namespace).then((r) => {",
+          "-          setInitialYaml(r.rawYaml)",
+          "-          setYamlValue(r.rawYaml)",
+          "+          setYamlContent(r.rawYaml)",
+          "         })",
+          "       )",
+          "     }"
+        ]
+      },
+      {
+        "oldStart": 52,
+        "oldLines": 6,
+        "newStart": 52,
+        "newLines": 22,
+        "lines": [
+          " ",
+          "   const action = mode === 'Protect' ? 'Sigkill' : 'Post'",
+          " ",
+          "+  const handleTabChange = (tab: string) => {",
+          "+    // Switching Form → YAML: sync editor with current form-generated YAML",
+          "+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {",
+          "+      try {",
+          "+        const generated = formToYaml(formValues, action)",
+          "+        setYamlContent(generated)",
+          "+        setYamlValid(true)",
+          "+        setYamlEditorKey((k) => k + 1)",
+          "+      } catch {",
+          "+        // fallback: keep existing yaml content",
+          "+        setYamlEditorKey((k) => k + 1)",
+          "+      }",
+          "+    }",
+          "+    setActiveTab(tab)",
+          "+  }",
+          "+",
+          "   const handleSave = async () => {",
+          "     if (activeTab === 'form') {",
+          "       if (!formValues.name.trim()) {"
+        ]
+      },
+      {
+        "oldStart": 77,
+        "oldLines": 7,
+        "newStart": 93,
+        "newLines": 7,
+        "lines": [
+          "       }",
+          "       setLoading(true)",
+          "       try {",
+          "-        const payload = { source: 'yaml' as const, rawYaml: yamlValue }",
+          "+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }",
+          "         if (isNew) await policyApi.create(payload)",
+          "         else await policyApi.update(name!, payload)",
+          "         toast.success('Policy applied')"
+        ]
+      },
+      {
+        "oldStart": 112,
+        "oldLines": 10,
+        "newStart": 128,
+        "newLines": 7,
+        "lines": [
+          "           )}",
+          "         </div>",
+          "         <div className="flex gap-2">",
+          "-          <Button",
+          "-            variant="outline"",
+          "-            onClick={() => navigate('/policies/tracing')}",
+          "-          >",
+          "+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>",
+          "             Cancel",
+          "           </Button>",
+          "           <Button onClick={handleSave} disabled={loading}>"
+        ]
+      },
+      {
+        "oldStart": 125,
+        "oldLines": 7,
+        "newStart": 138,
+        "newLines": 7,
+        "lines": [
+          "       </div>",
+          " ",
+          "       {/* Tabs */}",
+          "-      <Tabs value={activeTab} onValueChange={setActiveTab}>",
+          "+      <Tabs value={activeTab} onValueChange={handleTabChange}>",
+          "         <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">",
+          "           <TabsTrigger",
+          "             value="form""
+        ]
+      },
+      {
+        "oldStart": 150,
+        "oldLines": 9,
+        "newStart": 163,
+        "newLines": 10,
+        "lines": [
+          "         </TabsContent>",
+          "         <TabsContent value="yaml">",
+          "           <YamlEditor",
+          "-            initialValue={initialYaml}",
+          "+            key={yamlEditorKey}",
+          "+            initialValue={yamlContent}",
+          "             onValueChange={(v, valid) => {",
+          "-              setYamlValue(v)",
+          "+              setYamlContent(v)",
+          "               setYamlValid(valid)",
+          "             }}",
+          "           />"
+        ]
+      }
+    ],
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, namespaceApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import type { PolicyFormInput, Mode } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [initialYaml, setInitialYaml] = useState('')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlValue, setYamlValue] = useState('')
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  useEffect(() => {
+    const work: Promise<void>[] = [
+      namespaceApi.list().then(setNamespaces),
+      modeApi.get().then(setMode),
+    ]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setInitialYaml(r.rawYaml)
+          setYamlValue(r.rawYaml)
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const action = mode === 'Protect' ? 'Sigkill' : 'Post'
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlValue }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Page header */}
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/policies/tracing')}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            initialValue={initialYaml}
+            onValueChange={(v, valid) => {
+              setYamlValue(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -4",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -4",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  17:47:21
+   Duration  479ms (transform 21ms, setup 35ms, import 19ms, tests 4ms, environment 344ms)
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add web/src/pages/PolicyEditPage.tsx && git commit -m "feat: sync form-generated YAML to editor when switching to YAML tab"",
+    "description": "提交變更"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add web/src/pages/PolicyEditPage.tsx && git commit -m "feat: sync form-generated YAML to editor when switching to YAML tab"",
+    "description": "提交變更"
+  },
+  "tool_response": {
+    "error": "Exit code 128
+warning: could not open directory 'web/web/src/pages/': No such file or directory
+fatal: pathspec 'web/src/pages/PolicyEditPage.tsx' did not match any files",
+    "is_interrupt": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/PolicyEditPage.tsx && git commit -m "feat: sync form-generated YAML to editor when switching to YAML tab"",
+    "description": "從根目錄提交"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/PolicyEditPage.tsx && git commit -m "feat: sync form-generated YAML to editor when switching to YAML tab"",
+    "description": "從根目錄提交"
+  },
+  "tool_response": {
+    "stdout": "[main e9316b0] feat: sync form-generated YAML to editor when switching to YAML tab
+ 1 file changed, 26 insertions(+), 12 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "e9316b0",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。行為變化如下：
+
+**之前：** 切到 YAML tab 只顯示原本從 API 拉回的 YAML（或空白）
+
+**現在：**
+- Form tab 填好表單，右側 YAML Preview 即時更新
+- 點 YAML tab → Monaco editor **自動注入表單產生的 YAML**，可接著直接編輯
+- 如果表單 `name` 是空的（無法產生有效 YAML），切換時保留原有內容不變
+
+技術細節：切換時用 `key={yamlEditorKey}` 強制重新掛載 Monaco Editor，因為 Monaco 的 `defaultValue` 是不受控的，只在初始掛載時生效。每次 Form→YAML 切換都遞增 key，讓 editor 用最新的 `yamlContent` 重新初始化。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "在最左側我要新增一個 Security Events，他要可以看到整個叢集所有違反的行為的 events"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+      "content": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"` // "cluster" or "namespaced"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+",
+      "numLines": 277,
+      "startLine": 1,
+      "totalLines": 277
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+      "content": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store *k8s.Store
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Get("/api/policies", listPolicies(cfg.Store))
+	r.Post("/api/policies", createPolicy(cfg.Store))
+	r.Post("/api/policies/preview", previewPolicy)
+	r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+	r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+	r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+      "numLines": 42,
+      "startLine": 1,
+      "totalLines": 42
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/client.go",
+      "content": "package k8s
+
+import (
+	"os"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	secretGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "secrets",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
+// CurrentNamespace returns the namespace the pod is running in.
+// Falls back to "default" if the file is not found.
+func CurrentNamespace() string {
+	b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "default"
+	}
+	return string(b)
+}
+",
+      "numLines": 52,
+      "startLine": 1,
+      "totalLines": 52
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 8,
+        "newStart": 1,
+        "newLines": 6,
+        "lines": [
+          " package k8s",
+          " ",
+          " import (",
+          "-  "os"",
+          "-",
+          "   "k8s.io/apimachinery/pkg/runtime/schema"",
+          "   "k8s.io/client-go/dynamic"",
+          "   "k8s.io/client-go/rest""
+        ]
+      },
+      {
+        "oldStart": 24,
+        "oldLines": 10,
+        "newStart": 22,
+        "newLines": 10,
+        "lines": [
+          "     Version:  "v1",",
+          "     Resource: "namespaces",",
+          "   }",
+          "-  secretGVR = schema.GroupVersionResource{",
+          "+  eventsGVR = schema.GroupVersionResource{",
+          "     Group:    "",",
+          "     Version:  "v1",",
+          "-    Resource: "secrets",",
+          "+    Resource: "events",",
+          "   }",
+          " )",
+          " "
+        ]
+      },
+      {
+        "oldStart": 39,
+        "oldLines": 13,
+        "newStart": 37,
+        "newLines": 3,
+        "lines": [
+          "   }",
+          "   return dynamic.NewForConfig(cfg)",
+          " }",
+          "-",
+          "-// CurrentNamespace returns the namespace the pod is running in.",
+          "-// Falls back to "default" if the file is not found.",
+          "-func CurrentNamespace() string {",
+          "-  b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")",
+          "-  if err != nil {",
+          "-    return "default"",
+          "-  }",
+          "-  return string(b)",
+          "-}"
+        ]
+      }
+    ],
+    "originalFile": "package k8s
+
+import (
+	"os"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	secretGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "secrets",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
+// CurrentNamespace returns the namespace the pod is running in.
+// Falls back to "default" if the file is not found.
+func CurrentNamespace() string {
+	b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "default"
+	}
+	return string(b)
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)",
+    "new_string": "import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)",
+    "new_string": "import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)",
+    "newString": "import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"` // "cluster" or "namespaced"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 4,
+        "oldLines": 6,
+        "newStart": 4,
+        "newLines": 8,
+        "lines": [
+          "   "context"",
+          "   "encoding/json"",
+          "   "fmt"",
+          "+  "sort"",
+          "+  "strings"",
+          " ",
+          "   k8serrors "k8s.io/apimachinery/pkg/api/errors"",
+          "   metav1 "k8s.io/apimachinery/pkg/apis/meta/v1""
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// ListNamespaces returns all namespace names in the cluster.",
+    "new_string": "// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// ListNamespaces returns all namespace names in the cluster.",
+    "new_string": "// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "// ListNamespaces returns all namespace names in the cluster.",
+    "newString": "// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"` // "cluster" or "namespaced"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 138,
+        "oldLines": 6,
+        "newStart": 138,
+        "newLines": 75,
+        "lines": [
+          "   return nil",
+          " }",
+          " ",
+          "+// SecurityEvent is a security-relevant Kubernetes event returned by the API.",
+          "+type SecurityEvent struct {",
+          "+  Namespace         string `json:"namespace"`",
+          "+  InvolvedKind      string `json:"involvedKind"`",
+          "+  InvolvedName      string `json:"involvedName"`",
+          "+  InvolvedNamespace string `json:"involvedNamespace"`",
+          "+  Reason            string `json:"reason"`",
+          "+  Message           string `json:"message"`",
+          "+  Type              string `json:"type"`",
+          "+  Count             int64  `json:"count"`",
+          "+  FirstTime         string `json:"firstTime"`",
+          "+  LastTime          string `json:"lastTime"`",
+          "+  Source            string `json:"source"`",
+          "+}",
+          "+",
+          "+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.",
+          "+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {",
+          "+  list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})",
+          "+  if err != nil {",
+          "+    return nil, fmt.Errorf("list events: %w", err)",
+          "+  }",
+          "+",
+          "+  var events []SecurityEvent",
+          "+  for _, item := range list.Items {",
+          "+    evType, _, _ := unstructured.NestedString(item.Object, "type")",
+          "+    source, _, _ := unstructured.NestedString(item.Object, "source", "component")",
+          "+",
+          "+    isTetragon := strings.Contains(strings.ToLower(source), "tetragon")",
+          "+    if evType != "Warning" && !isTetragon {",
+          "+      continue",
+          "+    }",
+          "+",
+          "+    reason, _, _ := unstructured.NestedString(item.Object, "reason")",
+          "+    message, _, _ := unstructured.NestedString(item.Object, "message")",
+          "+    involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")",
+          "+    involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")",
+          "+    involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")",
+          "+    firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")",
+          "+    lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")",
+          "+",
+          "+    var count int64",
+          "+    if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {",
+          "+      if n, ok := v.(int64); ok {",
+          "+        count = n",
+          "+      }",
+          "+    }",
+          "+",
+          "+    events = append(events, SecurityEvent{",
+          "+      Namespace:         item.GetNamespace(),",
+          "+      InvolvedKind:      involvedKind,",
+          "+      InvolvedName:      involvedName,",
+          "+      InvolvedNamespace: involvedNS,",
+          "+      Reason:            reason,",
+          "+      Message:           message,",
+          "+      Type:              evType,",
+          "+      Count:             count,",
+          "+      FirstTime:         firstTime,",
+          "+      LastTime:          lastTime,",
+          "+      Source:            source,",
+          "+    })",
+          "+  }",
+          "+",
+          "+  sort.Slice(events, func(i, j int) bool {",
+          "+    return events[i].LastTime > events[j].LastTime",
+          "+  })",
+          "+",
+          "+  return events, nil",
+          "+}",
+          "+",
+          " // ListNamespaces returns all namespace names in the cluster.",
+          " func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {",
+          "   list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func listEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		events, err := store.ListSecurityEvents(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if events == nil {
+			events = []k8s.SecurityEvent{}
+		}
+		writeJSON(w, http.StatusOK, events)
+	}
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func listEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		events, err := store.ListSecurityEvents(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if events == nil {
+			events = []k8s.SecurityEvent{}
+		}
+		writeJSON(w, http.StatusOK, events)
+	}
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func listEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		events, err := store.ListSecurityEvents(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if events == nil {
+			events = []k8s.SecurityEvent{}
+		}
+		writeJSON(w, http.StatusOK, events)
+	}
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))",
+    "new_string": "	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))
+	r.Get("/api/events", listEvents(cfg.Store))",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))",
+    "new_string": "	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))
+	r.Get("/api/events", listEvents(cfg.Store))",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "oldString": "	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))",
+    "newString": "	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))
+	r.Get("/api/events", listEvents(cfg.Store))",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store *k8s.Store
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Get("/api/policies", listPolicies(cfg.Store))
+	r.Post("/api/policies", createPolicy(cfg.Store))
+	r.Post("/api/policies/preview", previewPolicy)
+	r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+	r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+	r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 30,
+        "oldLines": 6,
+        "newStart": 30,
+        "newLines": 7,
+        "lines": [
+          "   r.Get("/api/namespaces", listNamespaces(cfg.Store))",
+          "   r.Get("/api/mode", getMode(cfg.Store))",
+          "   r.Put("/api/mode", setMode(cfg.Store))",
+          "+  r.Get("/api/events", listEvents(cfg.Store))",
+          " ",
+          "   return r",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "old_string": "  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]",
+    "new_string": "  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "old_string": "  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]",
+    "new_string": "  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "oldString": "  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]",
+    "newString": "  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]",
+    "originalFile": "apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sentinel
+rules:
+  - apiGroups: ["cilium.io"]
+    resources: ["tracingpolicies", "tracingpoliciesnamespaced"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+",
+    "structuredPatch": [
+      {
+        "oldStart": 9,
+        "oldLines": 3,
+        "newStart": 9,
+        "newLines": 6,
+        "lines": [
+          "   - apiGroups: [""]",
+          "     resources: ["namespaces"]",
+          "     verbs: ["get", "list"]",
+          "+  - apiGroups: [""]",
+          "+    resources: ["events"]",
+          "+    verbs: ["get", "list", "watch"]"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 30000,
+    "description": "驗證 Go 後端編譯"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 30000,
+    "description": "驗證 Go 後端編譯"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "export type Mode = 'Monitoring' | 'Protect' | 'Mixed'",
+    "new_string": "export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "export type Mode = 'Monitoring' | 'Protect' | 'Mixed'",
+    "new_string": "export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "oldString": "export type Mode = 'Monitoring' | 'Protect' | 'Mixed'",
+    "newString": "export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}",
+    "originalFile": "export interface ProcessRule {
+  binaries: string[]
+}
+
+export interface FileRule {
+  paths: string[]
+  operation: 'read' | 'write' | 'open'
+}
+
+export interface PolicyFormInput {
+  name: string
+  namespace?: string
+  podSelector?: Record<string, string>
+  process?: ProcessRule[]
+  file?: FileRule[]
+}
+
+export interface PolicyRecord {
+  name: string
+  namespace?: string
+  scope: 'cluster' | 'namespaced'
+  createdAt: string
+  rawYaml: string
+}
+
+export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface CreatePolicyPayload {
+  source: 'form' | 'yaml'
+  form?: PolicyFormInput
+  action?: string
+  rawYaml?: string
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 25,
+        "oldLines": 6,
+        "newStart": 25,
+        "newLines": 20,
+        "lines": [
+          " ",
+          " export type Mode = 'Monitoring' | 'Protect' | 'Mixed'",
+          " ",
+          "+export interface SecurityEvent {",
+          "+  namespace: string",
+          "+  involvedKind: string",
+          "+  involvedName: string",
+          "+  involvedNamespace: string",
+          "+  reason: string",
+          "+  message: string",
+          "+  type: string",
+          "+  count: number",
+          "+  firstTime: string",
+          "+  lastTime: string",
+          "+  source: string",
+          "+}",
+          "+",
+          " export interface CreatePolicyPayload {",
+          "   source: 'form' | 'yaml'",
+          "   form?: PolicyFormInput"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+    "new_string": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+    "new_string": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+    "newString": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 5,
+        "newStart": 1,
+        "newLines": 5,
+        "lines": [
+          " import axios from 'axios'",
+          "-import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+          "+import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+          " ",
+          " const api = axios.create({ baseURL: '/api', withCredentials: true })",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}",
+    "new_string": "export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}",
+    "new_string": "export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}",
+    "newString": "export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 37,
+        "oldLines": 3,
+        "newStart": 37,
+        "newLines": 7,
+        "lines": [
+          " export const namespaceApi = {",
+          "   list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),",
+          " }",
+          "+",
+          "+export const eventsApi = {",
+          "+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),",
+          "+}"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { eventsApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { SecurityEvent } from '../api/types'
+
+function formatTime(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString()
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diffMs = Date.now() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+  let label = ''
+  if (diffMin < 1) label = 'Just now'
+  else if (diffMin < 60) label = `${diffMin}m ago`
+  else if (diffHr < 24) label = `${diffHr}h ago`
+  else label = `${diffDay}d ago`
+  return <span title={formatTime(iso)}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const toast = useToast()
+  const [events, setEvents] = useState<SecurityEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+    try {
+      setEvents(await eventsApi.list())
+    } catch {
+      toast.error('Failed to load security events')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            叢集違規行為紀錄（Warning 事件 + Tetragon 事件）
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => load(true)}
+          disabled={refreshing}
+        >
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Type</TableHead>
+                  <TableHead>Object</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead className="max-w-xs">Message</TableHead>
+                  <TableHead className="text-center w-16">Count</TableHead>
+                  <TableHead className="w-32">Last Seen</TableHead>
+                  <TableHead>Source</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-12 text-center text-muted-foreground"
+                    >
+                      No security events found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  events.map((e, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Badge variant={e.type === 'Warning' ? 'destructive' : 'secondary'}>
+                          {e.type || '—'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{e.involvedName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {e.involvedKind}
+                          {e.involvedNamespace ? ` / ${e.involvedNamespace}` : ''}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{e.reason || '—'}</TableCell>
+                      <TableCell className="max-w-xs">
+                        <p
+                          className="truncate text-sm"
+                          title={e.message}
+                        >
+                          {e.message || '—'}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-center text-sm">
+                        {e.count || 1}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <RelativeTime iso={e.lastTime} />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.source || '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { eventsApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { SecurityEvent } from '../api/types'
+
+function formatTime(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString()
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diffMs = Date.now() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+  let label = ''
+  if (diffMin < 1) label = 'Just now'
+  else if (diffMin < 60) label = `${diffMin}m ago`
+  else if (diffHr < 24) label = `${diffHr}h ago`
+  else label = `${diffDay}d ago`
+  return <span title={formatTime(iso)}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const toast = useToast()
+  const [events, setEvents] = useState<SecurityEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+    try {
+      setEvents(await eventsApi.list())
+    } catch {
+      toast.error('Failed to load security events')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            叢集違規行為紀錄（Warning 事件 + Tetragon 事件）
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => load(true)}
+          disabled={refreshing}
+        >
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Type</TableHead>
+                  <TableHead>Object</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead className="max-w-xs">Message</TableHead>
+                  <TableHead className="text-center w-16">Count</TableHead>
+                  <TableHead className="w-32">Last Seen</TableHead>
+                  <TableHead>Source</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-12 text-center text-muted-foreground"
+                    >
+                      No security events found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  events.map((e, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Badge variant={e.type === 'Warning' ? 'destructive' : 'secondary'}>
+                          {e.type || '—'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{e.involvedName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {e.involvedKind}
+                          {e.involvedNamespace ? ` / ${e.involvedNamespace}` : ''}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{e.reason || '—'}</TableCell>
+                      <TableCell className="max-w-xs">
+                        <p
+                          className="truncate text-sm"
+                          title={e.message}
+                        >
+                          {e.message || '—'}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-center text-sm">
+                        {e.count || 1}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <RelativeTime iso={e.lastTime} />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.source || '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { eventsApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { SecurityEvent } from '../api/types'
+
+function formatTime(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString()
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diffMs = Date.now() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+  let label = ''
+  if (diffMin < 1) label = 'Just now'
+  else if (diffMin < 60) label = `${diffMin}m ago`
+  else if (diffHr < 24) label = `${diffHr}h ago`
+  else label = `${diffDay}d ago`
+  return <span title={formatTime(iso)}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const toast = useToast()
+  const [events, setEvents] = useState<SecurityEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+    try {
+      setEvents(await eventsApi.list())
+    } catch {
+      toast.error('Failed to load security events')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            叢集違規行為紀錄（Warning 事件 + Tetragon 事件）
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => load(true)}
+          disabled={refreshing}
+        >
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Type</TableHead>
+                  <TableHead>Object</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead className="max-w-xs">Message</TableHead>
+                  <TableHead className="text-center w-16">Count</TableHead>
+                  <TableHead className="w-32">Last Seen</TableHead>
+                  <TableHead>Source</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-12 text-center text-muted-foreground"
+                    >
+                      No security events found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  events.map((e, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Badge variant={e.type === 'Warning' ? 'destructive' : 'secondary'}>
+                          {e.type || '—'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{e.involvedName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {e.involvedKind}
+                          {e.involvedNamespace ? ` / ${e.involvedNamespace}` : ''}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{e.reason || '—'}</TableCell>
+                      <TableCell className="max-w-xs">
+                        <p
+                          className="truncate text-sm"
+                          title={e.message}
+                        >
+                          {e.message || '—'}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-center text-sm">
+                        {e.count || 1}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <RelativeTime iso={e.lastTime} />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.source || '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'",
+    "new_string": "import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'",
+    "new_string": "import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'",
+    "newString": "import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+            <Route path="/policies/tracing" element={<PolicyListPage />} />
+            <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+            <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 6,
+        "oldLines": 6,
+        "newStart": 6,
+        "newLines": 7,
+        "lines": [
+          " import { PolicyEditPage } from './pages/PolicyEditPage'",
+          " import { ModePage } from './pages/ModePage'",
+          " import { NamespacesPage } from './pages/NamespacesPage'",
+          "+import { SecurityEventsPage } from './pages/SecurityEventsPage'",
+          " ",
+          " export default function App() {",
+          "   return ("
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />",
+    "new_string": "            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="/security/events" element={<SecurityEventsPage />} />",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />",
+    "new_string": "            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="/security/events" element={<SecurityEventsPage />} />",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />",
+    "newString": "            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="/security/events" element={<SecurityEventsPage />} />",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+            <Route path="/policies/tracing" element={<PolicyListPage />} />
+            <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+            <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 22,
+        "oldLines": 6,
+        "newStart": 22,
+        "newLines": 7,
+        "lines": [
+          "             <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />",
+          "             <Route path="/cluster/mode" element={<ModePage />} />",
+          "             <Route path="/cluster/namespaces" element={<NamespacesPage />} />",
+          "+            <Route path="/security/events" element={<SecurityEventsPage />} />",
+          "             <Route path="*" element={<Navigate to="/dashboard" replace />} />",
+          "           </Route>",
+          "         </Routes>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        {/* Cluster */}
+        <SidebarGroup>",
+    "new_string": "        {/* Security */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Cluster */}
+        <SidebarGroup>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        {/* Cluster */}
+        <SidebarGroup>",
+    "new_string": "        {/* Security */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Cluster */}
+        <SidebarGroup>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "        {/* Cluster */}
+        <SidebarGroup>",
+    "newString": "        {/* Security */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Cluster */}
+        <SidebarGroup>",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      {/* Brand */}
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        {/* Dashboard */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Policies */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Cluster */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/mode')}>
+                  <NavLink to="/cluster/mode">Mode Control</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 59,
+        "oldLines": 6,
+        "newStart": 59,
+        "newLines": 20,
+        "lines": [
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>",
+          " ",
+          "+        {/* Security */}",
+          "+        <SidebarGroup>",
+          "+          <SidebarGroupLabel>Security</SidebarGroupLabel>",
+          "+          <SidebarGroupContent>",
+          "+            <SidebarMenu>",
+          "+              <SidebarMenuItem>",
+          "+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>",
+          "+                  <NavLink to="/security/events">Events</NavLink>",
+          "+                </SidebarMenuButton>",
+          "+              </SidebarMenuItem>",
+          "+            </SidebarMenu>",
+          "+          </SidebarGroupContent>",
+          "+        </SidebarGroup>",
+          "+",
+          "         {/* Cluster */}",
+          "         <SidebarGroup>",
+          "           <SidebarGroupLabel>Cluster</SidebarGroupLabel>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && go test ./... 2>&1 && echo "Go OK"",
+    "timeout": 30000,
+    "description": "Go 完整驗證"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && go test ./... 2>&1 && echo "Go OK"",
+    "timeout": 30000,
+    "description": "Go 完整驗證"
+  },
+  "tool_response": {
+    "stdout": "?   	github.com/brobridge/sentinel/cmd/server	[no test files]
+?   	github.com/brobridge/sentinel/internal/handler	[no test files]
+?   	github.com/brobridge/sentinel/internal/k8s	[no test files]
+?   	github.com/brobridge/sentinel/web	[no test files]
+ok  	github.com/brobridge/sentinel/internal/policy	(cached)
+Go OK",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "前端測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "前端測試 + build"
+  },
+  "tool_response": {
+    "stdout": "npm error errno -2
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/home/bigred/Sentinel/package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+npm error A complete log of this run can be found in: /home/bigred/.npm/_logs/2026-06-04T09_52_01_139Z-debug-0.log
+npm error errno -2
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/home/bigred/Sentinel/package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+npm error A complete log of this run can be found in: /home/bigred/.npm/_logs/2026-06-04T09_52_01_197Z-debug-0.log",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "在 web 目錄執行測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "在 web 目錄執行測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  17:52:05
+   Duration  475ms (transform 20ms, setup 38ms, import 17ms, tests 4ms, environment 343ms)
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "feat: add Security Events page with cluster-wide k8s warning events"",
+    "description": "提交全部變更"
+  }
+}
+
+----------------------------------------
+

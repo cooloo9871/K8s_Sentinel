@@ -6,6 +6,7 @@ import { PolicyListPage } from './pages/PolicyListPage'
 import { PolicyEditPage } from './pages/PolicyEditPage'
 import { ModePage } from './pages/ModePage'
 import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
             <Route path="/cluster/mode" element={<ModePage />} />
             <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="/security/events" element={<SecurityEventsPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

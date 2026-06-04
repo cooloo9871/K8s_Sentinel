@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'
 
 const api = axios.create({ baseURL: '/api', withCredentials: true })
 
@@ -36,4 +36,8 @@ export const modeApi = {
 
 export const namespaceApi = {
   list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
 }

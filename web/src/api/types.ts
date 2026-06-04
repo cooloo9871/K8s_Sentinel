@@ -25,6 +25,20 @@ export interface PolicyRecord {
 
 export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
 
+export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}
+
 export interface CreatePolicyPayload {
   source: 'form' | 'yaml'
   form?: PolicyFormInput
