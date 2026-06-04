@@ -20,12 +20,6 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
-          env:
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: sentinel-credentials
-                  key: jwt-secret
           resources:
             requests:
               cpu: 50m

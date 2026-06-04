@@ -8,12 +8,6 @@ api.interceptors.response.use(
   (err) => Promise.reject(err)
 )
 
-export const authApi = {
-  login: (username: string, password: string) =>
-    api.post('/auth/login', { username, password }),
-  logout: () => api.post('/auth/logout'),
-}
-
 export const policyApi = {
   list: (): Promise<PolicyRecord[]> =>
     api.get('/policies').then((r) => r.data),

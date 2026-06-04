@@ -3,5 +3,3 @@ kind: Kustomization
 namespace: sentinel-system
 resources:
   - ../../base
-patches:
-  - path: secret-patch.yaml

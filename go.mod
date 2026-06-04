@@ -3,8 +3,7 @@ module github.com/brobridge/sentinel
 go 1.22.2
 
 require (
-	github.com/golang-jwt/jwt/v5 v5.2.1
-	golang.org/x/crypto v0.23.0
+	github.com/go-chi/chi/v5 v5.1.0
 	k8s.io/apimachinery v0.29.3
 	k8s.io/client-go v0.29.3
 	sigs.k8s.io/yaml v1.4.0
@@ -12,7 +11,6 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-chi/chi/v5 v5.1.0 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
