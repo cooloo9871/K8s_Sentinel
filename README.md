@@ -57,9 +57,22 @@ docker push your-registry/sentinel:latest
 
 ### 步驟三：部署
 
+執行安裝腳本，會自動偵測並安裝 Tetragon（若尚未安裝），然後部署 Sentinel：
+
 ```bash
-kubectl create namespace sentinel-system
-kubectl apply -k deploy/base/
+bash deploy/install.sh
+```
+
+腳本執行流程：
+1. 偵測 `kube-system` 是否已有 Tetragon DaemonSet，沒有則透過 Helm 安裝
+2. 建立 `sentinel-system` namespace（已存在則跳過）
+3. 套用 Sentinel K8s 資源
+4. 等待 Deployment 就緒
+
+若需要傳入額外的 Helm flags（例如指定 values 或 image），可透過環境變數：
+
+```bash
+EXTRA_HELM_FLAGS=(--set tetragon.image.tag=v1.2.3) bash deploy/install.sh
 ```
 
 確認所有資源正常建立：
@@ -143,9 +156,12 @@ Sentinel 需要以下叢集層級權限才能正常運作：
 ### 解除安裝
 
 ```bash
+# 移除 Sentinel
 kubectl delete -k deploy/base/
-# 或
 kubectl delete namespace sentinel-system
+
+# 移除 Tetragon（若是由本腳本安裝）
+helm uninstall tetragon -n kube-system
 ```
 
 ---
