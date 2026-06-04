@@ -12,12 +12,10 @@ import {
 } from '@/components/ui/select'
 import { ProcessSection } from './ProcessSection'
 import { FileSection } from './FileSection'
-import { NetworkSection } from './NetworkSection'
 import { formToYaml } from '../../utils/formToYaml'
-import type { PolicyFormInput, FileRule, NetworkRule } from '../../api/types'
+import type { PolicyFormInput, FileRule } from '../../api/types'
 
 type FileEntry = { path: string; operation: FileRule['operation'] }
-type NetEntry = { protocol: NetworkRule['protocol']; cidr: string; port: string }
 
 const CLUSTER_WIDE = '__cluster_wide__'
 
@@ -41,12 +39,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
   const fileEntries: FileEntry[] =
     value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []
-  const netEntries: NetEntry[] =
-    value.network?.map((n) => ({
-      protocol: n.protocol,
-      cidr: n.cidr,
-      port: n.port?.toString() ?? '',
-    })) ?? []
 
   const setProcessBinaries = (binaries: string[]) =>
     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
@@ -55,16 +47,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
     onChange({
       ...value,
       file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
-    })
-
-  const setNetEntries = (entries: NetEntry[]) =>
-    onChange({
-      ...value,
-      network: entries.map((e) => ({
-        protocol: e.protocol,
-        cidr: e.cidr,
-        port: e.port ? parseInt(e.port, 10) : undefined,
-      })),
     })
 
   return (
@@ -129,15 +111,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
           </CardHeader>
           <CardContent className="pt-4">
             <FileSection rules={fileEntries} onChange={setFileEntries} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">Network Rules</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <NetworkSection rules={netEntries} onChange={setNetEntries} />
           </CardContent>
         </Card>
 

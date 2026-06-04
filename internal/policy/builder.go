@@ -33,9 +33,6 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, kp)
 	}
-	for _, r := range input.Network {
-		tp.Spec.KProbes = append(tp.Spec.KProbes, buildNetworkKProbe(r, action))
-	}
 
 	return tp, nil
 }
@@ -74,17 +71,3 @@ func buildFileKProbe(r FileRule, action string) (KProbeSpec, error) {
 	}, nil
 }
 
-func buildNetworkKProbe(r NetworkRule, action string) KProbeSpec {
-	value := r.CIDR
-	if r.Port > 0 {
-		value = fmt.Sprintf("%s:%d", r.CIDR, r.Port)
-	}
-	return KProbeSpec{
-		Call:    "tcp_connect",
-		Syscall: false,
-		Selectors: []KProbeSelector{{
-			MatchArgs:    []ArgSelector{{Index: 0, Operator: "Equal", Values: []string{value}}},
-			MatchActions: []ActionSelector{{Action: action}},
-		}},
-	}
-}

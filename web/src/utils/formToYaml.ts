@@ -70,19 +70,5 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     })
   }
 
-  for (const r of input.network ?? []) {
-    const value = r.port ? `${r.cidr}:${r.port}` : r.cidr
-    doc.spec.kprobes.push({
-      call: 'tcp_connect',
-      syscall: false,
-      selectors: [
-        {
-          matchArgs: [{ index: 0, operator: 'Equal', values: [value] }],
-          matchActions: [{ action }],
-        },
-      ],
-    })
-  }
-
   return yaml.dump(doc, { lineWidth: -1 })
 }

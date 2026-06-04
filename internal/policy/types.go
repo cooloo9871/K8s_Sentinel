@@ -12,7 +12,6 @@ type PolicyFormInput struct {
 	PodSelector map[string]string `json:"podSelector,omitempty"`
 	Process     []ProcessRule     `json:"process,omitempty"`
 	File        []FileRule        `json:"file,omitempty"`
-	Network     []NetworkRule     `json:"network,omitempty"`
 }
 
 type ProcessRule struct {
@@ -22,12 +21,6 @@ type ProcessRule struct {
 type FileRule struct {
 	Paths     []string `json:"paths"`
 	Operation string   `json:"operation"` // "read", "write", "open"
-}
-
-type NetworkRule struct {
-	Protocol string `json:"protocol"`
-	Port     int    `json:"port,omitempty"`
-	CIDR     string `json:"cidr,omitempty"`
 }
 
 // TracingPolicy is the Tetragon CRD object used for YAML serialisation.

@@ -37,27 +37,6 @@ describe('formToYaml', () => {
     expect(yaml).toContain('/etc/passwd')
   })
 
-  it('generates network kprobe with CIDR and port', () => {
-    const input: PolicyFormInput = {
-      name: 'net-policy',
-      network: [{ protocol: 'TCP', cidr: '10.0.0.0/8', port: 8080 }],
-    }
-    const yaml = formToYaml(input, 'Sigkill')
-    expect(yaml).toContain('tcp_connect')
-    expect(yaml).toContain('10.0.0.0/8:8080')
-    expect(yaml).toContain('Sigkill')
-  })
-
-  it('generates network kprobe with CIDR only (no port)', () => {
-    const input: PolicyFormInput = {
-      name: 'cidr-only',
-      network: [{ protocol: 'TCP', cidr: '192.168.0.0/16' }],
-    }
-    const yaml = formToYaml(input, 'Post')
-    expect(yaml).toContain('192.168.0.0/16')
-    expect(yaml).not.toContain('192.168.0.0/16:')
-  })
-
   it('includes podSelector when provided', () => {
     const input: PolicyFormInput = {
       name: 'scoped',
@@ -74,11 +53,9 @@ describe('formToYaml', () => {
       name: 'multi',
       process: [{ binaries: ['/bin/bash'] }],
       file: [{ paths: ['/etc'], operation: 'open' }],
-      network: [{ protocol: 'TCP', cidr: '0.0.0.0/0' }],
     }
     const yaml = formToYaml(input, 'Post')
     expect(yaml).toContain('sys_execve')
     expect(yaml).toContain('sys_openat')
-    expect(yaml).toContain('tcp_connect')
   })
 })

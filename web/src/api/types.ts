@@ -7,19 +7,12 @@ export interface FileRule {
   operation: 'read' | 'write' | 'open'
 }
 
-export interface NetworkRule {
-  protocol: 'TCP' | 'UDP'
-  cidr: string
-  port?: number
-}
-
 export interface PolicyFormInput {
   name: string
   namespace?: string
   podSelector?: Record<string, string>
   process?: ProcessRule[]
   file?: FileRule[]
-  network?: NetworkRule[]
 }
 
 export interface PolicyRecord {

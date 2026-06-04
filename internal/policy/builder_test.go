@@ -83,43 +83,6 @@ func TestBuildFilePolicy_UnknownOperation(t *testing.T) {
 	}
 }
 
-func TestBuildNetworkPolicy(t *testing.T) {
-	input := policy.PolicyFormInput{
-		Name:    "block-external",
-		Network: []policy.NetworkRule{{Protocol: "TCP", CIDR: "10.0.0.0/8", Port: 8080}},
-	}
-
-	got, err := policy.Build(input, policy.ActionSigkill)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	kp := got.Spec.KProbes[0]
-	if kp.Call != "tcp_connect" {
-		t.Errorf("call = %q, want tcp_connect", kp.Call)
-	}
-	if kp.Selectors[0].MatchArgs[0].Values[0] != "10.0.0.0/8:8080" {
-		t.Errorf("value = %q, want 10.0.0.0/8:8080", kp.Selectors[0].MatchArgs[0].Values[0])
-	}
-	if kp.Selectors[0].MatchActions[0].Action != "Sigkill" {
-		t.Errorf("action = %q, want Sigkill", kp.Selectors[0].MatchActions[0].Action)
-	}
-}
-
-func TestBuildNetworkPolicy_NoPort(t *testing.T) {
-	input := policy.PolicyFormInput{
-		Name:    "any-port",
-		Network: []policy.NetworkRule{{Protocol: "TCP", CIDR: "192.168.0.0/16"}},
-	}
-
-	got, err := policy.Build(input, policy.ActionPost)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Values[0] != "192.168.0.0/16" {
-		t.Errorf("expected CIDR only, got %q", got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Values[0])
-	}
-}
-
 func TestBuildNamespacedPolicy(t *testing.T) {
 	input := policy.PolicyFormInput{
 		Name:      "ns-policy",
@@ -163,15 +126,14 @@ func TestBuildMultipleRules(t *testing.T) {
 		Name:    "multi",
 		Process: []policy.ProcessRule{{Binaries: []string{"/bin/bash"}}},
 		File:    []policy.FileRule{{Paths: []string{"/etc"}, Operation: "open"}},
-		Network: []policy.NetworkRule{{Protocol: "TCP", CIDR: "0.0.0.0/0"}},
 	}
 
 	got, err := policy.Build(input, policy.ActionPost)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if len(got.Spec.KProbes) != 3 {
-		t.Errorf("kprobes len = %d, want 3", len(got.Spec.KProbes))
+	if len(got.Spec.KProbes) != 2 {
+		t.Errorf("kprobes len = %d, want 2", len(got.Spec.KProbes))
 	}
 }
 
