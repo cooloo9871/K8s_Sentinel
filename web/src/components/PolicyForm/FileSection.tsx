@@ -1,4 +1,13 @@
-import { CFormInput, CFormSelect, CButton } from '@coreui/react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import type { FileRule } from '../../api/types'
 
 type FileEntry = { path: string; operation: FileRule['operation'] }
@@ -18,30 +27,45 @@ export function FileSection({ rules, onChange }: Props) {
   const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
 
   return (
-    <div className="mb-3">
+    <div className="flex flex-col gap-2">
       {rules.map((r, i) => (
-        <div key={i} className="d-flex align-items-center gap-2 mb-2">
-          <CFormInput
+        <div key={i} className="flex items-center gap-2">
+          <Input
             placeholder="/etc/nginx/nginx.conf"
             value={r.path}
             onChange={(e) => update(i, { path: e.target.value })}
-            size="sm"
-            style={{ flex: 2 }}
+            className="h-8 flex-[2] text-sm"
           />
-          <CFormSelect
+          <Select
             value={r.operation}
-            onChange={(e) => update(i, { operation: e.target.value as FileRule['operation'] })}
-            size="sm"
-            style={{ flex: 1 }}
+            onValueChange={(v) => update(i, { operation: v as FileRule['operation'] })}
           >
-            <option value="read">read</option>
-            <option value="write">write</option>
-            <option value="open">open</option>
-          </CFormSelect>
-          <CButton color="danger" variant="ghost" size="sm" onClick={() => remove(i)}>✕</CButton>
+            <SelectTrigger className="h-8 w-28 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="read">read</SelectItem>
+                <SelectItem value="write">write</SelectItem>
+                <SelectItem value="open">open</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(i)}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
+            ✕
+          </Button>
         </div>
       ))}
-      <CButton color="primary" variant="outline" size="sm" onClick={add}>+ Add</CButton>
+      <div>
+        <Button variant="outline" size="sm" onClick={add}>
+          + Add
+        </Button>
+      </div>
     </div>
   )
 }

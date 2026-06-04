@@ -1,4 +1,5 @@
-import { CFormInput, CButton } from '@coreui/react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface Props {
   binaries: string[]
@@ -15,23 +16,30 @@ export function ProcessSection({ binaries, onChange }: Props) {
   const remove = (i: number) => onChange(binaries.filter((_, j) => j !== i))
 
   return (
-    <div className="mb-3">
+    <div className="flex flex-col gap-2">
       {binaries.map((b, i) => (
-        <div key={i} className="d-flex align-items-center gap-2 mb-2">
-          <CFormInput
+        <div key={i} className="flex items-center gap-2">
+          <Input
             placeholder="/usr/bin/nginx"
             value={b}
             onChange={(e) => update(i, e.target.value)}
-            size="sm"
+            className="h-8 text-sm"
           />
-          <CButton color="danger" variant="ghost" size="sm" onClick={() => remove(i)} style={{ flexShrink: 0 }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(i)}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
             ✕
-          </CButton>
+          </Button>
         </div>
       ))}
-      <CButton color="primary" variant="outline" size="sm" onClick={add}>
-        + Add
-      </CButton>
+      <div>
+        <Button variant="outline" size="sm" onClick={add}>
+          + Add
+        </Button>
+      </div>
     </div>
   )
 }

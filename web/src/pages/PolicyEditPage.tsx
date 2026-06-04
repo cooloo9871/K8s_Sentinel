@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import {
-  CTabs,
-  CTabList,
-  CTab,
-  CTabContent,
-  CTabPanel,
-  CButton,
-  CSpinner,
-} from '@coreui/react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { policyApi, namespaceApi, modeApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { PolicyForm } from '../components/PolicyForm/PolicyForm'
@@ -37,7 +31,7 @@ export function PolicyEditPage() {
   const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
   const [yamlValue, setYamlValue] = useState('')
   const [yamlValid, setYamlValid] = useState(true)
-  const [activeTab, setActiveTab] = useState<string>('form')
+  const [activeTab, setActiveTab] = useState('form')
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(!isNew)
 
@@ -99,58 +93,72 @@ export function PolicyEditPage() {
 
   if (pageLoading) {
     return (
-      <div className="d-flex justify-content-center py-5">
-        <CSpinner color="primary" />
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
       </div>
     )
   }
 
   return (
     <>
-      <div className="d-flex justify-content-between align-items-start mb-3">
+      {/* Page header */}
+      <div className="mb-6 flex items-start justify-between">
         <div>
-          <h4 className="mb-0" style={{ color: '#1b2a3b', fontWeight: 600 }}>
+          <h4 className="text-lg font-semibold">
             {isNew ? 'New Policy' : 'Edit Policy'}
           </h4>
           {!isNew && (
-            <div className="text-muted" style={{ fontSize: '0.75rem' }}>{name}</div>
+            <p className="text-sm text-muted-foreground">{name}</p>
           )}
         </div>
-        <div className="d-flex gap-2">
-          <CButton color="secondary" variant="outline" onClick={() => navigate('/policies/tracing')}>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/policies/tracing')}
+          >
             Cancel
-          </CButton>
-          <CButton color="primary" onClick={handleSave} disabled={loading}>
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
             {loading ? 'Saving…' : 'Save Changes'}
-          </CButton>
+          </Button>
         </div>
       </div>
 
-      <CTabs activeItemKey={activeTab}>
-        <CTabList variant="underline-border" className="mb-3">
-          <CTab itemKey="form" onClick={() => setActiveTab('form')}>Form</CTab>
-          <CTab itemKey="yaml" onClick={() => setActiveTab('yaml')}>YAML</CTab>
-        </CTabList>
-        <CTabContent>
-          <CTabPanel itemKey="form">
-            <PolicyForm
-              namespaces={namespaces}
-              action={action}
-              value={formValues}
-              onChange={setFormValues}
-            />
-          </CTabPanel>
-          <CTabPanel itemKey="yaml">
-            <YamlEditor
-              initialValue={initialYaml}
-              onValueChange={(v, valid) => {
-                setYamlValue(v)
-                setYamlValid(valid)
-              }}
-            />
-          </CTabPanel>
-        </CTabContent>
-      </CTabs>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            initialValue={initialYaml}
+            onValueChange={(v, valid) => {
+              setYamlValue(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
     </>
   )
 }

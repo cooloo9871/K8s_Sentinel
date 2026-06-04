@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import MonacoEditor from '@monaco-editor/react'
-import { CAlert } from '@coreui/react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import yaml from 'js-yaml'
 
 interface Props {
@@ -26,11 +26,11 @@ export function YamlEditor({ initialValue = '', onValueChange }: Props) {
   }
 
   return (
-    <div>
+    <div className="flex flex-col gap-2">
       {error && (
-        <CAlert color="danger" className="mb-2" style={{ fontSize: '0.8rem' }}>
-          {error}
-        </CAlert>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       <MonacoEditor
         height="500px"
