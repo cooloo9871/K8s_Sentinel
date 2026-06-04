@@ -1,26 +1,33 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  CRow,
-  CCol,
-  CCard,
-  CCardHeader,
-  CCardBody,
-  CTable,
-  CTableHead,
-  CTableBody,
-  CTableRow,
-  CTableHeaderCell,
-  CTableDataCell,
-  CBadge,
-  CButton,
-  CSpinner,
-  CModal,
-  CModalHeader,
-  CModalTitle,
-  CModalBody,
-  CModalFooter,
-} from '@coreui/react'
+  Card,
+  CardHeader,
+  CardTitle,
+  CardAction,
+  CardContent,
+} from '@/components/ui/card'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { policyApi, modeApi, namespaceApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { StatCard } from '../components/StatCard'
@@ -34,7 +41,6 @@ export function DashboardPage() {
   const [namespaceCount, setNamespaceCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [switchModal, setSwitchModal] = useState(false)
-  const [switching, setSwitching] = useState(false)
 
   useEffect(() => {
     Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
@@ -49,156 +55,188 @@ export function DashboardPage() {
 
   const handleModeSwitch = async () => {
     const next: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'
-    setSwitching(true)
     try {
       await modeApi.set(next)
       setMode(next)
       toast.success(`Mode switched to ${next}`)
     } catch {
       toast.error('Failed to switch mode')
-    } finally {
-      setSwitching(false)
-      setSwitchModal(false)
     }
   }
 
   const clusterCount = policies.filter((p) => p.scope === 'cluster').length
   const recent = policies.slice(0, 5)
-  const modeColor = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
   const nextMode: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'
+  const modeColor = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center py-5">
-        <CSpinner color="primary" />
+      <div className="flex flex-col gap-6">
+        <h4 className="text-lg font-semibold">Dashboard</h4>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Skeleton className="h-64 rounded-xl xl:col-span-2" />
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
       </div>
     )
   }
 
   return (
     <>
-      <h4 className="mb-4" style={{ color: '#1b2a3b', fontWeight: 600 }}>
-        Dashboard
-      </h4>
+      <h4 className="mb-6 text-lg font-semibold">Dashboard</h4>
 
-      <CRow className="mb-4 g-3">
-        <CCol sm={6} xl={3}>
-          <StatCard title="Total Policies" value={policies.length} subtitle="TracingPolicy" borderColor="#2d7dd2" />
-        </CCol>
-        <CCol sm={6} xl={3}>
-          <StatCard
-            title="Current Mode"
-            value={mode.toUpperCase()}
-            subtitle={mode === 'Protect' ? '攔截違規行為' : '觀測模式，不攔截'}
-            borderColor={modeColor}
-          />
-        </CCol>
-        <CCol sm={6} xl={3}>
-          <StatCard title="Namespaces" value={namespaceCount} subtitle="已列管的命名空間" borderColor="#28a745" />
-        </CCol>
-        <CCol sm={6} xl={3}>
-          <StatCard title="Cluster-scoped" value={clusterCount} subtitle="跨命名空間 Policy" borderColor="#dc3545" />
-        </CCol>
-      </CRow>
+      {/* Stat cards */}
+      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard
+          title="Total Policies"
+          value={policies.length}
+          subtitle="TracingPolicy"
+          borderColor="#2d7dd2"
+        />
+        <StatCard
+          title="Current Mode"
+          value={mode.toUpperCase()}
+          subtitle={mode === 'Protect' ? '攔截違規行為' : '觀測模式，不攔截'}
+          borderColor={modeColor}
+        />
+        <StatCard
+          title="Namespaces"
+          value={namespaceCount}
+          subtitle="已列管的命名空間"
+          borderColor="#28a745"
+        />
+        <StatCard
+          title="Cluster-scoped"
+          value={clusterCount}
+          subtitle="跨命名空間 Policy"
+          borderColor="#dc3545"
+        />
+      </div>
 
-      <CRow className="g-3">
-        <CCol xl={8}>
-          <CCard>
-            <CCardHeader className="d-flex justify-content-between align-items-center">
-              <strong>Recent Policies</strong>
-              <CButton color="link" size="sm" onClick={() => navigate('/policies/tracing')}>
+      {/* Main content */}
+      <div className="grid gap-4 xl:grid-cols-3">
+
+        {/* Recent Policies */}
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle>Recent Policies</CardTitle>
+            <CardAction>
+              <Button variant="link" size="sm" onClick={() => navigate('/policies/tracing')}>
                 View All →
-              </CButton>
-            </CCardHeader>
-            <CCardBody className="p-0">
-              <CTable hover responsive className="mb-0">
-                <CTableHead>
-                  <CTableRow style={{ background: '#f8f9fa' }}>
-                    <CTableHeaderCell>Name</CTableHeaderCell>
-                    <CTableHeaderCell>Scope</CTableHeaderCell>
-                    <CTableHeaderCell>Namespace</CTableHeaderCell>
-                    <CTableHeaderCell>Created</CTableHeaderCell>
-                  </CTableRow>
-                </CTableHead>
-                <CTableBody>
-                  {recent.length === 0 ? (
-                    <CTableRow>
-                      <CTableDataCell colSpan={4} className="text-center text-muted py-4">
-                        No policies yet
-                      </CTableDataCell>
-                    </CTableRow>
-                  ) : (
-                    recent.map((p) => (
-                      <CTableRow
-                        key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() =>
-                          navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
-                        }
-                      >
-                        <CTableDataCell style={{ color: '#2d7dd2', fontWeight: 500 }}>
-                          {p.name}
-                        </CTableDataCell>
-                        <CTableDataCell>
-                          <CBadge color={p.scope === 'cluster' ? 'danger' : 'primary'}>{p.scope}</CBadge>
-                        </CTableDataCell>
-                        <CTableDataCell className="text-muted">{p.namespace ?? '—'}</CTableDataCell>
-                        <CTableDataCell className="text-muted">{p.createdAt}</CTableDataCell>
-                      </CTableRow>
-                    ))
-                  )}
-                </CTableBody>
-              </CTable>
-            </CCardBody>
-          </CCard>
-        </CCol>
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                      No policies yet
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  recent.map((p) => (
+                    <TableRow
+                      key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
+                      className="cursor-pointer"
+                      onClick={() =>
+                        navigate(
+                          `/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`
+                        )
+                      }
+                    >
+                      <TableCell className="font-medium text-primary">
+                        {p.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}
+                        >
+                          {p.scope}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.namespace ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.createdAt}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-        <CCol xl={4}>
-          <CCard>
-            <CCardHeader><strong>Enforcement Mode</strong></CCardHeader>
-            <CCardBody className="text-center">
-              <div
-                style={{ border: `2px solid ${modeColor}`, borderRadius: 6, padding: '0.75rem', marginBottom: '0.75rem' }}
-              >
-                <div className="text-muted mb-1" style={{ fontSize: '0.7rem' }}>目前模式</div>
-                <div style={{ fontWeight: 700, color: modeColor, fontSize: '1.1rem' }}>{mode.toUpperCase()}</div>
-              </div>
-              <CButton
-                color={nextMode === 'Protect' ? 'danger' : 'success'}
-                variant="outline"
-                size="sm"
-                className="w-100"
-                onClick={() => setSwitchModal(true)}
-              >
-                切換至 {nextMode.toUpperCase()}
-              </CButton>
+        {/* Mode widget */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Enforcement Mode</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 text-center">
+            <div
+              style={{ border: `2px solid ${modeColor}` }}
+              className="rounded-lg p-4"
+            >
+              <p className="mb-1 text-xs text-muted-foreground">目前模式</p>
+              <p className="text-lg font-bold" style={{ color: modeColor }}>
+                {mode.toUpperCase()}
+              </p>
+            </div>
+            <Button
+              variant={nextMode === 'Protect' ? 'destructive' : 'outline'}
+              className="w-full"
+              onClick={() => setSwitchModal(true)}
+            >
+              切換至 {nextMode.toUpperCase()}
+            </Button>
+            {nextMode === 'Protect' && (
+              <p className="text-xs text-destructive">⚠ 啟用後將攔截違規行為</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Mode switch confirmation */}
+      <AlertDialog open={switchModal} onOpenChange={setSwitchModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>切換模式</AlertDialogTitle>
+            <AlertDialogDescription>
+              確定要將模式切換為 <strong>{nextMode.toUpperCase()}</strong> 嗎？
               {nextMode === 'Protect' && (
-                <p className="text-danger mt-2 mb-0" style={{ fontSize: '0.7rem' }}>
-                  ⚠ 啟用後將攔截違規行為
-                </p>
+                <span className="mt-2 block text-destructive">
+                  警告：Protect 模式將攔截違規行為。
+                </span>
               )}
-            </CCardBody>
-          </CCard>
-        </CCol>
-      </CRow>
-
-      <CModal visible={switchModal} onClose={() => setSwitchModal(false)}>
-        <CModalHeader>
-          <CModalTitle>切換模式</CModalTitle>
-        </CModalHeader>
-        <CModalBody>
-          確定要將模式切換為 <strong>{nextMode.toUpperCase()}</strong> 嗎？
-          {nextMode === 'Protect' && (
-            <p className="text-danger mt-2 mb-0">警告：Protect 模式將攔截違規行為。</p>
-          )}
-        </CModalBody>
-        <CModalFooter>
-          <CButton color="secondary" variant="outline" onClick={() => setSwitchModal(false)}>取消</CButton>
-          <CButton color={nextMode === 'Protect' ? 'danger' : 'success'} onClick={handleModeSwitch} disabled={switching}>
-            {switching ? '切換中…' : `切換至 ${nextMode}`}
-          </CButton>
-        </CModalFooter>
-      </CModal>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant={nextMode === 'Protect' ? 'destructive' : 'default'}
+              onClick={handleModeSwitch}
+            >
+              切換至 {nextMode}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
