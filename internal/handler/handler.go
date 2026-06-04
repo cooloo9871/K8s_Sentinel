@@ -26,6 +26,7 @@ func New(cfg Config) http.Handler {
 	r.Post("/api/policies/preview", previewPolicy)
 	r.Get("/api/policies/{name}", getPolicy(cfg.Store))
 	r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+	r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
 	r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
 	r.Get("/api/namespaces", listNamespaces(cfg.Store))
 	r.Get("/api/mode", getMode(cfg.Store))

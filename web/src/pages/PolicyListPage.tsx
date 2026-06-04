@@ -35,6 +35,12 @@ import { policyApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import type { PolicyRecord } from '../api/types'
 
+const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
+  Protect: 'destructive',
+  Monitoring: 'secondary',
+  Mixed: 'outline',
+}
+
 export function PolicyListPage() {
   const navigate = useNavigate()
   const toast = useToast()
@@ -65,6 +71,22 @@ export function PolicyListPage() {
       fetchPolicies()
     } catch {
       toast.error('Failed to delete policy')
+    }
+  }
+
+  const handleModeChange = async (p: PolicyRecord, mode: 'Monitoring' | 'Protect') => {
+    // Optimistic update
+    setPolicies((prev) =>
+      prev.map((x) =>
+        x.name === p.name && x.namespace === p.namespace ? { ...x, mode } : x
+      )
+    )
+    try {
+      await policyApi.setMode(p.name, p.namespace, mode)
+      toast.success(`${p.name}: mode set to ${mode}`)
+    } catch {
+      toast.error(`Failed to update mode for ${p.name}`)
+      fetchPolicies() // revert on error
     }
   }
 
@@ -124,6 +146,7 @@ export function PolicyListPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
                   <TableHead>Namespace</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -132,7 +155,7 @@ export function PolicyListPage() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                       No policies found
                     </TableCell>
                   </TableRow>
@@ -151,6 +174,26 @@ export function PolicyListPage() {
                         <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
                           {p.scope}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
+                          onValueChange={(v) => handleModeChange(p, v as 'Monitoring' | 'Protect')}
+                        >
+                          <SelectTrigger className="h-7 w-32 text-xs">
+                            <SelectValue>
+                              <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>
+                                {p.mode}
+                              </Badge>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="Monitoring">Monitoring</SelectItem>
+                              <SelectItem value="Protect">Protect</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {p.namespace ?? '-'}

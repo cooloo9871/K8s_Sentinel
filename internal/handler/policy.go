@@ -135,6 +135,30 @@ func deletePolicy(store *k8s.Store) http.HandlerFunc {
 	}
 }
 
+func setPolicyMode(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := chi.URLParam(r, "name")
+		namespace := r.URL.Query().Get("namespace")
+
+		var req struct {
+			Mode string `json:"mode"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+			return
+		}
+		if req.Mode != "Monitoring" && req.Mode != "Protect" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mode must be Monitoring or Protect"})
+			return
+		}
+		if err := store.SetPolicyMode(r.Context(), name, namespace, req.Mode); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	}
+}
+
 func previewPolicy(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Form   policy.PolicyFormInput `json:"form"`

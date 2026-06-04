@@ -20,7 +20,8 @@ import (
 type PolicyRecord struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"`
-	Scope     string `json:"scope"` // "cluster" or "namespaced"
+	Scope     string `json:"scope"`  // "cluster" or "namespaced"
+	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
 	CreatedAt string `json:"createdAt"`
 	RawYAML   string `json:"rawYaml"`
 }
@@ -341,7 +342,61 @@ func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error
 		Name:      item.GetName(),
 		Namespace: item.GetNamespace(),
 		Scope:     scope,
+		Mode:      detectMode(string(rawYAML)),
 		CreatedAt: createdAt,
 		RawYAML:   string(rawYAML),
 	}, nil
+}
+
+// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
+func detectMode(rawYAML string) string {
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+		return "Monitoring"
+	}
+	post, kill := 0, 0
+	for _, kp := range tp.Spec.KProbes {
+		for _, sel := range kp.Selectors {
+			for _, act := range sel.MatchActions {
+				if act.Action == policy.ActionSigkill {
+					kill++
+				} else {
+					post++
+				}
+			}
+		}
+	}
+	if kill == 0 {
+		return "Monitoring"
+	}
+	if post == 0 {
+		return "Protect"
+	}
+	return "Mixed"
+}
+
+// SetPolicyMode updates all kprobe actions in a single policy.
+func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	record, err := s.Get(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
+		return fmt.Errorf("parse policy %q: %w", name, err)
+	}
+	for i := range tp.Spec.KProbes {
+		for j := range tp.Spec.KProbes[i].Selectors {
+			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+			}
+		}
+	}
+	return s.Apply(ctx, tp)
 }

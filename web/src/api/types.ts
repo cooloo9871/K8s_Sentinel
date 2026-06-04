@@ -19,6 +19,7 @@ export interface PolicyRecord {
   name: string
   namespace?: string
   scope: 'cluster' | 'namespaced'
+  mode: 'Monitoring' | 'Protect' | 'Mixed'
   createdAt: string
   rawYaml: string
 }

@@ -3,12 +3,21 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, namespaceApi, modeApi } from '../api/client'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { policyApi, namespaceApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { PolicyForm } from '../components/PolicyForm/PolicyForm'
 import { YamlEditor } from '../components/YamlEditor'
 import { formToYaml } from '../utils/formToYaml'
-import type { PolicyFormInput, Mode } from '../api/types'
+import type { PolicyFormInput } from '../api/types'
 
 const EMPTY_FORM: PolicyFormInput = {
   name: '',
@@ -26,7 +35,7 @@ export function PolicyEditPage() {
   const isNew = !name
 
   const [namespaces, setNamespaces] = useState<string[]>([])
-  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
   const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
   const [yamlContent, setYamlContent] = useState('')
   const [yamlEditorKey, setYamlEditorKey] = useState(0)
@@ -35,25 +44,26 @@ export function PolicyEditPage() {
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(!isNew)
 
+  const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
+
   useEffect(() => {
-    const work: Promise<void>[] = [
-      namespaceApi.list().then(setNamespaces),
-      modeApi.get().then(setMode),
-    ]
+    const work: Promise<void>[] = [namespaceApi.list().then(setNamespaces)]
     if (!isNew && name) {
       work.push(
         policyApi.get(name, namespace).then((r) => {
           setYamlContent(r.rawYaml)
+          if (r.mode === 'Protect') {
+            setPolicyMode('Protect')
+          } else {
+            setPolicyMode('Monitoring')
+          }
         })
       )
     }
     Promise.all(work).finally(() => setPageLoading(false))
   }, [name, namespace, isNew])
 
-  const action = mode === 'Protect' ? 'Sigkill' : 'Post'
-
   const handleTabChange = (tab: string) => {
-    // Switching Form → YAML: sync editor with current form-generated YAML
     if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
       try {
         const generated = formToYaml(formValues, action)
@@ -61,7 +71,6 @@ export function PolicyEditPage() {
         setYamlValid(true)
         setYamlEditorKey((k) => k + 1)
       } catch {
-        // fallback: keep existing yaml content
         setYamlEditorKey((k) => k + 1)
       }
     }
@@ -117,7 +126,6 @@ export function PolicyEditPage() {
 
   return (
     <>
-      {/* Page header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-lg font-semibold">
@@ -127,17 +135,34 @@ export function PolicyEditPage() {
             <p className="text-sm text-muted-foreground">{name}</p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          {/* Per-policy mode selector */}
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Mode</Label>
+            <Select
+              value={policyMode}
+              onValueChange={(v) => setPolicyMode(v as 'Monitoring' | 'Protect')}
+            >
+              <SelectTrigger className="h-9 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="Monitoring">Monitoring</SelectItem>
+                  <SelectItem value="Protect">Protect</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={loading}>
-            {loading ? 'Saving…' : 'Save Changes'}
+            {loading ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>
       </div>
 
-      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
           <TabsTrigger

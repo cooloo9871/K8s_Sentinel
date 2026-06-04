@@ -24,6 +24,9 @@ export const policyApi = {
   delete: (name: string, namespace?: string): Promise<void> =>
     api.delete(`/policies/${name}`, { params: { namespace } }),
 
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
   preview: (form: CreatePolicyPayload): Promise<string> =>
     api.post('/policies/preview', form).then((r) => r.data.yaml),
 }
