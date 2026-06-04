@@ -83605,3 +83605,3631 @@ ok  	github.com/brobridge/sentinel/internal/policy	(cached)
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "feat: add per-policy mode control (Monitoring/Protect per TracingPolicy)"",
+    "description": "提交所有變更"
+  },
+  "tool_response": {
+    "stdout": "[main 607bab4] feat: add per-policy mode control (Monitoring/Protect per TracingPolicy)
+ 8 files changed, 8836 insertions(+), 17 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "607bab4",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。兩個模式控制的完整實作：
+
+---
+
+**全域模式（既有，Mode Control 頁）**
+
+`/cluster/mode` → 一次性將所有 TracingPolicy 的 action 全部改為 `Post`（Monitoring）或 `Sigkill`（Protect）
+
+---
+
+**個別 Policy 模式（新增）**
+
+**Policy List 頁：**
+- 新增 `Mode` 欄位，每個 Policy 顯示目前模式（`Monitoring` / `Protect` / `Mixed`）
+- 點選下拉選單即可單獨切換該 Policy 的模式，樂觀更新 + API 確認
+
+**Policy Edit 頁：**
+- 標題列右側新增 `Mode` 選擇器（Monitoring / Protect）
+- 編輯既有 Policy 時：自動從 Policy 目前的 mode 初始化
+- 新建 Policy 時：預設為 Monitoring
+- Save 時使用此 mode 決定 kprobe action
+
+**新增 API：**
+- `PUT /api/policies/{name}/mode?namespace=xxx` → `{ "mode": "Monitoring" | "Protect" }`
+
+**`PolicyRecord` 新增欄位：**
+- `mode: "Monitoring" | "Protect" | "Mixed"` — 後端根據 kprobe actions 自動推導"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Mode Control 全域得設定我想要放在 TracingPolicy 最上面設定 global，左側的 Mode Control 就可以拿掉，然後 UI 整體自體放大自然一點。在 Dashboard 的 Dashboard 我覺得很醜，幫我重新設計一個"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+      "content": "import { useLocation, NavLink } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      {/* Brand */}
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        {/* Dashboard */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Policies */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Security */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Cluster */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/mode')}>
+                  <NavLink to="/cluster/mode">Mode Control</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+      "numLines": 98,
+      "startLine": 1,
+      "totalLines": 98
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "IconShield\\|tabler" /home/bigred/Sentinel/web/src/components/ui/sidebar.tsx | head -5",
+    "description": "確認 tabler icons 已安裝"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "IconShield\\|tabler" /home/bigred/Sentinel/web/src/components/ui/sidebar.tsx | head -5",
+    "description": "確認 tabler icons 已安裝"
+  },
+  "tool_response": {
+    "stdout": "25:import { IconLayoutSidebar } from "@tabler/icons-react"",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "content": "import { useLocation, NavLink } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "content": "import { useLocation, NavLink } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "content": "import { useLocation, NavLink } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 19,
+        "oldLines": 7,
+        "newStart": 19,
+        "newLines": 6,
+        "lines": [
+          " ",
+          "   return (",
+          "     <Sidebar collapsible="offcanvas">",
+          "-      {/* Brand */}",
+          "       <SidebarHeader>",
+          "         <div className="flex items-center gap-2.5 px-2 py-3">",
+          "           <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">"
+        ]
+      },
+      {
+        "oldStart": 32,
+        "oldLines": 7,
+        "newStart": 31,
+        "newLines": 6,
+        "lines": [
+          "       </SidebarHeader>",
+          " ",
+          "       <SidebarContent>",
+          "-        {/* Dashboard */}",
+          "         <SidebarGroup>",
+          "           <SidebarGroupContent>",
+          "             <SidebarMenu>"
+        ]
+      },
+      {
+        "oldStart": 45,
+        "oldLines": 7,
+        "newStart": 43,
+        "newLines": 6,
+        "lines": [
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>",
+          " ",
+          "-        {/* Policies */}",
+          "         <SidebarGroup>",
+          "           <SidebarGroupLabel>Policies</SidebarGroupLabel>",
+          "           <SidebarGroupContent>"
+        ]
+      },
+      {
+        "oldStart": 59,
+        "oldLines": 7,
+        "newStart": 56,
+        "newLines": 6,
+        "lines": [
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>",
+          " ",
+          "-        {/* Security */}",
+          "         <SidebarGroup>",
+          "           <SidebarGroupLabel>Security</SidebarGroupLabel>",
+          "           <SidebarGroupContent>"
+        ]
+      },
+      {
+        "oldStart": 73,
+        "oldLines": 17,
+        "newStart": 69,
+        "newLines": 11,
+        "lines": [
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>",
+          " ",
+          "-        {/* Cluster */}",
+          "         <SidebarGroup>",
+          "           <SidebarGroupLabel>Cluster</SidebarGroupLabel>",
+          "           <SidebarGroupContent>",
+          "             <SidebarMenu>",
+          "               <SidebarMenuItem>",
+          "-                <SidebarMenuButton asChild isActive={isActive('/cluster/mode')}>",
+          "-                  <NavLink to="/cluster/mode">Mode Control</NavLink>",
+          "-                </SidebarMenuButton>",
+          "-              </SidebarMenuItem>",
+          "-              <SidebarMenuItem>",
+          "                 <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>",
+          "                   <NavLink to="/cluster/namespaces">Namespaces</NavLink>",
+          "                 </SidebarMenuButton>"
+        ]
+      }
+    ],
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      {/* Brand */}
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        {/* Dashboard */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Policies */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Security */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Cluster */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/mode')}>
+                  <NavLink to="/cluster/mode">Mode Control</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyListPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { policyApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyRecord, Mode } from '../api/types'
+
+const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
+  Protect: 'destructive',
+  Monitoring: 'secondary',
+  Mixed: 'outline',
+}
+
+export function PolicyListPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState('all')
+  const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
+
+  // Global mode state
+  const [globalMode, setGlobalMode] = useState<Mode>('Monitoring')
+  const [modeModal, setModeModal] = useState(false)
+  const nextGlobalMode: 'Monitoring' | 'Protect' =
+    globalMode === 'Protect' ? 'Monitoring' : 'Protect'
+
+  const fetchPolicies = async () => {
+    setLoading(true)
+    try {
+      setPolicies(await policyApi.list())
+    } catch {
+      toast.error('Failed to load policies')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPolicies()
+    modeApi.get().then(setGlobalMode).catch(() => {})
+  }, [])
+
+  const handleGlobalModeSwitch = async () => {
+    try {
+      await modeApi.set(nextGlobalMode)
+      setGlobalMode(nextGlobalMode)
+      toast.success(`Global mode switched to ${nextGlobalMode}`)
+      fetchPolicies() // refresh per-policy modes
+    } catch {
+      toast.error('Failed to switch global mode')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await policyApi.delete(deleteTarget.name, deleteTarget.namespace)
+      toast.success('Policy deleted')
+      fetchPolicies()
+    } catch {
+      toast.error('Failed to delete policy')
+    }
+  }
+
+  const handleModeChange = async (p: PolicyRecord, mode: 'Monitoring' | 'Protect') => {
+    setPolicies((prev) =>
+      prev.map((x) =>
+        x.name === p.name && x.namespace === p.namespace ? { ...x, mode } : x
+      )
+    )
+    try {
+      await policyApi.setMode(p.name, p.namespace, mode)
+      toast.success(`${p.name}: mode set to ${mode}`)
+    } catch {
+      toast.error(`Failed to update mode for ${p.name}`)
+      fetchPolicies()
+    }
+  }
+
+  const filtered = policies.filter((p) => {
+    const matchName = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchScope = scopeFilter === 'all' || p.scope === scopeFilter
+    return matchName && matchScope
+  })
+
+  return (
+    <>
+      {/* Global mode control banner */}
+      <div className="mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4">
+        <div className="flex items-center gap-4">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Global Enforcement Mode</p>
+            <div className="mt-1 flex items-center gap-2">
+              <Badge
+                variant={globalMode === 'Protect' ? 'destructive' : globalMode === 'Mixed' ? 'outline' : 'secondary'}
+                className="text-sm px-3 py-0.5"
+              >
+                {globalMode.toUpperCase()}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {globalMode === 'Protect'
+                  ? 'Actively blocking violations on all policies'
+                  : globalMode === 'Mixed'
+                  ? 'Policies have mixed enforcement modes'
+                  : 'Monitoring only — no blocking on all policies'}
+              </span>
+            </div>
+          </div>
+        </div>
+        <Button
+          variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}
+          onClick={() => setModeModal(true)}
+        >
+          Switch to {nextGlobalMode}
+        </Button>
+      </div>
+
+      {/* Page header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">TracingPolicy</h4>
+          <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>
+        </div>
+        <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="flex items-center gap-2 border-b px-4 py-3">
+            <Input
+              placeholder="Search policy name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-56"
+            />
+            <Select value={scopeFilter} onValueChange={setScopeFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Scopes</SelectItem>
+                  <SelectItem value="namespaced">namespace</SelectItem>
+                  <SelectItem value="cluster">cluster</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <span className="ml-auto text-sm text-muted-foreground">
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                      No policies found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((p) => (
+                    <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
+                      <TableCell
+                        className="cursor-pointer font-medium text-primary"
+                        onClick={() =>
+                          navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                        }
+                      >
+                        {p.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                          {p.scope}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
+                          onValueChange={(v) => handleModeChange(p, v as 'Monitoring' | 'Protect')}
+                        >
+                          <SelectTrigger className="h-7 w-32 text-xs">
+                            <SelectValue>
+                              <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>
+                                {p.mode}
+                              </Badge>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="Monitoring">Monitoring</SelectItem>
+                              <SelectItem value="Protect">Protect</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.namespace ?? '-'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                            }
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeleteTarget(p)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Global mode switch dialog */}
+      <AlertDialog open={modeModal} onOpenChange={setModeModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch Global Mode</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                Apply <strong>{nextGlobalMode.toUpperCase()}</strong> to all TracingPolicies?
+                {nextGlobalMode === 'Protect' && (
+                  <p className="mt-2 text-destructive">
+                    ⚠ Warning: Protect mode will actively kill violating processes on all policies.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant={nextGlobalMode === 'Protect' ? 'destructive' : 'default'}
+              onClick={handleGlobalModeSwitch}
+            >
+              Switch to {nextGlobalMode}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Policy</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyListPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { policyApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyRecord, Mode } from '../api/types'
+
+const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
+  Protect: 'destructive',
+  Monitoring: 'secondary',
+  Mixed: 'outline',
+}
+
+export function PolicyListPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState('all')
+  const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
+
+  // Global mode state
+  const [globalMode, setGlobalMode] = useState<Mode>('Monitoring')
+  const [modeModal, setModeModal] = useState(false)
+  const nextGlobalMode: 'Monitoring' | 'Protect' =
+    globalMode === 'Protect' ? 'Monitoring' : 'Protect'
+
+  const fetchPolicies = async () => {
+    setLoading(true)
+    try {
+      setPolicies(await policyApi.list())
+    } catch {
+      toast.error('Failed to load policies')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPolicies()
+    modeApi.get().then(setGlobalMode).catch(() => {})
+  }, [])
+
+  const handleGlobalModeSwitch = async () => {
+    try {
+      await modeApi.set(nextGlobalMode)
+      setGlobalMode(nextGlobalMode)
+      toast.success(`Global mode switched to ${nextGlobalMode}`)
+      fetchPolicies() // refresh per-policy modes
+    } catch {
+      toast.error('Failed to switch global mode')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await policyApi.delete(deleteTarget.name, deleteTarget.namespace)
+      toast.success('Policy deleted')
+      fetchPolicies()
+    } catch {
+      toast.error('Failed to delete policy')
+    }
+  }
+
+  const handleModeChange = async (p: PolicyRecord, mode: 'Monitoring' | 'Protect') => {
+    setPolicies((prev) =>
+      prev.map((x) =>
+        x.name === p.name && x.namespace === p.namespace ? { ...x, mode } : x
+      )
+    )
+    try {
+      await policyApi.setMode(p.name, p.namespace, mode)
+      toast.success(`${p.name}: mode set to ${mode}`)
+    } catch {
+      toast.error(`Failed to update mode for ${p.name}`)
+      fetchPolicies()
+    }
+  }
+
+  const filtered = policies.filter((p) => {
+    const matchName = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchScope = scopeFilter === 'all' || p.scope === scopeFilter
+    return matchName && matchScope
+  })
+
+  return (
+    <>
+      {/* Global mode control banner */}
+      <div className="mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4">
+        <div className="flex items-center gap-4">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Global Enforcement Mode</p>
+            <div className="mt-1 flex items-center gap-2">
+              <Badge
+                variant={globalMode === 'Protect' ? 'destructive' : globalMode === 'Mixed' ? 'outline' : 'secondary'}
+                className="text-sm px-3 py-0.5"
+              >
+                {globalMode.toUpperCase()}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {globalMode === 'Protect'
+                  ? 'Actively blocking violations on all policies'
+                  : globalMode === 'Mixed'
+                  ? 'Policies have mixed enforcement modes'
+                  : 'Monitoring only — no blocking on all policies'}
+              </span>
+            </div>
+          </div>
+        </div>
+        <Button
+          variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}
+          onClick={() => setModeModal(true)}
+        >
+          Switch to {nextGlobalMode}
+        </Button>
+      </div>
+
+      {/* Page header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">TracingPolicy</h4>
+          <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>
+        </div>
+        <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="flex items-center gap-2 border-b px-4 py-3">
+            <Input
+              placeholder="Search policy name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-56"
+            />
+            <Select value={scopeFilter} onValueChange={setScopeFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Scopes</SelectItem>
+                  <SelectItem value="namespaced">namespace</SelectItem>
+                  <SelectItem value="cluster">cluster</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <span className="ml-auto text-sm text-muted-foreground">
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                      No policies found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((p) => (
+                    <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
+                      <TableCell
+                        className="cursor-pointer font-medium text-primary"
+                        onClick={() =>
+                          navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                        }
+                      >
+                        {p.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                          {p.scope}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
+                          onValueChange={(v) => handleModeChange(p, v as 'Monitoring' | 'Protect')}
+                        >
+                          <SelectTrigger className="h-7 w-32 text-xs">
+                            <SelectValue>
+                              <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>
+                                {p.mode}
+                              </Badge>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="Monitoring">Monitoring</SelectItem>
+                              <SelectItem value="Protect">Protect</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.namespace ?? '-'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                            }
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeleteTarget(p)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Global mode switch dialog */}
+      <AlertDialog open={modeModal} onOpenChange={setModeModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch Global Mode</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                Apply <strong>{nextGlobalMode.toUpperCase()}</strong> to all TracingPolicies?
+                {nextGlobalMode === 'Protect' && (
+                  <p className="mt-2 text-destructive">
+                    ⚠ Warning: Protect mode will actively kill violating processes on all policies.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant={nextGlobalMode === 'Protect' ? 'destructive' : 'default'}
+              onClick={handleGlobalModeSwitch}
+            >
+              Switch to {nextGlobalMode}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Policy</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyListPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { policyApi, modeApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyRecord, Mode } from '../api/types'
+
+const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
+  Protect: 'destructive',
+  Monitoring: 'secondary',
+  Mixed: 'outline',
+}
+
+export function PolicyListPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState('all')
+  const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
+
+  // Global mode state
+  const [globalMode, setGlobalMode] = useState<Mode>('Monitoring')
+  const [modeModal, setModeModal] = useState(false)
+  const nextGlobalMode: 'Monitoring' | 'Protect' =
+    globalMode === 'Protect' ? 'Monitoring' : 'Protect'
+
+  const fetchPolicies = async () => {
+    setLoading(true)
+    try {
+      setPolicies(await policyApi.list())
+    } catch {
+      toast.error('Failed to load policies')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPolicies()
+    modeApi.get().then(setGlobalMode).catch(() => {})
+  }, [])
+
+  const handleGlobalModeSwitch = async () => {
+    try {
+      await modeApi.set(nextGlobalMode)
+      setGlobalMode(nextGlobalMode)
+      toast.success(`Global mode switched to ${nextGlobalMode}`)
+      fetchPolicies() // refresh per-policy modes
+    } catch {
+      toast.error('Failed to switch global mode')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await policyApi.delete(deleteTarget.name, deleteTarget.namespace)
+      toast.success('Policy deleted')
+      fetchPolicies()
+    } catch {
+      toast.error('Failed to delete policy')
+    }
+  }
+
+  const handleModeChange = async (p: PolicyRecord, mode: 'Monitoring' | 'Protect') => {
+    setPolicies((prev) =>
+      prev.map((x) =>
+        x.name === p.name && x.namespace === p.namespace ? { ...x, mode } : x
+      )
+    )
+    try {
+      await policyApi.setMode(p.name, p.namespace, mode)
+      toast.success(`${p.name}: mode set to ${mode}`)
+    } catch {
+      toast.error(`Failed to update mode for ${p.name}`)
+      fetchPolicies()
+    }
+  }
+
+  const filtered = policies.filter((p) => {
+    const matchName = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchScope = scopeFilter === 'all' || p.scope === scopeFilter
+    return matchName && matchScope
+  })
+
+  return (
+    <>
+      {/* Global mode control banner */}
+      <div className="mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4">
+        <div className="flex items-center gap-4">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Global Enforcement Mode</p>
+            <div className="mt-1 flex items-center gap-2">
+              <Badge
+                variant={globalMode === 'Protect' ? 'destructive' : globalMode === 'Mixed' ? 'outline' : 'secondary'}
+                className="text-sm px-3 py-0.5"
+              >
+                {globalMode.toUpperCase()}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {globalMode === 'Protect'
+                  ? 'Actively blocking violations on all policies'
+                  : globalMode === 'Mixed'
+                  ? 'Policies have mixed enforcement modes'
+                  : 'Monitoring only — no blocking on all policies'}
+              </span>
+            </div>
+          </div>
+        </div>
+        <Button
+          variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}
+          onClick={() => setModeModal(true)}
+        >
+          Switch to {nextGlobalMode}
+        </Button>
+      </div>
+
+      {/* Page header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">TracingPolicy</h4>
+          <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>
+        </div>
+        <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="flex items-center gap-2 border-b px-4 py-3">
+            <Input
+              placeholder="Search policy name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-56"
+            />
+            <Select value={scopeFilter} onValueChange={setScopeFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Scopes</SelectItem>
+                  <SelectItem value="namespaced">namespace</SelectItem>
+                  <SelectItem value="cluster">cluster</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <span className="ml-auto text-sm text-muted-foreground">
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                      No policies found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((p) => (
+                    <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
+                      <TableCell
+                        className="cursor-pointer font-medium text-primary"
+                        onClick={() =>
+                          navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                        }
+                      >
+                        {p.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                          {p.scope}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
+                          onValueChange={(v) => handleModeChange(p, v as 'Monitoring' | 'Protect')}
+                        >
+                          <SelectTrigger className="h-7 w-32 text-xs">
+                            <SelectValue>
+                              <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>
+                                {p.mode}
+                              </Badge>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="Monitoring">Monitoring</SelectItem>
+                              <SelectItem value="Protect">Protect</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.namespace ?? '-'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                            }
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeleteTarget(p)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Global mode switch dialog */}
+      <AlertDialog open={modeModal} onOpenChange={setModeModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch Global Mode</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                Apply <strong>{nextGlobalMode.toUpperCase()}</strong> to all TracingPolicies?
+                {nextGlobalMode === 'Protect' && (
+                  <p className="mt-2 text-destructive">
+                    ⚠ Warning: Protect mode will actively kill violating processes on all policies.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant={nextGlobalMode === 'Protect' ? 'destructive' : 'default'}
+              onClick={handleGlobalModeSwitch}
+            >
+              Switch to {nextGlobalMode}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Policy</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 39,
+        "newStart": 1,
+        "newLines": 23,
+        "lines": [
+          " import { useEffect, useState } from 'react'",
+          " import { useNavigate } from 'react-router-dom'",
+          " import {",
+          "-  Table,",
+          "-  TableHeader,",
+          "-  TableBody,",
+          "-  TableRow,",
+          "-  TableHead,",
+          "-  TableCell,",
+          "+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,",
+          " } from '@/components/ui/table'",
+          " import { Badge } from '@/components/ui/badge'",
+          " import { Button } from '@/components/ui/button'",
+          " import { Input } from '@/components/ui/input'",
+          " import {",
+          "-  Select,",
+          "-  SelectContent,",
+          "-  SelectGroup,",
+          "-  SelectItem,",
+          "-  SelectTrigger,",
+          "-  SelectValue,",
+          "+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,",
+          " } from '@/components/ui/select'",
+          " import { Card, CardContent } from '@/components/ui/card'",
+          " import { Skeleton } from '@/components/ui/skeleton'",
+          " import {",
+          "-  AlertDialog,",
+          "-  AlertDialogAction,",
+          "-  AlertDialogCancel,",
+          "-  AlertDialogContent,",
+          "-  AlertDialogDescription,",
+          "-  AlertDialogFooter,",
+          "-  AlertDialogHeader,",
+          "-  AlertDialogTitle,",
+          "+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,",
+          "+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,",
+          " } from '@/components/ui/alert-dialog'",
+          "-import { policyApi } from '../api/client'",
+          "+import { policyApi, modeApi } from '../api/client'",
+          " import { useToast } from '../layout/AppToaster'",
+          "-import type { PolicyRecord } from '../api/types'",
+          "+import type { PolicyRecord, Mode } from '../api/types'",
+          " ",
+          " const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {",
+          "   Protect: 'destructive',"
+        ]
+      },
+      {
+        "oldStart": 50,
+        "oldLines": 6,
+        "newStart": 34,
+        "newLines": 12,
+        "lines": [
+          "   const [scopeFilter, setScopeFilter] = useState('all')",
+          "   const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)",
+          " ",
+          "+  // Global mode state",
+          "+  const [globalMode, setGlobalMode] = useState<Mode>('Monitoring')",
+          "+  const [modeModal, setModeModal] = useState(false)",
+          "+  const nextGlobalMode: 'Monitoring' | 'Protect' =",
+          "+    globalMode === 'Protect' ? 'Monitoring' : 'Protect'",
+          "+",
+          "   const fetchPolicies = async () => {",
+          "     setLoading(true)",
+          "     try {"
+        ]
+      },
+      {
+        "oldStart": 61,
+        "oldLines": 8,
+        "newStart": 51,
+        "newLines": 22,
+        "lines": [
+          "     }",
+          "   }",
+          " ",
+          "-  useEffect(() => { fetchPolicies() }, [])",
+          "+  useEffect(() => {",
+          "+    fetchPolicies()",
+          "+    modeApi.get().then(setGlobalMode).catch(() => {})",
+          "+  }, [])",
+          " ",
+          "+  const handleGlobalModeSwitch = async () => {",
+          "+    try {",
+          "+      await modeApi.set(nextGlobalMode)",
+          "+      setGlobalMode(nextGlobalMode)",
+          "+      toast.success(`Global mode switched to ${nextGlobalMode}`)",
+          "+      fetchPolicies() // refresh per-policy modes",
+          "+    } catch {",
+          "+      toast.error('Failed to switch global mode')",
+          "+    }",
+          "+  }",
+          "+",
+          "   const handleDelete = async () => {",
+          "     if (!deleteTarget) return",
+          "     try {"
+        ]
+      },
+      {
+        "oldStart": 75,
+        "oldLines": 7,
+        "newStart": 79,
+        "newLines": 6,
+        "lines": [
+          "   }",
+          " ",
+          "   const handleModeChange = async (p: PolicyRecord, mode: 'Monitoring' | 'Protect') => {",
+          "-    // Optimistic update",
+          "     setPolicies((prev) =>",
+          "       prev.map((x) =>",
+          "         x.name === p.name && x.namespace === p.namespace ? { ...x, mode } : x"
+        ]
+      },
+      {
+        "oldStart": 86,
+        "oldLines": 7,
+        "newStart": 89,
+        "newLines": 7,
+        "lines": [
+          "       toast.success(`${p.name}: mode set to ${mode}`)",
+          "     } catch {",
+          "       toast.error(`Failed to update mode for ${p.name}`)",
+          "-      fetchPolicies() // revert on error",
+          "+      fetchPolicies()",
+          "     }",
+          "   }",
+          " "
+        ]
+      },
+      {
+        "oldStart": 98,
+        "oldLines": 14,
+        "newStart": 101,
+        "newLines": 43,
+        "lines": [
+          " ",
+          "   return (",
+          "     <>",
+          "-      <div className="mb-6 flex items-center justify-between">",
+          "+      {/* Global mode control banner */}",
+          "+      <div className="mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4">",
+          "+        <div className="flex items-center gap-4">",
+          "+          <div>",
+          "+            <p className="text-sm font-medium text-muted-foreground">Global Enforcement Mode</p>",
+          "+            <div className="mt-1 flex items-center gap-2">",
+          "+              <Badge",
+          "+                variant={globalMode === 'Protect' ? 'destructive' : globalMode === 'Mixed' ? 'outline' : 'secondary'}",
+          "+                className="text-sm px-3 py-0.5"",
+          "+              >",
+          "+                {globalMode.toUpperCase()}",
+          "+              </Badge>",
+          "+              <span className="text-sm text-muted-foreground">",
+          "+                {globalMode === 'Protect'",
+          "+                  ? 'Actively blocking violations on all policies'",
+          "+                  : globalMode === 'Mixed'",
+          "+                  ? 'Policies have mixed enforcement modes'",
+          "+                  : 'Monitoring only — no blocking on all policies'}",
+          "+              </span>",
+          "+            </div>",
+          "+          </div>",
+          "+        </div>",
+          "+        <Button",
+          "+          variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}",
+          "+          onClick={() => setModeModal(true)}",
+          "+        >",
+          "+          Switch to {nextGlobalMode}",
+          "+        </Button>",
+          "+      </div>",
+          "+",
+          "+      {/* Page header */}",
+          "+      <div className="mb-4 flex items-center justify-between">",
+          "         <div>",
+          "-          <h4 className="mb-0 text-lg font-semibold">TracingPolicy</h4>",
+          "+          <h4 className="text-xl font-semibold">TracingPolicy</h4>",
+          "           <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>",
+          "         </div>",
+          "-        <Button onClick={() => navigate('/policies/tracing/new')}>",
+          "-          + New Policy",
+          "-        </Button>",
+          "+        <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>",
+          "       </div>",
+          " ",
+          "       <Card>"
+        ]
+      },
+      {
+        "oldStart": 115,
+        "oldLines": 7,
+        "newStart": 147,
+        "newLines": 7,
+        "lines": [
+          "               placeholder="Search policy name..."",
+          "               value={search}",
+          "               onChange={(e) => setSearch(e.target.value)}",
+          "-              className="w-52"",
+          "+              className="w-56"",
+          "             />",
+          "             <Select value={scopeFilter} onValueChange={setScopeFilter}>",
+          "               <SelectTrigger className="w-36">"
+        ]
+      },
+      {
+        "oldStart": 155,
+        "oldLines": 7,
+        "newStart": 187,
+        "newLines": 7,
+        "lines": [
+          "               <TableBody>",
+          "                 {filtered.length === 0 ? (",
+          "                   <TableRow>",
+          "-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">",
+          "+                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">",
+          "                       No policies found",
+          "                     </TableCell>",
+          "                   </TableRow>"
+        ]
+      },
+      {
+        "oldStart": 228,
+        "oldLines": 6,
+        "newStart": 260,
+        "newLines": 35,
+        "lines": [
+          "         </CardContent>",
+          "       </Card>",
+          " ",
+          "+      {/* Global mode switch dialog */}",
+          "+      <AlertDialog open={modeModal} onOpenChange={setModeModal}>",
+          "+        <AlertDialogContent>",
+          "+          <AlertDialogHeader>",
+          "+            <AlertDialogTitle>Switch Global Mode</AlertDialogTitle>",
+          "+            <AlertDialogDescription asChild>",
+          "+              <div>",
+          "+                Apply <strong>{nextGlobalMode.toUpperCase()}</strong> to all TracingPolicies?",
+          "+                {nextGlobalMode === 'Protect' && (",
+          "+                  <p className="mt-2 text-destructive">",
+          "+                    ⚠ Warning: Protect mode will actively kill violating processes on all policies.",
+          "+                  </p>",
+          "+                )}",
+          "+              </div>",
+          "+            </AlertDialogDescription>",
+          "+          </AlertDialogHeader>",
+          "+          <AlertDialogFooter>",
+          "+            <AlertDialogCancel>Cancel</AlertDialogCancel>",
+          "+            <AlertDialogAction",
+          "+              variant={nextGlobalMode === 'Protect' ? 'destructive' : 'default'}",
+          "+              onClick={handleGlobalModeSwitch}",
+          "+            >",
+          "+              Switch to {nextGlobalMode}",
+          "+            </AlertDialogAction>",
+          "+          </AlertDialogFooter>",
+          "+        </AlertDialogContent>",
+          "+      </AlertDialog>",
+          "+",
+          "+      {/* Delete dialog */}",
+          "       <AlertDialog",
+          "         open={!!deleteTarget}",
+          "         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}"
+        ]
+      }
+    ],
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { policyApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyRecord } from '../api/types'
+
+const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
+  Protect: 'destructive',
+  Monitoring: 'secondary',
+  Mixed: 'outline',
+}
+
+export function PolicyListPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState('all')
+  const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
+
+  const fetchPolicies = async () => {
+    setLoading(true)
+    try {
+      setPolicies(await policyApi.list())
+    } catch {
+      toast.error('Failed to load policies')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchPolicies() }, [])
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await policyApi.delete(deleteTarget.name, deleteTarget.namespace)
+      toast.success('Policy deleted')
+      fetchPolicies()
+    } catch {
+      toast.error('Failed to delete policy')
+    }
+  }
+
+  const handleModeChange = async (p: PolicyRecord, mode: 'Monitoring' | 'Protect') => {
+    // Optimistic update
+    setPolicies((prev) =>
+      prev.map((x) =>
+        x.name === p.name && x.namespace === p.namespace ? { ...x, mode } : x
+      )
+    )
+    try {
+      await policyApi.setMode(p.name, p.namespace, mode)
+      toast.success(`${p.name}: mode set to ${mode}`)
+    } catch {
+      toast.error(`Failed to update mode for ${p.name}`)
+      fetchPolicies() // revert on error
+    }
+  }
+
+  const filtered = policies.filter((p) => {
+    const matchName = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchScope = scopeFilter === 'all' || p.scope === scopeFilter
+    return matchName && matchScope
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="mb-0 text-lg font-semibold">TracingPolicy</h4>
+          <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>
+        </div>
+        <Button onClick={() => navigate('/policies/tracing/new')}>
+          + New Policy
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="flex items-center gap-2 border-b px-4 py-3">
+            <Input
+              placeholder="Search policy name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-52"
+            />
+            <Select value={scopeFilter} onValueChange={setScopeFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Scopes</SelectItem>
+                  <SelectItem value="namespaced">namespace</SelectItem>
+                  <SelectItem value="cluster">cluster</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <span className="ml-auto text-sm text-muted-foreground">
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                      No policies found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((p) => (
+                    <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
+                      <TableCell
+                        className="cursor-pointer font-medium text-primary"
+                        onClick={() =>
+                          navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                        }
+                      >
+                        {p.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                          {p.scope}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
+                          onValueChange={(v) => handleModeChange(p, v as 'Monitoring' | 'Protect')}
+                        >
+                          <SelectTrigger className="h-7 w-32 text-xs">
+                            <SelectValue>
+                              <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>
+                                {p.mode}
+                              </Badge>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="Monitoring">Monitoring</SelectItem>
+                              <SelectItem value="Protect">Protect</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.namespace ?? '-'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                            }
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeleteTarget(p)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Policy</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DashboardPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  IconShieldCheck,
+  IconServer,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconRefresh,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, modeApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyRecord, Mode } from '../api/types'
+
+interface StatProps {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  sub?: string
+  accent?: string
+}
+
+function StatCard({ icon, label, value, sub, accent = '#2d7dd2' }: StatProps) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-stretch">
+          <div
+            className="flex w-14 shrink-0 items-center justify-center"
+            style={{ background: accent + '18' }}
+          >
+            <span style={{ color: accent }}>{icon}</span>
+          </div>
+          <div className="flex flex-col justify-center px-5 py-4">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-0.5 text-2xl font-bold leading-none">{value}</p>
+            {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+  let label = diff < 1 ? 'just now'
+    : diff < 60 ? `${diff}m ago`
+    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
+    : `${Math.floor(diff / 1440)}d ago`
+  return <span title={d.toLocaleString()}>{label}</span>
+}
+
+export function DashboardPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [namespaceCount, setNamespaceCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
+      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })
+      .catch(() => toast.error('Failed to load dashboard'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [])
+
+  const clusterCount = policies.filter((p) => p.scope === 'cluster').length
+  const protectCount = policies.filter((p) => p.mode === 'Protect').length
+  const recent = policies.slice(0, 8)
+
+  const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-8">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-72 rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Overview</h2>
+          <p className="mt-1 text-base text-muted-foreground">
+            Cilium TracingPolicy management console
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={load}>
+          <IconRefresh className="mr-2 size-4" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard
+          icon={<IconShieldCheck size={26} />}
+          label="Total Policies"
+          value={policies.length}
+          sub={`${clusterCount} cluster-scoped`}
+          accent="#2d7dd2"
+        />
+        <StatCard
+          icon={<IconShieldCheck size={26} />}
+          label="Protect Mode"
+          value={protectCount}
+          sub={`${policies.length - protectCount} monitoring`}
+          accent="#dc3545"
+        />
+        <StatCard
+          icon={<IconServer size={26} />}
+          label="Namespaces"
+          value={namespaceCount}
+          sub="managed namespaces"
+          accent="#8b5cf6"
+        />
+        <StatCard
+          icon={<IconAlertTriangle size={26} />}
+          label="Global Mode"
+          value={mode}
+          sub={mode === 'Protect' ? 'Blocking violations' : 'Monitoring only'}
+          accent={modeAccent}
+        />
+      </div>
+
+      {/* Recent policies */}
+      <Card>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold">Recent Policies</h3>
+            <p className="text-sm text-muted-foreground">Latest {recent.length} of {policies.length} policies</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-sm"
+            onClick={() => navigate('/policies/tracing')}
+          >
+            View all
+            <IconArrowRight size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {policies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconShieldCheck size={40} strokeWidth={1.5} />
+              <p className="text-base">No policies yet</p>
+              <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>
+                Create your first policy
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.map((p) => (
+                  <TableRow
+                    key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                    }
+                  >
+                    <TableCell className="font-medium text-primary">{p.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                        {p.scope}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={p.mode === 'Protect' ? 'destructive' : p.mode === 'Mixed' ? 'outline' : 'secondary'}>
+                        {p.mode}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <RelativeTime iso={p.createdAt} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DashboardPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  IconShieldCheck,
+  IconServer,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconRefresh,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, modeApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyRecord, Mode } from '../api/types'
+
+interface StatProps {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  sub?: string
+  accent?: string
+}
+
+function StatCard({ icon, label, value, sub, accent = '#2d7dd2' }: StatProps) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-stretch">
+          <div
+            className="flex w-14 shrink-0 items-center justify-center"
+            style={{ background: accent + '18' }}
+          >
+            <span style={{ color: accent }}>{icon}</span>
+          </div>
+          <div className="flex flex-col justify-center px-5 py-4">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-0.5 text-2xl font-bold leading-none">{value}</p>
+            {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+  let label = diff < 1 ? 'just now'
+    : diff < 60 ? `${diff}m ago`
+    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
+    : `${Math.floor(diff / 1440)}d ago`
+  return <span title={d.toLocaleString()}>{label}</span>
+}
+
+export function DashboardPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [namespaceCount, setNamespaceCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
+      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })
+      .catch(() => toast.error('Failed to load dashboard'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [])
+
+  const clusterCount = policies.filter((p) => p.scope === 'cluster').length
+  const protectCount = policies.filter((p) => p.mode === 'Protect').length
+  const recent = policies.slice(0, 8)
+
+  const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-8">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-72 rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Overview</h2>
+          <p className="mt-1 text-base text-muted-foreground">
+            Cilium TracingPolicy management console
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={load}>
+          <IconRefresh className="mr-2 size-4" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard
+          icon={<IconShieldCheck size={26} />}
+          label="Total Policies"
+          value={policies.length}
+          sub={`${clusterCount} cluster-scoped`}
+          accent="#2d7dd2"
+        />
+        <StatCard
+          icon={<IconShieldCheck size={26} />}
+          label="Protect Mode"
+          value={protectCount}
+          sub={`${policies.length - protectCount} monitoring`}
+          accent="#dc3545"
+        />
+        <StatCard
+          icon={<IconServer size={26} />}
+          label="Namespaces"
+          value={namespaceCount}
+          sub="managed namespaces"
+          accent="#8b5cf6"
+        />
+        <StatCard
+          icon={<IconAlertTriangle size={26} />}
+          label="Global Mode"
+          value={mode}
+          sub={mode === 'Protect' ? 'Blocking violations' : 'Monitoring only'}
+          accent={modeAccent}
+        />
+      </div>
+
+      {/* Recent policies */}
+      <Card>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold">Recent Policies</h3>
+            <p className="text-sm text-muted-foreground">Latest {recent.length} of {policies.length} policies</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-sm"
+            onClick={() => navigate('/policies/tracing')}
+          >
+            View all
+            <IconArrowRight size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {policies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconShieldCheck size={40} strokeWidth={1.5} />
+              <p className="text-base">No policies yet</p>
+              <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>
+                Create your first policy
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.map((p) => (
+                  <TableRow
+                    key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                    }
+                  >
+                    <TableCell className="font-medium text-primary">{p.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                        {p.scope}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={p.mode === 'Protect' ? 'destructive' : p.mode === 'Mixed' ? 'outline' : 'secondary'}>
+                        {p.mode}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <RelativeTime iso={p.createdAt} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/DashboardPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  IconShieldCheck,
+  IconServer,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconRefresh,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { policyApi, modeApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyRecord, Mode } from '../api/types'
+
+interface StatProps {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  sub?: string
+  accent?: string
+}
+
+function StatCard({ icon, label, value, sub, accent = '#2d7dd2' }: StatProps) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-stretch">
+          <div
+            className="flex w-14 shrink-0 items-center justify-center"
+            style={{ background: accent + '18' }}
+          >
+            <span style={{ color: accent }}>{icon}</span>
+          </div>
+          <div className="flex flex-col justify-center px-5 py-4">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-0.5 text-2xl font-bold leading-none">{value}</p>
+            {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+  let label = diff < 1 ? 'just now'
+    : diff < 60 ? `${diff}m ago`
+    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
+    : `${Math.floor(diff / 1440)}d ago`
+  return <span title={d.toLocaleString()}>{label}</span>
+}
+
+export function DashboardPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [namespaceCount, setNamespaceCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
+      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })
+      .catch(() => toast.error('Failed to load dashboard'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [])
+
+  const clusterCount = policies.filter((p) => p.scope === 'cluster').length
+  const protectCount = policies.filter((p) => p.mode === 'Protect').length
+  const recent = policies.slice(0, 8)
+
+  const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-8">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-72 rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Overview</h2>
+          <p className="mt-1 text-base text-muted-foreground">
+            Cilium TracingPolicy management console
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={load}>
+          <IconRefresh className="mr-2 size-4" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard
+          icon={<IconShieldCheck size={26} />}
+          label="Total Policies"
+          value={policies.length}
+          sub={`${clusterCount} cluster-scoped`}
+          accent="#2d7dd2"
+        />
+        <StatCard
+          icon={<IconShieldCheck size={26} />}
+          label="Protect Mode"
+          value={protectCount}
+          sub={`${policies.length - protectCount} monitoring`}
+          accent="#dc3545"
+        />
+        <StatCard
+          icon={<IconServer size={26} />}
+          label="Namespaces"
+          value={namespaceCount}
+          sub="managed namespaces"
+          accent="#8b5cf6"
+        />
+        <StatCard
+          icon={<IconAlertTriangle size={26} />}
+          label="Global Mode"
+          value={mode}
+          sub={mode === 'Protect' ? 'Blocking violations' : 'Monitoring only'}
+          accent={modeAccent}
+        />
+      </div>
+
+      {/* Recent policies */}
+      <Card>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold">Recent Policies</h3>
+            <p className="text-sm text-muted-foreground">Latest {recent.length} of {policies.length} policies</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-sm"
+            onClick={() => navigate('/policies/tracing')}
+          >
+            View all
+            <IconArrowRight size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {policies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconShieldCheck size={40} strokeWidth={1.5} />
+              <p className="text-base">No policies yet</p>
+              <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>
+                Create your first policy
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.map((p) => (
+                  <TableRow
+                    key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                    }
+                  >
+                    <TableCell className="font-medium text-primary">{p.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                        {p.scope}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={p.mode === 'Protect' ? 'destructive' : p.mode === 'Mixed' ? 'outline' : 'secondary'}>
+                        {p.mode}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <RelativeTime iso={p.createdAt} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 38,
+        "newStart": 1,
+        "newLines": 65,
+        "lines": [
+          " import { useEffect, useState } from 'react'",
+          " import { useNavigate } from 'react-router-dom'",
+          " import {",
+          "-  Card,",
+          "-  CardHeader,",
+          "-  CardTitle,",
+          "-  CardAction,",
+          "-  CardContent,",
+          "-} from '@/components/ui/card'",
+          "+  IconShieldCheck,",
+          "+  IconServer,",
+          "+  IconAlertTriangle,",
+          "+  IconArrowRight,",
+          "+  IconRefresh,",
+          "+} from '@tabler/icons-react'",
+          "+import { Card, CardContent } from '@/components/ui/card'",
+          " import {",
+          "-  Table,",
+          "-  TableHeader,",
+          "-  TableBody,",
+          "-  TableRow,",
+          "-  TableHead,",
+          "-  TableCell,",
+          "+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,",
+          " } from '@/components/ui/table'",
+          " import { Badge } from '@/components/ui/badge'",
+          " import { Button } from '@/components/ui/button'",
+          " import { Skeleton } from '@/components/ui/skeleton'",
+          "-import {",
+          "-  AlertDialog,",
+          "-  AlertDialogAction,",
+          "-  AlertDialogCancel,",
+          "-  AlertDialogContent,",
+          "-  AlertDialogDescription,",
+          "-  AlertDialogFooter,",
+          "-  AlertDialogHeader,",
+          "-  AlertDialogTitle,",
+          "-} from '@/components/ui/alert-dialog'",
+          " import { policyApi, modeApi, namespaceApi } from '../api/client'",
+          " import { useToast } from '../layout/AppToaster'",
+          "-import { StatCard } from '../components/StatCard'",
+          " import type { PolicyRecord, Mode } from '../api/types'",
+          " ",
+          "+interface StatProps {",
+          "+  icon: React.ReactNode",
+          "+  label: string",
+          "+  value: string | number",
+          "+  sub?: string",
+          "+  accent?: string",
+          "+}",
+          "+",
+          "+function StatCard({ icon, label, value, sub, accent = '#2d7dd2' }: StatProps) {",
+          "+  return (",
+          "+    <Card className="overflow-hidden">",
+          "+      <CardContent className="p-0">",
+          "+        <div className="flex items-stretch">",
+          "+          <div",
+          "+            className="flex w-14 shrink-0 items-center justify-center"",
+          "+            style={{ background: accent + '18' }}",
+          "+          >",
+          "+            <span style={{ color: accent }}>{icon}</span>",
+          "+          </div>",
+          "+          <div className="flex flex-col justify-center px-5 py-4">",
+          "+            <p className="text-sm text-muted-foreground">{label}</p>",
+          "+            <p className="mt-0.5 text-2xl font-bold leading-none">{value}</p>",
+          "+            {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}",
+          "+          </div>",
+          "+        </div>",
+          "+      </CardContent>",
+          "+    </Card>",
+          "+  )",
+          "+}",
+          "+",
+          "+function RelativeTime({ iso }: { iso: string }) {",
+          "+  if (!iso) return <span className="text-muted-foreground">—</span>",
+          "+  const d = new Date(iso)",
+          "+  if (isNaN(d.getTime())) return <span>{iso}</span>",
+          "+  const diff = Math.floor((Date.now() - d.getTime()) / 60000)",
+          "+  let label = diff < 1 ? 'just now'",
+          "+    : diff < 60 ? `${diff}m ago`",
+          "+    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`",
+          "+    : `${Math.floor(diff / 1440)}d ago`",
+          "+  return <span title={d.toLocaleString()}>{label}</span>",
+          "+}",
+          "+",
+          " export function DashboardPage() {",
+          "   const navigate = useNavigate()",
+          "   const toast = useToast()"
+        ]
+      },
+      {
+        "oldStart": 40,
+        "oldLines": 191,
+        "newStart": 67,
+        "newLines": 151,
+        "lines": [
+          "   const [mode, setMode] = useState<Mode>('Monitoring')",
+          "   const [namespaceCount, setNamespaceCount] = useState(0)",
+          "   const [loading, setLoading] = useState(true)",
+          "-  const [switchModal, setSwitchModal] = useState(false)",
+          " ",
+          "-  useEffect(() => {",
+          "+  const load = () => {",
+          "+    setLoading(true)",
+          "     Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])",
+          "-      .then(([p, m, ns]) => {",
+          "-        setPolicies(p)",
+          "-        setMode(m)",
+          "-        setNamespaceCount(ns.length)",
+          "-      })",
+          "+      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })",
+          "       .catch(() => toast.error('Failed to load dashboard'))",
+          "       .finally(() => setLoading(false))",
+          "-  }, [])",
+          "-",
+          "-  const handleModeSwitch = async () => {",
+          "-    const next: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'",
+          "-    try {",
+          "-      await modeApi.set(next)",
+          "-      setMode(next)",
+          "-      toast.success(`Mode switched to ${next}`)",
+          "-    } catch {",
+          "-      toast.error('Failed to switch mode')",
+          "-    }",
+          "   }",
+          " ",
+          "+  useEffect(load, [])",
+          "+",
+          "   const clusterCount = policies.filter((p) => p.scope === 'cluster').length",
+          "-  const recent = policies.slice(0, 5)",
+          "-  const nextMode: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'",
+          "-  const modeColor = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'",
+          "+  const protectCount = policies.filter((p) => p.mode === 'Protect').length",
+          "+  const recent = policies.slice(0, 8)",
+          " ",
+          "+  const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'",
+          "+",
+          "   if (loading) {",
+          "     return (",
+          "-      <div className="flex flex-col gap-6">",
+          "-        <h4 className="text-lg font-semibold">Dashboard</h4>",
+          "+      <div className="flex flex-col gap-8">",
+          "+        <Skeleton className="h-8 w-48" />",
+          "         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">",
+          "-          {Array.from({ length: 4 }).map((_, i) => (",
+          "-            <Skeleton key={i} className="h-24 rounded-xl" />",
+          "-          ))}",
+          "+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}",
+          "         </div>",
+          "-        <div className="grid gap-4 xl:grid-cols-3">",
+          "-          <Skeleton className="h-64 rounded-xl xl:col-span-2" />",
+          "-          <Skeleton className="h-64 rounded-xl" />",
+          "-        </div>",
+          "+        <Skeleton className="h-72 rounded-xl" />",
+          "       </div>",
+          "     )",
+          "   }",
+          " ",
+          "   return (",
+          "-    <>",
+          "-      <h4 className="mb-6 text-lg font-semibold">Dashboard</h4>",
+          "+    <div className="flex flex-col gap-8">",
+          "+      {/* Page header */}",
+          "+      <div className="flex items-center justify-between">",
+          "+        <div>",
+          "+          <h2 className="text-2xl font-bold">Overview</h2>",
+          "+          <p className="mt-1 text-base text-muted-foreground">",
+          "+            Cilium TracingPolicy management console",
+          "+          </p>",
+          "+        </div>",
+          "+        <Button variant="outline" size="sm" onClick={load}>",
+          "+          <IconRefresh className="mr-2 size-4" />",
+          "+          Refresh",
+          "+        </Button>",
+          "+      </div>",
+          " ",
+          "-      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">",
+          "+      {/* Stat cards */}",
+          "+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">",
+          "         <StatCard",
+          "-          title="Total Policies"",
+          "+          icon={<IconShieldCheck size={26} />}",
+          "+          label="Total Policies"",
+          "           value={policies.length}",
+          "-          subtitle="TracingPolicy"",
+          "-          borderColor="#2d7dd2"",
+          "+          sub={`${clusterCount} cluster-scoped`}",
+          "+          accent="#2d7dd2"",
+          "         />",
+          "         <StatCard",
+          "-          title="Current Mode"",
+          "-          value={mode.toUpperCase()}",
+          "-          subtitle={mode === 'Protect' ? 'Actively blocking violations' : 'Monitoring only, no blocking'}",
+          "-          borderColor={modeColor}",
+          "+          icon={<IconShieldCheck size={26} />}",
+          "+          label="Protect Mode"",
+          "+          value={protectCount}",
+          "+          sub={`${policies.length - protectCount} monitoring`}",
+          "+          accent="#dc3545"",
+          "         />",
+          "         <StatCard",
+          "-          title="Namespaces"",
+          "+          icon={<IconServer size={26} />}",
+          "+          label="Namespaces"",
+          "           value={namespaceCount}",
+          "-          subtitle="Active namespaces"",
+          "-          borderColor="#28a745"",
+          "+          sub="managed namespaces"",
+          "+          accent="#8b5cf6"",
+          "         />",
+          "         <StatCard",
+          "-          title="Cluster-scoped"",
+          "-          value={clusterCount}",
+          "-          subtitle="Cluster-scoped policies"",
+          "-          borderColor="#dc3545"",
+          "+          icon={<IconAlertTriangle size={26} />}",
+          "+          label="Global Mode"",
+          "+          value={mode}",
+          "+          sub={mode === 'Protect' ? 'Blocking violations' : 'Monitoring only'}",
+          "+          accent={modeAccent}",
+          "         />",
+          "       </div>",
+          " ",
+          "-      <div className="grid gap-4 xl:grid-cols-3">",
+          "-        <Card className="xl:col-span-2">",
+          "-          <CardHeader>",
+          "-            <CardTitle>Recent Policies</CardTitle>",
+          "-            <CardAction>",
+          "-              <Button variant="link" size="sm" onClick={() => navigate('/policies/tracing')}>",
+          "-                View All →",
+          "+      {/* Recent policies */}",
+          "+      <Card>",
+          "+        <div className="flex items-center justify-between border-b px-6 py-4">",
+          "+          <div>",
+          "+            <h3 className="text-base font-semibold">Recent Policies</h3>",
+          "+            <p className="text-sm text-muted-foreground">Latest {recent.length} of {policies.length} policies</p>",
+          "+          </div>",
+          "+          <Button",
+          "+            variant="ghost"",
+          "+            size="sm"",
+          "+            className="gap-1 text-sm"",
+          "+            onClick={() => navigate('/policies/tracing')}",
+          "+          >",
+          "+            View all",
+          "+            <IconArrowRight size={14} />",
+          "+          </Button>",
+          "+        </div>",
+          "+        <CardContent className="p-0">",
+          "+          {policies.length === 0 ? (",
+          "+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">",
+          "+              <IconShieldCheck size={40} strokeWidth={1.5} />",
+          "+              <p className="text-base">No policies yet</p>",
+          "+              <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>",
+          "+                Create your first policy",
+          "               </Button>",
+          "-            </CardAction>",
+          "-          </CardHeader>",
+          "-          <CardContent className="p-0">",
+          "+            </div>",
+          "+          ) : (",
+          "             <Table>",
+          "               <TableHeader>",
+          "                 <TableRow>",
+          "                   <TableHead>Name</TableHead>",
+          "                   <TableHead>Scope</TableHead>",
+          "+                  <TableHead>Mode</TableHead>",
+          "                   <TableHead>Namespace</TableHead>",
+          "                   <TableHead>Created</TableHead>",
+          "                 </TableRow>",
+          "               </TableHeader>",
+          "               <TableBody>",
+          "-                {recent.length === 0 ? (",
+          "-                  <TableRow>",
+          "-                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">",
+          "-                      No policies yet",
+          "+                {recent.map((p) => (",
+          "+                  <TableRow",
+          "+                    key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}",
+          "+                    className="cursor-pointer"",
+          "+                    onClick={() =>",
+          "+                      navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)",
+          "+                    }",
+          "+                  >",
+          "+                    <TableCell className="font-medium text-primary">{p.name}</TableCell>",
+          "+                    <TableCell>",
+          "+                      <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>",
+          "+                        {p.scope}",
+          "+                      </Badge>",
+          "                     </TableCell>",
+          "+                    <TableCell>",
+          "+                      <Badge variant={p.mode === 'Protect' ? 'destructive' : p.mode === 'Mixed' ? 'outline' : 'secondary'}>",
+          "+                        {p.mode}",
+          "+                      </Badge>",
+          "+                    </TableCell>",
+          "+                    <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>",
+          "+                    <TableCell className="text-muted-foreground">",
+          "+                      <RelativeTime iso={p.createdAt} />",
+          "+                    </TableCell>",
+          "                   </TableRow>",
+          "-                ) : (",
+          "-                  recent.map((p) => (",
+          "-                    <TableRow",
+          "-                      key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}",
+          "-                      className="cursor-pointer"",
+          "-                      onClick={() =>",
+          "-                        navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)",
+          "-                      }",
+          "-                    >",
+          "-                      <TableCell className="font-medium text-primary">{p.name}</TableCell>",
+          "-                      <TableCell>",
+          "-                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>",
+          "-                          {p.scope}",
+          "-                        </Badge>",
+          "-                      </TableCell>",
+          "-                      <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>",
+          "-                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>",
+          "-                    </TableRow>",
+          "-                  ))",
+          "-                )}",
+          "+                ))}",
+          "               </TableBody>",
+          "             </Table>",
+          "-          </CardContent>",
+          "-        </Card>",
+          "-",
+          "-        <Card>",
+          "-          <CardHeader>",
+          "-            <CardTitle>Enforcement Mode</CardTitle>",
+          "-          </CardHeader>",
+          "-          <CardContent className="flex flex-col gap-4 text-center">",
+          "-            <div",
+          "-              style={{ border: `2px solid ${modeColor}` }}",
+          "-              className="rounded-lg p-4"",
+          "-            >",
+          "-              <p className="mb-1 text-xs text-muted-foreground">Current mode</p>",
+          "-              <p className="text-lg font-bold" style={{ color: modeColor }}>",
+          "-                {mode.toUpperCase()}",
+          "-              </p>",
+          "-            </div>",
+          "-            <Button",
+          "-              variant={nextMode === 'Protect' ? 'destructive' : 'outline'}",
+          "-              className="w-full"",
+          "-              onClick={() => setSwitchModal(true)}",
+          "-            >",
+          "-              Switch to {nextMode.toUpperCase()}",
+          "-            </Button>",
+          "-            {nextMode === 'Protect' && (",
+          "-              <p className="text-xs text-destructive">",
+          "-                ⚠ Will actively block violations when enabled",
+          "-              </p>",
+          "-            )}",
+          "-          </CardContent>",
+          "-        </Card>",
+          "-      </div>",
+          "-",
+          "-      <AlertDialog open={switchModal} onOpenChange={setSwitchModal}>",
+          "-        <AlertDialogContent>",
+          "-          <AlertDialogHeader>",
+          "-            <AlertDialogTitle>Switch Mode</AlertDialogTitle>",
+          "-            <AlertDialogDescription asChild>",
+          "-              <div>",
+          "-                Switch enforcement mode to <strong>{nextMode.toUpperCase()}</strong>?",
+          "-                {nextMode === 'Protect' && (",
+          "-                  <p className="mt-2 text-destructive">",
+          "-                    Warning: Protect mode will actively kill violating processes.",
+          "-                  </p>",
+          "-                )}",
+          "-              </div>",
+          "-            </AlertDialogDescription>",
+          "-          </AlertDialogHeader>",
+          "-          <AlertDialogFooter>",
+          "-            <AlertDialogCancel>Cancel</AlertDialogCancel>",
+          "-            <AlertDialogAction",
+          "-              variant={nextMode === 'Protect' ? 'destructive' : 'default'}",
+          "-              onClick={handleModeSwitch}",
+          "-            >",
+          "-              Switch to {nextMode}",
+          "-            </AlertDialogAction>",
+          "-          </AlertDialogFooter>",
+          "-        </AlertDialogContent>",
+          "-      </AlertDialog>",
+          "-    </>",
+          "+          )}",
+          "+        </CardContent>",
+          "+      </Card>",
+          "+    </div>",
+          "   )",
+          " }"
+        ]
+      }
+    ],
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardAction,
+  CardContent,
+} from '@/components/ui/card'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { policyApi, modeApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { StatCard } from '../components/StatCard'
+import type { PolicyRecord, Mode } from '../api/types'
+
+export function DashboardPage() {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [namespaceCount, setNamespaceCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [switchModal, setSwitchModal] = useState(false)
+
+  useEffect(() => {
+    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
+      .then(([p, m, ns]) => {
+        setPolicies(p)
+        setMode(m)
+        setNamespaceCount(ns.length)
+      })
+      .catch(() => toast.error('Failed to load dashboard'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleModeSwitch = async () => {
+    const next: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'
+    try {
+      await modeApi.set(next)
+      setMode(next)
+      toast.success(`Mode switched to ${next}`)
+    } catch {
+      toast.error('Failed to switch mode')
+    }
+  }
+
+  const clusterCount = policies.filter((p) => p.scope === 'cluster').length
+  const recent = policies.slice(0, 5)
+  const nextMode: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'
+  const modeColor = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h4 className="text-lg font-semibold">Dashboard</h4>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Skeleton className="h-64 rounded-xl xl:col-span-2" />
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <h4 className="mb-6 text-lg font-semibold">Dashboard</h4>
+
+      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatCard
+          title="Total Policies"
+          value={policies.length}
+          subtitle="TracingPolicy"
+          borderColor="#2d7dd2"
+        />
+        <StatCard
+          title="Current Mode"
+          value={mode.toUpperCase()}
+          subtitle={mode === 'Protect' ? 'Actively blocking violations' : 'Monitoring only, no blocking'}
+          borderColor={modeColor}
+        />
+        <StatCard
+          title="Namespaces"
+          value={namespaceCount}
+          subtitle="Active namespaces"
+          borderColor="#28a745"
+        />
+        <StatCard
+          title="Cluster-scoped"
+          value={clusterCount}
+          subtitle="Cluster-scoped policies"
+          borderColor="#dc3545"
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle>Recent Policies</CardTitle>
+            <CardAction>
+              <Button variant="link" size="sm" onClick={() => navigate('/policies/tracing')}>
+                View All →
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                      No policies yet
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  recent.map((p) => (
+                    <TableRow
+                      key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
+                      className="cursor-pointer"
+                      onClick={() =>
+                        navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                      }
+                    >
+                      <TableCell className="font-medium text-primary">{p.name}</TableCell>
+                      <TableCell>
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                          {p.scope}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Enforcement Mode</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 text-center">
+            <div
+              style={{ border: `2px solid ${modeColor}` }}
+              className="rounded-lg p-4"
+            >
+              <p className="mb-1 text-xs text-muted-foreground">Current mode</p>
+              <p className="text-lg font-bold" style={{ color: modeColor }}>
+                {mode.toUpperCase()}
+              </p>
+            </div>
+            <Button
+              variant={nextMode === 'Protect' ? 'destructive' : 'outline'}
+              className="w-full"
+              onClick={() => setSwitchModal(true)}
+            >
+              Switch to {nextMode.toUpperCase()}
+            </Button>
+            {nextMode === 'Protect' && (
+              <p className="text-xs text-destructive">
+                ⚠ Will actively block violations when enabled
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <AlertDialog open={switchModal} onOpenChange={setSwitchModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch Mode</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                Switch enforcement mode to <strong>{nextMode.toUpperCase()}</strong>?
+                {nextMode === 'Protect' && (
+                  <p className="mt-2 text-destructive">
+                    Warning: Protect mode will actively kill violating processes.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant={nextMode === 'Protect' ? 'destructive' : 'default'}
+              onClick={handleModeSwitch}
+            >
+              Switch to {nextMode}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppLayout.tsx",
+    "old_string": "        <main className="flex-1 p-6">
+          <Outlet />
+        </main>",
+    "new_string": "        <main className="flex-1 px-8 py-6">
+          <Outlet />
+        </main>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppLayout.tsx",
+    "old_string": "        <main className="flex-1 p-6">
+          <Outlet />
+        </main>",
+    "new_string": "        <main className="flex-1 px-8 py-6">
+          <Outlet />
+        </main>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppLayout.tsx",
+    "oldString": "        <main className="flex-1 p-6">
+          <Outlet />
+        </main>",
+    "newString": "        <main className="flex-1 px-8 py-6">
+          <Outlet />
+        </main>",
+    "originalFile": "import { Outlet } from 'react-router-dom'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
+import { AppSidebar } from './AppSidebar'
+import { AppHeader } from './AppHeader'
+
+export function AppLayout() {
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <AppHeader />
+        <main className="flex-1 p-6">
+          <Outlet />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 9,
+        "oldLines": 7,
+        "newStart": 9,
+        "newLines": 7,
+        "lines": [
+          "       <AppSidebar />",
+          "       <SidebarInset>",
+          "         <AppHeader />",
+          "-        <main className="flex-1 p-6">",
+          "+        <main className="flex-1 px-8 py-6">",
+          "           <Outlet />",
+          "         </main>",
+          "       </SidebarInset>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  18:13:43
+   Duration  479ms (transform 19ms, setup 37ms, import 16ms, tests 4ms, environment 344ms)
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "feat: redesign dashboard, move global mode to policy list, remove mode sidebar item"",
+    "description": "提交所有變更"
+  }
+}
+
+----------------------------------------
+

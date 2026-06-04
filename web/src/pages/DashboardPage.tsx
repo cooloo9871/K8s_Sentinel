@@ -1,37 +1,64 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardAction,
-  CardContent,
-} from '@/components/ui/card'
+  IconShieldCheck,
+  IconServer,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconRefresh,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
 import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { policyApi, modeApi, namespaceApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
-import { StatCard } from '../components/StatCard'
 import type { PolicyRecord, Mode } from '../api/types'
+
+interface StatProps {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  sub?: string
+  accent?: string
+}
+
+function StatCard({ icon, label, value, sub, accent = '#2d7dd2' }: StatProps) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-stretch">
+          <div
+            className="flex w-14 shrink-0 items-center justify-center"
+            style={{ background: accent + '18' }}
+          >
+            <span style={{ color: accent }}>{icon}</span>
+          </div>
+          <div className="flex flex-col justify-center px-5 py-4">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-0.5 text-2xl font-bold leading-none">{value}</p>
+            {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+  let label = diff < 1 ? 'just now'
+    : diff < 60 ? `${diff}m ago`
+    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
+    : `${Math.floor(diff / 1440)}d ago`
+  return <span title={d.toLocaleString()}>{label}</span>
+}
 
 export function DashboardPage() {
   const navigate = useNavigate()
@@ -40,191 +67,151 @@ export function DashboardPage() {
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [namespaceCount, setNamespaceCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [switchModal, setSwitchModal] = useState(false)
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true)
     Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
-      .then(([p, m, ns]) => {
-        setPolicies(p)
-        setMode(m)
-        setNamespaceCount(ns.length)
-      })
+      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
-  }, [])
-
-  const handleModeSwitch = async () => {
-    const next: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'
-    try {
-      await modeApi.set(next)
-      setMode(next)
-      toast.success(`Mode switched to ${next}`)
-    } catch {
-      toast.error('Failed to switch mode')
-    }
   }
 
+  useEffect(load, [])
+
   const clusterCount = policies.filter((p) => p.scope === 'cluster').length
-  const recent = policies.slice(0, 5)
-  const nextMode: 'Monitoring' | 'Protect' = mode === 'Protect' ? 'Monitoring' : 'Protect'
-  const modeColor = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
+  const protectCount = policies.filter((p) => p.mode === 'Protect').length
+  const recent = policies.slice(0, 8)
+
+  const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-6">
-        <h4 className="text-lg font-semibold">Dashboard</h4>
+      <div className="flex flex-col gap-8">
+        <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
-          ))}
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
         </div>
-        <div className="grid gap-4 xl:grid-cols-3">
-          <Skeleton className="h-64 rounded-xl xl:col-span-2" />
-          <Skeleton className="h-64 rounded-xl" />
-        </div>
+        <Skeleton className="h-72 rounded-xl" />
       </div>
     )
   }
 
   return (
-    <>
-      <h4 className="mb-6 text-lg font-semibold">Dashboard</h4>
+    <div className="flex flex-col gap-8">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Overview</h2>
+          <p className="mt-1 text-base text-muted-foreground">
+            Cilium TracingPolicy management console
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={load}>
+          <IconRefresh className="mr-2 size-4" />
+          Refresh
+        </Button>
+      </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
-          title="Total Policies"
+          icon={<IconShieldCheck size={26} />}
+          label="Total Policies"
           value={policies.length}
-          subtitle="TracingPolicy"
-          borderColor="#2d7dd2"
+          sub={`${clusterCount} cluster-scoped`}
+          accent="#2d7dd2"
         />
         <StatCard
-          title="Current Mode"
-          value={mode.toUpperCase()}
-          subtitle={mode === 'Protect' ? 'Actively blocking violations' : 'Monitoring only, no blocking'}
-          borderColor={modeColor}
+          icon={<IconShieldCheck size={26} />}
+          label="Protect Mode"
+          value={protectCount}
+          sub={`${policies.length - protectCount} monitoring`}
+          accent="#dc3545"
         />
         <StatCard
-          title="Namespaces"
+          icon={<IconServer size={26} />}
+          label="Namespaces"
           value={namespaceCount}
-          subtitle="Active namespaces"
-          borderColor="#28a745"
+          sub="managed namespaces"
+          accent="#8b5cf6"
         />
         <StatCard
-          title="Cluster-scoped"
-          value={clusterCount}
-          subtitle="Cluster-scoped policies"
-          borderColor="#dc3545"
+          icon={<IconAlertTriangle size={26} />}
+          label="Global Mode"
+          value={mode}
+          sub={mode === 'Protect' ? 'Blocking violations' : 'Monitoring only'}
+          accent={modeAccent}
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Recent Policies</CardTitle>
-            <CardAction>
-              <Button variant="link" size="sm" onClick={() => navigate('/policies/tracing')}>
-                View All →
+      {/* Recent policies */}
+      <Card>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold">Recent Policies</h3>
+            <p className="text-sm text-muted-foreground">Latest {recent.length} of {policies.length} policies</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-sm"
+            onClick={() => navigate('/policies/tracing')}
+          >
+            View all
+            <IconArrowRight size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {policies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconShieldCheck size={40} strokeWidth={1.5} />
+              <p className="text-base">No policies yet</p>
+              <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>
+                Create your first policy
               </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="p-0">
+            </div>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Scope</TableHead>
+                  <TableHead>Mode</TableHead>
                   <TableHead>Namespace</TableHead>
                   <TableHead>Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recent.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                      No policies yet
+                {recent.map((p) => (
+                  <TableRow
+                    key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                    }
+                  >
+                    <TableCell className="font-medium text-primary">{p.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                        {p.scope}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={p.mode === 'Protect' ? 'destructive' : p.mode === 'Mixed' ? 'outline' : 'secondary'}>
+                        {p.mode}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <RelativeTime iso={p.createdAt} />
                     </TableCell>
                   </TableRow>
-                ) : (
-                  recent.map((p) => (
-                    <TableRow
-                      key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
-                      className="cursor-pointer"
-                      onClick={() =>
-                        navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
-                      }
-                    >
-                      <TableCell className="font-medium text-primary">{p.name}</TableCell>
-                      <TableCell>
-                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
-                          {p.scope}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
-                      <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Enforcement Mode</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 text-center">
-            <div
-              style={{ border: `2px solid ${modeColor}` }}
-              className="rounded-lg p-4"
-            >
-              <p className="mb-1 text-xs text-muted-foreground">Current mode</p>
-              <p className="text-lg font-bold" style={{ color: modeColor }}>
-                {mode.toUpperCase()}
-              </p>
-            </div>
-            <Button
-              variant={nextMode === 'Protect' ? 'destructive' : 'outline'}
-              className="w-full"
-              onClick={() => setSwitchModal(true)}
-            >
-              Switch to {nextMode.toUpperCase()}
-            </Button>
-            {nextMode === 'Protect' && (
-              <p className="text-xs text-destructive">
-                ⚠ Will actively block violations when enabled
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <AlertDialog open={switchModal} onOpenChange={setSwitchModal}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Switch Mode</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div>
-                Switch enforcement mode to <strong>{nextMode.toUpperCase()}</strong>?
-                {nextMode === 'Protect' && (
-                  <p className="mt-2 text-destructive">
-                    Warning: Protect mode will actively kill violating processes.
-                  </p>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant={nextMode === 'Protect' ? 'destructive' : 'default'}
-              onClick={handleModeSwitch}
-            >
-              Switch to {nextMode}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }

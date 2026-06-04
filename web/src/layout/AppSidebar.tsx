@@ -19,7 +19,6 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="offcanvas">
-      {/* Brand */}
       <SidebarHeader>
         <div className="flex items-center gap-2.5 px-2 py-3">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
@@ -32,7 +31,6 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Dashboard */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -45,7 +43,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Policies */}
         <SidebarGroup>
           <SidebarGroupLabel>Policies</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -59,7 +56,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Security */}
         <SidebarGroup>
           <SidebarGroupLabel>Security</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -73,16 +69,10 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Cluster */}
         <SidebarGroup>
           <SidebarGroupLabel>Cluster</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/cluster/mode')}>
-                  <NavLink to="/cluster/mode">Mode Control</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
                   <NavLink to="/cluster/namespaces">Namespaces</NavLink>
