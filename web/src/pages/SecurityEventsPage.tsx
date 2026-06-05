@@ -10,13 +10,23 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
 
-type FilterType = 'all' | 'kill'
+type FilterType = 'all' | 'warning' | 'critical'
 
-function EventTypeBadge({ action }: { action: string }) {
-  if (action === 'kill') return <Badge variant="destructive">kill</Badge>
-  return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return (
+      <Badge variant="destructive" className="font-medium">
+        Critical
+      </Badge>
+    )
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
 }
 
 function RelativeTime({ iso }: { iso: string }) {
@@ -37,10 +47,14 @@ export function SecurityEventsPage() {
   const [podSearch, setPodSearch] = useState('')
 
   const filtered = events.filter((e) => {
-    if (filter === 'kill' && e.action !== 'kill') return false
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
     return true
   })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
 
   return (
     <>
@@ -69,13 +83,14 @@ export function SecurityEventsPage() {
           />
 
           <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
-            <SelectTrigger className="h-9 w-36">
+            <SelectTrigger className="h-9 w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all">All Policy Events</SelectItem>
-                <SelectItem value="kill">Kills Only</SelectItem>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -92,10 +107,19 @@ export function SecurityEventsPage() {
       )}
 
       <Card>
-        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
-          <span>{filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}</span>
-          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
-          <span className="text-destructive">{events.filter(e => e.action === 'kill').length} kills</span>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
         </div>
 
         <CardContent className="p-0">
@@ -113,7 +137,7 @@ export function SecurityEventsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-20">Type</TableHead>
+                  <TableHead className="w-24">Severity</TableHead>
                   <TableHead>Binary</TableHead>
                   <TableHead>Pod / Namespace</TableHead>
                   <TableHead>Policy</TableHead>
@@ -127,10 +151,10 @@ export function SecurityEventsPage() {
                 {filtered.map((e, i) => (
                   <TableRow
                     key={i}
-                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
                   >
                     <TableCell>
-                      <EventTypeBadge action={e.action} />
+                      <SeverityBadge severity={e.severity} />
                     </TableCell>
                     <TableCell>
                       <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>

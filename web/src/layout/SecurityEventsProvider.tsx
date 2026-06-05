@@ -4,8 +4,11 @@ import type { TetragonEvent } from '../api/types'
 const MAX_EVENTS = 500
 const DEDUP_WINDOW_MS = 5000
 
+export type Severity = 'warning' | 'critical'
+
 export interface DisplayEvent extends TetragonEvent {
   count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
 }
 
 function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
@@ -55,11 +58,12 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
     es.onmessage = (e) => {
       try {
         const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
         setEvents((prev) => {
           if (prev.length > 0 && isSameEvent(prev[0], evt)) {
             return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
           }
-          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
         })
       } catch {}
     }

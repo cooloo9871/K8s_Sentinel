@@ -115404,3 +115404,1461 @@ export function SecurityEventsPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: persist Security Events across navigation via app-level SecurityEventsProvider"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 53e088e] feat: persist Security Events across navigation via app-level SecurityEventsProvider
+ 4 files changed, 1700 insertions(+), 63 deletions(-)
+ create mode 100644 web/src/layout/SecurityEventsProvider.tsx",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "53e088e",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。架構改動：
+
+**之前：**
+```
+SecurityEventsPage mount → 建立 SSE → 離開頁面 → unmount → SSE 斷開 → 事件遺失
+```
+
+**現在：**
+```
+App 啟動 → SecurityEventsProvider mount → 建立 SSE → 持續接收事件
+                ↓
+SecurityEventsPage mount → 從 context 讀取現有事件 → 顯示
+SecurityEventsPage unmount（切換頁面）→ SSE 繼續運行，事件繼續累積
+SecurityEventsPage mount（切回來）→ 從 context 讀取所有累積事件 → 全部顯示
+```
+
+`SecurityEventsPage` 現在只負責顯示和篩選，不管理連線和狀態——這些都在 `SecurityEventsProvider` 裡，跟 App 同壽命。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Security Events 我還要再加等級分類 warning 和 critical，warning 主要用來記錄監控警告的 event 但不會阻擋。critical 主要用來記錄違反策略的告警，並且會阻擋"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "export interface DisplayEvent extends TetragonEvent {
+  count: number
+}",
+    "new_string": "export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "export interface DisplayEvent extends TetragonEvent {
+  count: number
+}",
+    "new_string": "export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "export interface DisplayEvent extends TetragonEvent {
+  count: number
+}",
+    "newString": "export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 4,
+        "oldLines": 8,
+        "newStart": 4,
+        "newLines": 11,
+        "lines": [
+          " const MAX_EVENTS = 500",
+          " const DEDUP_WINDOW_MS = 5000",
+          " ",
+          "+export type Severity = 'warning' | 'critical'",
+          "+",
+          " export interface DisplayEvent extends TetragonEvent {",
+          "   count: number",
+          "+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)",
+          " }",
+          " ",
+          " function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }",
+    "new_string": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }",
+    "new_string": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }",
+    "newString": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 58,
+        "oldLines": 11,
+        "newStart": 58,
+        "newLines": 12,
+        "lines": [
+          "     es.onmessage = (e) => {",
+          "       try {",
+          "         const evt: TetragonEvent = JSON.parse(e.data)",
+          "+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'",
+          "         setEvents((prev) => {",
+          "           if (prev.length > 0 && isSameEvent(prev[0], evt)) {",
+          "             return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]",
+          "           }",
+          "-          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)",
+          "+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)",
+          "         })",
+          "       } catch {}",
+          "     }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useState } from 'react'
+import { IconActivity, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return (
+      <Badge variant="destructive" className="font-medium">
+        Critical
+      </Badge>
+    )
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <SeverityBadge severity={e.severity} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 && (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useState } from 'react'
+import { IconActivity, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return (
+      <Badge variant="destructive" className="font-medium">
+        Critical
+      </Badge>
+    )
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <SeverityBadge severity={e.severity} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 && (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useState } from 'react'
+import { IconActivity, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return (
+      <Badge variant="destructive" className="font-medium">
+        Critical
+      </Badge>
+    )
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <SeverityBadge severity={e.severity} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 && (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 10,
+        "oldLines": 13,
+        "newStart": 10,
+        "newLines": 23,
+        "lines": [
+          " import {",
+          "   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,",
+          " } from '@/components/ui/select'",
+          "-import { useSecurityEvents } from '../layout/SecurityEventsProvider'",
+          "+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'",
+          " ",
+          "-type FilterType = 'all' | 'kill'",
+          "+type FilterType = 'all' | 'warning' | 'critical'",
+          " ",
+          "-function EventTypeBadge({ action }: { action: string }) {",
+          "-  if (action === 'kill') return <Badge variant="destructive">kill</Badge>",
+          "-  return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>",
+          "+function SeverityBadge({ severity }: { severity: Severity }) {",
+          "+  if (severity === 'critical') {",
+          "+    return (",
+          "+      <Badge variant="destructive" className="font-medium">",
+          "+        Critical",
+          "+      </Badge>",
+          "+    )",
+          "+  }",
+          "+  return (",
+          "+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">",
+          "+      Warning",
+          "+    </Badge>",
+          "+  )",
+          " }",
+          " ",
+          " function RelativeTime({ iso }: { iso: string }) {"
+        ]
+      },
+      {
+        "oldStart": 37,
+        "oldLines": 11,
+        "newStart": 47,
+        "newLines": 15,
+        "lines": [
+          "   const [podSearch, setPodSearch] = useState('')",
+          " ",
+          "   const filtered = events.filter((e) => {",
+          "-    if (filter === 'kill' && e.action !== 'kill') return false",
+          "+    if (filter === 'warning' && e.severity !== 'warning') return false",
+          "+    if (filter === 'critical' && e.severity !== 'critical') return false",
+          "     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false",
+          "     return true",
+          "   })",
+          " ",
+          "+  const warningCount = events.filter(e => e.severity === 'warning').length",
+          "+  const criticalCount = events.filter(e => e.severity === 'critical').length",
+          "+",
+          "   return (",
+          "     <>",
+          "       <div className="mb-6 flex items-center justify-between">"
+        ]
+      },
+      {
+        "oldStart": 69,
+        "oldLines": 13,
+        "newStart": 83,
+        "newLines": 14,
+        "lines": [
+          "           />",
+          " ",
+          "           <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>",
+          "-            <SelectTrigger className="h-9 w-36">",
+          "+            <SelectTrigger className="h-9 w-40">",
+          "               <SelectValue />",
+          "             </SelectTrigger>",
+          "             <SelectContent>",
+          "               <SelectGroup>",
+          "-                <SelectItem value="all">All Policy Events</SelectItem>",
+          "-                <SelectItem value="kill">Kills Only</SelectItem>",
+          "+                <SelectItem value="all">All Events</SelectItem>",
+          "+                <SelectItem value="warning">Warning Only</SelectItem>",
+          "+                <SelectItem value="critical">Critical Only</SelectItem>",
+          "               </SelectGroup>",
+          "             </SelectContent>",
+          "           </Select>"
+        ]
+      },
+      {
+        "oldStart": 92,
+        "oldLines": 10,
+        "newStart": 107,
+        "newLines": 19,
+        "lines": [
+          "       )}",
+          " ",
+          "       <Card>",
+          "-        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">",
+          "-          <span>{filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}</span>",
+          "-          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>",
+          "-          <span className="text-destructive">{events.filter(e => e.action === 'kill').length} kills</span>",
+          "+        {/* Stats bar */}",
+          "+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">",
+          "+          <span className="text-muted-foreground">",
+          "+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}",
+          "+          </span>",
+          "+          <div className="flex items-center gap-1.5">",
+          "+            <span className="size-2 rounded-full bg-amber-400" />",
+          "+            <span className="text-amber-700">{warningCount} warning</span>",
+          "+          </div>",
+          "+          <div className="flex items-center gap-1.5">",
+          "+            <span className="size-2 rounded-full bg-destructive" />",
+          "+            <span className="text-destructive">{criticalCount} critical</span>",
+          "+          </div>",
+          "         </div>",
+          " ",
+          "         <CardContent className="p-0">"
+        ]
+      },
+      {
+        "oldStart": 113,
+        "oldLines": 7,
+        "newStart": 137,
+        "newLines": 7,
+        "lines": [
+          "             <Table>",
+          "               <TableHeader>",
+          "                 <TableRow>",
+          "-                  <TableHead className="w-20">Type</TableHead>",
+          "+                  <TableHead className="w-24">Severity</TableHead>",
+          "                   <TableHead>Binary</TableHead>",
+          "                   <TableHead>Pod / Namespace</TableHead>",
+          "                   <TableHead>Policy</TableHead>"
+        ]
+      },
+      {
+        "oldStart": 127,
+        "oldLines": 10,
+        "newStart": 151,
+        "newLines": 10,
+        "lines": [
+          "                 {filtered.map((e, i) => (",
+          "                   <TableRow",
+          "                     key={i}",
+          "-                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}",
+          "+                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}",
+          "                   >",
+          "                     <TableCell>",
+          "-                      <EventTypeBadge action={e.action} />",
+          "+                      <SeverityBadge severity={e.severity} />",
+          "                     </TableCell>",
+          "                     <TableCell>",
+          "                       <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>"
+        ]
+      }
+    ],
+    "originalFile": "import { useState } from 'react'
+import { IconActivity, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+
+type FilterType = 'all' | 'kill'
+
+function EventTypeBadge({ action }: { action: string }) {
+  if (action === 'kill') return <Badge variant="destructive">kill</Badge>
+  return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const filtered = events.filter((e) => {
+    if (filter === 'kill' && e.action !== 'kill') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">{events.filter(e => e.action === 'kill').length} kills</span>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-20">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 && (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "TypeScript + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "TypeScript + build"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: add Warning/Critical severity classification to Security Events"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+
