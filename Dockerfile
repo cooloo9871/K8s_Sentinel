@@ -1,5 +1,5 @@
 # Stage 1: build React
-FROM node:20-alpine AS frontend
+FROM docker.io/library/node:20-alpine AS frontend
 WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY web/ ./
 RUN npm run build
 
 # Stage 2: build Go binary
-FROM golang:1.22-alpine AS backend
+FROM docker.io/library/golang:1.22-alpine AS backend
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
