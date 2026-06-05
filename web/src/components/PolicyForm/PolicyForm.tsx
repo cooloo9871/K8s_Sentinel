@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,8 +41,18 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
   const fileEntries: FileEntry[] =
     value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
-  const labelEntries: LabelEntry[] =
-    Object.entries(value.podSelector ?? {}).map(([key, val]) => ({ key, value: val }))
+
+  // Use local state for label entries so empty keys don't get discarded while typing
+  const [localLabels, setLocalLabels] = useState<LabelEntry[]>(() =>
+    Object.entries(value.podSelector ?? {}).map(([k, v]) => ({ key: k, value: v }))
+  )
+
+  // Sync when parent loads a different policy (e.g., switching from edit to new)
+  useEffect(() => {
+    setLocalLabels(
+      Object.entries(value.podSelector ?? {}).map(([k, v]) => ({ key: k, value: v }))
+    )
+  }, [JSON.stringify(value.podSelector)])
 
   const setProcessBinaries = (binaries: string[]) =>
     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
@@ -50,7 +60,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const setFileEntries = (entries: FileEntry[]) =>
     onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
 
-  const setLabelEntries = (entries: LabelEntry[]) => {
+  const syncLabelsToParent = (entries: LabelEntry[]) => {
+    setLocalLabels(entries)
     const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
       if (key.trim()) acc[key.trim()] = v.trim()
       return acc
@@ -61,12 +72,12 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
     })
   }
 
-  const addLabel = () => setLabelEntries([...labelEntries, { key: '', value: '' }])
-  const removeLabel = (i: number) => setLabelEntries(labelEntries.filter((_, j) => j !== i))
+  const addLabel = () => syncLabelsToParent([...localLabels, { key: '', value: '' }])
+  const removeLabel = (i: number) => syncLabelsToParent(localLabels.filter((_, j) => j !== i))
   const updateLabel = (i: number, patch: Partial<LabelEntry>) => {
-    const next = [...labelEntries]
+    const next = [...localLabels]
     next[i] = { ...next[i], ...patch }
-    setLabelEntries(next)
+    syncLabelsToParent(next)
   }
 
   return (
@@ -127,7 +138,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               Target specific pods by label. Leave empty to apply to all pods in the namespace.
             </p>
             <div className="flex flex-col gap-2">
-              {labelEntries.map((entry, i) => (
+              {localLabels.map((entry, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Input
                     placeholder="Key (e.g. app)"
