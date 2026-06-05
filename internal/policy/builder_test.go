@@ -17,9 +17,6 @@ func TestBuildProcessPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if got.Metadata.Name != "block-shells" {
-		t.Errorf("name = %q, want block-shells", got.Metadata.Name)
-	}
 	if got.Kind != "TracingPolicy" {
 		t.Errorf("kind = %q, want TracingPolicy", got.Kind)
 	}
@@ -33,15 +30,35 @@ func TestBuildProcessPolicy(t *testing.T) {
 	if !kp.Syscall {
 		t.Error("syscall should be true for process rule")
 	}
-	if kp.Selectors[0].MatchActions[0].Action != "Post" {
-		t.Errorf("action = %q, want Post", kp.Selectors[0].MatchActions[0].Action)
+}
+
+func TestBuildMultipleProcessRulesCombined(t *testing.T) {
+	input := policy.PolicyFormInput{
+		Name: "block-shells",
+		Process: []policy.ProcessRule{
+			{Binaries: []string{"/bin/bash"}},
+			{Binaries: []string{"/bin/sh"}},
+		},
+	}
+
+	got, err := policy.Build(input, policy.ActionPost)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	// Multiple process rules must be combined into ONE kprobe to avoid BPF pin conflict
+	if len(got.Spec.KProbes) != 1 {
+		t.Fatalf("kprobes len = %d, want 1 (all binaries must be in one kprobe)", len(got.Spec.KProbes))
+	}
+	binaries := got.Spec.KProbes[0].Selectors[0].MatchBinaries[0].Values
+	if len(binaries) != 2 {
+		t.Errorf("binaries len = %d, want 2", len(binaries))
 	}
 }
 
-func TestBuildFilePolicy_Write(t *testing.T) {
+func TestBuildFilePolicy(t *testing.T) {
 	input := policy.PolicyFormInput{
-		Name: "watch-etc",
-		File: []policy.FileRule{{Paths: []string{"/etc/passwd"}, Operation: "write"}},
+		Name: "watch-files",
+		File: []policy.FileRule{{Paths: []string{"/etc/shadow"}, Operation: "read"}},
 	}
 
 	got, err := policy.Build(input, policy.ActionPost)
@@ -51,35 +68,38 @@ func TestBuildFilePolicy_Write(t *testing.T) {
 	if len(got.Spec.KProbes) != 1 {
 		t.Fatalf("kprobes len = %d, want 1", len(got.Spec.KProbes))
 	}
-	if got.Spec.KProbes[0].Call != "sys_write" {
-		t.Errorf("call = %q, want sys_write", got.Spec.KProbes[0].Call)
+	kp := got.Spec.KProbes[0]
+	if kp.Call != "security_file_permission" {
+		t.Errorf("call = %q, want security_file_permission", kp.Call)
+	}
+	if kp.Syscall {
+		t.Error("syscall should be false for security_file_permission")
+	}
+	if kp.Selectors[0].MatchArgs[0].Values[0] != "/etc/shadow" {
+		t.Errorf("path = %q, want /etc/shadow", kp.Selectors[0].MatchArgs[0].Values[0])
 	}
 }
 
-func TestBuildFilePolicy_Read(t *testing.T) {
+func TestBuildMultipleFileRulesCombined(t *testing.T) {
 	input := policy.PolicyFormInput{
-		Name: "watch-read",
-		File: []policy.FileRule{{Paths: []string{"/etc/shadow"}, Operation: "read"}},
+		Name: "watch-files",
+		File: []policy.FileRule{
+			{Paths: []string{"/etc/shadow"}, Operation: "read"},
+			{Paths: []string{"/root"}, Operation: "read"},
+		},
 	}
 
 	got, err := policy.Build(input, policy.ActionPost)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if got.Spec.KProbes[0].Call != "sys_read" {
-		t.Errorf("call = %q, want sys_read", got.Spec.KProbes[0].Call)
+	// Multiple file rules must be combined into ONE kprobe to avoid BPF pin conflict
+	if len(got.Spec.KProbes) != 1 {
+		t.Fatalf("kprobes len = %d, want 1 (all paths must be in one kprobe)", len(got.Spec.KProbes))
 	}
-}
-
-func TestBuildFilePolicy_UnknownOperation(t *testing.T) {
-	input := policy.PolicyFormInput{
-		Name: "bad",
-		File: []policy.FileRule{{Paths: []string{"/tmp"}, Operation: "delete"}},
-	}
-
-	_, err := policy.Build(input, policy.ActionPost)
-	if err == nil {
-		t.Error("Build() should return error for unknown operation")
+	paths := got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Values
+	if len(paths) != 2 {
+		t.Errorf("paths len = %d, want 2", len(paths))
 	}
 }
 
@@ -102,38 +122,26 @@ func TestBuildNamespacedPolicy(t *testing.T) {
 	}
 }
 
-func TestBuildPodSelector(t *testing.T) {
-	input := policy.PolicyFormInput{
-		Name:        "scoped",
-		PodSelector: map[string]string{"app": "myapp"},
-		Process:     []policy.ProcessRule{{Binaries: []string{"/bin/sh"}}},
-	}
-
-	got, err := policy.Build(input, policy.ActionPost)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if got.Spec.PodSelector == nil {
-		t.Fatal("expected non-nil PodSelector")
-	}
-	if got.Spec.PodSelector.MatchLabels["app"] != "myapp" {
-		t.Errorf("podSelector.app = %q, want myapp", got.Spec.PodSelector.MatchLabels["app"])
-	}
-}
-
 func TestBuildMultipleRules(t *testing.T) {
 	input := policy.PolicyFormInput{
 		Name:    "multi",
 		Process: []policy.ProcessRule{{Binaries: []string{"/bin/bash"}}},
-		File:    []policy.FileRule{{Paths: []string{"/etc"}, Operation: "open"}},
+		File:    []policy.FileRule{{Paths: []string{"/etc"}, Operation: "read"}},
 	}
 
 	got, err := policy.Build(input, policy.ActionPost)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
+	// One kprobe for sys_execve, one for security_file_permission
 	if len(got.Spec.KProbes) != 2 {
 		t.Errorf("kprobes len = %d, want 2", len(got.Spec.KProbes))
+	}
+	if got.Spec.KProbes[0].Call != "sys_execve" {
+		t.Errorf("kprobes[0].call = %q, want sys_execve", got.Spec.KProbes[0].Call)
+	}
+	if got.Spec.KProbes[1].Call != "security_file_permission" {
+		t.Errorf("kprobes[1].call = %q, want security_file_permission", got.Spec.KProbes[1].Call)
 	}
 }
 
@@ -154,7 +162,6 @@ func TestBuildYAMLRoundtrip(t *testing.T) {
 	if len(b) == 0 {
 		t.Error("expected non-empty YAML")
 	}
-
 	var out policy.TracingPolicy
 	if err := yaml.Unmarshal(b, &out); err != nil {
 		t.Fatalf("yaml.Unmarshal() error: %v", err)

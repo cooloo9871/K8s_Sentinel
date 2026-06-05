@@ -1,7 +1,5 @@
 package policy
 
-import "fmt"
-
 // Build converts PolicyFormInput into a TracingPolicy CRD object.
 // action must be ActionPost ("Post") or ActionSigkill ("Sigkill").
 func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
@@ -23,51 +21,45 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		tp.Spec.PodSelector = &LabelSelector{MatchLabels: input.PodSelector}
 	}
 
+	// Process rules: ONE sys_execve kprobe with all binaries combined.
+	// Multiple kprobes for the same function name cause BPF link pin conflicts.
+	var allBinaries []string
 	for _, r := range input.Process {
-		tp.Spec.KProbes = append(tp.Spec.KProbes, buildProcessKProbe(r, action))
+		allBinaries = append(allBinaries, r.Binaries...)
 	}
+	if len(allBinaries) > 0 {
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "sys_execve",
+			Syscall: true,
+			Args:    []KProbeArg{{Index: 0, Type: "string"}},
+			Selectors: []KProbeSelector{{
+				MatchBinaries: []BinarySelector{{Operator: "In", Values: allBinaries}},
+				MatchActions:  []ActionSelector{{Action: action}},
+			}},
+		})
+	}
+
+	// File rules: ONE security_file_permission kprobe with all paths combined.
+	// sys_read/sys_write/sys_openat work on file descriptors and cannot filter
+	// by path. security_file_permission receives the file object directly.
+	var allPaths []string
 	for _, r := range input.File {
-		kp, err := buildFileKProbe(r, action)
-		if err != nil {
-			return TracingPolicy{}, err
-		}
-		tp.Spec.KProbes = append(tp.Spec.KProbes, kp)
+		allPaths = append(allPaths, r.Paths...)
+	}
+	if len(allPaths) > 0 {
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "security_file_permission",
+			Syscall: false,
+			Args: []KProbeArg{
+				{Index: 0, Type: "file"},
+				{Index: 1, Type: "int"},
+			},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: allPaths}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
 	}
 
 	return tp, nil
 }
-
-func buildProcessKProbe(r ProcessRule, action string) KProbeSpec {
-	return KProbeSpec{
-		Call:    "sys_execve",
-		Syscall: true,
-		Args:    []KProbeArg{{Index: 0, Type: "string"}},
-		Selectors: []KProbeSelector{{
-			MatchBinaries: []BinarySelector{{Operator: "In", Values: r.Binaries}},
-			MatchActions:  []ActionSelector{{Action: action}},
-		}},
-	}
-}
-
-func buildFileKProbe(r FileRule, action string) (KProbeSpec, error) {
-	call := ""
-	switch r.Operation {
-	case "read":
-		call = "sys_read"
-	case "write":
-		call = "sys_write"
-	case "open":
-		call = "sys_openat"
-	default:
-		return KProbeSpec{}, fmt.Errorf("unknown file operation: %q", r.Operation)
-	}
-	return KProbeSpec{
-		Call:    call,
-		Syscall: true,
-		Selectors: []KProbeSelector{{
-			MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: r.Paths}},
-			MatchActions: []ActionSelector{{Action: action}},
-		}},
-	}, nil
-}
-
