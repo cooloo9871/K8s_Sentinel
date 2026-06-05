@@ -9,7 +9,7 @@ describe('formToYaml', () => {
       process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],
     }
     const out = formToYaml(input, 'Post')
-    expect(out).toContain('kind: TracingPolicy')
+    expect(out).toContain('kind: "TracingPolicy"')
     expect(out).toContain('sys_execve')
     expect(out).toContain('/bin/bash')
     expect(out).toContain('/bin/sh')
@@ -24,8 +24,8 @@ describe('formToYaml', () => {
       process: [{ binaries: ['/bin/sh'] }],
     }
     const out = formToYaml(input, 'Post')
-    expect(out).toContain('kind: TracingPolicyNamespaced')
-    expect(out).toContain('namespace: production')
+    expect(out).toContain('kind: "TracingPolicyNamespaced"')
+    expect(out).toContain('namespace: "production"')
   })
 
   it('generates a single security_file_permission kprobe with all paths combined', () => {
