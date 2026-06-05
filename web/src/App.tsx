@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './layout/AppLayout'
 import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
 import { DashboardPage } from './pages/DashboardPage'
 import { PolicyListPage } from './pages/PolicyListPage'
 import { PolicyEditPage } from './pages/PolicyEditPage'
@@ -12,6 +13,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppToaster>
+      <SecurityEventsProvider>
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -26,6 +28,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
+      </SecurityEventsProvider>
       </AppToaster>
     </BrowserRouter>
   )
