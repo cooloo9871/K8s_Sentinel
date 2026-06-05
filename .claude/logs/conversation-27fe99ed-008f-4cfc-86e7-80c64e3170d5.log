@@ -111979,3 +111979,1822 @@ export function SecurityEventsPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: deduplicate consecutive identical events with count badge in Security Events"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 385bc56] feat: deduplicate consecutive identical events with count badge in Security Events
+ 2 files changed, 2288 insertions(+), 2 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "385bc56",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。
+
+**為什麼看到重複事件（這是正常的）：**
+
+`security_file_permission` 是 kernel LSM hook，`cat /etc/shadow` 背後每次呼叫 `read()` syscall 都會觸發一次，所以 4 次 read 事件 = 真實的 4 次 kernel 呼叫，不是 bug。
+
+**現在的改善：**
+- 5 秒內，同一個 binary + pod + function + policy 的連續事件合併為一行
+- 右側顯示 `×4` badge 表示觸發次數
+- 超過 5 秒間隔則視為新事件（例如使用者又執行了一次 `cat`）"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Security Events 的 pause 和 clear 功能幫我拿掉，然後我還要在這裡加入可以搜尋 pod 名稱的功能，只查到對應的 events"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+      "content": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000 // merge identical events within 5s
+
+type FilterType = 'all' | 'kill'
+
+// DisplayEvent extends TetragonEvent with a client-side dedup count
+interface DisplayEvent extends TetragonEvent {
+  count: number
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          // Merge into the most recent identical event instead of adding a new row
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 ? (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+      "numLines": 291,
+      "startLine": 1,
+      "totalLines": 291
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+
+type FilterType = 'all' | 'kill'
+
+interface DisplayEvent extends TetragonEvent {
+  count: number
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+function EventTypeBadge({ action }: { action: string }) {
+  if (action === 'kill') return <Badge variant="destructive">kill</Badge>
+  return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'kill' && e.action !== 'kill') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">{events.filter(e => e.action === 'kill').length} kills</span>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-20">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 && (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+
+type FilterType = 'all' | 'kill'
+
+interface DisplayEvent extends TetragonEvent {
+  count: number
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+function EventTypeBadge({ action }: { action: string }) {
+  if (action === 'kill') return <Badge variant="destructive">kill</Badge>
+  return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'kill' && e.action !== 'kill') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">{events.filter(e => e.action === 'kill').length} kills</span>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-20">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 && (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+
+type FilterType = 'all' | 'kill'
+
+interface DisplayEvent extends TetragonEvent {
+  count: number
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+function EventTypeBadge({ action }: { action: string }) {
+  if (action === 'kill') return <Badge variant="destructive">kill</Badge>
+  return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'kill' && e.action !== 'kill') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">{events.filter(e => e.action === 'kill').length} kills</span>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-20">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 && (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 9,
+        "newStart": 1,
+        "newLines": 6,
+        "lines": [
+          " import { useEffect, useRef, useState } from 'react'",
+          " import {",
+          "   IconActivity,",
+          "-  IconPlayerPlay,",
+          "-  IconPlayerPause,",
+          "-  IconTrash,",
+          "   IconWifi,",
+          "   IconWifiOff,",
+          " } from '@tabler/icons-react'"
+        ]
+      },
+      {
+        "oldStart": 13,
+        "oldLines": 17,
+        "newStart": 10,
+        "newLines": 17,
+        "lines": [
+          " } from '@/components/ui/table'",
+          " import { Badge } from '@/components/ui/badge'",
+          " import { Button } from '@/components/ui/button'",
+          "+import { Input } from '@/components/ui/input'",
+          " import {",
+          "   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,",
+          " } from '@/components/ui/select'",
+          " import type { TetragonEvent } from '../api/types'",
+          " ",
+          " const MAX_EVENTS = 500",
+          "-const DEDUP_WINDOW_MS = 5000 // merge identical events within 5s",
+          "+const DEDUP_WINDOW_MS = 5000",
+          " ",
+          " type FilterType = 'all' | 'kill'",
+          " ",
+          "-// DisplayEvent extends TetragonEvent with a client-side dedup count",
+          " interface DisplayEvent extends TetragonEvent {",
+          "   count: number",
+          " }"
+        ]
+      },
+      {
+        "oldStart": 39,
+        "oldLines": 14,
+        "newStart": 36,
+        "newLines": 9,
+        "lines": [
+          "   )",
+          " }",
+          " ",
+          "-function EventTypeBadge({ type, action }: { type: string; action: string }) {",
+          "-  if (type === 'exec') return <Badge variant="secondary">exec</Badge>",
+          "-  if (type === 'exit') return <Badge variant="outline">exit</Badge>",
+          "-  if (type === 'kprobe' && action === 'kill')",
+          "-    return <Badge variant="destructive">kill</Badge>",
+          "-  if (type === 'kprobe')",
+          "-    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>",
+          "-  return <Badge variant="outline">{type}</Badge>",
+          "+function EventTypeBadge({ action }: { action: string }) {",
+          "+  if (action === 'kill') return <Badge variant="destructive">kill</Badge>",
+          "+  return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>",
+          " }",
+          " ",
+          " function RelativeTime({ iso }: { iso: string }) {"
+        ]
+      },
+      {
+        "oldStart": 64,
+        "oldLines": 10,
+        "newStart": 56,
+        "newLines": 9,
+        "lines": [
+          " export function SecurityEventsPage() {",
+          "   const [events, setEvents] = useState<DisplayEvent[]>([])",
+          "   const [connected, setConnected] = useState(false)",
+          "-  const [paused, setPaused] = useState(false)",
+          "   const [error, setError] = useState('')",
+          "   const [filter, setFilter] = useState<FilterType>('all')",
+          "-  const pausedRef = useRef(false)",
+          "+  const [podSearch, setPodSearch] = useState('')",
+          "   const esRef = useRef<EventSource | null>(null)",
+          " ",
+          "   const connect = () => {"
+        ]
+      },
+      {
+        "oldStart": 78,
+        "oldLines": 11,
+        "newStart": 69,
+        "newLines": 9,
+        "lines": [
+          "     es.onopen = () => setConnected(true)",
+          " ",
+          "     es.onmessage = (e) => {",
+          "-      if (pausedRef.current) return",
+          "       try {",
+          "         const evt: TetragonEvent = JSON.parse(e.data)",
+          "         setEvents((prev) => {",
+          "-          // Merge into the most recent identical event instead of adding a new row",
+          "           if (prev.length > 0 && isSameEvent(prev[0], evt)) {",
+          "             return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]",
+          "           }"
+        ]
+      },
+      {
+        "oldStart": 97,
+        "oldLines": 10,
+        "newStart": 86,
+        "newLines": 7,
+        "lines": [
+          "       es.close()",
+          "     })",
+          " ",
+          "-    es.onerror = () => {",
+          "-      setConnected(false)",
+          "-      // EventSource auto-reconnects — show brief disconnected state",
+          "-    }",
+          "+    es.onerror = () => setConnected(false)",
+          "   }",
+          " ",
+          "   useEffect(() => {"
+        ]
+      },
+      {
+        "oldStart": 108,
+        "oldLines": 17,
+        "newStart": 94,
+        "newLines": 10,
+        "lines": [
+          "     return () => esRef.current?.close()",
+          "   }, [])",
+          " ",
+          "-  const togglePause = () => {",
+          "-    pausedRef.current = !paused",
+          "-    setPaused(!paused)",
+          "-  }",
+          "-",
+          "-  const clearEvents = () => setEvents([])",
+          "-",
+          "   const filtered = events.filter((e) => {",
+          "-    if (filter === 'all') return true",
+          "-    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'",
+          "-    return e.type === filter",
+          "+    if (filter === 'kill' && e.action !== 'kill') return false",
+          "+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false",
+          "+    return true",
+          "   })",
+          " ",
+          "   return ("
+        ]
+      },
+      {
+        "oldStart": 132,
+        "oldLines": 22,
+        "newStart": 111,
+        "newLines": 21,
+        "lines": [
+          "         </div>",
+          " ",
+          "         <div className="flex items-center gap-3">",
+          "-          {/* Connection status */}",
+          "           <div className="flex items-center gap-1.5 text-sm">",
+          "             {connected ? (",
+          "-              <>",
+          "-                <IconWifi size={16} className="text-green-500" />",
+          "-                <span className="text-green-600">Live</span>",
+          "-              </>",
+          "+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>",
+          "             ) : (",
+          "-              <>",
+          "-                <IconWifiOff size={16} className="text-muted-foreground" />",
+          "-                <span className="text-muted-foreground">Disconnected</span>",
+          "-              </>",
+          "+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>",
+          "             )}",
+          "           </div>",
+          " ",
+          "-          {/* Filter */}",
+          "+          <Input",
+          "+            placeholder="Search pod name..."",
+          "+            value={podSearch}",
+          "+            onChange={(e) => setPodSearch(e.target.value)}",
+          "+            className="h-9 w-48"",
+          "+          />",
+          "+",
+          "           <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>",
+          "             <SelectTrigger className="h-9 w-36">",
+          "               <SelectValue />"
+        ]
+      },
+      {
+        "oldStart": 159,
+        "oldLines": 23,
+        "newStart": 137,
+        "newLines": 9,
+        "lines": [
+          "               </SelectGroup>",
+          "             </SelectContent>",
+          "           </Select>",
+          "-",
+          "-          <Button variant="outline" size="sm" onClick={togglePause}>",
+          "-            {paused ? (",
+          "-              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>",
+          "-            ) : (",
+          "-              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>",
+          "-            )}",
+          "-          </Button>",
+          "-",
+          "-          <Button variant="outline" size="sm" onClick={clearEvents}>",
+          "-            <IconTrash size={14} className="mr-1.5" />",
+          "-            Clear",
+          "-          </Button>",
+          "         </div>",
+          "       </div>",
+          " ",
+          "-      {/* Error banner */}",
+          "       {error && (",
+          "         <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">",
+          "           <span className="text-sm text-destructive">{error}</span>"
+        ]
+      },
+      {
+        "oldStart": 186,
+        "oldLines": 18,
+        "newStart": 150,
+        "newLines": 10,
+        "lines": [
+          "       )}",
+          " ",
+          "       <Card>",
+          "-        {/* Stats bar */}",
+          "         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">",
+          "-          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>",
+          "+          <span>{filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}</span>",
+          "           <span>{events.filter(e => e.action === 'monitor').length} monitor</span>",
+          "-          <span className="text-destructive">",
+          "-            {events.filter(e => e.action === 'kill').length} kills",
+          "-          </span>",
+          "-          {paused && (",
+          "-            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">",
+          "-              PAUSED",
+          "-            </span>",
+          "-          )}",
+          "+          <span className="text-destructive">{events.filter(e => e.action === 'kill').length} kills</span>",
+          "         </div>",
+          " ",
+          "         <CardContent className="p-0">"
+        ]
+      },
+      {
+        "oldStart": 205,
+        "oldLines": 17,
+        "newStart": 161,
+        "newLines": 17,
+        "lines": [
+          "             <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">",
+          "               <IconActivity size={40} strokeWidth={1.5} />",
+          "               <p className="text-base">",
+          "-                {connected ? 'Waiting for events...' : 'Not connected'}",
+          "+                {connected",
+          "+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'",
+          "+                  : 'Not connected'}",
+          "               </p>",
+          "-              <p className="text-sm">",
+          "-                Events will appear here as Tetragon detects runtime activity",
+          "-              </p>",
+          "+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>",
+          "             </div>",
+          "           ) : (",
+          "             <Table>",
+          "               <TableHeader>",
+          "                 <TableRow>",
+          "-                  <TableHead className="w-24">Type</TableHead>",
+          "+                  <TableHead className="w-20">Type</TableHead>",
+          "                   <TableHead>Binary</TableHead>",
+          "                   <TableHead>Pod / Namespace</TableHead>",
+          "                   <TableHead>Policy</TableHead>"
+        ]
+      },
+      {
+        "oldStart": 232,
+        "oldLines": 7,
+        "newStart": 188,
+        "newLines": 7,
+        "lines": [
+          "                     className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}",
+          "                   >",
+          "                     <TableCell>",
+          "-                      <EventTypeBadge type={e.type} action={e.action} />",
+          "+                      <EventTypeBadge action={e.action} />",
+          "                     </TableCell>",
+          "                     <TableCell>",
+          "                       <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>"
+        ]
+      },
+      {
+        "oldStart": 241,
+        "oldLines": 17,
+        "newStart": 197,
+        "newLines": 14,
+        "lines": [
+          "                           {e.arguments}",
+          "                         </p>",
+          "                       )}",
+          "-                      {e.parentBin && (",
+          "-                        <p className="font-mono text-xs text-muted-foreground">",
+          "-                          ↑ {e.parentBin}",
+          "-                        </p>",
+          "-                      )}",
+          "                     </TableCell>",
+          "                     <TableCell>",
+          "                       {e.pod ? (",
+          "                         <>",
+          "                           <p className="text-sm font-medium">{e.pod}</p>",
+          "-                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>",
+          "+                          <p className="text-xs text-muted-foreground">",
+          "+                            {e.namespace}{e.container ? ` / ${e.container}` : ''}",
+          "+                          </p>",
+          "                         </>",
+          "                       ) : (",
+          "                         <span className="text-muted-foreground">—</span>"
+        ]
+      },
+      {
+        "oldStart": 259,
+        "oldLines": 9,
+        "newStart": 212,
+        "newLines": 7,
+        "lines": [
+          "                     </TableCell>",
+          "                     <TableCell>",
+          "                       {e.policyName ? (",
+          "-                        <Badge variant="outline" className="font-mono text-xs">",
+          "-                          {e.policyName}",
+          "-                        </Badge>",
+          "+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>",
+          "                       ) : '—'}",
+          "                     </TableCell>",
+          "                     <TableCell className="font-mono text-xs text-muted-foreground">"
+        ]
+      },
+      {
+        "oldStart": 271,
+        "oldLines": 9,
+        "newStart": 222,
+        "newLines": 9,
+        "lines": [
+          "                       {e.nodeName || '—'}",
+          "                     </TableCell>",
+          "                     <TableCell className="text-center">",
+          "-                      {e.count > 1 ? (",
+          "+                      {e.count > 1 && (",
+          "                         <Badge variant="secondary" className="text-xs">×{e.count}</Badge>",
+          "-                      ) : null}",
+          "+                      )}",
+          "                     </TableCell>",
+          "                     <TableCell>",
+          "                       <RelativeTime iso={e.time} />"
+        ]
+      }
+    ],
+    "originalFile": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000 // merge identical events within 5s
+
+type FilterType = 'all' | 'kill'
+
+// DisplayEvent extends TetragonEvent with a client-side dedup count
+interface DisplayEvent extends TetragonEvent {
+  count: number
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => {
+          // Merge into the most recent identical event instead of adding a new row
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 ? (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "TypeScript + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "TypeScript + build"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: remove pause/clear from Security Events, add pod name search"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+
