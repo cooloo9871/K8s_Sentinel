@@ -100870,3 +100870,635 @@ describe('formToYaml', () => {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "fix: force double quotes on all YAML string values (forceQuotes)"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main c5e0067] fix: force double quotes on all YAML string values (forceQuotes)
+ 3 files changed, 846 insertions(+), 4 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "c5e0067",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。現在 UI 產生的 YAML 所有字串值都會有雙引號，格式與 user 的 working policy 一致：
+
+```yaml
+apiVersion: "cilium.io/v1alpha1"
+kind: "TracingPolicyNamespaced"
+metadata:
+  name: "monitor-sensitive-files"
+  namespace: "test1"
+spec:
+  kprobes:
+    - call: "security_file_permission"
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+        - index: 1
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/etc/shadow"
+                - "/root"
+          matchActions:
+            - action: "Post"
+```
+
+布林值（`syscall: false`）和整數（`index: 0`）保持不加引號，符合 YAML 規範。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "為何使用 ui 直接產生的設定，在 tetra 就是沒看到？這次我再去重新阪急產生的設定把雙引號拿掉後 tetra 就看到了，什麼問題？"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "old_string": "  return yaml.dump(doc, { lineWidth: -1, quotingType: '"', forceQuotes: true })",
+    "new_string": "  return yaml.dump(doc, { lineWidth: -1 })",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "old_string": "  return yaml.dump(doc, { lineWidth: -1, quotingType: '"', forceQuotes: true })",
+    "new_string": "  return yaml.dump(doc, { lineWidth: -1 })",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "oldString": "  return yaml.dump(doc, { lineWidth: -1, quotingType: '"', forceQuotes: true })",
+    "newString": "  return yaml.dump(doc, { lineWidth: -1 })",
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+interface KProbeSpec {
+  call: string
+  syscall: boolean
+  args?: { index: number; type: string }[]
+  selectors: {
+    matchBinaries?: { operator: string; values: string[] }[]
+    matchArgs?: { index: number; operator: string; values: string[] }[]
+    matchActions: { action: string }[]
+  }[]
+}
+
+interface TracingPolicyDoc {
+  apiVersion: string
+  kind: string
+  metadata: { name: string; namespace?: string }
+  spec: {
+    podSelector?: { matchLabels: Record<string, string> }
+    kprobes: KProbeSpec[]
+  }
+}
+
+export function formToYaml(input: PolicyFormInput, action: string): string {
+  const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
+
+  const doc: TracingPolicyDoc = {
+    apiVersion: 'cilium.io/v1alpha1',
+    kind,
+    metadata: { name: input.name, ...(input.namespace ? { namespace: input.namespace } : {}) },
+    spec: { kprobes: [] },
+  }
+
+  if (input.podSelector && Object.keys(input.podSelector).length > 0) {
+    doc.spec.podSelector = { matchLabels: input.podSelector }
+  }
+
+  // Process rules: ONE sys_execve kprobe with all binaries in a single matchBinaries.
+  // Multiple kprobes for the same function name would fail to pin their BPF links.
+  const allBinaries = (input.process ?? []).flatMap((r) => r.binaries).filter(Boolean)
+  if (allBinaries.length > 0) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [{
+        matchBinaries: [{ operator: 'In', values: allBinaries }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  // File rules: ONE security_file_permission kprobe with all paths in a single matchArgs.
+  // Values in the same matchArgs entry are OR'd by Tetragon.
+  const allPaths = (input.file ?? []).flatMap((r) => r.paths).filter(Boolean)
+  if (allPaths.length > 0) {
+    doc.spec.kprobes.push({
+      call: 'security_file_permission',
+      syscall: false,
+      args: [
+        { index: 0, type: 'file' },
+        { index: 1, type: 'int' },
+      ],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: 'Prefix', values: allPaths }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  return yaml.dump(doc, { lineWidth: -1, quotingType: '"', forceQuotes: true })
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 69,
+        "oldLines": 5,
+        "newStart": 69,
+        "newLines": 5,
+        "lines": [
+          "     })",
+          "   }",
+          " ",
+          "-  return yaml.dump(doc, { lineWidth: -1, quotingType: '"', forceQuotes: true })",
+          "+  return yaml.dump(doc, { lineWidth: -1 })",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "    expect(out).toContain('kind: "TracingPolicy"')",
+    "new_string": "    expect(out).toContain('kind: TracingPolicy')",
+    "replace_all": true
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "    expect(out).toContain('kind: "TracingPolicy"')",
+    "new_string": "    expect(out).toContain('kind: TracingPolicy')",
+    "replace_all": true
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "oldString": "    expect(out).toContain('kind: "TracingPolicy"')",
+    "newString": "    expect(out).toContain('kind: TracingPolicy')",
+    "originalFile": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates a single sys_execve kprobe for process rules', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: "TracingPolicy"')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('/bin/bash')
+    expect(out).toContain('/bin/sh')
+    // Only ONE kprobe definition — no duplicate
+    expect(out.split('sys_execve').length - 1).toBe(1)
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: "TracingPolicyNamespaced"')
+    expect(out).toContain('namespace: "production"')
+  })
+
+  it('generates a single security_file_permission kprobe with all paths combined', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-files',
+      file: [
+        { paths: ['/etc/shadow'], operation: 'read' },
+        { paths: ['/root'], operation: 'write' },
+      ],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain('syscall: false')
+    expect(out).toContain('/etc/shadow')
+    expect(out).toContain('/root')
+    // Only ONE kprobe definition — no duplicate function
+    expect(out.split('security_file_permission').length - 1).toBe(1)
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('podSelector')
+    expect(out).toContain('myapp')
+  })
+
+  it('returns both kprobes for mixed process and file rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+
+  it('emits no process kprobe when process list is empty', () => {
+    const input: PolicyFormInput = {
+      name: 'file-only',
+      file: [{ paths: ['/etc/passwd'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).not.toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+})
+",
+    "structuredPatch": [
+      {
+        "oldStart": 9,
+        "oldLines": 7,
+        "newStart": 9,
+        "newLines": 7,
+        "lines": [
+          "       process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],",
+          "     }",
+          "     const out = formToYaml(input, 'Post')",
+          "-    expect(out).toContain('kind: "TracingPolicy"')",
+          "+    expect(out).toContain('kind: TracingPolicy')",
+          "     expect(out).toContain('sys_execve')",
+          "     expect(out).toContain('/bin/bash')",
+          "     expect(out).toContain('/bin/sh')"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": true
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "    expect(out).toContain('kind: "TracingPolicyNamespaced"')",
+    "new_string": "    expect(out).toContain('kind: TracingPolicyNamespaced')",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "    expect(out).toContain('kind: "TracingPolicyNamespaced"')",
+    "new_string": "    expect(out).toContain('kind: TracingPolicyNamespaced')",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "oldString": "    expect(out).toContain('kind: "TracingPolicyNamespaced"')",
+    "newString": "    expect(out).toContain('kind: TracingPolicyNamespaced')",
+    "originalFile": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates a single sys_execve kprobe for process rules', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: TracingPolicy')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('/bin/bash')
+    expect(out).toContain('/bin/sh')
+    // Only ONE kprobe definition — no duplicate
+    expect(out.split('sys_execve').length - 1).toBe(1)
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: "TracingPolicyNamespaced"')
+    expect(out).toContain('namespace: "production"')
+  })
+
+  it('generates a single security_file_permission kprobe with all paths combined', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-files',
+      file: [
+        { paths: ['/etc/shadow'], operation: 'read' },
+        { paths: ['/root'], operation: 'write' },
+      ],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain('syscall: false')
+    expect(out).toContain('/etc/shadow')
+    expect(out).toContain('/root')
+    // Only ONE kprobe definition — no duplicate function
+    expect(out.split('security_file_permission').length - 1).toBe(1)
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('podSelector')
+    expect(out).toContain('myapp')
+  })
+
+  it('returns both kprobes for mixed process and file rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+
+  it('emits no process kprobe when process list is empty', () => {
+    const input: PolicyFormInput = {
+      name: 'file-only',
+      file: [{ paths: ['/etc/passwd'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).not.toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+})
+",
+    "structuredPatch": [
+      {
+        "oldStart": 24,
+        "oldLines": 7,
+        "newStart": 24,
+        "newLines": 7,
+        "lines": [
+          "       process: [{ binaries: ['/bin/sh'] }],",
+          "     }",
+          "     const out = formToYaml(input, 'Post')",
+          "-    expect(out).toContain('kind: "TracingPolicyNamespaced"')",
+          "+    expect(out).toContain('kind: TracingPolicyNamespaced')",
+          "     expect(out).toContain('namespace: "production"')",
+          "   })",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "    expect(out).toContain('namespace: "production"')",
+    "new_string": "    expect(out).toContain('namespace: production')",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "    expect(out).toContain('namespace: "production"')",
+    "new_string": "    expect(out).toContain('namespace: production')",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "oldString": "    expect(out).toContain('namespace: "production"')",
+    "newString": "    expect(out).toContain('namespace: production')",
+    "originalFile": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates a single sys_execve kprobe for process rules', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: TracingPolicy')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('/bin/bash')
+    expect(out).toContain('/bin/sh')
+    // Only ONE kprobe definition — no duplicate
+    expect(out.split('sys_execve').length - 1).toBe(1)
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: TracingPolicyNamespaced')
+    expect(out).toContain('namespace: "production"')
+  })
+
+  it('generates a single security_file_permission kprobe with all paths combined', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-files',
+      file: [
+        { paths: ['/etc/shadow'], operation: 'read' },
+        { paths: ['/root'], operation: 'write' },
+      ],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain('syscall: false')
+    expect(out).toContain('/etc/shadow')
+    expect(out).toContain('/root')
+    // Only ONE kprobe definition — no duplicate function
+    expect(out.split('security_file_permission').length - 1).toBe(1)
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('podSelector')
+    expect(out).toContain('myapp')
+  })
+
+  it('returns both kprobes for mixed process and file rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+
+  it('emits no process kprobe when process list is empty', () => {
+    const input: PolicyFormInput = {
+      name: 'file-only',
+      file: [{ paths: ['/etc/passwd'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).not.toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+})
+",
+    "structuredPatch": [
+      {
+        "oldStart": 25,
+        "oldLines": 7,
+        "newStart": 25,
+        "newLines": 7,
+        "lines": [
+          "     }",
+          "     const out = formToYaml(input, 'Post')",
+          "     expect(out).toContain('kind: TracingPolicyNamespaced')",
+          "-    expect(out).toContain('namespace: "production"')",
+          "+    expect(out).toContain('namespace: production')",
+          "   })",
+          " ",
+          "   it('generates a single security_file_permission kprobe with all paths combined', () => {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  16:29:57
+   Duration  523ms (transform 22ms, setup 42ms, import 18ms, tests 4ms, environment 381ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "revert: remove forceQuotes — plain YAML works, quotes break Tetragon parsing"",
+    "description": "提交 revert"
+  }
+}
+
+----------------------------------------
+

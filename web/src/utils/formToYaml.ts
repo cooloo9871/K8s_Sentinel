@@ -69,5 +69,5 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     })
   }
 
-  return yaml.dump(doc, { lineWidth: -1, quotingType: '"', forceQuotes: true })
+  return yaml.dump(doc, { lineWidth: -1 })
 }
