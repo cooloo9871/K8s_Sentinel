@@ -19,8 +19,25 @@ import {
 import type { TetragonEvent } from '../api/types'
 
 const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000 // merge identical events within 5s
 
 type FilterType = 'all' | 'kill'
+
+// DisplayEvent extends TetragonEvent with a client-side dedup count
+interface DisplayEvent extends TetragonEvent {
+  count: number
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
 
 function EventTypeBadge({ type, action }: { type: string; action: string }) {
   if (type === 'exec') return <Badge variant="secondary">exec</Badge>
@@ -45,7 +62,7 @@ function RelativeTime({ iso }: { iso: string }) {
 }
 
 export function SecurityEventsPage() {
-  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [events, setEvents] = useState<DisplayEvent[]>([])
   const [connected, setConnected] = useState(false)
   const [paused, setPaused] = useState(false)
   const [error, setError] = useState('')
@@ -64,7 +81,13 @@ export function SecurityEventsPage() {
       if (pausedRef.current) return
       try {
         const evt: TetragonEvent = JSON.parse(e.data)
-        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+        setEvents((prev) => {
+          // Merge into the most recent identical event instead of adding a new row
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1 }, ...prev].slice(0, MAX_EVENTS)
+        })
       } catch {}
     }
 
@@ -198,6 +221,7 @@ export function SecurityEventsPage() {
                   <TableHead>Policy</TableHead>
                   <TableHead>Function</TableHead>
                   <TableHead>Node</TableHead>
+                  <TableHead className="w-14 text-center">×</TableHead>
                   <TableHead className="w-24">Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -245,6 +269,11 @@ export function SecurityEventsPage() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {e.count > 1 ? (
+                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <RelativeTime iso={e.time} />
