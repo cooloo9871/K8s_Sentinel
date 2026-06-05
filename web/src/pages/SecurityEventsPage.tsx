@@ -143,7 +143,6 @@ export function SecurityEventsPage() {
                   <TableHead>Policy</TableHead>
                   <TableHead>Function</TableHead>
                   <TableHead>Node</TableHead>
-                  <TableHead className="w-14 text-center">×</TableHead>
                   <TableHead className="w-24">Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -186,11 +185,6 @@ export function SecurityEventsPage() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {e.nodeName || '—'}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {e.count > 1 && (
-                        <Badge variant="secondary" className="text-xs">×{e.count}</Badge>
-                      )}
                     </TableCell>
                     <TableCell>
                       <RelativeTime iso={e.time} />
