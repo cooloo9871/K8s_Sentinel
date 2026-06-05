@@ -3,12 +3,27 @@ import type { TetragonEvent } from '../api/types'
 
 const MAX_EVENTS = 500
 const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
 
 export type Severity = 'warning' | 'critical'
 
 export interface DisplayEvent extends TetragonEvent {
   count: number
   severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
 }
 
 function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
@@ -41,7 +56,7 @@ export function useSecurityEvents() {
 }
 
 export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
-  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
   const esRef = useRef<EventSource | null>(null)
@@ -76,6 +91,11 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
 
     es.onerror = () => setConnected(false)
   }
+
+  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
 
   useEffect(() => {
     connect()

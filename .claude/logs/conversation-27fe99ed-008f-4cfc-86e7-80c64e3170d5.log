@@ -119223,3 +119223,1090 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: default namespace to 'default', add pod selector label section in policy form"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 958ffe3] feat: default namespace to 'default', add pod selector label section in policy form
+ 4 files changed, 1811 insertions(+), 2 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "958ffe3",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。兩項變更：
+
+**1. 預設 Namespace = `default`**
+新建 Policy 時，Namespace 選單預設選 `default`（而非 cluster-wide）。
+
+**2. Pod Selector 區塊**
+位於 Basic Information 和 Process Rules 之間，讓使用者以 label key=value 指定目標 Pod：
+
+```
+Pod Selector
+Target specific pods by label. Leave empty to apply to all pods in the namespace.
+
+┌──────────────┐ = ┌──────────────┐  ✕
+│ app          │   │ nginx        │
+└──────────────┘   └──────────────┘
+[ + Add Label ]
+```
+
+生成的 YAML：
+```yaml
+spec:
+  podSelector:
+    matchLabels:
+      app: nginx       ← 只套用到帶有 app=nginx label 的 Pod
+```
+
+留空 → 不加 `podSelector` → 套用到 namespace 所有 Pod。
+
+編輯既有 Policy 時，`yamlToForm` 也會正確解析 `spec.podSelector.matchLabels` 並填入表單。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "我在瀏覽器點 refresh 後 Security Events  原本記錄的 event 就都消失了，不能消失"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000",
+    "new_string": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000",
+    "new_string": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000",
+    "newString": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 3,
+        "oldLines": 7,
+        "newStart": 3,
+        "newLines": 22,
+        "lines": [
+          " ",
+          " const MAX_EVENTS = 500",
+          " const DEDUP_WINDOW_MS = 5000",
+          "+const STORAGE_KEY = 'sentinel_security_events'",
+          " ",
+          "+function loadFromStorage(): DisplayEvent[] {",
+          "+  try {",
+          "+    const raw = localStorage.getItem(STORAGE_KEY)",
+          "+    if (raw) return JSON.parse(raw) as DisplayEvent[]",
+          "+  } catch {}",
+          "+  return []",
+          "+}",
+          "+",
+          "+function saveToStorage(events: DisplayEvent[]) {",
+          "+  try {",
+          "+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))",
+          "+  } catch {}",
+          "+}",
+          "+",
+          " export type Severity = 'warning' | 'critical'",
+          " ",
+          " export interface DisplayEvent extends TetragonEvent {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>([])",
+    "new_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>([])",
+    "new_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>([])",
+    "newString": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 56,
+        "oldLines": 7,
+        "newStart": 56,
+        "newLines": 7,
+        "lines": [
+          " }",
+          " ",
+          " export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {",
+          "-  const [events, setEvents] = useState<DisplayEvent[]>([])",
+          "+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())",
+          "   const [connected, setConnected] = useState(false)",
+          "   const [error, setError] = useState('')",
+          "   const esRef = useRef<EventSource | null>(null)"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])",
+    "new_string": "  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])",
+    "new_string": "  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])",
+    "newString": "  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 92,
+        "oldLines": 7,
+        "newStart": 92,
+        "newLines": 12,
+        "lines": [
+          "     es.onerror = () => setConnected(false)",
+          "   }",
+          " ",
+          "+  // Persist events to localStorage whenever they change",
+          "   useEffect(() => {",
+          "+    saveToStorage(events)",
+          "+  }, [events])",
+          "+",
+          "+  useEffect(() => {",
+          "     connect()",
+          "     return () => esRef.current?.close()",
+          "   }, [])"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 1,
+    "limit": 35
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 1,
+    "limit": 35
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+      "content": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&",
+      "numLines": 35,
+      "startLine": 1,
+      "totalLines": 111
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}",
+    "new_string": "const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}",
+    "new_string": "const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}",
+    "newString": "const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as DisplayEvent[]
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 5,
+        "oldLines": 6,
+        "newStart": 5,
+        "newLines": 13,
+        "lines": [
+          " const DEDUP_WINDOW_MS = 5000",
+          " const STORAGE_KEY = 'sentinel_security_events'",
+          " ",
+          "+export type Severity = 'warning' | 'critical'",
+          "+",
+          "+export interface DisplayEvent extends TetragonEvent {",
+          "+  count: number",
+          "+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)",
+          "+}",
+          "+",
+          " function loadFromStorage(): DisplayEvent[] {",
+          "   try {",
+          "     const raw = localStorage.getItem(STORAGE_KEY)"
+        ]
+      },
+      {
+        "oldStart": 19,
+        "oldLines": 13,
+        "newStart": 26,
+        "newLines": 6,
+        "lines": [
+          "   } catch {}",
+          " }",
+          " ",
+          "-export type Severity = 'warning' | 'critical'",
+          "-",
+          "-export interface DisplayEvent extends TetragonEvent {",
+          "-  count: number",
+          "-  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)",
+          "-}",
+          "-",
+          " function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {",
+          "   return (",
+          "     a.binary === b.binary &&"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "TypeScript + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "TypeScript + build"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: persist Security Events to localStorage so they survive browser refresh"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+
