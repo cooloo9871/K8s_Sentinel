@@ -17,9 +17,13 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
 
   if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
 
+  const matchLabels = doc.spec?.podSelector?.matchLabels
   const result: PolicyFormInput = {
     name: doc.metadata.name ?? '',
     namespace: doc.metadata.namespace || undefined,
+    podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
+      ? matchLabels as Record<string, string>
+      : undefined,
     process: [],
     file: [],
   }

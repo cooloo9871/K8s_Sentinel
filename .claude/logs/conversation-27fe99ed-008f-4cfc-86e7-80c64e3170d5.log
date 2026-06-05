@@ -117485,3 +117485,1741 @@ export function SecurityEventsPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3 && git add -A && git commit -m "feat: remove count column from Security Events table"",
+    "timeout": 60000,
+    "description": "驗證 + 提交"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[main 53730a9] feat: remove count column from Security Events table
+ 2 files changed, 623 insertions(+), 6 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "53730a9",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成，`×` 欄位和計數 Badge 已移除。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "在創建 TracingPolicy 的時候，預設 namespace 不要選 cluster-wide，預設都選 default ns。
+然後在 TracingPolicy 這裡我要可以指定 特定的 pod 綁定這個策略，預設不指定就是選擇 ns 所有的 pod。"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+      "content": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path] })),
+    })
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+      "numLines": 158,
+      "startLine": 1,
+      "totalLines": 158
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}",
+    "new_string": "const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: 'default',
+  process: [],
+  file: [],
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}",
+    "new_string": "const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: 'default',
+  process: [],
+  file: [],
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "oldString": "const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}",
+    "newString": "const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: 'default',
+  process: [],
+  file: [],
+}",
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { policyApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
+import { yamlToForm } from '../utils/yamlToForm'
+import type { PolicyFormInput } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
+
+  useEffect(() => {
+    const work: Promise<void>[] = [namespaceApi.list().then(setNamespaces)]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          // Pre-populate form from existing policy YAML
+          const parsed = yamlToForm(r.rawYaml)
+          if (parsed) setFormValues(parsed)
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        setYamlEditorKey((k) => k + 1)
+      }
+    }
+    setActiveTab(tab)
+  }
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Per-policy mode selector */}
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Mode</Label>
+            <Select
+              value={policyMode}
+              onValueChange={(v) => setPolicyMode(v as 'Monitoring' | 'Protect')}
+            >
+              <SelectTrigger className="h-9 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="Monitoring">Monitoring</SelectItem>
+                  <SelectItem value="Protect">Protect</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            key={yamlEditorKey}
+            initialValue={yamlContent}
+            onValueChange={(v, valid) => {
+              setYamlContent(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 22,
+        "oldLines": 7,
+        "newStart": 22,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " const EMPTY_FORM: PolicyFormInput = {",
+          "   name: '',",
+          "-  namespace: undefined,",
+          "+  namespace: 'default',",
+          "   process: [],",
+          "   file: [],",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "content": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }
+type LabelEntry = { key: string; value: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+  const labelEntries: LabelEntry[] =
+    Object.entries(value.podSelector ?? {}).map(([key, val]) => ({ key, value: val }))
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
+
+  const setLabelEntries = (entries: LabelEntry[]) => {
+    const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
+      if (key.trim()) acc[key.trim()] = v.trim()
+      return acc
+    }, {})
+    onChange({
+      ...value,
+      podSelector: Object.keys(selector).length > 0 ? selector : undefined,
+    })
+  }
+
+  const addLabel = () => setLabelEntries([...labelEntries, { key: '', value: '' }])
+  const removeLabel = (i: number) => setLabelEntries(labelEntries.filter((_, j) => j !== i))
+  const updateLabel = (i: number, patch: Partial<LabelEntry>) => {
+    const next = [...labelEntries]
+    next[i] = { ...next[i], ...patch }
+    setLabelEntries(next)
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        {/* Basic Info */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pod Selector */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Pod Selector</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Target specific pods by label. Leave empty to apply to all pods in the namespace.
+            </p>
+            <div className="flex flex-col gap-2">
+              {labelEntries.map((entry, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Key (e.g. app)"
+                    value={entry.key}
+                    onChange={(e) => updateLabel(i, { key: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">=</span>
+                  <Input
+                    placeholder="Value (e.g. nginx)"
+                    value={entry.value}
+                    onChange={(e) => updateLabel(i, { value: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeLabel(i)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button variant="outline" size="sm" onClick={addLabel}>
+                  + Add Label
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Process Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        {/* File Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "content": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }
+type LabelEntry = { key: string; value: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+  const labelEntries: LabelEntry[] =
+    Object.entries(value.podSelector ?? {}).map(([key, val]) => ({ key, value: val }))
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
+
+  const setLabelEntries = (entries: LabelEntry[]) => {
+    const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
+      if (key.trim()) acc[key.trim()] = v.trim()
+      return acc
+    }, {})
+    onChange({
+      ...value,
+      podSelector: Object.keys(selector).length > 0 ? selector : undefined,
+    })
+  }
+
+  const addLabel = () => setLabelEntries([...labelEntries, { key: '', value: '' }])
+  const removeLabel = (i: number) => setLabelEntries(labelEntries.filter((_, j) => j !== i))
+  const updateLabel = (i: number, patch: Partial<LabelEntry>) => {
+    const next = [...labelEntries]
+    next[i] = { ...next[i], ...patch }
+    setLabelEntries(next)
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        {/* Basic Info */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pod Selector */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Pod Selector</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Target specific pods by label. Leave empty to apply to all pods in the namespace.
+            </p>
+            <div className="flex flex-col gap-2">
+              {labelEntries.map((entry, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Key (e.g. app)"
+                    value={entry.key}
+                    onChange={(e) => updateLabel(i, { key: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">=</span>
+                  <Input
+                    placeholder="Value (e.g. nginx)"
+                    value={entry.value}
+                    onChange={(e) => updateLabel(i, { value: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeLabel(i)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button variant="outline" size="sm" onClick={addLabel}>
+                  + Add Label
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Process Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        {/* File Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "content": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }
+type LabelEntry = { key: string; value: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+  const labelEntries: LabelEntry[] =
+    Object.entries(value.podSelector ?? {}).map(([key, val]) => ({ key, value: val }))
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
+
+  const setLabelEntries = (entries: LabelEntry[]) => {
+    const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
+      if (key.trim()) acc[key.trim()] = v.trim()
+      return acc
+    }, {})
+    onChange({
+      ...value,
+      podSelector: Object.keys(selector).length > 0 ? selector : undefined,
+    })
+  }
+
+  const addLabel = () => setLabelEntries([...labelEntries, { key: '', value: '' }])
+  const removeLabel = (i: number) => setLabelEntries(labelEntries.filter((_, j) => j !== i))
+  const updateLabel = (i: number, patch: Partial<LabelEntry>) => {
+    const next = [...labelEntries]
+    next[i] = { ...next[i], ...patch }
+    setLabelEntries(next)
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        {/* Basic Info */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pod Selector */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Pod Selector</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Target specific pods by label. Leave empty to apply to all pods in the namespace.
+            </p>
+            <div className="flex flex-col gap-2">
+              {labelEntries.map((entry, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Key (e.g. app)"
+                    value={entry.key}
+                    onChange={(e) => updateLabel(i, { key: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">=</span>
+                  <Input
+                    placeholder="Value (e.g. nginx)"
+                    value={entry.value}
+                    onChange={(e) => updateLabel(i, { value: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeLabel(i)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button variant="outline" size="sm" onClick={addLabel}>
+                  + Add Label
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Process Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        {/* File Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 2,
+        "oldLines": 6,
+        "newStart": 2,
+        "newLines": 7,
+        "lines": [
+          " import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'",
+          " import { Input } from '@/components/ui/input'",
+          " import { Label } from '@/components/ui/label'",
+          "+import { Button } from '@/components/ui/button'",
+          " import {",
+          "   Select,",
+          "   SelectContent,"
+        ]
+      },
+      {
+        "oldStart": 16,
+        "oldLines": 6,
+        "newStart": 17,
+        "newLines": 7,
+        "lines": [
+          " import type { PolicyFormInput } from '../../api/types'",
+          " ",
+          " type FileEntry = { path: string }",
+          "+type LabelEntry = { key: string; value: string }",
+          " ",
+          " const CLUSTER_WIDE = '__cluster_wide__'",
+          " "
+        ]
+      },
+      {
+        "oldStart": 39,
+        "oldLines": 21,
+        "newStart": 41,
+        "newLines": 40,
+        "lines": [
+          "   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []",
+          "   const fileEntries: FileEntry[] =",
+          "     value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []",
+          "+  const labelEntries: LabelEntry[] =",
+          "+    Object.entries(value.podSelector ?? {}).map(([key, val]) => ({ key, value: val }))",
+          " ",
+          "   const setProcessBinaries = (binaries: string[]) =>",
+          "     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })",
+          " ",
+          "   const setFileEntries = (entries: FileEntry[]) =>",
+          "+    onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })",
+          "+",
+          "+  const setLabelEntries = (entries: LabelEntry[]) => {",
+          "+    const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {",
+          "+      if (key.trim()) acc[key.trim()] = v.trim()",
+          "+      return acc",
+          "+    }, {})",
+          "     onChange({",
+          "       ...value,",
+          "-      file: entries.map((e) => ({ paths: [e.path] })),",
+          "+      podSelector: Object.keys(selector).length > 0 ? selector : undefined,",
+          "     })",
+          "+  }",
+          " ",
+          "+  const addLabel = () => setLabelEntries([...labelEntries, { key: '', value: '' }])",
+          "+  const removeLabel = (i: number) => setLabelEntries(labelEntries.filter((_, j) => j !== i))",
+          "+  const updateLabel = (i: number, patch: Partial<LabelEntry>) => {",
+          "+    const next = [...labelEntries]",
+          "+    next[i] = { ...next[i], ...patch }",
+          "+    setLabelEntries(next)",
+          "+  }",
+          "+",
+          "   return (",
+          "     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">",
+          "       {/* Left: form cards */}",
+          "       <div className="flex flex-col gap-4">",
+          " ",
+          "+        {/* Basic Info */}",
+          "         <Card>",
+          "           <CardHeader className="border-b pb-3">",
+          "             <CardTitle className="text-sm font-medium">Basic Information</CardTitle>"
+        ]
+      },
+      {
+        "oldStart": 96,
+        "oldLines": 8,
+        "newStart": 117,
+        "newLines": 53,
+        "lines": [
+          "           </CardContent>",
+          "         </Card>",
+          " ",
+          "+        {/* Pod Selector */}",
+          "         <Card>",
+          "           <CardHeader className="border-b pb-3">",
+          "+            <CardTitle className="text-sm font-medium">Pod Selector</CardTitle>",
+          "+          </CardHeader>",
+          "+          <CardContent className="pt-4">",
+          "+            <p className="mb-3 text-xs text-muted-foreground">",
+          "+              Target specific pods by label. Leave empty to apply to all pods in the namespace.",
+          "+            </p>",
+          "+            <div className="flex flex-col gap-2">",
+          "+              {labelEntries.map((entry, i) => (",
+          "+                <div key={i} className="flex items-center gap-2">",
+          "+                  <Input",
+          "+                    placeholder="Key (e.g. app)"",
+          "+                    value={entry.key}",
+          "+                    onChange={(e) => updateLabel(i, { key: e.target.value })}",
+          "+                    className="h-8 text-sm"",
+          "+                  />",
+          "+                  <span className="shrink-0 text-sm text-muted-foreground">=</span>",
+          "+                  <Input",
+          "+                    placeholder="Value (e.g. nginx)"",
+          "+                    value={entry.value}",
+          "+                    onChange={(e) => updateLabel(i, { value: e.target.value })}",
+          "+                    className="h-8 text-sm"",
+          "+                  />",
+          "+                  <Button",
+          "+                    variant="ghost"",
+          "+                    size="sm"",
+          "+                    onClick={() => removeLabel(i)}",
+          "+                    className="shrink-0 text-muted-foreground hover:text-destructive"",
+          "+                  >",
+          "+                    ✕",
+          "+                  </Button>",
+          "+                </div>",
+          "+              ))}",
+          "+              <div>",
+          "+                <Button variant="outline" size="sm" onClick={addLabel}>",
+          "+                  + Add Label",
+          "+                </Button>",
+          "+              </div>",
+          "+            </div>",
+          "+          </CardContent>",
+          "+        </Card>",
+          "+",
+          "+        {/* Process Rules */}",
+          "+        <Card>",
+          "+          <CardHeader className="border-b pb-3">",
+          "             <CardTitle className="text-sm font-medium">Process Rules</CardTitle>",
+          "           </CardHeader>",
+          "           <CardContent className="pt-4">"
+        ]
+      },
+      {
+        "oldStart": 105,
+        "oldLines": 6,
+        "newStart": 171,
+        "newLines": 7,
+        "lines": [
+          "           </CardContent>",
+          "         </Card>",
+          " ",
+          "+        {/* File Rules */}",
+          "         <Card>",
+          "           <CardHeader className="border-b pb-3">",
+          "             <CardTitle className="text-sm font-medium">File Rules</CardTitle>"
+        ]
+      }
+    ],
+    "originalFile": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path] })),
+    })
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "old_string": "  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }",
+    "new_string": "  const matchLabels = doc.spec?.podSelector?.matchLabels
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
+      ? matchLabels as Record<string, string>
+      : undefined,
+    process: [],
+    file: [],
+  }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "old_string": "  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }",
+    "new_string": "  const matchLabels = doc.spec?.podSelector?.matchLabels
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
+      ? matchLabels as Record<string, string>
+      : undefined,
+    process: [],
+    file: [],
+  }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "oldString": "  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }",
+    "newString": "  const matchLabels = doc.spec?.podSelector?.matchLabels
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
+      ? matchLabels as Record<string, string>
+      : undefined,
+    process: [],
+    file: [],
+  }",
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (
+      call === 'security_file_permission' ||
+      call === 'sys_read' ||
+      call === 'sys_write' ||
+      call === 'sys_openat'
+    ) {
+      // All file-related kprobes: extract path values from matchArgs index 0
+      for (const sel of selectors) {
+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path] })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 17,
+        "oldLines": 9,
+        "newStart": 17,
+        "newLines": 13,
+        "lines": [
+          " ",
+          "   if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null",
+          " ",
+          "+  const matchLabels = doc.spec?.podSelector?.matchLabels",
+          "   const result: PolicyFormInput = {",
+          "     name: doc.metadata.name ?? '',",
+          "     namespace: doc.metadata.namespace || undefined,",
+          "+    podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0",
+          "+      ? matchLabels as Record<string, string>",
+          "+      : undefined,",
+          "     process: [],",
+          "     file: [],",
+          "   }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  17:41:45
+   Duration  465ms (transform 20ms, setup 34ms, import 17ms, tests 4ms, environment 339ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: default namespace to 'default', add pod selector label section in policy form"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+

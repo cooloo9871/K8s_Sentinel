@@ -22,7 +22,7 @@ import type { PolicyFormInput } from '../api/types'
 
 const EMPTY_FORM: PolicyFormInput = {
   name: '',
-  namespace: undefined,
+  namespace: 'default',
   process: [],
   file: [],
 }

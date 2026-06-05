@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -16,6 +17,7 @@ import { formToYaml } from '../../utils/formToYaml'
 import type { PolicyFormInput } from '../../api/types'
 
 type FileEntry = { path: string }
+type LabelEntry = { key: string; value: string }
 
 const CLUSTER_WIDE = '__cluster_wide__'
 
@@ -39,21 +41,40 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
   const fileEntries: FileEntry[] =
     value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+  const labelEntries: LabelEntry[] =
+    Object.entries(value.podSelector ?? {}).map(([key, val]) => ({ key, value: val }))
 
   const setProcessBinaries = (binaries: string[]) =>
     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
 
   const setFileEntries = (entries: FileEntry[]) =>
+    onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
+
+  const setLabelEntries = (entries: LabelEntry[]) => {
+    const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
+      if (key.trim()) acc[key.trim()] = v.trim()
+      return acc
+    }, {})
     onChange({
       ...value,
-      file: entries.map((e) => ({ paths: [e.path] })),
+      podSelector: Object.keys(selector).length > 0 ? selector : undefined,
     })
+  }
+
+  const addLabel = () => setLabelEntries([...labelEntries, { key: '', value: '' }])
+  const removeLabel = (i: number) => setLabelEntries(labelEntries.filter((_, j) => j !== i))
+  const updateLabel = (i: number, patch: Partial<LabelEntry>) => {
+    const next = [...labelEntries]
+    next[i] = { ...next[i], ...patch }
+    setLabelEntries(next)
+  }
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
       {/* Left: form cards */}
       <div className="flex flex-col gap-4">
 
+        {/* Basic Info */}
         <Card>
           <CardHeader className="border-b pb-3">
             <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
@@ -96,6 +117,51 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
           </CardContent>
         </Card>
 
+        {/* Pod Selector */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Pod Selector</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Target specific pods by label. Leave empty to apply to all pods in the namespace.
+            </p>
+            <div className="flex flex-col gap-2">
+              {labelEntries.map((entry, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Key (e.g. app)"
+                    value={entry.key}
+                    onChange={(e) => updateLabel(i, { key: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">=</span>
+                  <Input
+                    placeholder="Value (e.g. nginx)"
+                    value={entry.value}
+                    onChange={(e) => updateLabel(i, { value: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeLabel(i)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button variant="outline" size="sm" onClick={addLabel}>
+                  + Add Label
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Process Rules */}
         <Card>
           <CardHeader className="border-b pb-3">
             <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
@@ -105,6 +171,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
           </CardContent>
         </Card>
 
+        {/* File Rules */}
         <Card>
           <CardHeader className="border-b pb-3">
             <CardTitle className="text-sm font-medium">File Rules</CardTitle>
