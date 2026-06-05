@@ -1,19 +1,13 @@
 import yaml from 'js-yaml'
 import type { PolicyFormInput } from '../api/types'
 
-interface KProbeMatchArg {
-  index: number
-  operator: string
-  values: string[]
-}
-
 interface KProbeSpec {
   call: string
   syscall: boolean
   args?: { index: number; type: string }[]
   selectors: {
     matchBinaries?: { operator: string; values: string[] }[]
-    matchArgs?: KProbeMatchArg[]
+    matchArgs?: { index: number; operator: string; values: string[] }[]
     matchActions: { action: string }[]
   }[]
 }
@@ -42,23 +36,25 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     doc.spec.podSelector = { matchLabels: input.podSelector }
   }
 
-  // Process rules: sys_execve kprobe
-  for (const r of input.process ?? []) {
+  // Process rules: ONE sys_execve kprobe with all binaries in a single matchBinaries.
+  // Multiple kprobes for the same function name would fail to pin their BPF links.
+  const allBinaries = (input.process ?? []).flatMap((r) => r.binaries).filter(Boolean)
+  if (allBinaries.length > 0) {
     doc.spec.kprobes.push({
       call: 'sys_execve',
       syscall: true,
       args: [{ index: 0, type: 'string' }],
       selectors: [{
-        matchBinaries: [{ operator: 'In', values: r.binaries }],
+        matchBinaries: [{ operator: 'In', values: allBinaries }],
         matchActions: [{ action }],
       }],
     })
   }
 
-  // File rules: security_file_permission kprobe
-  // arg[0] = file object (path). We match on path only — Tetragon captures all
-  // permission types (read/write/exec) for the matched paths.
-  for (const r of input.file ?? []) {
+  // File rules: ONE security_file_permission kprobe with all paths in a single matchArgs.
+  // Values in the same matchArgs entry are OR'd by Tetragon.
+  const allPaths = (input.file ?? []).flatMap((r) => r.paths).filter(Boolean)
+  if (allPaths.length > 0) {
     doc.spec.kprobes.push({
       call: 'security_file_permission',
       syscall: false,
@@ -67,7 +63,7 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
         { index: 1, type: 'int' },
       ],
       selectors: [{
-        matchArgs: [{ index: 0, operator: 'Prefix', values: r.paths }],
+        matchArgs: [{ index: 0, operator: 'Prefix', values: allPaths }],
         matchActions: [{ action }],
       }],
     })

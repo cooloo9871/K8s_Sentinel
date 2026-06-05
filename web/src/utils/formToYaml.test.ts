@@ -3,17 +3,18 @@ import { formToYaml } from './formToYaml'
 import type { PolicyFormInput } from '../api/types'
 
 describe('formToYaml', () => {
-  it('generates process kprobe for cluster-wide policy', () => {
+  it('generates a single sys_execve kprobe for process rules', () => {
     const input: PolicyFormInput = {
       name: 'block-shells',
-      process: [{ binaries: ['/bin/bash', '/bin/sh'] }],
+      process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],
     }
     const out = formToYaml(input, 'Post')
-    expect(out).toContain('name: block-shells')
     expect(out).toContain('kind: TracingPolicy')
     expect(out).toContain('sys_execve')
-    expect(out).toContain('Post')
     expect(out).toContain('/bin/bash')
+    expect(out).toContain('/bin/sh')
+    // Only ONE kprobe definition — no duplicate
+    expect(out.split('sys_execve').length - 1).toBe(1)
   })
 
   it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
@@ -27,19 +28,21 @@ describe('formToYaml', () => {
     expect(out).toContain('namespace: production')
   })
 
-  it('generates security_file_permission kprobe for file rule', () => {
+  it('generates a single security_file_permission kprobe with all paths combined', () => {
     const input: PolicyFormInput = {
-      name: 'watch-etc',
-      file: [{ paths: ['/etc/passwd'], operation: 'write' }],
+      name: 'watch-files',
+      file: [
+        { paths: ['/etc/shadow'], operation: 'read' },
+        { paths: ['/root'], operation: 'write' },
+      ],
     }
     const out = formToYaml(input, 'Post')
     expect(out).toContain('security_file_permission')
     expect(out).toContain('syscall: false')
-    expect(out).toContain('/etc/passwd')
-    // path-only matching — no permission int filter
-    expect(out).not.toContain("'2'")
-    expect(out).not.toContain("'4'")
-    expect(out).not.toContain('sys_write')
+    expect(out).toContain('/etc/shadow')
+    expect(out).toContain('/root')
+    // Only ONE kprobe definition — no duplicate function
+    expect(out.split('security_file_permission').length - 1).toBe(1)
   })
 
   it('includes podSelector when provided', () => {
@@ -53,7 +56,7 @@ describe('formToYaml', () => {
     expect(out).toContain('myapp')
   })
 
-  it('returns multiple kprobes for mixed rules', () => {
+  it('returns both kprobes for mixed process and file rules', () => {
     const input: PolicyFormInput = {
       name: 'multi',
       process: [{ binaries: ['/bin/bash'] }],
@@ -61,6 +64,16 @@ describe('formToYaml', () => {
     }
     const out = formToYaml(input, 'Post')
     expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+
+  it('emits no process kprobe when process list is empty', () => {
+    const input: PolicyFormInput = {
+      name: 'file-only',
+      file: [{ paths: ['/etc/passwd'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).not.toContain('sys_execve')
     expect(out).toContain('security_file_permission')
   })
 })
