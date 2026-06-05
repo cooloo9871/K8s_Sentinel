@@ -4,7 +4,6 @@ export interface ProcessRule {
 
 export interface FileRule {
   paths: string[]
-  operation: 'read' | 'write' | 'open'
 }
 
 export interface PolicyFormInput {

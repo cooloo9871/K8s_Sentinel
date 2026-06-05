@@ -19,8 +19,7 @@ type ProcessRule struct {
 }
 
 type FileRule struct {
-	Paths     []string `json:"paths"`
-	Operation string   `json:"operation"` // "read", "write", "open"
+	Paths []string `json:"paths"`
 }
 
 // TracingPolicy is the Tetragon CRD object used for YAML serialisation.

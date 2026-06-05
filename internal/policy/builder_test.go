@@ -58,7 +58,7 @@ func TestBuildMultipleProcessRulesCombined(t *testing.T) {
 func TestBuildFilePolicy(t *testing.T) {
 	input := policy.PolicyFormInput{
 		Name: "watch-files",
-		File: []policy.FileRule{{Paths: []string{"/etc/shadow"}, Operation: "read"}},
+		File: []policy.FileRule{{Paths: []string{"/etc/shadow"}}},
 	}
 
 	got, err := policy.Build(input, policy.ActionPost)
@@ -84,8 +84,8 @@ func TestBuildMultipleFileRulesCombined(t *testing.T) {
 	input := policy.PolicyFormInput{
 		Name: "watch-files",
 		File: []policy.FileRule{
-			{Paths: []string{"/etc/shadow"}, Operation: "read"},
-			{Paths: []string{"/root"}, Operation: "read"},
+			{Paths: []string{"/etc/shadow"}},
+			{Paths: []string{"/root"}},
 		},
 	}
 
@@ -126,7 +126,7 @@ func TestBuildMultipleRules(t *testing.T) {
 	input := policy.PolicyFormInput{
 		Name:    "multi",
 		Process: []policy.ProcessRule{{Binaries: []string{"/bin/bash"}}},
-		File:    []policy.FileRule{{Paths: []string{"/etc"}, Operation: "read"}},
+		File:    []policy.FileRule{{Paths: []string{"/etc"}}},
 	}
 
 	got, err := policy.Build(input, policy.ActionPost)

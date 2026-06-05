@@ -32,8 +32,8 @@ describe('formToYaml', () => {
     const input: PolicyFormInput = {
       name: 'watch-files',
       file: [
-        { paths: ['/etc/shadow'], operation: 'read' },
-        { paths: ['/root'], operation: 'write' },
+        { paths: ['/etc/shadow'] },
+        { paths: ['/root'] },
       ],
     }
     const out = formToYaml(input, 'Post')
@@ -60,7 +60,7 @@ describe('formToYaml', () => {
     const input: PolicyFormInput = {
       name: 'multi',
       process: [{ binaries: ['/bin/bash'] }],
-      file: [{ paths: ['/etc'], operation: 'open' }],
+      file: [{ paths: ['/etc'] }],
     }
     const out = formToYaml(input, 'Post')
     expect(out).toContain('sys_execve')
@@ -70,7 +70,7 @@ describe('formToYaml', () => {
   it('emits no process kprobe when process list is empty', () => {
     const input: PolicyFormInput = {
       name: 'file-only',
-      file: [{ paths: ['/etc/passwd'], operation: 'read' }],
+      file: [{ paths: ['/etc/passwd'] }],
     }
     const out = formToYaml(input, 'Post')
     expect(out).not.toContain('sys_execve')

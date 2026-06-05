@@ -1,16 +1,9 @@
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import type { FileRule } from '../../api/types'
 
-type FileEntry = { path: string; operation: FileRule['operation'] }
+interface FileEntry {
+  path: string
+}
 
 interface Props {
   rules: FileEntry[]
@@ -18,12 +11,12 @@ interface Props {
 }
 
 export function FileSection({ rules, onChange }: Props) {
-  const update = (i: number, patch: Partial<FileEntry>) => {
+  const update = (i: number, path: string) => {
     const next = [...rules]
-    next[i] = { ...next[i], ...patch }
+    next[i] = { path }
     onChange(next)
   }
-  const add = () => onChange([...rules, { path: '', operation: 'read' }])
+  const add = () => onChange([...rules, { path: '' }])
   const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
 
   return (
@@ -31,26 +24,11 @@ export function FileSection({ rules, onChange }: Props) {
       {rules.map((r, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
-            placeholder="/etc/nginx/nginx.conf"
+            placeholder="/etc/shadow"
             value={r.path}
-            onChange={(e) => update(i, { path: e.target.value })}
-            className="h-8 flex-[2] text-sm"
+            onChange={(e) => update(i, e.target.value)}
+            className="h-8 text-sm"
           />
-          <Select
-            value={r.operation}
-            onValueChange={(v) => update(i, { operation: v as FileRule['operation'] })}
-          >
-            <SelectTrigger className="h-8 w-28 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="read">read</SelectItem>
-                <SelectItem value="write">write</SelectItem>
-                <SelectItem value="open">open</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
           <Button
             variant="ghost"
             size="sm"

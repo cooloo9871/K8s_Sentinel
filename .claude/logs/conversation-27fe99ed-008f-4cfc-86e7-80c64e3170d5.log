@@ -103103,3 +103103,2014 @@ ok  	github.com/brobridge/sentinel/internal/policy	0.002s",
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "fix: update Go policy builder to use security_file_permission and single kprobe per function"",
+    "description": "提交修正"
+  },
+  "tool_response": {
+    "stdout": "[main f9fd1f3] fix: update Go policy builder to use security_file_permission and single kprobe per function
+ 3 files changed, 1686 insertions(+), 86 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "f9fd1f3",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "根本原因找到了，是**兩套 YAML 產生邏輯不同步**：
+
+```
+Form tab 儲存路徑：
+  前端 → source: "form" → Go builder.go → sys_read/sys_write ← 錯誤（這次修正）
+
+YAML tab 儲存路徑：
+  前端 → source: "yaml" → rawYaml 直接套用 → 正確
+```
+
+前端的 `formToYaml.ts`（YAML Preview 用）早就修了，但實際 Form 儲存走的是 Go 的 `policy.Build()`，那裡還在用舊的 `sys_read`/`sys_write`/`sys_openat`。現在兩套邏輯一致了：
+
+| | 修正後 |
+|---|---|
+| `sys_read/sys_write/sys_openat` | → `security_file_permission` |
+| 每個 rule 一個 kprobe | → 所有 paths 合併進單一 kprobe |"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "在 File Rules 選擇 read write open 這三個分別有什麼區別？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "根本原因找到了，是**兩套 YAML 產生邏輯不同步**：
+
+```
+Form tab 儲存路徑：
+  前端 → source: "form" → Go builder.go → sys_read/sys_write ← 錯誤（這次修正）
+
+YAML tab 儲存路徑：
+  前端 → source: "yaml" → rawYaml 直接套用 → 正確
+```
+
+前端的 `formToYaml.ts`（YAML Preview 用）早就修了，但實際 Form 儲存走的是 Go 的 `policy.Build()`，那裡還在用舊的 `sys_read`/`sys_write`/`sys_openat`。現在兩套邏輯一致了：
+
+| | 修正後 |
+|---|---|
+| `sys_read/sys_write/sys_openat` | → `security_file_permission` |
+| 每個 rule 一個 kprobe | → 所有 paths 合併進單一 kprobe |"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "直接把這個選項拿掉"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "export interface FileRule {
+  paths: string[]
+  operation: 'read' | 'write' | 'open'
+}",
+    "new_string": "export interface FileRule {
+  paths: string[]
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "export interface FileRule {
+  paths: string[]
+  operation: 'read' | 'write' | 'open'
+}",
+    "new_string": "export interface FileRule {
+  paths: string[]
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "oldString": "export interface FileRule {
+  paths: string[]
+  operation: 'read' | 'write' | 'open'
+}",
+    "newString": "export interface FileRule {
+  paths: string[]
+}",
+    "originalFile": "export interface ProcessRule {
+  binaries: string[]
+}
+
+export interface FileRule {
+  paths: string[]
+  operation: 'read' | 'write' | 'open'
+}
+
+export interface PolicyFormInput {
+  name: string
+  namespace?: string
+  podSelector?: Record<string, string>
+  process?: ProcessRule[]
+  file?: FileRule[]
+}
+
+export interface PolicyRecord {
+  name: string
+  namespace?: string
+  scope: 'cluster' | 'namespaced'
+  mode: 'Monitoring' | 'Protect' | 'Mixed'
+  createdAt: string
+  rawYaml: string
+}
+
+export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface TetragonEvent {
+  type: 'exec' | 'exit' | 'kprobe'
+  time: string
+  nodeName: string
+  namespace: string
+  pod: string
+  container: string
+  binary: string
+  arguments: string
+  parentBin: string
+  action: 'monitor' | 'kill' | ''
+  policyName: string
+  function: string
+}
+
+export interface CreatePolicyPayload {
+  source: 'form' | 'yaml'
+  form?: PolicyFormInput
+  action?: string
+  rawYaml?: string
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 4,
+        "oldLines": 7,
+        "newStart": 4,
+        "newLines": 6,
+        "lines": [
+          " ",
+          " export interface FileRule {",
+          "   paths: string[]",
+          "-  operation: 'read' | 'write' | 'open'",
+          " }",
+          " ",
+          " export interface PolicyFormInput {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/FileSection.tsx",
+    "content": "import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+interface FileEntry {
+  path: string
+}
+
+interface Props {
+  rules: FileEntry[]
+  onChange: (rules: FileEntry[]) => void
+}
+
+export function FileSection({ rules, onChange }: Props) {
+  const update = (i: number, path: string) => {
+    const next = [...rules]
+    next[i] = { path }
+    onChange(next)
+  }
+  const add = () => onChange([...rules, { path: '' }])
+  const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rules.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            placeholder="/etc/shadow"
+            value={r.path}
+            onChange={(e) => update(i, e.target.value)}
+            className="h-8 text-sm"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(i)}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
+            ✕
+          </Button>
+        </div>
+      ))}
+      <div>
+        <Button variant="outline" size="sm" onClick={add}>
+          + Add
+        </Button>
+      </div>
+    </div>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/FileSection.tsx",
+    "content": "import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+interface FileEntry {
+  path: string
+}
+
+interface Props {
+  rules: FileEntry[]
+  onChange: (rules: FileEntry[]) => void
+}
+
+export function FileSection({ rules, onChange }: Props) {
+  const update = (i: number, path: string) => {
+    const next = [...rules]
+    next[i] = { path }
+    onChange(next)
+  }
+  const add = () => onChange([...rules, { path: '' }])
+  const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rules.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            placeholder="/etc/shadow"
+            value={r.path}
+            onChange={(e) => update(i, e.target.value)}
+            className="h-8 text-sm"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(i)}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
+            ✕
+          </Button>
+        </div>
+      ))}
+      <div>
+        <Button variant="outline" size="sm" onClick={add}>
+          + Add
+        </Button>
+      </div>
+    </div>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/components/PolicyForm/FileSection.tsx",
+    "content": "import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+interface FileEntry {
+  path: string
+}
+
+interface Props {
+  rules: FileEntry[]
+  onChange: (rules: FileEntry[]) => void
+}
+
+export function FileSection({ rules, onChange }: Props) {
+  const update = (i: number, path: string) => {
+    const next = [...rules]
+    next[i] = { path }
+    onChange(next)
+  }
+  const add = () => onChange([...rules, { path: '' }])
+  const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rules.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            placeholder="/etc/shadow"
+            value={r.path}
+            onChange={(e) => update(i, e.target.value)}
+            className="h-8 text-sm"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(i)}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
+            ✕
+          </Button>
+        </div>
+      ))}
+      <div>
+        <Button variant="outline" size="sm" onClick={add}>
+          + Add
+        </Button>
+      </div>
+    </div>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 16,
+        "newStart": 1,
+        "newLines": 9,
+        "lines": [
+          " import { Input } from '@/components/ui/input'",
+          " import { Button } from '@/components/ui/button'",
+          "-import {",
+          "-  Select,",
+          "-  SelectContent,",
+          "-  SelectGroup,",
+          "-  SelectItem,",
+          "-  SelectTrigger,",
+          "-  SelectValue,",
+          "-} from '@/components/ui/select'",
+          "-import type { FileRule } from '../../api/types'",
+          " ",
+          "-type FileEntry = { path: string; operation: FileRule['operation'] }",
+          "+interface FileEntry {",
+          "+  path: string",
+          "+}",
+          " ",
+          " interface Props {",
+          "   rules: FileEntry[]"
+        ]
+      },
+      {
+        "oldStart": 18,
+        "oldLines": 12,
+        "newStart": 11,
+        "newLines": 12,
+        "lines": [
+          " }",
+          " ",
+          " export function FileSection({ rules, onChange }: Props) {",
+          "-  const update = (i: number, patch: Partial<FileEntry>) => {",
+          "+  const update = (i: number, path: string) => {",
+          "     const next = [...rules]",
+          "-    next[i] = { ...next[i], ...patch }",
+          "+    next[i] = { path }",
+          "     onChange(next)",
+          "   }",
+          "-  const add = () => onChange([...rules, { path: '', operation: 'read' }])",
+          "+  const add = () => onChange([...rules, { path: '' }])",
+          "   const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))",
+          " ",
+          "   return ("
+        ]
+      },
+      {
+        "oldStart": 31,
+        "oldLines": 26,
+        "newStart": 24,
+        "newLines": 11,
+        "lines": [
+          "       {rules.map((r, i) => (",
+          "         <div key={i} className="flex items-center gap-2">",
+          "           <Input",
+          "-            placeholder="/etc/nginx/nginx.conf"",
+          "+            placeholder="/etc/shadow"",
+          "             value={r.path}",
+          "-            onChange={(e) => update(i, { path: e.target.value })}",
+          "-            className="h-8 flex-[2] text-sm"",
+          "+            onChange={(e) => update(i, e.target.value)}",
+          "+            className="h-8 text-sm"",
+          "           />",
+          "-          <Select",
+          "-            value={r.operation}",
+          "-            onValueChange={(v) => update(i, { operation: v as FileRule['operation'] })}",
+          "-          >",
+          "-            <SelectTrigger className="h-8 w-28 text-sm">",
+          "-              <SelectValue />",
+          "-            </SelectTrigger>",
+          "-            <SelectContent>",
+          "-              <SelectGroup>",
+          "-                <SelectItem value="read">read</SelectItem>",
+          "-                <SelectItem value="write">write</SelectItem>",
+          "-                <SelectItem value="open">open</SelectItem>",
+          "-              </SelectGroup>",
+          "-            </SelectContent>",
+          "-          </Select>",
+          "           <Button",
+          "             variant="ghost"",
+          "             size="sm""
+        ]
+      }
+    ],
+    "originalFile": "import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import type { FileRule } from '../../api/types'
+
+type FileEntry = { path: string; operation: FileRule['operation'] }
+
+interface Props {
+  rules: FileEntry[]
+  onChange: (rules: FileEntry[]) => void
+}
+
+export function FileSection({ rules, onChange }: Props) {
+  const update = (i: number, patch: Partial<FileEntry>) => {
+    const next = [...rules]
+    next[i] = { ...next[i], ...patch }
+    onChange(next)
+  }
+  const add = () => onChange([...rules, { path: '', operation: 'read' }])
+  const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rules.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            placeholder="/etc/nginx/nginx.conf"
+            value={r.path}
+            onChange={(e) => update(i, { path: e.target.value })}
+            className="h-8 flex-[2] text-sm"
+          />
+          <Select
+            value={r.operation}
+            onValueChange={(v) => update(i, { operation: v as FileRule['operation'] })}
+          >
+            <SelectTrigger className="h-8 w-28 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="read">read</SelectItem>
+                <SelectItem value="write">write</SelectItem>
+                <SelectItem value="open">open</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(i)}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
+            ✕
+          </Button>
+        </div>
+      ))}
+      <div>
+        <Button variant="outline" size="sm" onClick={add}>
+          + Add
+        </Button>
+      </div>
+    </div>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput, FileRule } from '../../api/types'
+
+type FileEntry = { path: string; operation: FileRule['operation'] }",
+    "new_string": "import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput, FileRule } from '../../api/types'
+
+type FileEntry = { path: string; operation: FileRule['operation'] }",
+    "new_string": "import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "oldString": "import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput, FileRule } from '../../api/types'
+
+type FileEntry = { path: string; operation: FileRule['operation'] }",
+    "newString": "import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }",
+    "originalFile": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput, FileRule } from '../../api/types'
+
+type FileEntry = { path: string; operation: FileRule['operation'] }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
+    })
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 13,
+        "oldLines": 9,
+        "newStart": 13,
+        "newLines": 9,
+        "lines": [
+          " import { ProcessSection } from './ProcessSection'",
+          " import { FileSection } from './FileSection'",
+          " import { formToYaml } from '../../utils/formToYaml'",
+          "-import type { PolicyFormInput, FileRule } from '../../api/types'",
+          "+import type { PolicyFormInput } from '../../api/types'",
+          " ",
+          "-type FileEntry = { path: string; operation: FileRule['operation'] }",
+          "+type FileEntry = { path: string }",
+          " ",
+          " const CLUSTER_WIDE = '__cluster_wide__'",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []",
+    "new_string": "  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []",
+    "new_string": "  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "oldString": "  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []",
+    "newString": "  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []",
+    "originalFile": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
+    })
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 38,
+        "oldLines": 7,
+        "newStart": 38,
+        "newLines": 7,
+        "lines": [
+          " ",
+          "   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []",
+          "   const fileEntries: FileEntry[] =",
+          "-    value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []",
+          "+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []",
+          " ",
+          "   const setProcessBinaries = (binaries: string[]) =>",
+          "     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
+    })",
+    "new_string": "  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path] })),
+    })",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
+    })",
+    "new_string": "  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path] })),
+    })",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "oldString": "  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
+    })",
+    "newString": "  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path] })),
+    })",
+    "originalFile": "import { useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput } from '../../api/types'
+
+type FileEntry = { path: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({
+      ...value,
+      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
+    })
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 46,
+        "oldLines": 7,
+        "newStart": 46,
+        "newLines": 7,
+        "lines": [
+          "   const setFileEntries = (entries: FileEntry[]) =>",
+          "     onChange({",
+          "       ...value,",
+          "-      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),",
+          "+      file: entries.map((e) => ({ paths: [e.path] })),",
+          "     })",
+          " ",
+          "   return ("
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (
+      call === 'security_file_permission' ||
+      call === 'sys_read' ||
+      call === 'sys_write' ||
+      call === 'sys_openat'
+    ) {
+      // All file-related kprobes: extract path values from matchArgs index 0
+      for (const sel of selectors) {
+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path] })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (
+      call === 'security_file_permission' ||
+      call === 'sys_read' ||
+      call === 'sys_write' ||
+      call === 'sys_openat'
+    ) {
+      // All file-related kprobes: extract path values from matchArgs index 0
+      for (const sel of selectors) {
+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path] })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (
+      call === 'security_file_permission' ||
+      call === 'sys_read' ||
+      call === 'sys_write' ||
+      call === 'sys_openat'
+    ) {
+      // All file-related kprobes: extract path values from matchArgs index 0
+      for (const sel of selectors) {
+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path] })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 19,
+        "newStart": 1,
+        "newLines": 6,
+        "lines": [
+          " import yaml from 'js-yaml'",
+          " import type { PolicyFormInput } from '../api/types'",
+          " ",
+          "-// Backward-compatible mapping for old-style file kprobes",
+          "-const LEGACY_FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {",
+          "-  sys_read:   'read',",
+          "-  sys_write:  'write',",
+          "-  sys_openat: 'open',",
+          "-}",
+          "-",
+          "-// MAY_READ=4, MAY_WRITE=2 for security_file_permission arg[1]",
+          "-const PERM_TO_OP: Record<string, 'read' | 'write' | 'open'> = {",
+          "-  '4': 'read',",
+          "-  '2': 'write',",
+          "-}",
+          "-",
+          " /**",
+          "  * Parses a TracingPolicy YAML string back into PolicyFormInput.",
+          "  * Returns null if the YAML cannot be parsed or doesn't match the expected schema."
+        ]
+      },
+      {
+        "oldStart": 44,
+        "oldLines": 7,
+        "newStart": 31,
+        "newLines": 6,
+        "lines": [
+          "     const selectors: any[] = kp.selectors ?? []",
+          " ",
+          "     if (call === 'sys_execve') {",
+          "-      // Process rule",
+          "       for (const sel of selectors) {",
+          "         for (const mb of sel.matchBinaries ?? []) {",
+          "           for (const bin of mb.values ?? []) {"
+        ]
+      },
+      {
+        "oldStart": 53,
+        "oldLines": 28,
+        "newStart": 39,
+        "newLines": 17,
+        "lines": [
+          "         }",
+          "       }",
+          " ",
+          "-    } else if (call === 'security_file_permission') {",
+          "-      // File rule (current format)",
+          "+    } else if (",
+          "+      call === 'security_file_permission' ||",
+          "+      call === 'sys_read' ||",
+          "+      call === 'sys_write' ||",
+          "+      call === 'sys_openat'",
+          "+    ) {",
+          "+      // All file-related kprobes: extract path values from matchArgs index 0",
+          "       for (const sel of selectors) {",
+          "-        const args: any[] = sel.matchArgs ?? []",
+          "-        const pathArg = args.find((a: any) => a.index === 0)",
+          "-        const permArg = args.find((a: any) => a.index === 1)",
+          "-",
+          "-        const operation: 'read' | 'write' | 'open' =",
+          "-          PERM_TO_OP[permArg?.values?.[0]] ?? 'open'",
+          "-",
+          "-        for (const path of pathArg?.values ?? []) {",
+          "-          if (path) result.file!.push({ paths: [path], operation })",
+          "-        }",
+          "-      }",
+          "-",
+          "-    } else if (call in LEGACY_FILE_CALL_OP) {",
+          "-      // Legacy format (sys_read / sys_write / sys_openat)",
+          "-      const operation = LEGACY_FILE_CALL_OP[call]",
+          "-      for (const sel of selectors) {",
+          "-        for (const ma of sel.matchArgs ?? []) {",
+          "+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {",
+          "           for (const path of ma.values ?? []) {",
+          "-            if (path) result.file!.push({ paths: [path], operation })",
+          "+            if (path) result.file!.push({ paths: [path] })",
+          "           }",
+          "         }",
+          "       }"
+        ]
+      }
+    ],
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+// Backward-compatible mapping for old-style file kprobes
+const LEGACY_FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read:   'read',
+  sys_write:  'write',
+  sys_openat: 'open',
+}
+
+// MAY_READ=4, MAY_WRITE=2 for security_file_permission arg[1]
+const PERM_TO_OP: Record<string, 'read' | 'write' | 'open'> = {
+  '4': 'read',
+  '2': 'write',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      // Process rule
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (call === 'security_file_permission') {
+      // File rule (current format)
+      for (const sel of selectors) {
+        const args: any[] = sel.matchArgs ?? []
+        const pathArg = args.find((a: any) => a.index === 0)
+        const permArg = args.find((a: any) => a.index === 1)
+
+        const operation: 'read' | 'write' | 'open' =
+          PERM_TO_OP[permArg?.values?.[0]] ?? 'open'
+
+        for (const path of pathArg?.values ?? []) {
+          if (path) result.file!.push({ paths: [path], operation })
+        }
+      }
+
+    } else if (call in LEGACY_FILE_CALL_OP) {
+      // Legacy format (sys_read / sys_write / sys_openat)
+      const operation = LEGACY_FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "offset": 40,
+    "limit": 20
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "offset": 40,
+    "limit": 20
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+      "content": "  // Multiple kprobes for the same function name would fail to pin their BPF links.
+  const allBinaries = (input.process ?? []).flatMap((r) => r.binaries).filter(Boolean)
+  if (allBinaries.length > 0) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [{
+        matchBinaries: [{ operator: 'In', values: allBinaries }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  // File rules: ONE security_file_permission kprobe with all paths in a single matchArgs.
+  // Values in the same matchArgs entry are OR'd by Tetragon.
+  const allPaths = (input.file ?? []).flatMap((r) => r.paths).filter(Boolean)
+  if (allPaths.length > 0) {
+    doc.spec.kprobes.push({
+      call: 'security_file_permission',",
+      "numLines": 20,
+      "startLine": 40,
+      "totalLines": 74
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/types.go",
+    "old_string": "type FileRule struct {
+	Paths     []string `json:"paths"`
+	Operation string   `json:"operation"` // "read", "write", "open"
+}",
+    "new_string": "type FileRule struct {
+	Paths []string `json:"paths"`
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/types.go",
+    "old_string": "type FileRule struct {
+	Paths     []string `json:"paths"`
+	Operation string   `json:"operation"` // "read", "write", "open"
+}",
+    "new_string": "type FileRule struct {
+	Paths []string `json:"paths"`
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/policy/types.go",
+    "oldString": "type FileRule struct {
+	Paths     []string `json:"paths"`
+	Operation string   `json:"operation"` // "read", "write", "open"
+}",
+    "newString": "type FileRule struct {
+	Paths []string `json:"paths"`
+}",
+    "originalFile": "package policy
+
+const (
+	ActionPost    = "Post"
+	ActionSigkill = "Sigkill"
+)
+
+// PolicyFormInput is the data submitted from the frontend form.
+type PolicyFormInput struct {
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace,omitempty"`
+	PodSelector map[string]string `json:"podSelector,omitempty"`
+	Process     []ProcessRule     `json:"process,omitempty"`
+	File        []FileRule        `json:"file,omitempty"`
+}
+
+type ProcessRule struct {
+	Binaries []string `json:"binaries"`
+}
+
+type FileRule struct {
+	Paths     []string `json:"paths"`
+	Operation string   `json:"operation"` // "read", "write", "open"
+}
+
+// TracingPolicy is the Tetragon CRD object used for YAML serialisation.
+type TracingPolicy struct {
+	APIVersion string            `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string            `yaml:"kind"       json:"kind"`
+	Metadata   ObjectMeta        `yaml:"metadata"   json:"metadata"`
+	Spec       TracingPolicySpec `yaml:"spec"       json:"spec"`
+}
+
+type ObjectMeta struct {
+	Name      string `yaml:"name"                json:"name"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+}
+
+type TracingPolicySpec struct {
+	PodSelector *LabelSelector `yaml:"podSelector,omitempty" json:"podSelector,omitempty"`
+	KProbes     []KProbeSpec   `yaml:"kprobes,omitempty"     json:"kprobes,omitempty"`
+}
+
+type LabelSelector struct {
+	MatchLabels map[string]string `yaml:"matchLabels,omitempty" json:"matchLabels,omitempty"`
+}
+
+type KProbeSpec struct {
+	Call      string           `yaml:"call"                json:"call"`
+	Syscall   bool             `yaml:"syscall"             json:"syscall"`
+	Args      []KProbeArg      `yaml:"args,omitempty"      json:"args,omitempty"`
+	Selectors []KProbeSelector `yaml:"selectors,omitempty" json:"selectors,omitempty"`
+}
+
+type KProbeArg struct {
+	Index int    `yaml:"index" json:"index"`
+	Type  string `yaml:"type"  json:"type"`
+}
+
+type KProbeSelector struct {
+	MatchBinaries []BinarySelector `yaml:"matchBinaries,omitempty" json:"matchBinaries,omitempty"`
+	MatchArgs     []ArgSelector    `yaml:"matchArgs,omitempty"     json:"matchArgs,omitempty"`
+	MatchActions  []ActionSelector `yaml:"matchActions"            json:"matchActions"`
+}
+
+type BinarySelector struct {
+	Operator string   `yaml:"operator" json:"operator"`
+	Values   []string `yaml:"values"   json:"values"`
+}
+
+type ArgSelector struct {
+	Index    int      `yaml:"index"    json:"index"`
+	Operator string   `yaml:"operator" json:"operator"`
+	Values   []string `yaml:"values"   json:"values"`
+}
+
+type ActionSelector struct {
+	Action string `yaml:"action" json:"action"`
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 19,
+        "oldLines": 8,
+        "newStart": 19,
+        "newLines": 7,
+        "lines": [
+          " }",
+          " ",
+          " type FileRule struct {",
+          "-  Paths     []string `json:"paths"`",
+          "-  Operation string   `json:"operation"` // "read", "write", "open"",
+          "+  Paths []string `json:"paths"`",
+          " }",
+          " ",
+          " // TracingPolicy is the Tetragon CRD object used for YAML serialisation."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Operation" /home/bigred/Sentinel/internal/policy/builder_test.go",
+    "description": "確認測試中的 Operation 引用"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Operation" /home/bigred/Sentinel/internal/policy/builder_test.go",
+    "description": "確認測試中的 Operation 引用"
+  },
+  "tool_response": {
+    "stdout": "61:		File: []policy.FileRule{{Paths: []string{"/etc/shadow"}, Operation: "read"}},
+87:			{Paths: []string{"/etc/shadow"}, Operation: "read"},
+88:			{Paths: []string{"/root"}, Operation: "read"},
+129:		File:    []policy.FileRule{{Paths: []string{"/etc"}, Operation: "read"}},",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "sed -i 's/, Operation: "read"//g; s/, Operation: "write"//g; s/, Operation: "open"//g' /home/bigred/Sentinel/internal/policy/builder_test.go",
+    "description": "移除測試中所有 Operation 欄位"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "sed -i 's/, Operation: "read"//g; s/, Operation: "write"//g; s/, Operation: "open"//g' /home/bigred/Sentinel/internal/policy/builder_test.go",
+    "description": "移除測試中所有 Operation 欄位"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && go test ./internal/... 2>&1",
+    "timeout": 30000,
+    "description": "Go 編譯 + 測試"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && go test ./internal/... 2>&1",
+    "timeout": 30000,
+    "description": "Go 編譯 + 測試"
+  },
+  "tool_response": {
+    "stdout": "?   	github.com/brobridge/sentinel/internal/handler	[no test files]
+?   	github.com/brobridge/sentinel/internal/k8s	[no test files]
+ok  	github.com/brobridge/sentinel/internal/policy	0.002s",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "operation" /home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "description": "確認測試中的 operation 引用"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "operation" /home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "description": "確認測試中的 operation 引用"
+  },
+  "tool_response": {
+    "stdout": "35:        { paths: ['/etc/shadow'], operation: 'read' },
+36:        { paths: ['/root'], operation: 'write' },
+63:      file: [{ paths: ['/etc'], operation: 'open' }],
+73:      file: [{ paths: ['/etc/passwd'], operation: 'read' }],",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "sed -i "s/, operation: 'read'//g; s/, operation: 'write'//g; s/, operation: 'open'//g" /home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "description": "移除測試中所有 operation 欄位"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "sed -i "s/, operation: 'read'//g; s/, operation: 'write'//g; s/, operation: 'open'//g" /home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "description": "移除測試中所有 operation 欄位"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "前端測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "前端測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  16:48:38
+   Duration  474ms (transform 21ms, setup 37ms, import 18ms, tests 4ms, environment 341ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: remove file operation selector (read/write/open had no effect on kprobe)"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+

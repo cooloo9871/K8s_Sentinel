@@ -13,9 +13,9 @@ import {
 import { ProcessSection } from './ProcessSection'
 import { FileSection } from './FileSection'
 import { formToYaml } from '../../utils/formToYaml'
-import type { PolicyFormInput, FileRule } from '../../api/types'
+import type { PolicyFormInput } from '../../api/types'
 
-type FileEntry = { path: string; operation: FileRule['operation'] }
+type FileEntry = { path: string }
 
 const CLUSTER_WIDE = '__cluster_wide__'
 
@@ -38,7 +38,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
 
   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
   const fileEntries: FileEntry[] =
-    value.file?.map((f) => ({ path: f.paths[0] ?? '', operation: f.operation })) ?? []
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
 
   const setProcessBinaries = (binaries: string[]) =>
     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
@@ -46,7 +46,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const setFileEntries = (entries: FileEntry[]) =>
     onChange({
       ...value,
-      file: entries.map((e) => ({ paths: [e.path], operation: e.operation })),
+      file: entries.map((e) => ({ paths: [e.path] })),
     })
 
   return (
