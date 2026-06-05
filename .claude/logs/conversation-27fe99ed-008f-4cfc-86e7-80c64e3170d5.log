@@ -92974,3 +92974,3337 @@ ok  	github.com/brobridge/sentinel/internal/policy	(cached)
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "feat: replace Security Events with real-time Tetragon event stream via SSE"",
+    "description": "提交所有變更"
+  },
+  "tool_response": {
+    "stdout": "[main 41fd799] feat: replace Security Events with real-time Tetragon event stream via SSE
+ 13 files changed, 6254 insertions(+), 138 deletions(-)
+ create mode 100644 internal/k8s/tetragon.go",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "41fd799",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。架構說明：
+
+---
+
+**後端流程**
+```
+GET /api/events/stream (SSE)
+  │
+  ├─ 找 kube-system 的 Tetragon pod
+  │     label: app.kubernetes.io/name=tetragon
+  │     找不到 → SSE error event → 前端顯示錯誤
+  │
+  ├─ kubernetes typed client → GetLogs(pod, container=tetragon, follow=true, tailLines=100)
+  │
+  ├─ bufio.Scanner 逐行讀取 JSON
+  │     parse process_exec / process_exit / process_kprobe
+  │     正規化為 TetragonEvent struct
+  │
+  └─ SSE → fmt.Fprintf(w, "data: %s\
+\
+", json)
+```
+
+**前端功能**
+- `EventSource('/api/events/stream')` 自動連線 + 斷線重連
+- 綠色 `Live` / 灰色 `Disconnected` 狀態指示
+- **Pause / Resume** — 暫停接收，連線保持
+- **Clear** — 清除顯示但不斷開連線
+- **Filter** — All / exec / exit / kprobe / Kills Only
+- 事件表格：Type badge（kill=紅色、kprobe=橘色、exec=灰）、Binary + 參數、Pod/Namespace、觸發的 Policy 名稱、Function、Node
+- Kill 事件列有紅色背景高亮
+- 最多保留最新 500 筆
+
+**RBAC 新增：** `pods` 和 `pods/log` get/list/watch"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~/Sentinel$ kubectl -n sentinel-system edit svc sentinel
+service/sentinel edited
+bigred@m1:~/Sentinel$ kubectl -n sentinel-system get svc
+NAME       TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+sentinel   NodePort   10.96.26.238   <none>        80:32373/TCP   22h
+bigred@m1:~/Sentinel$ kubectl create ns test1
+namespace/test1 created
+bigred@m1:~/Sentinel$ kubectl -n sentinel-system get pod
+NAME                        READY   STATUS             RESTARTS      AGE
+sentinel-79f9ddc6b5-dk89j   0/1     CrashLoopBackOff   1 (11s ago)   2m30s
+bigred@m1:~/Sentinel$ kubectl -n sentinel-system logs sentinel-79f9ddc6b5-dk89j
+2026/06/05 06:52:22 starting sentinel on :8080
+bigred@m1:~/Sentinel$ kubectl -n sentinel-system logs sentinel-79f9ddc6b5-dk89j
+2026/06/05 06:52:22 starting sentinel on :8080
+bigred@m1:~/Sentinel$ kubectl -n sentinel-system logs sentinel-79f9ddc6b5-dk89j -p
+2026/06/05 06:51:09 starting sentinel on :8080
+2026/06/05 06:51:24 "GET http://192.168.1.55:32373/api/namespaces HTTP/1.1" from 10.244.202.0:13675 - 200 255B in 154.259531ms
+2026/06/05 06:51:24 "GET http://192.168.1.55:32373/api/policies HTTP/1.1" from 10.244.202.0:55658 - 200 923B in 242.357547ms
+2026/06/05 06:51:24 "GET http://192.168.1.55:32373/api/mode HTTP/1.1" from 10.244.202.0:46834 - 200 19B in 273.780892ms
+2026/06/05 06:51:24 "GET http://192.168.1.55:32373/api/mode HTTP/1.1" from 10.244.202.0:3240 - 200 19B in 273.915107ms
+2026/06/05 06:51:27 "GET http://192.168.1.55:32373/api/policies HTTP/1.1" from 10.244.202.0:3240 - 200 923B in 130.288334ms
+2026/06/05 06:51:27 "GET http://192.168.1.55:32373/api/mode HTTP/1.1" from 10.244.202.0:46834 - 200 19B in 130.512185ms
+2026/06/05 06:51:30 "GET http://192.168.1.55:32373/api/policies/test HTTP/1.1" from 10.244.202.0:46834 - 200 921B in 15.935377ms
+2026/06/05 06:51:30 "GET http://192.168.1.55:32373/api/namespaces HTTP/1.1" from 10.244.202.0:3240 - 200 255B in 17.855901ms
+2026/06/05 06:51:32 "GET http://192.168.1.55:32373/api/policies HTTP/1.1" from 10.244.202.0:3240 - 200 923B in 27.582931ms
+2026/06/05 06:51:32 "GET http://192.168.1.55:32373/api/mode HTTP/1.1" from 10.244.202.0:46834 - 200 19B in 28.420082ms
+2026/06/05 06:51:43 "DELETE http://192.168.1.55:32373/api/policies/test HTTP/1.1" from 10.244.202.0:3240 - 200 21B in 29.625607ms
+2026/06/05 06:51:43 "GET http://192.168.1.55:32373/api/policies HTTP/1.1" from 10.244.202.0:3240 - 200 3B in 25.448879ms
+2026/06/05 06:52:11 "GET http://192.168.1.55:32373/api/events/stream HTTP/1.1" from 10.244.202.0:3240 - 000 0B in 2.370107297s
+2026/06/05 06:52:11 http: superfluous response.WriteHeader call from github.com/go-chi/chi/v5/middleware.(*basicWriter).WriteHeader (wrap_writer.go:88)
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x6691d2]
+
+goroutine 100 [running]:
+bufio.(*Writer).Flush(0x1605100?)
+    /usr/local/go/src/bufio/bufio.go:633 +0x12
+net/http.(*chunkWriter).flush(0x40f2ff?)
+    /usr/local/go/src/net/http/server.go:401 +0x39
+net/http.(*response).FlushError(0xc0000c0700)
+    /usr/local/go/src/net/http/server.go:1729 +0x51
+net/http.(*response).Flush(0x2439ee0?)
+    /usr/local/go/src/net/http/server.go:1721 +0x13
+github.com/go-chi/chi/v5/middleware.(*httpFancyWriter).Flush(0x7b8d5c2302d8?)
+    /go/pkg/mod/github.com/go-chi/chi/v5@v5.1.0/middleware/wrap_writer.go:194 +0x7a
+github.com/brobridge/sentinel/internal/handler.New.streamTetragonEvents.func10.1()
+    /app/internal/handler/events.go:36 +0x139
+created by github.com/brobridge/sentinel/internal/handler.New.streamTetragonEvents.func10 in goroutine 5
+    /app/internal/handler/events.go:31 +0x265"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		// Set SSE headers before any goroutine work to avoid header-after-write issues.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		// Send an initial comment to confirm SSE connection is live.
+		fmt.Fprintf(w, ": connected\
+\
+")
+		flusher.Flush()
+
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		events := make(chan k8s.TetragonEvent, 256)
+		errCh := make(chan string, 1) // buffered so goroutine never blocks on send
+
+		go func() {
+			// Always close events last so the main loop exits cleanly.
+			defer close(events)
+			if err := store.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+				// ctx.Err() != nil means the client disconnected — don't report as an error.
+				select {
+				case errCh <- err.Error():
+				default:
+				}
+			}
+		}()
+
+		for {
+			select {
+			case msg := <-errCh:
+				// Relay the error as an SSE event so the frontend can show it.
+				data, _ := json.Marshal(map[string]string{"error": msg})
+				fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case evt, ok := <-events:
+				if !ok {
+					return // goroutine finished — clean exit
+				}
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		// Set SSE headers before any goroutine work to avoid header-after-write issues.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		// Send an initial comment to confirm SSE connection is live.
+		fmt.Fprintf(w, ": connected\
+\
+")
+		flusher.Flush()
+
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		events := make(chan k8s.TetragonEvent, 256)
+		errCh := make(chan string, 1) // buffered so goroutine never blocks on send
+
+		go func() {
+			// Always close events last so the main loop exits cleanly.
+			defer close(events)
+			if err := store.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+				// ctx.Err() != nil means the client disconnected — don't report as an error.
+				select {
+				case errCh <- err.Error():
+				default:
+				}
+			}
+		}()
+
+		for {
+			select {
+			case msg := <-errCh:
+				// Relay the error as an SSE event so the frontend can show it.
+				data, _ := json.Marshal(map[string]string{"error": msg})
+				fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case evt, ok := <-events:
+				if !ok {
+					return // goroutine finished — clean exit
+				}
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		// Set SSE headers before any goroutine work to avoid header-after-write issues.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		// Send an initial comment to confirm SSE connection is live.
+		fmt.Fprintf(w, ": connected\
+\
+")
+		flusher.Flush()
+
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		events := make(chan k8s.TetragonEvent, 256)
+		errCh := make(chan string, 1) // buffered so goroutine never blocks on send
+
+		go func() {
+			// Always close events last so the main loop exits cleanly.
+			defer close(events)
+			if err := store.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+				// ctx.Err() != nil means the client disconnected — don't report as an error.
+				select {
+				case errCh <- err.Error():
+				default:
+				}
+			}
+		}()
+
+		for {
+			select {
+			case msg := <-errCh:
+				// Relay the error as an SSE event so the frontend can show it.
+				data, _ := json.Marshal(map[string]string{"error": msg})
+				fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case evt, ok := <-events:
+				if !ok {
+					return // goroutine finished — clean exit
+				}
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 17,
+        "oldLines": 31,
+        "newStart": 17,
+        "newLines": 45,
+        "lines": [
+          "       return",
+          "     }",
+          " ",
+          "+    // Set SSE headers before any goroutine work to avoid header-after-write issues.",
+          "     w.Header().Set("Content-Type", "text/event-stream")",
+          "     w.Header().Set("Cache-Control", "no-cache")",
+          "     w.Header().Set("Connection", "keep-alive")",
+          "     w.Header().Set("X-Accel-Buffering", "no")",
+          "-    w.Header().Set("Access-Control-Allow-Origin", "*")",
+          " ",
+          "+    // Send an initial comment to confirm SSE connection is live.",
+          "+    fmt.Fprintf(w, ": connected\
+\
+")",
+          "+    flusher.Flush()",
+          "+",
+          "     ctx, cancel := context.WithCancel(r.Context())",
+          "     defer cancel()",
+          " ",
+          "     events := make(chan k8s.TetragonEvent, 256)",
+          "+    errCh := make(chan string, 1) // buffered so goroutine never blocks on send",
+          " ",
+          "     go func() {",
+          "+      // Always close events last so the main loop exits cleanly.",
+          "       defer close(events)",
+          "-      if err := store.StreamTetragonEvents(ctx, events); err != nil {",
+          "-        // Send error as a special SSE event so the client can display it",
+          "-        fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", err.Error())",
+          "-        flusher.Flush()",
+          "+      if err := store.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {",
+          "+        // ctx.Err() != nil means the client disconnected — don't report as an error.",
+          "+        select {",
+          "+        case errCh <- err.Error():",
+          "+        default:",
+          "+        }",
+          "       }",
+          "     }()",
+          " ",
+          "     for {",
+          "       select {",
+          "+      case msg := <-errCh:",
+          "+        // Relay the error as an SSE event so the frontend can show it.",
+          "+        data, _ := json.Marshal(map[string]string{"error": msg})",
+          "+        fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", data)",
+          "+        flusher.Flush()",
+          "+",
+          "       case evt, ok := <-events:",
+          "         if !ok {",
+          "-          return",
+          "+          return // goroutine finished — clean exit",
+          "         }",
+          "         data, err := json.Marshal(evt)",
+          "         if err != nil {"
+        ]
+      }
+    ],
+    "originalFile": "package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		events := make(chan k8s.TetragonEvent, 256)
+
+		go func() {
+			defer close(events)
+			if err := store.StreamTetragonEvents(ctx, events); err != nil {
+				// Send error as a special SSE event so the client can display it
+				fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", err.Error())
+				flusher.Flush()
+			}
+		}()
+
+		for {
+			select {
+			case evt, ok := <-events:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 30000,
+    "description": "驗證 Go 編譯"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 30000,
+    "description": "驗證 Go 編譯"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/handler/events.go && git commit -m "fix: write SSE headers before goroutine, relay errors via channel to avoid nil pointer panic"",
+    "description": "提交修正"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/handler/events.go && git commit -m "fix: write SSE headers before goroutine, relay errors via channel to avoid nil pointer panic"",
+    "description": "提交修正"
+  },
+  "tool_response": {
+    "stdout": "[main c691eca] fix: write SSE headers before goroutine, relay errors via channel to avoid nil pointer panic
+ 1 file changed, 20 insertions(+), 6 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "c691eca",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "修正說明：
+
+**Panic 的根本原因：**
+goroutine 在 `StreamTetragonEvents` 返回 error 後，直接對 `w` 呼叫 `fmt.Fprintf` 和 `flusher.Flush()`，但此時 chi middleware 的 `httpFancyWriter` 內部狀態已不一致，造成 nil pointer。
+
+**修法 — 三個關鍵改動：**
+
+1. **SSE headers 在 goroutine 啟動之前就寫入**，確保連線正確建立（`Content-Type: text/event-stream` + initial `: connected\
+\
+` comment），chi middleware 不會再嘗試二次寫入
+
+2. **goroutine 絕不直接寫 `w`**，改用 buffered `errCh chan string` 傳回 error 訊息
+
+3. **主 handler goroutine 統一負責所有 `w` 寫入**，透過 select 同時監聽 events / errCh / context cancel
+
+```
+goroutine                主 goroutine (HTTP handler)
+───────────────          ────────────────────────────
+StreamTetragonEvents()   w: SSE headers + ": connected"
+  → error               ←── errCh ──  event: stream-error
+  → event               ←── events ── data: {...}
+  → close(events)                      return (clean exit)
+```"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~$ POD=$(kubectl -n kube-system get pods -l 'app.kubernetes.io/name=tetragon' \\
+  -o name \\
+  --field-selector spec.nodeName=$(kubectl get pod bx1 -n test1 -o jsonpath='{.spec.nodeName}'))
+bigred@m1:~$ kubectl exec -ti -n kube-system $POD -c tetragon --   tetra getevents -o compact --namespace test1 --pod bx1
+🚀 process test1/bx1 /bin/bash -c "cat /etc/shadow"
+🚀 process test1/bx1 /bin/cat /etc/shadow
+💥 exit    test1/bx1 /bin/cat /etc/shadow 0我透過 ui 產生監控檔案的設定，但是在 events 並沒有看到警告，實際用 tetra 指令去看是有生效的"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewClients creates dynamic, typed, and raw REST config from in-cluster config.
+// All three share the same underlying config, so only one in-cluster lookup is made.
+func NewClients() (dynamic.Interface, *kubernetes.Clientset, *rest.Config, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	typed, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return dyn, typed, cfg, nil
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewClients creates dynamic, typed, and raw REST config from in-cluster config.
+// All three share the same underlying config, so only one in-cluster lookup is made.
+func NewClients() (dynamic.Interface, *kubernetes.Clientset, *rest.Config, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	typed, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return dyn, typed, cfg, nil
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewClients creates dynamic, typed, and raw REST config from in-cluster config.
+// All three share the same underlying config, so only one in-cluster lookup is made.
+func NewClients() (dynamic.Interface, *kubernetes.Clientset, *rest.Config, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	typed, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return dyn, typed, cfg, nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 30,
+        "oldLines": 20,
+        "newStart": 30,
+        "newLines": 20,
+        "lines": [
+          "   }",
+          " )",
+          " ",
+          "-// NewDynamicClient creates a dynamic k8s client using in-cluster config.",
+          "-func NewDynamicClient() (dynamic.Interface, error) {",
+          "+// NewClients creates dynamic, typed, and raw REST config from in-cluster config.",
+          "+// All three share the same underlying config, so only one in-cluster lookup is made.",
+          "+func NewClients() (dynamic.Interface, *kubernetes.Clientset, *rest.Config, error) {",
+          "   cfg, err := rest.InClusterConfig()",
+          "   if err != nil {",
+          "-    return nil, err",
+          "+    return nil, nil, nil, err",
+          "   }",
+          "-  return dynamic.NewForConfig(cfg)",
+          "-}",
+          "-",
+          "-// NewTypedClient creates a typed k8s client using in-cluster config.",
+          "-func NewTypedClient() (*kubernetes.Clientset, error) {",
+          "-  cfg, err := rest.InClusterConfig()",
+          "+  dyn, err := dynamic.NewForConfig(cfg)",
+          "   if err != nil {",
+          "-    return nil, err",
+          "+    return nil, nil, nil, err",
+          "   }",
+          "-  return kubernetes.NewForConfig(cfg)",
+          "+  typed, err := kubernetes.NewForConfig(cfg)",
+          "+  if err != nil {",
+          "+    return nil, nil, nil, err",
+          "+  }",
+          "+  return dyn, typed, cfg, nil",
+          " }"
+        ]
+      }
+    ],
+    "originalFile": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
+// NewTypedClient creates a typed k8s client using in-cluster config.
+func NewTypedClient() (*kubernetes.Clientset, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(cfg)
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"",
+    "new_string": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"",
+    "new_string": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"",
+    "newString": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"`  // "cluster" or "namespaced"
+	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		Mode:      detectMode(string(rawYAML)),
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+
+// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
+func detectMode(rawYAML string) string {
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+		return "Monitoring"
+	}
+	post, kill := 0, 0
+	for _, kp := range tp.Spec.KProbes {
+		for _, sel := range kp.Selectors {
+			for _, act := range sel.MatchActions {
+				if act.Action == policy.ActionSigkill {
+					kill++
+				} else {
+					post++
+				}
+			}
+		}
+	}
+	if kill == 0 {
+		return "Monitoring"
+	}
+	if post == 0 {
+		return "Protect"
+	}
+	return "Mixed"
+}
+
+// SetPolicyMode updates all kprobe actions in a single policy.
+func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	record, err := s.Get(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
+		return fmt.Errorf("parse policy %q: %w", name, err)
+	}
+	for i := range tp.Spec.KProbes {
+		for j := range tp.Spec.KProbes[i].Selectors {
+			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+			}
+		}
+	}
+	return s.Apply(ctx, tp)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 12,
+        "oldLines": 6,
+        "newStart": 12,
+        "newLines": 7,
+        "lines": [
+          "   "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"",
+          "   "k8s.io/client-go/dynamic"",
+          "   "k8s.io/client-go/kubernetes"",
+          "+  "k8s.io/client-go/rest"",
+          "   "sigs.k8s.io/yaml"",
+          " ",
+          "   "github.com/brobridge/sentinel/internal/policy""
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}",
+    "new_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client     dynamic.Interface
+	typed      *kubernetes.Clientset
+	restConfig *rest.Config
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
+	return &Store{client: client, typed: typed, restConfig: cfg}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}",
+    "new_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client     dynamic.Interface
+	typed      *kubernetes.Clientset
+	restConfig *rest.Config
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
+	return &Store{client: client, typed: typed, restConfig: cfg}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}",
+    "newString": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client     dynamic.Interface
+	typed      *kubernetes.Clientset
+	restConfig *rest.Config
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
+	return &Store{client: client, typed: typed, restConfig: cfg}
+}",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"`  // "cluster" or "namespaced"
+	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		Mode:      detectMode(string(rawYAML)),
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+
+// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
+func detectMode(rawYAML string) string {
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+		return "Monitoring"
+	}
+	post, kill := 0, 0
+	for _, kp := range tp.Spec.KProbes {
+		for _, sel := range kp.Selectors {
+			for _, act := range sel.MatchActions {
+				if act.Action == policy.ActionSigkill {
+					kill++
+				} else {
+					post++
+				}
+			}
+		}
+	}
+	if kill == 0 {
+		return "Monitoring"
+	}
+	if post == 0 {
+		return "Protect"
+	}
+	return "Mixed"
+}
+
+// SetPolicyMode updates all kprobe actions in a single policy.
+func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	record, err := s.Get(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
+		return fmt.Errorf("parse policy %q: %w", name, err)
+	}
+	for i := range tp.Spec.KProbes {
+		for j := range tp.Spec.KProbes[i].Selectors {
+			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+			}
+		}
+	}
+	return s.Apply(ctx, tp)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 30,
+        "oldLines": 13,
+        "newStart": 30,
+        "newLines": 14,
+        "lines": [
+          " ",
+          " // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.",
+          " type Store struct {",
+          "-  client dynamic.Interface",
+          "-  typed  *kubernetes.Clientset",
+          "+  client     dynamic.Interface",
+          "+  typed      *kubernetes.Clientset",
+          "+  restConfig *rest.Config",
+          " }",
+          " ",
+          " // NewStore creates a Store wrapping the given clients.",
+          "-func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {",
+          "-  return &Store{client: client, typed: typed}",
+          "+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {",
+          "+  return &Store{client: client, typed: typed, restConfig: cfg}",
+          " }",
+          " ",
+          " // List returns all cluster-wide and namespaced policies."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, mapField(kp, "process"))
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, mapField(kp, "process"))
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, mapField(kp, "process"))
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 5,
+        "oldLines": 10,
+        "newStart": 5,
+        "newLines": 13,
+        "lines": [
+          "   "context"",
+          "   "encoding/json"",
+          "   "fmt"",
+          "+  "io"",
+          "   "strings"",
+          " ",
+          "   corev1 "k8s.io/api/core/v1"",
+          "   metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"",
+          "+  "k8s.io/client-go/kubernetes/scheme"",
+          "+  "k8s.io/client-go/tools/remotecommand"",
+          " )",
+          " ",
+          " // TetragonEvent is a normalised Tetragon runtime event for the frontend."
+        ]
+      },
+      {
+        "oldStart": 27,
+        "oldLines": 33,
+        "newStart": 30,
+        "newLines": 49,
+        "lines": [
+          "   Function   string `json:"function"`",
+          " }",
+          " ",
+          "-// StreamTetragonEvents finds a Tetragon DaemonSet pod and streams parsed events",
+          "-// into the returned channel. The channel is closed when streaming ends.",
+          "+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",",
+          "+// parsing each JSON line into a TetragonEvent and sending it to out.",
+          " func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {",
+          "-  if s.typed == nil {",
+          "-    return fmt.Errorf("typed kubernetes client not available")",
+          "+  if s.typed == nil || s.restConfig == nil {",
+          "+    return fmt.Errorf("kubernetes clients not initialised")",
+          "   }",
+          " ",
+          "-  // Find Tetragon pods (try common label selectors)",
+          "   podName, err := s.findTetragonPod(ctx)",
+          "   if err != nil {",
+          "     return err",
+          "   }",
+          " ",
+          "-  tailLines := int64(100)",
+          "-  req := s.typed.CoreV1().Pods("kube-system").GetLogs(podName, &corev1.PodLogOptions{",
+          "-    Container: "tetragon",",
+          "-    Follow:    true,",
+          "-    TailLines: &tailLines,",
+          "-  })",
+          "+  req := s.typed.CoreV1().RESTClient().Post().",
+          "+    Resource("pods").",
+          "+    Name(podName).",
+          "+    Namespace("kube-system").",
+          "+    SubResource("exec").",
+          "+    VersionedParams(&corev1.PodExecOptions{",
+          "+      Container: "tetragon",",
+          "+      Command:   []string{"tetra", "getevents", "-o", "json"},",
+          "+      Stdin:     false,",
+          "+      Stdout:    true,",
+          "+      Stderr:    false,",
+          "+      TTY:       false,",
+          "+    }, scheme.ParameterCodec)",
+          " ",
+          "-  stream, err := req.Stream(ctx)",
+          "+  executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())",
+          "   if err != nil {",
+          "-    return fmt.Errorf("open log stream for pod %s: %w", podName, err)",
+          "+    return fmt.Errorf("create exec for pod %s: %w", podName, err)",
+          "   }",
+          "-  defer stream.Close()",
+          " ",
+          "-  scanner := bufio.NewScanner(stream)",
+          "+  pr, pw := io.Pipe()",
+          "+  defer pr.Close()",
+          "+",
+          "+  execDone := make(chan error, 1)",
+          "+  go func() {",
+          "+    defer pw.Close()",
+          "+    execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{",
+          "+      Stdout: pw,",
+          "+    })",
+          "+  }()",
+          "+",
+          "+  scanner := bufio.NewScanner(pr)",
+          "   scanner.Buffer(make([]byte, 1<<20), 1<<20)",
+          " ",
+          "   for scanner.Scan() {"
+        ]
+      },
+      {
+        "oldStart": 62,
+        "oldLines": 12,
+        "newStart": 81,
+        "newLines": 10,
+        "lines": [
+          "       return nil",
+          "     default:",
+          "     }",
+          "-",
+          "     evt, ok := parseTetragonLog(scanner.Text())",
+          "     if !ok {",
+          "       continue",
+          "     }",
+          "-",
+          "     select {",
+          "     case out <- evt:",
+          "     case <-ctx.Done():"
+        ]
+      },
+      {
+        "oldStart": 75,
+        "oldLines": 15,
+        "newStart": 92,
+        "newLines": 14,
+        "lines": [
+          "     }",
+          "   }",
+          " ",
+          "-  return scanner.Err()",
+          "+  if err := scanner.Err(); err != nil {",
+          "+    return err",
+          "+  }",
+          "+  return <-execDone",
+          " }",
+          " ",
+          " func (s *Store) findTetragonPod(ctx context.Context) (string, error) {",
+          "-  selectors := []string{",
+          "-    "app.kubernetes.io/name=tetragon",",
+          "-    "app=tetragon",",
+          "-  }",
+          "-  for _, sel := range selectors {",
+          "+  for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {",
+          "     list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{",
+          "       LabelSelector: sel,",
+          "     })"
+        ]
+      },
+      {
+        "oldStart": 108,
+        "oldLines": 23,
+        "newStart": 124,
+        "newLines": 23,
+        "lines": [
+          "   switch {",
+          "   case raw["process_exec"] != nil:",
+          "     evt.Type = "exec"",
+          "-    fillProcess(&evt, mapField(raw, "process_exec"), "process")",
+          "-    if parent := mapField(mapField(raw, "process_exec"), "parent"); parent != nil {",
+          "-      evt.ParentBin = strField(parent, "binary")",
+          "+    exec := mapField(raw, "process_exec")",
+          "+    fillProcess(&evt, mapField(exec, "process"))",
+          "+    if p := mapField(exec, "parent"); p != nil {",
+          "+      evt.ParentBin = strField(p, "binary")",
+          "     }",
+          " ",
+          "   case raw["process_exit"] != nil:",
+          "     evt.Type = "exit"",
+          "-    fillProcess(&evt, mapField(raw, "process_exit"), "process")",
+          "+    fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))",
+          " ",
+          "   case raw["process_kprobe"] != nil:",
+          "     evt.Type = "kprobe"",
+          "     kp := mapField(raw, "process_kprobe")",
+          "-    fillProcess(&evt, kp, "process")",
+          "+    fillProcess(&evt, mapField(kp, "process"))",
+          "     evt.Function = strField(kp, "function_name")",
+          "     evt.PolicyName = strField(kp, "policy_name")",
+          "-    action := strField(kp, "action")",
+          "-    if strings.Contains(strings.ToUpper(action), "SIGKILL") {",
+          "+    if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {",
+          "       evt.Action = "kill"",
+          "     } else {",
+          "       evt.Action = "monitor""
+        ]
+      },
+      {
+        "oldStart": 137,
+        "oldLines": 14,
+        "newStart": 153,
+        "newLines": 12,
+        "lines": [
+          "   return evt, true",
+          " }",
+          " ",
+          "-func fillProcess(evt *TetragonEvent, parent map[string]any, key string) {",
+          "-  proc := mapField(parent, key)",
+          "+func fillProcess(evt *TetragonEvent, proc map[string]any) {",
+          "   if proc == nil {",
+          "     return",
+          "   }",
+          "   evt.Binary = strField(proc, "binary")",
+          "   evt.Arguments = strField(proc, "arguments")",
+          "-",
+          "   pod := mapField(proc, "pod")",
+          "   if pod == nil {",
+          "     return"
+        ]
+      }
+    ],
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents finds a Tetragon DaemonSet pod and streams parsed events
+// into the returned channel. The channel is closed when streaming ends.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil {
+		return fmt.Errorf("typed kubernetes client not available")
+	}
+
+	// Find Tetragon pods (try common label selectors)
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	tailLines := int64(100)
+	req := s.typed.CoreV1().Pods("kube-system").GetLogs(podName, &corev1.PodLogOptions{
+		Container: "tetragon",
+		Follow:    true,
+		TailLines: &tailLines,
+	})
+
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return fmt.Errorf("open log stream for pod %s: %w", podName, err)
+	}
+	defer stream.Close()
+
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	return scanner.Err()
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	selectors := []string{
+		"app.kubernetes.io/name=tetragon",
+		"app=tetragon",
+	}
+	for _, sel := range selectors {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		fillProcess(&evt, mapField(raw, "process_exec"), "process")
+		if parent := mapField(mapField(raw, "process_exec"), "parent"); parent != nil {
+			evt.ParentBin = strField(parent, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(raw, "process_exit"), "process")
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, kp, "process")
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		action := strField(kp, "action")
+		if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, parent map[string]any, key string) {
+	proc := mapField(parent, key)
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "content": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "content": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/cmd/server/main.go",
+    "content": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 12,
+        "oldLines": 18,
+        "newStart": 12,
+        "newLines": 13,
+        "lines": [
+          " )",
+          " ",
+          " func main() {",
+          "-  dynClient, err := k8sclient.NewDynamicClient()",
+          "+  dynClient, typedClient, restCfg, err := k8sclient.NewClients()",
+          "   if err != nil {",
+          "-    log.Fatalf("k8s dynamic client: %v", err)",
+          "+    log.Fatalf("k8s clients: %v", err)",
+          "   }",
+          " ",
+          "-  typedClient, err := k8sclient.NewTypedClient()",
+          "-  if err != nil {",
+          "-    log.Fatalf("k8s typed client: %v", err)",
+          "-  }",
+          "+  store := k8sclient.NewStore(dynClient, typedClient, restCfg)",
+          " ",
+          "-  store := k8sclient.NewStore(dynClient, typedClient)",
+          "-",
+          "   cfg := handler.Config{",
+          "     Store: store,",
+          "   }"
+        ]
+      }
+    ],
+    "originalFile": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, err := k8sclient.NewDynamicClient()
+	if err != nil {
+		log.Fatalf("k8s dynamic client: %v", err)
+	}
+
+	typedClient, err := k8sclient.NewTypedClient()
+	if err != nil {
+		log.Fatalf("k8s typed client: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "old_string": "  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]",
+    "new_string": "  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "create"]",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "old_string": "  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]",
+    "new_string": "  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "create"]",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "oldString": "  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]",
+    "newString": "  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "create"]",
+    "originalFile": "apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sentinel
+rules:
+  - apiGroups: ["cilium.io"]
+    resources: ["tracingpolicies", "tracingpoliciesnamespaced"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+",
+    "structuredPatch": [
+      {
+        "oldStart": 13,
+        "oldLines": 5,
+        "newStart": 13,
+        "newLines": 5,
+        "lines": [
+          "     resources: ["events"]",
+          "     verbs: ["get", "list", "watch"]",
+          "   - apiGroups: [""]",
+          "-    resources: ["pods", "pods/log"]",
+          "-    verbs: ["get", "list", "watch"]",
+          "+    resources: ["pods", "pods/log", "pods/exec"]",
+          "+    verbs: ["get", "list", "watch", "create"]"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go mod tidy && go build ./... 2>&1",
+    "timeout": 120000,
+    "description": "go mod tidy + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go mod tidy && go build ./... 2>&1",
+    "timeout": 120000,
+    "description": "go mod tidy + build"
+  },
+  "tool_response": {
+    "stdout": "go: downloading github.com/gorilla/websocket v1.5.0
+go: downloading github.com/moby/spdystream v0.2.0
+go: downloading github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
+go: downloading github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 120000,
+    "description": "等待 build 完成"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 120000,
+    "description": "等待 build 完成"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go test ./... 2>&1",
+    "timeout": 30000,
+    "description": "Go 測試"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go test ./... 2>&1",
+    "timeout": 30000,
+    "description": "Go 測試"
+  },
+  "tool_response": {
+    "stdout": "?   	github.com/brobridge/sentinel/cmd/server	[no test files]
+?   	github.com/brobridge/sentinel/internal/handler	[no test files]
+?   	github.com/brobridge/sentinel/internal/k8s	[no test files]
+?   	github.com/brobridge/sentinel/web	[no test files]
+ok  	github.com/brobridge/sentinel/internal/policy	(cached)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "fix: replace pod log streaming with kubectl exec tetra getevents for real Tetragon events"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+

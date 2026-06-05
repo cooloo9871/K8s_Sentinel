@@ -30,20 +30,20 @@ var (
 	}
 )
 
-// NewDynamicClient creates a dynamic k8s client using in-cluster config.
-func NewDynamicClient() (dynamic.Interface, error) {
+// NewClients creates dynamic, typed, and raw REST config from in-cluster config.
+// All three share the same underlying config, so only one in-cluster lookup is made.
+func NewClients() (dynamic.Interface, *kubernetes.Clientset, *rest.Config, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	return dynamic.NewForConfig(cfg)
-}
-
-// NewTypedClient creates a typed k8s client using in-cluster config.
-func NewTypedClient() (*kubernetes.Clientset, error) {
-	cfg, err := rest.InClusterConfig()
+	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	return kubernetes.NewForConfig(cfg)
+	typed, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return dyn, typed, cfg, nil
 }

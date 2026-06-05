@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 // TetragonEvent is a normalised Tetragon runtime event for the frontend.
@@ -27,33 +30,49 @@ type TetragonEvent struct {
 	Function   string `json:"function"`
 }
 
-// StreamTetragonEvents finds a Tetragon DaemonSet pod and streams parsed events
-// into the returned channel. The channel is closed when streaming ends.
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
 func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
-	if s.typed == nil {
-		return fmt.Errorf("typed kubernetes client not available")
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
 	}
 
-	// Find Tetragon pods (try common label selectors)
 	podName, err := s.findTetragonPod(ctx)
 	if err != nil {
 		return err
 	}
 
-	tailLines := int64(100)
-	req := s.typed.CoreV1().Pods("kube-system").GetLogs(podName, &corev1.PodLogOptions{
-		Container: "tetragon",
-		Follow:    true,
-		TailLines: &tailLines,
-	})
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
 
-	stream, err := req.Stream(ctx)
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
 	if err != nil {
-		return fmt.Errorf("open log stream for pod %s: %w", podName, err)
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
 	}
-	defer stream.Close()
 
-	scanner := bufio.NewScanner(stream)
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 
 	for scanner.Scan() {
@@ -62,12 +81,10 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 			return nil
 		default:
 		}
-
 		evt, ok := parseTetragonLog(scanner.Text())
 		if !ok {
 			continue
 		}
-
 		select {
 		case out <- evt:
 		case <-ctx.Done():
@@ -75,15 +92,14 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
 }
 
 func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
-	selectors := []string{
-		"app.kubernetes.io/name=tetragon",
-		"app=tetragon",
-	}
-	for _, sel := range selectors {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
 		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 		})
@@ -108,23 +124,23 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	switch {
 	case raw["process_exec"] != nil:
 		evt.Type = "exec"
-		fillProcess(&evt, mapField(raw, "process_exec"), "process")
-		if parent := mapField(mapField(raw, "process_exec"), "parent"); parent != nil {
-			evt.ParentBin = strField(parent, "binary")
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
 		}
 
 	case raw["process_exit"] != nil:
 		evt.Type = "exit"
-		fillProcess(&evt, mapField(raw, "process_exit"), "process")
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
 
 	case raw["process_kprobe"] != nil:
 		evt.Type = "kprobe"
 		kp := mapField(raw, "process_kprobe")
-		fillProcess(&evt, kp, "process")
+		fillProcess(&evt, mapField(kp, "process"))
 		evt.Function = strField(kp, "function_name")
 		evt.PolicyName = strField(kp, "policy_name")
-		action := strField(kp, "action")
-		if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
 			evt.Action = "kill"
 		} else {
 			evt.Action = "monitor"
@@ -137,14 +153,12 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	return evt, true
 }
 
-func fillProcess(evt *TetragonEvent, parent map[string]any, key string) {
-	proc := mapField(parent, key)
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
 	if proc == nil {
 		return
 	}
 	evt.Binary = strField(proc, "binary")
 	evt.Arguments = strField(proc, "arguments")
-
 	pod := mapField(proc, "pod")
 	if pod == nil {
 		return

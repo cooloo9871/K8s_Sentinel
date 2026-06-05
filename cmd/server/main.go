@@ -12,17 +12,12 @@ import (
 )
 
 func main() {
-	dynClient, err := k8sclient.NewDynamicClient()
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
 	if err != nil {
-		log.Fatalf("k8s dynamic client: %v", err)
+		log.Fatalf("k8s clients: %v", err)
 	}
 
-	typedClient, err := k8sclient.NewTypedClient()
-	if err != nil {
-		log.Fatalf("k8s typed client: %v", err)
-	}
-
-	store := k8sclient.NewStore(dynClient, typedClient)
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
 
 	cfg := handler.Config{
 		Store: store,
