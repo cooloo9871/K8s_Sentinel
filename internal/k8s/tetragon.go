@@ -16,7 +16,7 @@ import (
 
 // TetragonEvent is a normalised Tetragon runtime event for the frontend.
 type TetragonEvent struct {
-	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Type       string `json:"type"`       // "kprobe"
 	Time       string `json:"time"`
 	NodeName   string `json:"nodeName"`
 	Namespace  string `json:"namespace"`
@@ -110,6 +110,8 @@ func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
 }
 
+// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.
+// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.
 func parseTetragonLog(line string) (TetragonEvent, bool) {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
@@ -117,25 +119,26 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	}
 
 	evt := TetragonEvent{
-		Time:     strField(raw, "time"),
-		NodeName: strField(raw, "node_name"),
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "nodeName", "node_name"),
 	}
 
-	switch {
-	case raw["process_kprobe"] != nil:
-		evt.Type = "kprobe"
-		kp := mapField(raw, "process_kprobe")
-		fillProcess(&evt, mapField(kp, "process"))
-		evt.Function = strField(kp, "function_name")
-		evt.PolicyName = strField(kp, "policy_name")
-		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
-			evt.Action = "kill"
-		} else {
-			evt.Action = "monitor"
-		}
+	// Try both camelCase (protobuf JSON) and snake_case field names
+	kp := anyMap(raw, "processKprobe", "process_kprobe")
+	if kp == nil {
+		return TetragonEvent{}, false // only process_kprobe events are policy-triggered
+	}
 
-	default:
-		return TetragonEvent{}, false
+	evt.Type = "kprobe"
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "functionName", "function_name")
+	evt.PolicyName = anyStr(kp, "policyName", "policy_name")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
 	}
 
 	return evt, true
@@ -145,31 +148,40 @@ func fillProcess(evt *TetragonEvent, proc map[string]any) {
 	if proc == nil {
 		return
 	}
-	evt.Binary = strField(proc, "binary")
-	evt.Arguments = strField(proc, "arguments")
-	pod := mapField(proc, "pod")
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+
+	pod := anyMap(proc, "pod")
 	if pod == nil {
 		return
 	}
-	evt.Namespace = strField(pod, "namespace")
-	evt.Pod = strField(pod, "name")
-	if c := mapField(pod, "container"); c != nil {
-		evt.Container = strField(c, "name")
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
 	}
 }
 
-func strField(m map[string]any, key string) string {
-	if m == nil {
-		return ""
+// anyStr returns the first non-empty string value found among the given keys.
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
 	}
-	v, _ := m[key].(string)
-	return v
+	return ""
 }
 
-func mapField(m map[string]any, key string) map[string]any {
-	if m == nil {
-		return nil
+// anyMap returns the first map value found among the given keys.
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
 	}
-	v, _ := m[key].(map[string]any)
-	return v
+	return nil
 }

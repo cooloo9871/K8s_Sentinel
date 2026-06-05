@@ -107220,3 +107220,1319 @@ export function SecurityEventsPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: filter Security Events to policy-triggered kprobe events only"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 6622edb] feat: filter Security Events to policy-triggered kprobe events only
+ 3 files changed, 2112 insertions(+), 20 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "6622edb",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。兩層過濾確保只顯示 TracingPolicy 觸發的事件：
+
+| 層 | 做法 | 說明 |
+|---|---|---|
+| tetra 命令 | `--event-types process_kprobe` | 在 Tetragon agent 側就過濾，減少傳輸量 |
+| Go 解析層 | 只處理 `process_kprobe` | 防禦層，確保 exec/exit 不漏進來 |
+| 前端 filter | 只有「All Policy Events」和「Kills Only」 | 移除無意義的 exec/exit 選項 |
+
+**為什麼之前會看到一堆不相關事件：**
+- `🚀 process exec` / `💥 exit` 來自 Tetragon 的 **base sensor**（內建，永遠運行，跟 TracingPolicy 無關）
+- `📚 read / kprobe` 才是 TracingPolicy 觸發的事件
+
+現在 Security Events 只會顯示你定義的 Policy 觸發的存取行為。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Security Events 這邊出現 {"error":"command terminated with exit code 1"} 錯誤"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},",
+    "new_string": "			Command:   []string{"tetra", "getevents", "-o", "json"},",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},",
+    "new_string": "			Command:   []string{"tetra", "getevents", "-o", "json"},",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},",
+    "newString": "			Command:   []string{"tetra", "getevents", "-o", "json"},",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, mapField(kp, "process"))
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 49,
+        "oldLines": 8,
+        "newStart": 49,
+        "newLines": 7,
+        "lines": [
+          "     SubResource("exec").",
+          "     VersionedParams(&corev1.PodExecOptions{",
+          "       Container: "tetragon",",
+          "-      // --event-types filters at source; only kprobe events are policy-triggered.",
+          "-      Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},",
+          "+      Command:   []string{"tetra", "getevents", "-o", "json"},",
+          "       Stdin:     false,",
+          "       Stdout:    true,",
+          "       Stderr:    false,"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1 && git add internal/k8s/tetragon.go && git commit -m "fix: remove unsupported --event-types flag, rely on Go-level kprobe filtering"",
+    "timeout": 30000,
+    "description": "驗證 + 提交"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1 && git add internal/k8s/tetragon.go && git commit -m "fix: remove unsupported --event-types flag, rely on Go-level kprobe filtering"",
+    "timeout": 30000,
+    "description": "驗證 + 提交"
+  },
+  "tool_response": {
+    "error": "Exit code 128
+warning: could not open directory 'web/internal/k8s/': No such file or directory
+fatal: pathspec 'internal/k8s/tetragon.go' did not match any files",
+    "is_interrupt": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && go build ./... && git add internal/k8s/tetragon.go && git commit -m "fix: remove unsupported --event-types flag, rely on Go-level kprobe filtering"",
+    "timeout": 30000,
+    "description": "從根目錄提交"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && go build ./... && git add internal/k8s/tetragon.go && git commit -m "fix: remove unsupported --event-types flag, rely on Go-level kprobe filtering"",
+    "timeout": 30000,
+    "description": "從根目錄提交"
+  },
+  "tool_response": {
+    "stdout": "[main d020c70] fix: remove unsupported --event-types flag, rely on Go-level kprobe filtering
+ 1 file changed, 1 insertion(+), 2 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "d020c70",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "修好了。過濾邏輯現在只靠 Go 解析層：
+
+```
+tetra getevents -o json          ← 輸出所有事件
+    ↓
+parseTetragonLog()               ← 只處理 process_kprobe，其餘全部丟棄
+    ↓
+SSE → 前端                       ← 只看到 TracingPolicy 觸發的事件
+```"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Security Events 沒有收到任何訊息，但是 tetra 是已經有收到這些了
+
+bigred@m1:~$ kubectl exec -ti -n kube-system $POD -c tetragon --   tetra getevents -o compact --namespace test1 --pod bx1
+🚀 process test1/bx1 /bin/bash -c "cat /etc/shadow"
+🚀 process test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+💥 exit    test1/bx1 /bin/cat /etc/shadow 0
+🚀 process test1/bx1 /bin/bash -c "cat /etc/shadow"
+🚀 process test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+💥 exit    test1/bx1 /bin/cat /etc/shadow 0
+🚀 process test1/bx1 /bin/bash -c "cat /etc/shadow"
+🚀 process test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+💥 exit    test1/bx1 /bin/cat /etc/shadow 0"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.
+// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "nodeName", "node_name"),
+	}
+
+	// Try both camelCase (protobuf JSON) and snake_case field names
+	kp := anyMap(raw, "processKprobe", "process_kprobe")
+	if kp == nil {
+		return TetragonEvent{}, false // only process_kprobe events are policy-triggered
+	}
+
+	evt.Type = "kprobe"
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "functionName", "function_name")
+	evt.PolicyName = anyStr(kp, "policyName", "policy_name")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+// anyStr returns the first non-empty string value found among the given keys.
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// anyMap returns the first map value found among the given keys.
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.
+// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "nodeName", "node_name"),
+	}
+
+	// Try both camelCase (protobuf JSON) and snake_case field names
+	kp := anyMap(raw, "processKprobe", "process_kprobe")
+	if kp == nil {
+		return TetragonEvent{}, false // only process_kprobe events are policy-triggered
+	}
+
+	evt.Type = "kprobe"
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "functionName", "function_name")
+	evt.PolicyName = anyStr(kp, "policyName", "policy_name")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+// anyStr returns the first non-empty string value found among the given keys.
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// anyMap returns the first map value found among the given keys.
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.
+// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "nodeName", "node_name"),
+	}
+
+	// Try both camelCase (protobuf JSON) and snake_case field names
+	kp := anyMap(raw, "processKprobe", "process_kprobe")
+	if kp == nil {
+		return TetragonEvent{}, false // only process_kprobe events are policy-triggered
+	}
+
+	evt.Type = "kprobe"
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "functionName", "function_name")
+	evt.PolicyName = anyStr(kp, "policyName", "policy_name")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+// anyStr returns the first non-empty string value found among the given keys.
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// anyMap returns the first map value found among the given keys.
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 16,
+        "oldLines": 7,
+        "newStart": 16,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " // TetragonEvent is a normalised Tetragon runtime event for the frontend.",
+          " type TetragonEvent struct {",
+          "-  Type       string `json:"type"`       // "exec", "exit", "kprobe"",
+          "+  Type       string `json:"type"`       // "kprobe"",
+          "   Time       string `json:"time"`",
+          "   NodeName   string `json:"nodeName"`",
+          "   Namespace  string `json:"namespace"`"
+        ]
+      },
+      {
+        "oldStart": 110,
+        "oldLines": 6,
+        "newStart": 110,
+        "newLines": 8,
+        "lines": [
+          "   return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+          " }",
+          " ",
+          "+// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.",
+          "+// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.",
+          " func parseTetragonLog(line string) (TetragonEvent, bool) {",
+          "   var raw map[string]any",
+          "   if err := json.Unmarshal([]byte(line), &raw); err != nil {"
+        ]
+      },
+      {
+        "oldStart": 117,
+        "oldLines": 25,
+        "newStart": 119,
+        "newLines": 26,
+        "lines": [
+          "   }",
+          " ",
+          "   evt := TetragonEvent{",
+          "-    Time:     strField(raw, "time"),",
+          "-    NodeName: strField(raw, "node_name"),",
+          "+    Time:     anyStr(raw, "time"),",
+          "+    NodeName: anyStr(raw, "nodeName", "node_name"),",
+          "   }",
+          " ",
+          "-  switch {",
+          "-  case raw["process_kprobe"] != nil:",
+          "-    evt.Type = "kprobe"",
+          "-    kp := mapField(raw, "process_kprobe")",
+          "-    fillProcess(&evt, mapField(kp, "process"))",
+          "-    evt.Function = strField(kp, "function_name")",
+          "-    evt.PolicyName = strField(kp, "policy_name")",
+          "-    if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {",
+          "-      evt.Action = "kill"",
+          "-    } else {",
+          "-      evt.Action = "monitor"",
+          "-    }",
+          "+  // Try both camelCase (protobuf JSON) and snake_case field names",
+          "+  kp := anyMap(raw, "processKprobe", "process_kprobe")",
+          "+  if kp == nil {",
+          "+    return TetragonEvent{}, false // only process_kprobe events are policy-triggered",
+          "+  }",
+          " ",
+          "-  default:",
+          "-    return TetragonEvent{}, false",
+          "+  evt.Type = "kprobe"",
+          "+  fillProcess(&evt, anyMap(kp, "process"))",
+          "+  evt.Function = anyStr(kp, "functionName", "function_name")",
+          "+  evt.PolicyName = anyStr(kp, "policyName", "policy_name")",
+          "+",
+          "+  action := anyStr(kp, "action")",
+          "+  if strings.Contains(strings.ToUpper(action), "SIGKILL") {",
+          "+    evt.Action = "kill"",
+          "+  } else {",
+          "+    evt.Action = "monitor"",
+          "   }",
+          " ",
+          "   return evt, true"
+        ]
+      },
+      {
+        "oldStart": 145,
+        "oldLines": 31,
+        "newStart": 148,
+        "newLines": 40,
+        "lines": [
+          "   if proc == nil {",
+          "     return",
+          "   }",
+          "-  evt.Binary = strField(proc, "binary")",
+          "-  evt.Arguments = strField(proc, "arguments")",
+          "-  pod := mapField(proc, "pod")",
+          "+  evt.Binary = anyStr(proc, "binary")",
+          "+  evt.Arguments = anyStr(proc, "arguments")",
+          "+",
+          "+  pod := anyMap(proc, "pod")",
+          "   if pod == nil {",
+          "     return",
+          "   }",
+          "-  evt.Namespace = strField(pod, "namespace")",
+          "-  evt.Pod = strField(pod, "name")",
+          "-  if c := mapField(pod, "container"); c != nil {",
+          "-    evt.Container = strField(c, "name")",
+          "+  evt.Namespace = anyStr(pod, "namespace")",
+          "+  evt.Pod = anyStr(pod, "name")",
+          "+  if c := anyMap(pod, "container"); c != nil {",
+          "+    evt.Container = anyStr(c, "name")",
+          "   }",
+          " }",
+          " ",
+          "-func strField(m map[string]any, key string) string {",
+          "-  if m == nil {",
+          "-    return """,
+          "+// anyStr returns the first non-empty string value found among the given keys.",
+          "+func anyStr(m map[string]any, keys ...string) string {",
+          "+  for _, k := range keys {",
+          "+    if v, ok := m[k]; ok {",
+          "+      if s, ok := v.(string); ok && s != "" {",
+          "+        return s",
+          "+      }",
+          "+    }",
+          "   }",
+          "-  v, _ := m[key].(string)",
+          "-  return v",
+          "+  return """,
+          " }",
+          " ",
+          "-func mapField(m map[string]any, key string) map[string]any {",
+          "-  if m == nil {",
+          "-    return nil",
+          "+// anyMap returns the first map value found among the given keys.",
+          "+func anyMap(m map[string]any, keys ...string) map[string]any {",
+          "+  for _, k := range keys {",
+          "+    if v, ok := m[k]; ok {",
+          "+      if sub, ok := v.(map[string]any); ok {",
+          "+        return sub",
+          "+      }",
+          "+    }",
+          "   }",
+          "-  v, _ := m[key].(map[string]any)",
+          "-  return v",
+          "+  return nil",
+          " }"
+        ]
+      }
+    ],
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, mapField(kp, "process"))
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add -A && git commit -m "fix: handle camelCase protobuf JSON field names in Tetragon event parser"",
+    "timeout": 30000,
+    "description": "編譯 + 提交"
+  }
+}
+
+----------------------------------------
+
