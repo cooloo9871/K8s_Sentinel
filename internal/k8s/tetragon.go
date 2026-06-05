@@ -49,7 +49,8 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "tetragon",
-			Command:   []string{"tetra", "getevents", "-o", "json"},
+			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},
 			Stdin:     false,
 			Stdout:    true,
 			Stderr:    false,
@@ -122,18 +123,6 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	}
 
 	switch {
-	case raw["process_exec"] != nil:
-		evt.Type = "exec"
-		exec := mapField(raw, "process_exec")
-		fillProcess(&evt, mapField(exec, "process"))
-		if p := mapField(exec, "parent"); p != nil {
-			evt.ParentBin = strField(p, "binary")
-		}
-
-	case raw["process_exit"] != nil:
-		evt.Type = "exit"
-		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
-
 	case raw["process_kprobe"] != nil:
 		evt.Type = "kprobe"
 		kp := mapField(raw, "process_kprobe")

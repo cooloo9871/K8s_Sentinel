@@ -20,7 +20,7 @@ import type { TetragonEvent } from '../api/types'
 
 const MAX_EVENTS = 500
 
-type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'
+type FilterType = 'all' | 'kill'
 
 function EventTypeBadge({ type, action }: { type: string; action: string }) {
   if (type === 'exec') return <Badge variant="secondary">exec</Badge>
@@ -104,7 +104,7 @@ export function SecurityEventsPage() {
         <div>
           <h4 className="text-xl font-semibold">Security Events</h4>
           <p className="text-sm text-muted-foreground">
-            Real-time Tetragon runtime event stream
+            Policy-triggered kprobe events from your TracingPolicies
           </p>
         </div>
 
@@ -131,10 +131,7 @@ export function SecurityEventsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all">All Events</SelectItem>
-                <SelectItem value="exec">Process Exec</SelectItem>
-                <SelectItem value="exit">Process Exit</SelectItem>
-                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="all">All Policy Events</SelectItem>
                 <SelectItem value="kill">Kills Only</SelectItem>
               </SelectGroup>
             </SelectContent>
@@ -169,7 +166,7 @@ export function SecurityEventsPage() {
         {/* Stats bar */}
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
           <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
-          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
           <span className="text-destructive">
             {events.filter(e => e.action === 'kill').length} kills
           </span>

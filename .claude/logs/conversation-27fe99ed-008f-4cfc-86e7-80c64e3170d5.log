@@ -105114,3 +105114,2109 @@ ok  	github.com/brobridge/sentinel/internal/policy	0.002s",
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: remove file operation selector (read/write/open had no effect on kprobe)"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 5ab476f] feat: remove file operation selector (read/write/open had no effect on kprobe)
+ 8 files changed, 2042 insertions(+), 80 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "5ab476f",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。共更新 8 個檔案：
+
+| 檔案 | 變更 |
+|---|---|
+| `api/types.ts` | `FileRule` 移除 `operation` 欄位 |
+| `FileSection.tsx` | 移除 operation Select，只保留路徑輸入 |
+| `PolicyForm.tsx` | `FileEntry` type 移除 operation |
+| `formToYaml.ts` | 無需改（已只用 paths） |
+| `yamlToForm.ts` | 解析時不再讀 operation |
+| `formToYaml.test.ts` | 移除所有 `operation:` 欄位 |
+| `internal/policy/types.go` | `FileRule` 移除 `Operation` 欄位 |
+| `internal/policy/builder_test.go` | 移除所有 `Operation:` 欄位 |"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "然後 Security Events 為何我沒做任何 policy 他就會看到一堆的 event?我要針對我有定義的 policy 才看到這些 events"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)",
+    "new_string": "	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)",
+    "new_string": "	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)",
+    "newString": "	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, mapField(kp, "process"))
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 49,
+        "oldLines": 7,
+        "newStart": 49,
+        "newLines": 8,
+        "lines": [
+          "     SubResource("exec").",
+          "     VersionedParams(&corev1.PodExecOptions{",
+          "       Container: "tetragon",",
+          "-      Command:   []string{"tetra", "getevents", "-o", "json"},",
+          "+      // --event-types filters at source; only kprobe events are policy-triggered.",
+          "+      Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},",
+          "       Stdin:     false,",
+          "       Stdout:    true,",
+          "       Stderr:    false,"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:",
+    "new_string": "	switch {
+	case raw["process_kprobe"] != nil:",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:",
+    "new_string": "	switch {
+	case raw["process_kprobe"] != nil:",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:",
+    "newString": "	switch {
+	case raw["process_kprobe"] != nil:",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			// --event-types filters at source; only kprobe events are policy-triggered.
+			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		exec := mapField(raw, "process_exec")
+		fillProcess(&evt, mapField(exec, "process"))
+		if p := mapField(exec, "parent"); p != nil {
+			evt.ParentBin = strField(p, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, mapField(kp, "process"))
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		if strings.Contains(strings.ToUpper(strField(kp, "action")), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 123,
+        "oldLines": 18,
+        "newStart": 123,
+        "newLines": 6,
+        "lines": [
+          "   }",
+          " ",
+          "   switch {",
+          "-  case raw["process_exec"] != nil:",
+          "-    evt.Type = "exec"",
+          "-    exec := mapField(raw, "process_exec")",
+          "-    fillProcess(&evt, mapField(exec, "process"))",
+          "-    if p := mapField(exec, "parent"); p != nil {",
+          "-      evt.ParentBin = strField(p, "binary")",
+          "-    }",
+          "-",
+          "-  case raw["process_exit"] != nil:",
+          "-    evt.Type = "exit"",
+          "-    fillProcess(&evt, mapField(mapField(raw, "process_exit"), "process"))",
+          "-",
+          "   case raw["process_kprobe"] != nil:",
+          "     evt.Type = "kprobe"",
+          "     kp := mapField(raw, "process_kprobe")"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'",
+    "new_string": "type FilterType = 'all' | 'kill'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'",
+    "new_string": "type FilterType = 'all' | 'kill'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'",
+    "newString": "type FilterType = 'all' | 'kill'",
+    "originalFile": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+
+type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Real-time Tetragon runtime event stream
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 20,
+        "oldLines": 7,
+        "newStart": 20,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " const MAX_EVENTS = 500",
+          " ",
+          "-type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'",
+          "+type FilterType = 'all' | 'kill'",
+          " ",
+          " function EventTypeBadge({ type, action }: { type: string; action: string }) {",
+          "   if (type === 'exec') return <Badge variant="secondary">exec</Badge>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Cluster-wide\\|Warning and Tetragon\\|violation events" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "description": "找描述文字位置"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Cluster-wide\\|Warning and Tetragon\\|violation events" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "description": "找描述文字位置"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "returnCodeInterpretation": "No matches found",
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Real-time\\|stream\\|subtitle\\|muted-fore" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -5",
+    "description": "找頁面描述行"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Real-time\\|stream\\|subtitle\\|muted-fore" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -5",
+    "description": "找頁面描述行"
+  },
+  "tool_response": {
+    "stdout": "36:  if (!iso) return <span className="text-muted-foreground">—</span>
+58:    const es = new EventSource('/api/events/stream')
+71:    es.addEventListener('stream-error', (e: MessageEvent) => {
+106:          <p className="text-sm text-muted-foreground">
+107:            Real-time Tetragon runtime event stream",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "            Real-time Tetragon runtime event stream",
+    "new_string": "            Policy-triggered kprobe events from your TracingPolicies",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "            Real-time Tetragon runtime event stream",
+    "new_string": "            Policy-triggered kprobe events from your TracingPolicies",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "            Real-time Tetragon runtime event stream",
+    "newString": "            Policy-triggered kprobe events from your TracingPolicies",
+    "originalFile": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+
+type FilterType = 'all' | 'kill'
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Real-time Tetragon runtime event stream
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 104,
+        "oldLines": 7,
+        "newStart": 104,
+        "newLines": 7,
+        "lines": [
+          "         <div>",
+          "           <h4 className="text-xl font-semibold">Security Events</h4>",
+          "           <p className="text-sm text-muted-foreground">",
+          "-            Real-time Tetragon runtime event stream",
+          "+            Policy-triggered kprobe events from your TracingPolicies",
+          "           </p>",
+          "         </div>",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "SelectItem\\|All Events\\|Exec\\|Kill" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "找 SelectItem 位置"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "SelectItem\\|All Events\\|Exec\\|Kill" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "找 SelectItem 位置"
+  },
+  "tool_response": {
+    "stdout": "17:  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+134:                <SelectItem value="all">All Events</SelectItem>
+135:                <SelectItem value="exec">Process Exec</SelectItem>
+136:                <SelectItem value="exit">Process Exit</SelectItem>
+137:                <SelectItem value="kprobe">Kprobe</SelectItem>
+138:                <SelectItem value="kill">Kills Only</SelectItem>",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>",
+    "new_string": "                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>",
+    "new_string": "                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>",
+    "newString": "                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>",
+    "originalFile": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+
+type FilterType = 'all' | 'kill'
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 131,
+        "oldLines": 10,
+        "newStart": 131,
+        "newLines": 7,
+        "lines": [
+          "             </SelectTrigger>",
+          "             <SelectContent>",
+          "               <SelectGroup>",
+          "-                <SelectItem value="all">All Events</SelectItem>",
+          "-                <SelectItem value="exec">Process Exec</SelectItem>",
+          "-                <SelectItem value="exit">Process Exit</SelectItem>",
+          "-                <SelectItem value="kprobe">Kprobe</SelectItem>",
+          "+                <SelectItem value="all">All Policy Events</SelectItem>",
+          "                 <SelectItem value="kill">Kills Only</SelectItem>",
+          "               </SelectGroup>",
+          "             </SelectContent>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>",
+    "new_string": "          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>",
+    "new_string": "          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>",
+    "newString": "          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>",
+    "originalFile": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+
+type FilterType = 'all' | 'kill'
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Policy Events</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 166,
+        "oldLines": 7,
+        "newStart": 166,
+        "newLines": 7,
+        "lines": [
+          "         {/* Stats bar */}",
+          "         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">",
+          "           <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>",
+          "-          <span>{events.filter(e => e.type === 'exec').length} execs</span>",
+          "+          <span>{events.filter(e => e.action === 'monitor').length} monitor</span>",
+          "           <span className="text-destructive">",
+          "             {events.filter(e => e.action === 'kill').length} kills",
+          "           </span>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1 && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "Go + TypeScript + 測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1 && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "Go + TypeScript + 測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  16:51:17
+   Duration  480ms (transform 20ms, setup 36ms, import 17ms, tests 4ms, environment 341ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: filter Security Events to policy-triggered kprobe events only"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+
