@@ -31,7 +31,7 @@ func New(cfg Config) http.Handler {
 	r.Get("/api/namespaces", listNamespaces(cfg.Store))
 	r.Get("/api/mode", getMode(cfg.Store))
 	r.Put("/api/mode", setMode(cfg.Store))
-	r.Get("/api/events", listEvents(cfg.Store))
+	r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
 
 	return r
 }

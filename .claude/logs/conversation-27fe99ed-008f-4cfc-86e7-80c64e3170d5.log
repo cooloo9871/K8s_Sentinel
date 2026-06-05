@@ -87233,3 +87233,5744 @@ export function AppLayout() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "feat: redesign dashboard, move global mode to policy list, remove mode sidebar item"",
+    "description": "提交所有變更"
+  },
+  "tool_response": {
+    "stdout": "[main 8b8914d] feat: redesign dashboard, move global mode to policy list, remove mode sidebar item
+ 5 files changed, 3873 insertions(+), 207 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "8b8914d",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。以下是所有改動：
+
+**側邊欄**
+- 移除 `Mode Control` 項目，Cluster 群組只保留 `Namespaces`
+
+**TracingPolicy 頁面頂部**
+- 新增全域模式橫幅：顯示目前模式 Badge + 描述文字 + Switch 按鈕
+- 點擊 Switch 會跳出 AlertDialog 確認，確認後統一更新所有 Policy 並刷新列表
+
+**Dashboard 重新設計**
+- 頁首改為 `Overview` + 副標題，更有層次感
+- Stat cards 改為橫向 icon + 數字的設計，icon 有色調背景
+- 顯示的統計：Total Policies、Protect Mode 數量、Namespaces、Global Mode
+- Recent Policies 表格新增 Mode 欄位，並加入相對時間顯示（"2h ago"）
+- 空狀態有 icon + 引導按鈕
+- 右上角 Refresh 按鈕
+
+**整體**
+- main 區域 padding 從 `p-6` 改為 `px-8 py-6`，內容更有呼吸空間"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "然後 TracingPolicy 重新設定既有的 policy 點進去後旁邊的 yaml 要可以看到當前的設定，並且要可以修改編輯"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+      "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+interface KProbeSpec {
+  call: string
+  syscall: boolean
+  args?: { index: number; type: string }[]
+  selectors: {
+    matchBinaries?: { operator: string; values: string[] }[]
+    matchArgs?: { index: number; operator: string; values: string[] }[]
+    matchActions: { action: string }[]
+  }[]
+}
+
+interface TracingPolicyDoc {
+  apiVersion: string
+  kind: string
+  metadata: { name: string; namespace?: string }
+  spec: {
+    podSelector?: { matchLabels: Record<string, string> }
+    kprobes: KProbeSpec[]
+  }
+}
+
+const FILE_OP_CALL: Record<string, string> = {
+  read: 'sys_read',
+  write: 'sys_write',
+  open: 'sys_openat',
+}
+
+export function formToYaml(input: PolicyFormInput, action: string): string {
+  const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
+
+  const doc: TracingPolicyDoc = {
+    apiVersion: 'cilium.io/v1alpha1',
+    kind,
+    metadata: { name: input.name, ...(input.namespace ? { namespace: input.namespace } : {}) },
+    spec: { kprobes: [] },
+  }
+
+  if (input.podSelector && Object.keys(input.podSelector).length > 0) {
+    doc.spec.podSelector = { matchLabels: input.podSelector }
+  }
+
+  for (const r of input.process ?? []) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [
+        {
+          matchBinaries: [{ operator: 'In', values: r.binaries }],
+          matchActions: [{ action }],
+        },
+      ],
+    })
+  }
+
+  for (const r of input.file ?? []) {
+    const call = FILE_OP_CALL[r.operation] ?? 'sys_write'
+    doc.spec.kprobes.push({
+      call,
+      syscall: true,
+      selectors: [
+        {
+          matchArgs: [{ index: 0, operator: 'Prefix', values: r.paths }],
+          matchActions: [{ action }],
+        },
+      ],
+    })
+  }
+
+  return yaml.dump(doc, { lineWidth: -1 })
+}
+",
+      "numLines": 75,
+      "startLine": 1,
+      "totalLines": 75
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+const FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read: 'read',
+  sys_write: 'write',
+  sys_openat: 'open',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ * Kprobes that don't match known calls (sys_execve, sys_read, sys_write, sys_openat)
+ * are silently ignored — the user can see and edit them in the YAML tab.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+    } else if (call in FILE_CALL_OP) {
+      const operation = FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+const FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read: 'read',
+  sys_write: 'write',
+  sys_openat: 'open',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ * Kprobes that don't match known calls (sys_execve, sys_read, sys_write, sys_openat)
+ * are silently ignored — the user can see and edit them in the YAML tab.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+    } else if (call in FILE_CALL_OP) {
+      const operation = FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+const FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read: 'read',
+  sys_write: 'write',
+  sys_openat: 'open',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ * Kprobes that don't match known calls (sys_execve, sys_read, sys_write, sys_openat)
+ * are silently ignored — the user can see and edit them in the YAML tab.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+    } else if (call in FILE_CALL_OP) {
+      const operation = FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "import { formToYaml } from '../utils/formToYaml'
+import type { PolicyFormInput } from '../api/types'",
+    "new_string": "import { formToYaml } from '../utils/formToYaml'
+import { yamlToForm } from '../utils/yamlToForm'
+import type { PolicyFormInput } from '../api/types'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "import { formToYaml } from '../utils/formToYaml'
+import type { PolicyFormInput } from '../api/types'",
+    "new_string": "import { formToYaml } from '../utils/formToYaml'
+import { yamlToForm } from '../utils/yamlToForm'
+import type { PolicyFormInput } from '../api/types'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "oldString": "import { formToYaml } from '../utils/formToYaml'
+import type { PolicyFormInput } from '../api/types'",
+    "newString": "import { formToYaml } from '../utils/formToYaml'
+import { yamlToForm } from '../utils/yamlToForm'
+import type { PolicyFormInput } from '../api/types'",
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { policyApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
+
+  useEffect(() => {
+    const work: Promise<void>[] = [namespaceApi.list().then(setNamespaces)]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          if (r.mode === 'Protect') {
+            setPolicyMode('Protect')
+          } else {
+            setPolicyMode('Monitoring')
+          }
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        setYamlEditorKey((k) => k + 1)
+      }
+    }
+    setActiveTab(tab)
+  }
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Per-policy mode selector */}
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Mode</Label>
+            <Select
+              value={policyMode}
+              onValueChange={(v) => setPolicyMode(v as 'Monitoring' | 'Protect')}
+            >
+              <SelectTrigger className="h-9 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="Monitoring">Monitoring</SelectItem>
+                  <SelectItem value="Protect">Protect</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            key={yamlEditorKey}
+            initialValue={yamlContent}
+            onValueChange={(v, valid) => {
+              setYamlContent(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 17,
+        "oldLines": 6,
+        "newStart": 17,
+        "newLines": 7,
+        "lines": [
+          " import { PolicyForm } from '../components/PolicyForm/PolicyForm'",
+          " import { YamlEditor } from '../components/YamlEditor'",
+          " import { formToYaml } from '../utils/formToYaml'",
+          "+import { yamlToForm } from '../utils/yamlToForm'",
+          " import type { PolicyFormInput } from '../api/types'",
+          " ",
+          " const EMPTY_FORM: PolicyFormInput = {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          if (r.mode === 'Protect') {
+            setPolicyMode('Protect')
+          } else {
+            setPolicyMode('Monitoring')
+          }
+        })
+      )
+    }",
+    "new_string": "    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          // Pre-populate form from existing policy YAML
+          const parsed = yamlToForm(r.rawYaml)
+          if (parsed) setFormValues(parsed)
+        })
+      )
+    }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          if (r.mode === 'Protect') {
+            setPolicyMode('Protect')
+          } else {
+            setPolicyMode('Monitoring')
+          }
+        })
+      )
+    }",
+    "new_string": "    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          // Pre-populate form from existing policy YAML
+          const parsed = yamlToForm(r.rawYaml)
+          if (parsed) setFormValues(parsed)
+        })
+      )
+    }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "oldString": "    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          if (r.mode === 'Protect') {
+            setPolicyMode('Protect')
+          } else {
+            setPolicyMode('Monitoring')
+          }
+        })
+      )
+    }",
+    "newString": "    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          // Pre-populate form from existing policy YAML
+          const parsed = yamlToForm(r.rawYaml)
+          if (parsed) setFormValues(parsed)
+        })
+      )
+    }",
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { policyApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
+import { yamlToForm } from '../utils/yamlToForm'
+import type { PolicyFormInput } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: undefined,
+  process: [],
+  file: [],
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
+
+  useEffect(() => {
+    const work: Promise<void>[] = [namespaceApi.list().then(setNamespaces)]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          if (r.mode === 'Protect') {
+            setPolicyMode('Protect')
+          } else {
+            setPolicyMode('Monitoring')
+          }
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        setYamlEditorKey((k) => k + 1)
+      }
+    }
+    setActiveTab(tab)
+  }
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Per-policy mode selector */}
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Mode</Label>
+            <Select
+              value={policyMode}
+              onValueChange={(v) => setPolicyMode(v as 'Monitoring' | 'Protect')}
+            >
+              <SelectTrigger className="h-9 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="Monitoring">Monitoring</SelectItem>
+                  <SelectItem value="Protect">Protect</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            key={yamlEditorKey}
+            initialValue={yamlContent}
+            onValueChange={(v, valid) => {
+              setYamlContent(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 53,
+        "oldLines": 11,
+        "newStart": 53,
+        "newLines": 10,
+        "lines": [
+          "       work.push(",
+          "         policyApi.get(name, namespace).then((r) => {",
+          "           setYamlContent(r.rawYaml)",
+          "-          if (r.mode === 'Protect') {",
+          "-            setPolicyMode('Protect')",
+          "-          } else {",
+          "-            setPolicyMode('Monitoring')",
+          "-          }",
+          "+          setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')",
+          "+          // Pre-populate form from existing policy YAML",
+          "+          const parsed = yamlToForm(r.rawYaml)",
+          "+          if (parsed) setFormValues(parsed)",
+          "         })",
+          "       )",
+          "     }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -6 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "TypeScript + 測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  18:15:22
+   Duration  482ms (transform 20ms, setup 36ms, import 16ms, tests 4ms, environment 348ms)
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/utils/yamlToForm.ts web/src/pages/PolicyEditPage.tsx && git commit -m "feat: parse existing policy YAML into form on edit, sync YAML preview"",
+    "description": "提交變更"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/utils/yamlToForm.ts web/src/pages/PolicyEditPage.tsx && git commit -m "feat: parse existing policy YAML into form on edit, sync YAML preview"",
+    "description": "提交變更"
+  },
+  "tool_response": {
+    "stdout": "[main 8272112] feat: parse existing policy YAML into form on edit, sync YAML preview
+ 2 files changed, 67 insertions(+), 5 deletions(-)
+ create mode 100644 web/src/utils/yamlToForm.ts",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "8272112",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。改動說明：
+
+**新增 `web/src/utils/yamlToForm.ts`**
+
+`yamlToForm(rawYaml)` 是 `formToYaml` 的反向操作，將 TracingPolicy YAML 解析回 `PolicyFormInput`：
+
+| YAML kprobe call | 解析為 |
+|---|---|
+| `sys_execve` + `matchBinaries.values` | `ProcessRule[]`，每個 binary 一條 |
+| `sys_read/sys_write/sys_openat` + `matchArgs.values` | `FileRule[]`，帶 operation 類型 |
+| `metadata.name / namespace` | `name / namespace` |
+
+無法識別的 kprobe（自訂 call）會被略過，使用者仍可在 YAML tab 看到並編輯完整內容。
+
+**`PolicyEditPage.tsx` 變更**
+
+載入既有 Policy 時多做一件事：
+```
+policyApi.get() → setYamlContent(r.rawYaml)
+                → setPolicyMode(...)
+                → setFormValues(yamlToForm(r.rawYaml))  ← 新增
+```
+
+效果：
+- 點進既有 Policy → Form tab 欄位自動填入現有設定
+- 右側 YAML Preview 同步顯示目前設定的 YAML
+- 修改任何欄位 → Preview 即時更新
+- 點 YAML tab → 自動同步表單產生的最新 YAML 供繼續編輯"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Sentinel 是專注針對 Cilium Tetragon 的 UI 管理工具，你認為他應該還要有哪些功能？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。改動說明：
+
+**新增 `web/src/utils/yamlToForm.ts`**
+
+`yamlToForm(rawYaml)` 是 `formToYaml` 的反向操作，將 TracingPolicy YAML 解析回 `PolicyFormInput`：
+
+| YAML kprobe call | 解析為 |
+|---|---|
+| `sys_execve` + `matchBinaries.values` | `ProcessRule[]`，每個 binary 一條 |
+| `sys_read/sys_write/sys_openat` + `matchArgs.values` | `FileRule[]`，帶 operation 類型 |
+| `metadata.name / namespace` | `name / namespace` |
+
+無法識別的 kprobe（自訂 call）會被略過，使用者仍可在 YAML tab 看到並編輯完整內容。
+
+**`PolicyEditPage.tsx` 變更**
+
+載入既有 Policy 時多做一件事：
+```
+policyApi.get() → setYamlContent(r.rawYaml)
+                → setPolicyMode(...)
+                → setFormValues(yamlToForm(r.rawYaml))  ← 新增
+```
+
+效果：
+- 點進既有 Policy → Form tab 欄位自動填入現有設定
+- 右側 YAML Preview 同步顯示目前設定的 YAML
+- 修改任何欄位 → Preview 即時更新
+- 點 YAML tab → 自動同步表單產生的最新 YAML 供繼續編輯"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "即時 Tetragon 事件流 跟上次做的 Security Events 不是同一個東西嗎？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "以下是我認為 Sentinel 應該補齊的功能，依優先順序排列：
+
+---
+
+## 核心缺口（最重要）
+
+### 1. 即時 Tetragon 事件流
+目前的 Security Events 只是 Kubernetes Warning 事件，**不是真正的 Tetragon runtime 事件**。Tetragon 透過 gRPC 輸出的才是真正有價值的資料：
+- 哪個 Pod 執行了哪個 process
+- 哪個 process 嘗試存取哪個檔案
+- 哪個連線被攔截
+- 哪個 process 被 Sigkill 終止
+
+這是 Tetragon 最核心的能力，沒有這個等於沒發揮工具的主要價值。
+
+### 2. 違規行為稽核紀錄（Audit Log）
+持久化儲存所有 Policy 觸發事件，供安全稽核使用：
+- 時間點、Pod、Namespace、觸發了哪條 Policy
+- 執行的 action（Post 紀錄 or Sigkill 終止）
+- 可依時間範圍、Namespace、Policy 篩選
+
+### 3. 工作負載覆蓋視圖（Coverage Map）
+- 列出叢集所有 Deployment / Pod
+- 標示哪些有 Policy 覆蓋、哪些沒有（**未覆蓋的才是風險點**）
+- 覆蓋率百分比
+
+---
+
+## 中優先（UX 效率提升）
+
+### 4. Policy 範本庫（Templates）
+預置常見安全場景的 Policy 範本：
+- Shell 偵測（bash/sh 執行攔截）
+- 敏感檔案保護（/etc/passwd、/etc/shadow）
+- 加密貨幣挖礦偵測（特定 binary pattern）
+
+一鍵套用範本再微調，大幅降低使用門檻。
+
+### 5. Policy 複製 / 版本比較
+- Clone 一條 Policy 做為基礎修改
+- 儲存修改前後的 YAML diff，讓操作可追溯
+
+### 6. Policy 匯出 / 匯入
+- 整批匯出所有 Policy 為 YAML bundle（方便備份或搬到另一個叢集）
+- 匯入外部的 Policy 清單
+- GitOps 整合（push 到 Git repo）
+
+---
+
+## 長期方向
+
+### 7. 多叢集支援
+- 從同一個 Sentinel UI 管理多個 K8s 叢集的 Tetragon Policy
+- 叢集之間比較 Policy 覆蓋差異
+
+### 8. 告警通知整合
+- Policy 觸發時 webhook 通知（Slack、Teams、PagerDuty）
+- 設定觸發閾值（例如同一 Pod 在 5 分鐘內觸發超過 N 次才告警）
+
+### 9. Hubble 整合
+- 在 Policy 違規事件旁邊附上對應的 Hubble 網路流量資料
+- 完整的 process → network 行為關聯
+
+---
+
+## 最應該先做的
+
+如果只能選一個：**即時 Tetragon 事件流**。
+
+這需要後端連接 Tetragon agent 的 gRPC API（port 54321），訂閱事件流，再透過 WebSocket 或 SSE 推送到前端。沒有這個，Sentinel 只是一個 Policy 的 CRUD 工具，而不是真正的「安全可觀測性 console」。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "幫我把 現有 Security Events 換成 即時 Tetragon 事件流 的功能"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/handler/events.go",
+      "content": "package handler
+
+import (
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func listEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		events, err := store.ListSecurityEvents(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if events == nil {
+			events = []k8s.SecurityEvent{}
+		}
+		writeJSON(w, http.StatusOK, events)
+	}
+}
+",
+      "numLines": 22,
+      "startLine": 1,
+      "totalLines": 22
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep "k8s.io/client-go\\|k8s.io/api" /home/bigred/Sentinel/go.mod | head -8",
+    "description": "確認 client-go 版本及 k8s.io/api 是否可用"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep "k8s.io/client-go\\|k8s.io/api" /home/bigred/Sentinel/go.mod | head -8",
+    "description": "確認 client-go 版本及 k8s.io/api 是否可用"
+  },
+  "tool_response": {
+    "stdout": "	k8s.io/apimachinery v0.29.3
+	k8s.io/client-go v0.29.3",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
+// NewTypedClient creates a typed k8s client using in-cluster config.
+func NewTypedClient() (*kubernetes.Clientset, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(cfg)
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
+// NewTypedClient creates a typed k8s client using in-cluster config.
+func NewTypedClient() (*kubernetes.Clientset, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(cfg)
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/client.go",
+    "content": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+
+// NewTypedClient creates a typed k8s client using in-cluster config.
+func NewTypedClient() (*kubernetes.Clientset, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(cfg)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 3,
+        "oldLines": 6,
+        "newStart": 3,
+        "newLines": 7,
+        "lines": [
+          " import (",
+          "   "k8s.io/apimachinery/pkg/runtime/schema"",
+          "   "k8s.io/client-go/dynamic"",
+          "+  "k8s.io/client-go/kubernetes"",
+          "   "k8s.io/client-go/rest"",
+          " )",
+          " "
+        ]
+      },
+      {
+        "oldStart": 37,
+        "oldLines": 3,
+        "newStart": 38,
+        "newLines": 12,
+        "lines": [
+          "   }",
+          "   return dynamic.NewForConfig(cfg)",
+          " }",
+          "+",
+          "+// NewTypedClient creates a typed k8s client using in-cluster config.",
+          "+func NewTypedClient() (*kubernetes.Clientset, error) {",
+          "+  cfg, err := rest.InClusterConfig()",
+          "+  if err != nil {",
+          "+    return nil, err",
+          "+  }",
+          "+  return kubernetes.NewForConfig(cfg)",
+          "+}"
+        ]
+      }
+    ],
+    "originalFile": "package k8s
+
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+)
+
+var (
+	tracingPolicyGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpolicies",
+	}
+	tracingPolicyNamespacedGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v1alpha1",
+		Resource: "tracingpoliciesnamespaced",
+	}
+	namespaceGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "namespaces",
+	}
+	eventsGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+)
+
+// NewDynamicClient creates a dynamic k8s client using in-cluster config.
+func NewDynamicClient() (dynamic.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(cfg)
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"",
+    "new_string": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"",
+    "new_string": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"",
+    "newString": "	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"`  // "cluster" or "namespaced"
+	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		Mode:      detectMode(string(rawYAML)),
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+
+// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
+func detectMode(rawYAML string) string {
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+		return "Monitoring"
+	}
+	post, kill := 0, 0
+	for _, kp := range tp.Spec.KProbes {
+		for _, sel := range kp.Selectors {
+			for _, act := range sel.MatchActions {
+				if act.Action == policy.ActionSigkill {
+					kill++
+				} else {
+					post++
+				}
+			}
+		}
+	}
+	if kill == 0 {
+		return "Monitoring"
+	}
+	if post == 0 {
+		return "Protect"
+	}
+	return "Mixed"
+}
+
+// SetPolicyMode updates all kprobe actions in a single policy.
+func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	record, err := s.Get(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
+		return fmt.Errorf("parse policy %q: %w", name, err)
+	}
+	for i := range tp.Spec.KProbes {
+		for j := range tp.Spec.KProbes[i].Selectors {
+			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+			}
+		}
+	}
+	return s.Apply(ctx, tp)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 11,
+        "oldLines": 6,
+        "newStart": 11,
+        "newLines": 7,
+        "lines": [
+          "   metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"",
+          "   "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"",
+          "   "k8s.io/client-go/dynamic"",
+          "+  "k8s.io/client-go/kubernetes"",
+          "   "sigs.k8s.io/yaml"",
+          " ",
+          "   "github.com/brobridge/sentinel/internal/policy""
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}",
+    "new_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}",
+    "new_string": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}",
+    "newString": "// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+	typed  *kubernetes.Clientset
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
+}",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
+
+	"github.com/brobridge/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"`  // "cluster" or "namespaced"
+	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client dynamic.Interface
+}
+
+// NewStore creates a Store wrapping the given dynamic client.
+func NewStore(client dynamic.Interface) *Store {
+	return &Store{client: client}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		Mode:      detectMode(string(rawYAML)),
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+
+// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
+func detectMode(rawYAML string) string {
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+		return "Monitoring"
+	}
+	post, kill := 0, 0
+	for _, kp := range tp.Spec.KProbes {
+		for _, sel := range kp.Selectors {
+			for _, act := range sel.MatchActions {
+				if act.Action == policy.ActionSigkill {
+					kill++
+				} else {
+					post++
+				}
+			}
+		}
+	}
+	if kill == 0 {
+		return "Monitoring"
+	}
+	if post == 0 {
+		return "Protect"
+	}
+	return "Mixed"
+}
+
+// SetPolicyMode updates all kprobe actions in a single policy.
+func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	record, err := s.Get(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
+		return fmt.Errorf("parse policy %q: %w", name, err)
+	}
+	for i := range tp.Spec.KProbes {
+		for j := range tp.Spec.KProbes[i].Selectors {
+			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+			}
+		}
+	}
+	return s.Apply(ctx, tp)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 30,
+        "oldLines": 11,
+        "newStart": 30,
+        "newLines": 12,
+        "lines": [
+          " // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.",
+          " type Store struct {",
+          "   client dynamic.Interface",
+          "+  typed  *kubernetes.Clientset",
+          " }",
+          " ",
+          "-// NewStore creates a Store wrapping the given dynamic client.",
+          "-func NewStore(client dynamic.Interface) *Store {",
+          "-  return &Store{client: client}",
+          "+// NewStore creates a Store wrapping the given clients.",
+          "+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {",
+          "+  return &Store{client: client, typed: typed}",
+          " }",
+          " ",
+          " // List returns all cluster-wide and namespaced policies."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents finds a Tetragon DaemonSet pod and streams parsed events
+// into the returned channel. The channel is closed when streaming ends.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil {
+		return fmt.Errorf("typed kubernetes client not available")
+	}
+
+	// Find Tetragon pods (try common label selectors)
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	tailLines := int64(100)
+	req := s.typed.CoreV1().Pods("kube-system").GetLogs(podName, &corev1.PodLogOptions{
+		Container: "tetragon",
+		Follow:    true,
+		TailLines: &tailLines,
+	})
+
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return fmt.Errorf("open log stream for pod %s: %w", podName, err)
+	}
+	defer stream.Close()
+
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	return scanner.Err()
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	selectors := []string{
+		"app.kubernetes.io/name=tetragon",
+		"app=tetragon",
+	}
+	for _, sel := range selectors {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		fillProcess(&evt, mapField(raw, "process_exec"), "process")
+		if parent := mapField(mapField(raw, "process_exec"), "parent"); parent != nil {
+			evt.ParentBin = strField(parent, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(raw, "process_exit"), "process")
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, kp, "process")
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		action := strField(kp, "action")
+		if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, parent map[string]any, key string) {
+	proc := mapField(parent, key)
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents finds a Tetragon DaemonSet pod and streams parsed events
+// into the returned channel. The channel is closed when streaming ends.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil {
+		return fmt.Errorf("typed kubernetes client not available")
+	}
+
+	// Find Tetragon pods (try common label selectors)
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	tailLines := int64(100)
+	req := s.typed.CoreV1().Pods("kube-system").GetLogs(podName, &corev1.PodLogOptions{
+		Container: "tetragon",
+		Follow:    true,
+		TailLines: &tailLines,
+	})
+
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return fmt.Errorf("open log stream for pod %s: %w", podName, err)
+	}
+	defer stream.Close()
+
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	return scanner.Err()
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	selectors := []string{
+		"app.kubernetes.io/name=tetragon",
+		"app=tetragon",
+	}
+	for _, sel := range selectors {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		fillProcess(&evt, mapField(raw, "process_exec"), "process")
+		if parent := mapField(mapField(raw, "process_exec"), "parent"); parent != nil {
+			evt.ParentBin = strField(parent, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(raw, "process_exit"), "process")
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, kp, "process")
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		action := strField(kp, "action")
+		if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, parent map[string]any, key string) {
+	proc := mapField(parent, key)
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "exec", "exit", "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents finds a Tetragon DaemonSet pod and streams parsed events
+// into the returned channel. The channel is closed when streaming ends.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil {
+		return fmt.Errorf("typed kubernetes client not available")
+	}
+
+	// Find Tetragon pods (try common label selectors)
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	tailLines := int64(100)
+	req := s.typed.CoreV1().Pods("kube-system").GetLogs(podName, &corev1.PodLogOptions{
+		Container: "tetragon",
+		Follow:    true,
+		TailLines: &tailLines,
+	})
+
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return fmt.Errorf("open log stream for pod %s: %w", podName, err)
+	}
+	defer stream.Close()
+
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	return scanner.Err()
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	selectors := []string{
+		"app.kubernetes.io/name=tetragon",
+		"app=tetragon",
+	}
+	for _, sel := range selectors {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     strField(raw, "time"),
+		NodeName: strField(raw, "node_name"),
+	}
+
+	switch {
+	case raw["process_exec"] != nil:
+		evt.Type = "exec"
+		fillProcess(&evt, mapField(raw, "process_exec"), "process")
+		if parent := mapField(mapField(raw, "process_exec"), "parent"); parent != nil {
+			evt.ParentBin = strField(parent, "binary")
+		}
+
+	case raw["process_exit"] != nil:
+		evt.Type = "exit"
+		fillProcess(&evt, mapField(raw, "process_exit"), "process")
+
+	case raw["process_kprobe"] != nil:
+		evt.Type = "kprobe"
+		kp := mapField(raw, "process_kprobe")
+		fillProcess(&evt, kp, "process")
+		evt.Function = strField(kp, "function_name")
+		evt.PolicyName = strField(kp, "policy_name")
+		action := strField(kp, "action")
+		if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+			evt.Action = "kill"
+		} else {
+			evt.Action = "monitor"
+		}
+
+	default:
+		return TetragonEvent{}, false
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, parent map[string]any, key string) {
+	proc := mapField(parent, key)
+	if proc == nil {
+		return
+	}
+	evt.Binary = strField(proc, "binary")
+	evt.Arguments = strField(proc, "arguments")
+
+	pod := mapField(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = strField(pod, "namespace")
+	evt.Pod = strField(pod, "name")
+	if c := mapField(pod, "container"); c != nil {
+		evt.Container = strField(c, "name")
+	}
+}
+
+func strField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func mapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, _ := m[key].(map[string]any)
+	return v
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		events := make(chan k8s.TetragonEvent, 256)
+
+		go func() {
+			defer close(events)
+			if err := store.StreamTetragonEvents(ctx, events); err != nil {
+				// Send error as a special SSE event so the client can display it
+				fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", err.Error())
+				flusher.Flush()
+			}
+		}()
+
+		for {
+			select {
+			case evt, ok := <-events:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		events := make(chan k8s.TetragonEvent, 256)
+
+		go func() {
+			defer close(events)
+			if err := store.StreamTetragonEvents(ctx, events); err != nil {
+				// Send error as a special SSE event so the client can display it
+				fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", err.Error())
+				flusher.Flush()
+			}
+		}()
+
+		for {
+			select {
+			case evt, ok := <-events:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/handler/events.go",
+    "content": "package handler
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		events := make(chan k8s.TetragonEvent, 256)
+
+		go func() {
+			defer close(events)
+			if err := store.StreamTetragonEvents(ctx, events); err != nil {
+				// Send error as a special SSE event so the client can display it
+				fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", err.Error())
+				flusher.Flush()
+			}
+		}()
+
+		for {
+			select {
+			case evt, ok := <-events:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "data: %s\
+\
+", data)
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 21,
+        "newStart": 1,
+        "newLines": 58,
+        "lines": [
+          " package handler",
+          " ",
+          " import (",
+          "+  "context"",
+          "+  "encoding/json"",
+          "+  "fmt"",
+          "   "net/http"",
+          " ",
+          "   "github.com/brobridge/sentinel/internal/k8s"",
+          " )",
+          " ",
+          "-func listEvents(store *k8s.Store) http.HandlerFunc {",
+          "+func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {",
+          "   return func(w http.ResponseWriter, r *http.Request) {",
+          "-    events, err := store.ListSecurityEvents(r.Context())",
+          "-    if err != nil {",
+          "-      writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})",
+          "+    flusher, ok := w.(http.Flusher)",
+          "+    if !ok {",
+          "+      http.Error(w, "streaming not supported", http.StatusInternalServerError)",
+          "       return",
+          "     }",
+          "-    if events == nil {",
+          "-      events = []k8s.SecurityEvent{}",
+          "+",
+          "+    w.Header().Set("Content-Type", "text/event-stream")",
+          "+    w.Header().Set("Cache-Control", "no-cache")",
+          "+    w.Header().Set("Connection", "keep-alive")",
+          "+    w.Header().Set("X-Accel-Buffering", "no")",
+          "+    w.Header().Set("Access-Control-Allow-Origin", "*")",
+          "+",
+          "+    ctx, cancel := context.WithCancel(r.Context())",
+          "+    defer cancel()",
+          "+",
+          "+    events := make(chan k8s.TetragonEvent, 256)",
+          "+",
+          "+    go func() {",
+          "+      defer close(events)",
+          "+      if err := store.StreamTetragonEvents(ctx, events); err != nil {",
+          "+        // Send error as a special SSE event so the client can display it",
+          "+        fmt.Fprintf(w, "event: stream-error\
+data: %s\
+\
+", err.Error())",
+          "+        flusher.Flush()",
+          "+      }",
+          "+    }()",
+          "+",
+          "+    for {",
+          "+      select {",
+          "+      case evt, ok := <-events:",
+          "+        if !ok {",
+          "+          return",
+          "+        }",
+          "+        data, err := json.Marshal(evt)",
+          "+        if err != nil {",
+          "+          continue",
+          "+        }",
+          "+        fmt.Fprintf(w, "data: %s\
+\
+", data)",
+          "+        flusher.Flush()",
+          "+",
+          "+      case <-r.Context().Done():",
+          "+        return",
+          "+      }",
+          "     }",
+          "-    writeJSON(w, http.StatusOK, events)",
+          "   }",
+          " }"
+        ]
+      }
+    ],
+    "originalFile": "package handler
+
+import (
+	"net/http"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+func listEvents(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		events, err := store.ListSecurityEvents(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if events == nil {
+			events = []k8s.SecurityEvent{}
+		}
+		writeJSON(w, http.StatusOK, events)
+	}
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	r.Get("/api/events", listEvents(cfg.Store))",
+    "new_string": "	r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	r.Get("/api/events", listEvents(cfg.Store))",
+    "new_string": "	r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "oldString": "	r.Get("/api/events", listEvents(cfg.Store))",
+    "newString": "	r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/brobridge/sentinel/internal/k8s"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store *k8s.Store
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Get("/api/policies", listPolicies(cfg.Store))
+	r.Post("/api/policies", createPolicy(cfg.Store))
+	r.Post("/api/policies/preview", previewPolicy)
+	r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+	r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+	r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
+	r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))
+	r.Get("/api/events", listEvents(cfg.Store))
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 31,
+        "oldLines": 7,
+        "newStart": 31,
+        "newLines": 7,
+        "lines": [
+          "   r.Get("/api/namespaces", listNamespaces(cfg.Store))",
+          "   r.Get("/api/mode", getMode(cfg.Store))",
+          "   r.Put("/api/mode", setMode(cfg.Store))",
+          "-  r.Get("/api/events", listEvents(cfg.Store))",
+          "+  r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))",
+          " ",
+          "   return r",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "content": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, err := k8sclient.NewDynamicClient()
+	if err != nil {
+		log.Fatalf("k8s dynamic client: %v", err)
+	}
+
+	typedClient, err := k8sclient.NewTypedClient()
+	if err != nil {
+		log.Fatalf("k8s typed client: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "content": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, err := k8sclient.NewDynamicClient()
+	if err != nil {
+		log.Fatalf("k8s dynamic client: %v", err)
+	}
+
+	typedClient, err := k8sclient.NewTypedClient()
+	if err != nil {
+		log.Fatalf("k8s typed client: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/cmd/server/main.go",
+    "content": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, err := k8sclient.NewDynamicClient()
+	if err != nil {
+		log.Fatalf("k8s dynamic client: %v", err)
+	}
+
+	typedClient, err := k8sclient.NewTypedClient()
+	if err != nil {
+		log.Fatalf("k8s typed client: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 14,
+        "oldLines": 11,
+        "newStart": 14,
+        "newLines": 16,
+        "lines": [
+          " func main() {",
+          "   dynClient, err := k8sclient.NewDynamicClient()",
+          "   if err != nil {",
+          "-    log.Fatalf("k8s client: %v", err)",
+          "+    log.Fatalf("k8s dynamic client: %v", err)",
+          "   }",
+          " ",
+          "-  store := k8sclient.NewStore(dynClient)",
+          "+  typedClient, err := k8sclient.NewTypedClient()",
+          "+  if err != nil {",
+          "+    log.Fatalf("k8s typed client: %v", err)",
+          "+  }",
+          " ",
+          "+  store := k8sclient.NewStore(dynClient, typedClient)",
+          "+",
+          "   cfg := handler.Config{",
+          "     Store: store,",
+          "   }"
+        ]
+      },
+      {
+        "oldStart": 42,
+        "oldLines": 7,
+        "newStart": 47,
+        "newLines": 6,
+        "lines": [
+          "   }",
+          " }",
+          " ",
+          "-// spaHandler serves static files and falls back to index.html for SPA routing.",
+          " func spaHandler(fsys http.FileSystem) http.Handler {",
+          "   fileServer := http.FileServer(fsys)",
+          "   return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {"
+        ]
+      }
+    ],
+    "originalFile": "package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/brobridge/sentinel/internal/handler"
+	k8sclient "github.com/brobridge/sentinel/internal/k8s"
+	sentinelweb "github.com/brobridge/sentinel/web"
+)
+
+func main() {
+	dynClient, err := k8sclient.NewDynamicClient()
+	if err != nil {
+		log.Fatalf("k8s client: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient)
+
+	cfg := handler.Config{
+		Store: store,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// spaHandler serves static files and falls back to index.html for SPA routing.
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "old_string": "  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]",
+    "new_string": "  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "old_string": "  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]",
+    "new_string": "  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/deploy/base/clusterrole.yaml",
+    "oldString": "  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]",
+    "newString": "  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]",
+    "originalFile": "apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sentinel
+rules:
+  - apiGroups: ["cilium.io"]
+    resources: ["tracingpolicies", "tracingpoliciesnamespaced"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+",
+    "structuredPatch": [
+      {
+        "oldStart": 12,
+        "oldLines": 3,
+        "newStart": 12,
+        "newLines": 6,
+        "lines": [
+          "   - apiGroups: [""]",
+          "     resources: ["events"]",
+          "     verbs: ["get", "list", "watch"]",
+          "+  - apiGroups: [""]",
+          "+    resources: ["pods", "pods/log"]",
+          "+    verbs: ["get", "list", "watch"]"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go mod tidy && go build ./... 2>&1",
+    "timeout": 60000,
+    "description": "go mod tidy + build 驗證"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go mod tidy && go build ./... 2>&1",
+    "timeout": 60000,
+    "description": "go mod tidy + build 驗證"
+  },
+  "tool_response": {
+    "stdout": "go: downloading github.com/onsi/gomega v1.29.0
+go: downloading github.com/onsi/ginkgo/v2 v2.13.0
+go: downloading golang.org/x/tools v0.16.1",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 120000,
+    "description": "等待 build 完成"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "timeout": 120000,
+    "description": "等待 build 完成"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}",
+    "new_string": "export interface TetragonEvent {
+  type: 'exec' | 'exit' | 'kprobe'
+  time: string
+  nodeName: string
+  namespace: string
+  pod: string
+  container: string
+  binary: string
+  arguments: string
+  parentBin: string
+  action: 'monitor' | 'kill' | ''
+  policyName: string
+  function: string
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}",
+    "new_string": "export interface TetragonEvent {
+  type: 'exec' | 'exit' | 'kprobe'
+  time: string
+  nodeName: string
+  namespace: string
+  pod: string
+  container: string
+  binary: string
+  arguments: string
+  parentBin: string
+  action: 'monitor' | 'kill' | ''
+  policyName: string
+  function: string
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "oldString": "export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}",
+    "newString": "export interface TetragonEvent {
+  type: 'exec' | 'exit' | 'kprobe'
+  time: string
+  nodeName: string
+  namespace: string
+  pod: string
+  container: string
+  binary: string
+  arguments: string
+  parentBin: string
+  action: 'monitor' | 'kill' | ''
+  policyName: string
+  function: string
+}",
+    "originalFile": "export interface ProcessRule {
+  binaries: string[]
+}
+
+export interface FileRule {
+  paths: string[]
+  operation: 'read' | 'write' | 'open'
+}
+
+export interface PolicyFormInput {
+  name: string
+  namespace?: string
+  podSelector?: Record<string, string>
+  process?: ProcessRule[]
+  file?: FileRule[]
+}
+
+export interface PolicyRecord {
+  name: string
+  namespace?: string
+  scope: 'cluster' | 'namespaced'
+  mode: 'Monitoring' | 'Protect' | 'Mixed'
+  createdAt: string
+  rawYaml: string
+}
+
+export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface SecurityEvent {
+  namespace: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace: string
+  reason: string
+  message: string
+  type: string
+  count: number
+  firstTime: string
+  lastTime: string
+  source: string
+}
+
+export interface CreatePolicyPayload {
+  source: 'form' | 'yaml'
+  form?: PolicyFormInput
+  action?: string
+  rawYaml?: string
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 26,
+        "oldLines": 18,
+        "newStart": 26,
+        "newLines": 19,
+        "lines": [
+          " ",
+          " export type Mode = 'Monitoring' | 'Protect' | 'Mixed'",
+          " ",
+          "-export interface SecurityEvent {",
+          "+export interface TetragonEvent {",
+          "+  type: 'exec' | 'exit' | 'kprobe'",
+          "+  time: string",
+          "+  nodeName: string",
+          "   namespace: string",
+          "-  involvedKind: string",
+          "-  involvedName: string",
+          "-  involvedNamespace: string",
+          "-  reason: string",
+          "-  message: string",
+          "-  type: string",
+          "-  count: number",
+          "-  firstTime: string",
+          "-  lastTime: string",
+          "-  source: string",
+          "+  pod: string",
+          "+  container: string",
+          "+  binary: string",
+          "+  arguments: string",
+          "+  parentBin: string",
+          "+  action: 'monitor' | 'kill' | ''",
+          "+  policyName: string",
+          "+  function: string",
+          " }",
+          " ",
+          " export interface CreatePolicyPayload {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+    "new_string": "import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+    "new_string": "import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+    "newString": "import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 5,
+        "newStart": 1,
+        "newLines": 5,
+        "lines": [
+          " import axios from 'axios'",
+          "-import type { PolicyRecord, CreatePolicyPayload, Mode, SecurityEvent } from './types'",
+          "+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'",
+          " ",
+          " const api = axios.create({ baseURL: '/api', withCredentials: true })",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}",
+    "new_string": "",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}",
+    "new_string": "",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}",
+    "newString": "",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const eventsApi = {
+  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 41,
+        "oldLines": 6,
+        "newStart": 41,
+        "newLines": 3,
+        "lines": [
+          "   list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),",
+          " }",
+          " ",
+          "-export const eventsApi = {",
+          "-  list: (): Promise<SecurityEvent[]> => api.get('/events').then((r) => r.data),",
+          "-}"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+
+type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Real-time Tetragon runtime event stream
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+
+type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Real-time Tetragon runtime event stream
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "content": "import { useEffect, useRef, useState } from 'react'
+import {
+  IconActivity,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconTrash,
+  IconWifi,
+  IconWifiOff,
+} from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+
+type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'
+
+function EventTypeBadge({ type, action }: { type: string; action: string }) {
+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>
+  if (type === 'exit') return <Badge variant="outline">exit</Badge>
+  if (type === 'kprobe' && action === 'kill')
+    return <Badge variant="destructive">kill</Badge>
+  if (type === 'kprobe')
+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>
+  return <Badge variant="outline">{type}</Badge>
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const [events, setEvents] = useState<TetragonEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState<FilterType>('all')
+  const pausedRef = useRef(false)
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    setError('')
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      if (pausedRef.current) return
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => {
+      setConnected(false)
+      // EventSource auto-reconnects — show brief disconnected state
+    }
+  }
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  const togglePause = () => {
+    pausedRef.current = !paused
+    setPaused(!paused)
+  }
+
+  const clearEvents = () => setEvents([])
+
+  const filtered = events.filter((e) => {
+    if (filter === 'all') return true
+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'
+    return e.type === filter
+  })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Real-time Tetragon runtime event stream
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <>
+                <IconWifi size={16} className="text-green-500" />
+                <span className="text-green-600">Live</span>
+              </>
+            ) : (
+              <>
+                <IconWifiOff size={16} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Disconnected</span>
+              </>
+            )}
+          </div>
+
+          {/* Filter */}
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="exec">Process Exec</SelectItem>
+                <SelectItem value="exit">Process Exit</SelectItem>
+                <SelectItem value="kprobe">Kprobe</SelectItem>
+                <SelectItem value="kill">Kills Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={togglePause}>
+            {paused ? (
+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>
+            ) : (
+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={clearEvents}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">
+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>
+          <span>{events.filter(e => e.type === 'exec').length} execs</span>
+          <span className="text-destructive">
+            {events.filter(e => e.action === 'kill').length} kills
+          </span>
+          {paused && (
+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              PAUSED
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected ? 'Waiting for events...' : 'Not connected'}
+              </p>
+              <p className="text-sm">
+                Events will appear here as Tetragon detects runtime activity
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <EventTypeBadge type={e.type} action={e.action} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                      {e.parentBin && (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          ↑ {e.parentBin}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.pod ? (
+                        <>
+                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {e.policyName}
+                        </Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 150,
+        "newStart": 1,
+        "newLines": 259,
+        "lines": [
+          "-import { useCallback, useEffect, useState } from 'react'",
+          "+import { useEffect, useRef, useState } from 'react'",
+          "+import {",
+          "+  IconActivity,",
+          "+  IconPlayerPlay,",
+          "+  IconPlayerPause,",
+          "+  IconTrash,",
+          "+  IconWifi,",
+          "+  IconWifiOff,",
+          "+} from '@tabler/icons-react'",
+          " import { Card, CardContent } from '@/components/ui/card'",
+          " import {",
+          "-  Table,",
+          "-  TableHeader,",
+          "-  TableBody,",
+          "-  TableRow,",
+          "-  TableHead,",
+          "-  TableCell,",
+          "+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,",
+          " } from '@/components/ui/table'",
+          " import { Badge } from '@/components/ui/badge'",
+          " import { Button } from '@/components/ui/button'",
+          "-import { Skeleton } from '@/components/ui/skeleton'",
+          "-import { eventsApi } from '../api/client'",
+          "-import { useToast } from '../layout/AppToaster'",
+          "-import type { SecurityEvent } from '../api/types'",
+          "+import {",
+          "+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,",
+          "+} from '@/components/ui/select'",
+          "+import type { TetragonEvent } from '../api/types'",
+          " ",
+          "-function formatTime(iso: string): string {",
+          "-  if (!iso) return '—'",
+          "-  const d = new Date(iso)",
+          "-  if (isNaN(d.getTime())) return iso",
+          "-  return d.toLocaleString()",
+          "+const MAX_EVENTS = 500",
+          "+",
+          "+type FilterType = 'all' | 'exec' | 'exit' | 'kprobe' | 'kill'",
+          "+",
+          "+function EventTypeBadge({ type, action }: { type: string; action: string }) {",
+          "+  if (type === 'exec') return <Badge variant="secondary">exec</Badge>",
+          "+  if (type === 'exit') return <Badge variant="outline">exit</Badge>",
+          "+  if (type === 'kprobe' && action === 'kill')",
+          "+    return <Badge variant="destructive">kill</Badge>",
+          "+  if (type === 'kprobe')",
+          "+    return <Badge className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/20">kprobe</Badge>",
+          "+  return <Badge variant="outline">{type}</Badge>",
+          " }",
+          " ",
+          " function RelativeTime({ iso }: { iso: string }) {",
+          "   if (!iso) return <span className="text-muted-foreground">—</span>",
+          "   const d = new Date(iso)",
+          "-  if (isNaN(d.getTime())) return <span>{iso}</span>",
+          "-  const diffMs = Date.now() - d.getTime()",
+          "-  const diffMin = Math.floor(diffMs / 60000)",
+          "-  const diffHr = Math.floor(diffMin / 60)",
+          "-  const diffDay = Math.floor(diffHr / 24)",
+          "-  let label = ''",
+          "-  if (diffMin < 1) label = 'Just now'",
+          "-  else if (diffMin < 60) label = `${diffMin}m ago`",
+          "-  else if (diffHr < 24) label = `${diffHr}h ago`",
+          "-  else label = `${diffDay}d ago`",
+          "-  return <span title={formatTime(iso)}>{label}</span>",
+          "+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>",
+          "+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)",
+          "+  const label = diff < 5 ? 'just now'",
+          "+    : diff < 60 ? `${diff}s ago`",
+          "+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`",
+          "+    : `${Math.floor(diff / 3600)}h ago`",
+          "+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>",
+          " }",
+          " ",
+          " export function SecurityEventsPage() {",
+          "-  const toast = useToast()",
+          "-  const [events, setEvents] = useState<SecurityEvent[]>([])",
+          "-  const [loading, setLoading] = useState(true)",
+          "-  const [refreshing, setRefreshing] = useState(false)",
+          "+  const [events, setEvents] = useState<TetragonEvent[]>([])",
+          "+  const [connected, setConnected] = useState(false)",
+          "+  const [paused, setPaused] = useState(false)",
+          "+  const [error, setError] = useState('')",
+          "+  const [filter, setFilter] = useState<FilterType>('all')",
+          "+  const pausedRef = useRef(false)",
+          "+  const esRef = useRef<EventSource | null>(null)",
+          " ",
+          "-  const load = useCallback(async (isRefresh = false) => {",
+          "-    if (isRefresh) setRefreshing(true)",
+          "-    else setLoading(true)",
+          "-    try {",
+          "-      setEvents(await eventsApi.list())",
+          "-    } catch {",
+          "-      toast.error('Failed to load security events')",
+          "-    } finally {",
+          "-      setLoading(false)",
+          "-      setRefreshing(false)",
+          "+  const connect = () => {",
+          "+    setError('')",
+          "+    const es = new EventSource('/api/events/stream')",
+          "+    esRef.current = es",
+          "+",
+          "+    es.onopen = () => setConnected(true)",
+          "+",
+          "+    es.onmessage = (e) => {",
+          "+      if (pausedRef.current) return",
+          "+      try {",
+          "+        const evt: TetragonEvent = JSON.parse(e.data)",
+          "+        setEvents((prev) => [evt, ...prev].slice(0, MAX_EVENTS))",
+          "+      } catch {}",
+          "     }",
+          "+",
+          "+    es.addEventListener('stream-error', (e: MessageEvent) => {",
+          "+      setError(e.data)",
+          "+      setConnected(false)",
+          "+      es.close()",
+          "+    })",
+          "+",
+          "+    es.onerror = () => {",
+          "+      setConnected(false)",
+          "+      // EventSource auto-reconnects — show brief disconnected state",
+          "+    }",
+          "+  }",
+          "+",
+          "+  useEffect(() => {",
+          "+    connect()",
+          "+    return () => esRef.current?.close()",
+          "   }, [])",
+          " ",
+          "-  useEffect(() => { load() }, [load])",
+          "+  const togglePause = () => {",
+          "+    pausedRef.current = !paused",
+          "+    setPaused(!paused)",
+          "+  }",
+          " ",
+          "+  const clearEvents = () => setEvents([])",
+          "+",
+          "+  const filtered = events.filter((e) => {",
+          "+    if (filter === 'all') return true",
+          "+    if (filter === 'kill') return e.type === 'kprobe' && e.action === 'kill'",
+          "+    return e.type === filter",
+          "+  })",
+          "+",
+          "   return (",
+          "     <>",
+          "       <div className="mb-6 flex items-center justify-between">",
+          "         <div>",
+          "-          <h4 className="text-lg font-semibold">Security Events</h4>",
+          "+          <h4 className="text-xl font-semibold">Security Events</h4>",
+          "           <p className="text-sm text-muted-foreground">",
+          "-            Cluster-wide Warning and Tetragon violation events",
+          "+            Real-time Tetragon runtime event stream",
+          "           </p>",
+          "         </div>",
+          "-        <Button",
+          "-          variant="outline"",
+          "-          size="sm"",
+          "-          onClick={() => load(true)}",
+          "-          disabled={refreshing}",
+          "-        >",
+          "-          {refreshing ? 'Refreshing…' : 'Refresh'}",
+          "-        </Button>",
+          "+",
+          "+        <div className="flex items-center gap-3">",
+          "+          {/* Connection status */}",
+          "+          <div className="flex items-center gap-1.5 text-sm">",
+          "+            {connected ? (",
+          "+              <>",
+          "+                <IconWifi size={16} className="text-green-500" />",
+          "+                <span className="text-green-600">Live</span>",
+          "+              </>",
+          "+            ) : (",
+          "+              <>",
+          "+                <IconWifiOff size={16} className="text-muted-foreground" />",
+          "+                <span className="text-muted-foreground">Disconnected</span>",
+          "+              </>",
+          "+            )}",
+          "+          </div>",
+          "+",
+          "+          {/* Filter */}",
+          "+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>",
+          "+            <SelectTrigger className="h-9 w-36">",
+          "+              <SelectValue />",
+          "+            </SelectTrigger>",
+          "+            <SelectContent>",
+          "+              <SelectGroup>",
+          "+                <SelectItem value="all">All Events</SelectItem>",
+          "+                <SelectItem value="exec">Process Exec</SelectItem>",
+          "+                <SelectItem value="exit">Process Exit</SelectItem>",
+          "+                <SelectItem value="kprobe">Kprobe</SelectItem>",
+          "+                <SelectItem value="kill">Kills Only</SelectItem>",
+          "+              </SelectGroup>",
+          "+            </SelectContent>",
+          "+          </Select>",
+          "+",
+          "+          <Button variant="outline" size="sm" onClick={togglePause}>",
+          "+            {paused ? (",
+          "+              <><IconPlayerPlay size={14} className="mr-1.5" />Resume</>",
+          "+            ) : (",
+          "+              <><IconPlayerPause size={14} className="mr-1.5" />Pause</>",
+          "+            )}",
+          "+          </Button>",
+          "+",
+          "+          <Button variant="outline" size="sm" onClick={clearEvents}>",
+          "+            <IconTrash size={14} className="mr-1.5" />",
+          "+            Clear",
+          "+          </Button>",
+          "+        </div>",
+          "       </div>",
+          " ",
+          "+      {/* Error banner */}",
+          "+      {error && (",
+          "+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">",
+          "+          <span className="text-sm text-destructive">{error}</span>",
+          "+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => { setError(''); connect() }}>",
+          "+            Reconnect",
+          "+          </Button>",
+          "+        </div>",
+          "+      )}",
+          "+",
+          "       <Card>",
+          "+        {/* Stats bar */}",
+          "+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm text-muted-foreground">",
+          "+          <span>{filtered.length} events{filter !== 'all' ? ` (filtered)` : ''}</span>",
+          "+          <span>{events.filter(e => e.type === 'exec').length} execs</span>",
+          "+          <span className="text-destructive">",
+          "+            {events.filter(e => e.action === 'kill').length} kills",
+          "+          </span>",
+          "+          {paused && (",
+          "+            <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">",
+          "+              PAUSED",
+          "+            </span>",
+          "+          )}",
+          "+        </div>",
+          "+",
+          "         <CardContent className="p-0">",
+          "-          {loading ? (",
+          "-            <div className="flex flex-col gap-2 p-4">",
+          "-              {Array.from({ length: 6 }).map((_, i) => (",
+          "-                <Skeleton key={i} className="h-10 w-full rounded-lg" />",
+          "-              ))}",
+          "+          {filtered.length === 0 ? (",
+          "+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">",
+          "+              <IconActivity size={40} strokeWidth={1.5} />",
+          "+              <p className="text-base">",
+          "+                {connected ? 'Waiting for events...' : 'Not connected'}",
+          "+              </p>",
+          "+              <p className="text-sm">",
+          "+                Events will appear here as Tetragon detects runtime activity",
+          "+              </p>",
+          "             </div>",
+          "           ) : (",
+          "             <Table>",
+          "               <TableHeader>",
+          "                 <TableRow>",
+          "-                  <TableHead className="w-28">Type</TableHead>",
+          "-                  <TableHead>Object</TableHead>",
+          "-                  <TableHead>Reason</TableHead>",
+          "-                  <TableHead className="max-w-xs">Message</TableHead>",
+          "-                  <TableHead className="text-center w-16">Count</TableHead>",
+          "-                  <TableHead className="w-32">Last Seen</TableHead>",
+          "-                  <TableHead>Source</TableHead>",
+          "+                  <TableHead className="w-24">Type</TableHead>",
+          "+                  <TableHead>Binary</TableHead>",
+          "+                  <TableHead>Pod / Namespace</TableHead>",
+          "+                  <TableHead>Policy</TableHead>",
+          "+                  <TableHead>Function</TableHead>",
+          "+                  <TableHead>Node</TableHead>",
+          "+                  <TableHead className="w-24">Time</TableHead>",
+          "                 </TableRow>",
+          "               </TableHeader>",
+          "               <TableBody>",
+          "-                {events.length === 0 ? (",
+          "-                  <TableRow>",
+          "-                    <TableCell",
+          "-                      colSpan={7}",
+          "-                      className="py-12 text-center text-muted-foreground"",
+          "-                    >",
+          "-                      No security events found",
+          "+                {filtered.map((e, i) => (",
+          "+                  <TableRow",
+          "+                    key={i}",
+          "+                    className={e.action === 'kill' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}",
+          "+                  >",
+          "+                    <TableCell>",
+          "+                      <EventTypeBadge type={e.type} action={e.action} />",
+          "                     </TableCell>",
+          "-                  </TableRow>",
+          "-                ) : (",
+          "-                  events.map((e, i) => (",
+          "-                    <TableRow key={i}>",
+          "-                      <TableCell>",
+          "-                        <Badge variant={e.type === 'Warning' ? 'destructive' : 'secondary'}>",
+          "-                          {e.type || '—'}",
+          "-                        </Badge>",
+          "-                      </TableCell>",
+          "-                      <TableCell>",
+          "-                        <div className="font-medium">{e.involvedName}</div>",
+          "-                        <div className="text-xs text-muted-foreground">",
+          "-                          {e.involvedKind}",
+          "-                          {e.involvedNamespace ? ` / ${e.involvedNamespace}` : ''}",
+          "-                        </div>",
+          "-                      </TableCell>",
+          "-                      <TableCell className="font-mono text-xs">{e.reason || '—'}</TableCell>",
+          "-                      <TableCell className="max-w-xs">",
+          "-                        <p",
+          "-                          className="truncate text-sm"",
+          "-                          title={e.message}",
+          "-                        >",
+          "-                          {e.message || '—'}",
+          "+                    <TableCell>",
+          "+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>",
+          "+                      {e.arguments && (",
+          "+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>",
+          "+                          {e.arguments}",
+          "                         </p>",
+          "-                      </TableCell>",
+          "-                      <TableCell className="text-center text-sm">",
+          "-                        {e.count || 1}",
+          "-                      </TableCell>",
+          "-                      <TableCell className="text-sm text-muted-foreground">",
+          "-                        <RelativeTime iso={e.lastTime} />",
+          "-                      </TableCell>",
+          "-                      <TableCell className="text-xs text-muted-foreground">",
+          "-                        {e.source || '—'}",
+          "-                      </TableCell>",
+          "-                    </TableRow>",
+          "-                  ))",
+          "-                )}",
+          "+                      )}",
+          "+                      {e.parentBin && (",
+          "+                        <p className="font-mono text-xs text-muted-foreground">",
+          "+                          ↑ {e.parentBin}",
+          "+                        </p>",
+          "+                      )}",
+          "+                    </TableCell>",
+          "+                    <TableCell>",
+          "+                      {e.pod ? (",
+          "+                        <>",
+          "+                          <p className="text-sm font-medium">{e.pod}</p>",
+          "+                          <p className="text-xs text-muted-foreground">{e.namespace}{e.container ? ` / ${e.container}` : ''}</p>",
+          "+                        </>",
+          "+                      ) : (",
+          "+                        <span className="text-muted-foreground">—</span>",
+          "+                      )}",
+          "+                    </TableCell>",
+          "+                    <TableCell>",
+          "+                      {e.policyName ? (",
+          "+                        <Badge variant="outline" className="font-mono text-xs">",
+          "+                          {e.policyName}",
+          "+                        </Badge>",
+          "+                      ) : '—'}",
+          "+                    </TableCell>",
+          "+                    <TableCell className="font-mono text-xs text-muted-foreground">",
+          "+                      {e.function || '—'}",
+          "+                    </TableCell>",
+          "+                    <TableCell className="text-xs text-muted-foreground">",
+          "+                      {e.nodeName || '—'}",
+          "+                    </TableCell>",
+          "+                    <TableCell>",
+          "+                      <RelativeTime iso={e.time} />",
+          "+                    </TableCell>",
+          "+                  </TableRow>",
+          "+                ))}",
+          "               </TableBody>",
+          "             </Table>",
+          "           )}"
+        ]
+      }
+    ],
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { eventsApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { SecurityEvent } from '../api/types'
+
+function formatTime(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString()
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span>{iso}</span>
+  const diffMs = Date.now() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+  let label = ''
+  if (diffMin < 1) label = 'Just now'
+  else if (diffMin < 60) label = `${diffMin}m ago`
+  else if (diffHr < 24) label = `${diffHr}h ago`
+  else label = `${diffDay}d ago`
+  return <span title={formatTime(iso)}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const toast = useToast()
+  const [events, setEvents] = useState<SecurityEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+    try {
+      setEvents(await eventsApi.list())
+    } catch {
+      toast.error('Failed to load security events')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Cluster-wide Warning and Tetragon violation events
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => load(true)}
+          disabled={refreshing}
+        >
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Type</TableHead>
+                  <TableHead>Object</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead className="max-w-xs">Message</TableHead>
+                  <TableHead className="text-center w-16">Count</TableHead>
+                  <TableHead className="w-32">Last Seen</TableHead>
+                  <TableHead>Source</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-12 text-center text-muted-foreground"
+                    >
+                      No security events found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  events.map((e, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Badge variant={e.type === 'Warning' ? 'destructive' : 'secondary'}>
+                          {e.type || '—'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{e.involvedName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {e.involvedKind}
+                          {e.involvedNamespace ? ` / ${e.involvedNamespace}` : ''}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{e.reason || '—'}</TableCell>
+                      <TableCell className="max-w-xs">
+                        <p
+                          className="truncate text-sm"
+                          title={e.message}
+                        >
+                          {e.message || '—'}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-center text-sm">
+                        {e.count || 1}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <RelativeTime iso={e.lastTime} />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.source || '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go test ./... 2>&1 && cd /home/bigred/Sentinel/web && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "Go + TypeScript + 前端測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go test ./... 2>&1 && cd /home/bigred/Sentinel/web && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "Go + TypeScript + 前端測試 + build"
+  },
+  "tool_response": {
+    "stdout": "?   	github.com/brobridge/sentinel/cmd/server	[no test files]
+?   	github.com/brobridge/sentinel/internal/handler	[no test files]
+?   	github.com/brobridge/sentinel/internal/k8s	[no test files]
+ok  	github.com/brobridge/sentinel/internal/policy	(cached)
+?   	github.com/brobridge/sentinel/web	[no test files]
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  14:41:11
+   Duration  495ms (transform 23ms, setup 40ms, import 19ms, tests 4ms, environment 353ms)
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "feat: replace Security Events with real-time Tetragon event stream via SSE"",
+    "description": "提交所有變更"
+  }
+}
+
+----------------------------------------
+

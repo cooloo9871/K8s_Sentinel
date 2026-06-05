@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 
 	"github.com/brobridge/sentinel/internal/policy"
@@ -29,11 +30,12 @@ type PolicyRecord struct {
 // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
 type Store struct {
 	client dynamic.Interface
+	typed  *kubernetes.Clientset
 }
 
-// NewStore creates a Store wrapping the given dynamic client.
-func NewStore(client dynamic.Interface) *Store {
-	return &Store{client: client}
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset) *Store {
+	return &Store{client: client, typed: typed}
 }
 
 // List returns all cluster-wide and namespaced policies.

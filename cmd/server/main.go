@@ -14,10 +14,15 @@ import (
 func main() {
 	dynClient, err := k8sclient.NewDynamicClient()
 	if err != nil {
-		log.Fatalf("k8s client: %v", err)
+		log.Fatalf("k8s dynamic client: %v", err)
 	}
 
-	store := k8sclient.NewStore(dynClient)
+	typedClient, err := k8sclient.NewTypedClient()
+	if err != nil {
+		log.Fatalf("k8s typed client: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient)
 
 	cfg := handler.Config{
 		Store: store,
@@ -42,7 +47,6 @@ func main() {
 	}
 }
 
-// spaHandler serves static files and falls back to index.html for SPA routing.
 func spaHandler(fsys http.FileSystem) http.Handler {
 	fileServer := http.FileServer(fsys)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
