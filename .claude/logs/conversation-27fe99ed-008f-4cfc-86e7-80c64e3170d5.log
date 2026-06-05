@@ -96308,3 +96308,1810 @@ ok  	github.com/brobridge/sentinel/internal/policy	(cached)",
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "fix: replace pod log streaming with kubectl exec tetra getevents for real Tetragon events"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 2d416e3] fix: replace pod log streaming with kubectl exec tetra getevents for real Tetragon events
+ 8 files changed, 3416 insertions(+), 59 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "2d416e3",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "完成。修正說明：
+
+**舊方法（錯的）：** 讀取 Tetragon pod 的 stdout log
+- Tetragon pod log 只有啟動訊息、錯誤等 operational log
+- 安全事件（process exec、file access、kprobe）**不在 log 裡**
+
+**新方法（正確的）：** `kubectl exec tetra getevents -o json`
+- 等同於你手動跑的 `tetra getevents -o compact` 指令
+- 直接連 Tetragon 的 gRPC API，拿到真正的 eBPF 安全事件
+- JSON 格式與原本的 parser 相同，不需要改前端
+
+**架構變化：**
+
+```
+GET /api/events/stream
+  → K8s Exec API (SPDY)
+  → tetragon pod: tetra getevents -o json
+  → stdout pipe → bufio.Scanner → parseTetragonLog()
+  → SSE → 前端即時顯示
+```
+
+**需要重新部署** 讓 RBAC 和新的 image 生效：
+
+```bash
+kubectl apply -k deploy/base/
+# 或重 build image 後 rollout restart
+docker build -t quay.io/cooloo9871/sentinel:latest .
+docker push quay.io/cooloo9871/sentinel:latest
+kubectl -n sentinel-system rollout restart deployment/sentinel
+```"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "需要更正，透過 ui 產生的設定方式，監控檔案 讀跟寫 都沒生效，正確應該是要像以下
+🚀 process test1/bx1 /bin/bash -c "cat /etc/shadow"
+🚀 process test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+📚 read    test1/bx1 /bin/cat /etc/shadow
+💥 exit    test1/bx1 /bin/cat /etc/shadow 0
+🚀 process test1/bx1 /bin/bash -c "ls /root"
+🚀 process test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+📚 read    test1/bx1 /bin/ls /root
+💥 exit    test1/bx1 /bin/ls /root 0
+
+我之前是使用這個 yaml
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: monitor-sensitive-files
+  namespace: test1
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc/shadow"
+        - "/root""
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+interface KProbeMatchArg {
+  index: number
+  operator: string
+  values: string[]
+}
+
+interface KProbeSpec {
+  call: string
+  syscall: boolean
+  args?: { index: number; type: string }[]
+  selectors: {
+    matchBinaries?: { operator: string; values: string[] }[]
+    matchArgs?: KProbeMatchArg[]
+    matchActions: { action: string }[]
+  }[]
+}
+
+interface TracingPolicyDoc {
+  apiVersion: string
+  kind: string
+  metadata: { name: string; namespace?: string }
+  spec: {
+    podSelector?: { matchLabels: Record<string, string> }
+    kprobes: KProbeSpec[]
+  }
+}
+
+// File permission values for security_file_permission arg[1]
+const FILE_OP_PERM: Record<string, string | null> = {
+  read:  '4',  // MAY_READ
+  write: '2',  // MAY_WRITE
+  open:  null, // no permission filter — monitor all access
+}
+
+export function formToYaml(input: PolicyFormInput, action: string): string {
+  const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
+
+  const doc: TracingPolicyDoc = {
+    apiVersion: 'cilium.io/v1alpha1',
+    kind,
+    metadata: { name: input.name, ...(input.namespace ? { namespace: input.namespace } : {}) },
+    spec: { kprobes: [] },
+  }
+
+  if (input.podSelector && Object.keys(input.podSelector).length > 0) {
+    doc.spec.podSelector = { matchLabels: input.podSelector }
+  }
+
+  // Process rules: sys_execve kprobe
+  for (const r of input.process ?? []) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [{
+        matchBinaries: [{ operator: 'In', values: r.binaries }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  // File rules: security_file_permission kprobe
+  // arg[0] = file object (path), arg[1] = permission int (MAY_READ=4, MAY_WRITE=2)
+  for (const r of input.file ?? []) {
+    const matchArgs: KProbeMatchArg[] = [
+      { index: 0, operator: 'Prefix', values: r.paths },
+    ]
+    const perm = FILE_OP_PERM[r.operation]
+    if (perm !== null && perm !== undefined) {
+      matchArgs.push({ index: 1, operator: 'Equal', values: [perm] })
+    }
+
+    doc.spec.kprobes.push({
+      call: 'security_file_permission',
+      syscall: false,
+      args: [
+        { index: 0, type: 'file' },
+        { index: 1, type: 'int' },
+      ],
+      selectors: [{ matchArgs, matchActions: [{ action }] }],
+    })
+  }
+
+  return yaml.dump(doc, { lineWidth: -1 })
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+interface KProbeMatchArg {
+  index: number
+  operator: string
+  values: string[]
+}
+
+interface KProbeSpec {
+  call: string
+  syscall: boolean
+  args?: { index: number; type: string }[]
+  selectors: {
+    matchBinaries?: { operator: string; values: string[] }[]
+    matchArgs?: KProbeMatchArg[]
+    matchActions: { action: string }[]
+  }[]
+}
+
+interface TracingPolicyDoc {
+  apiVersion: string
+  kind: string
+  metadata: { name: string; namespace?: string }
+  spec: {
+    podSelector?: { matchLabels: Record<string, string> }
+    kprobes: KProbeSpec[]
+  }
+}
+
+// File permission values for security_file_permission arg[1]
+const FILE_OP_PERM: Record<string, string | null> = {
+  read:  '4',  // MAY_READ
+  write: '2',  // MAY_WRITE
+  open:  null, // no permission filter — monitor all access
+}
+
+export function formToYaml(input: PolicyFormInput, action: string): string {
+  const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
+
+  const doc: TracingPolicyDoc = {
+    apiVersion: 'cilium.io/v1alpha1',
+    kind,
+    metadata: { name: input.name, ...(input.namespace ? { namespace: input.namespace } : {}) },
+    spec: { kprobes: [] },
+  }
+
+  if (input.podSelector && Object.keys(input.podSelector).length > 0) {
+    doc.spec.podSelector = { matchLabels: input.podSelector }
+  }
+
+  // Process rules: sys_execve kprobe
+  for (const r of input.process ?? []) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [{
+        matchBinaries: [{ operator: 'In', values: r.binaries }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  // File rules: security_file_permission kprobe
+  // arg[0] = file object (path), arg[1] = permission int (MAY_READ=4, MAY_WRITE=2)
+  for (const r of input.file ?? []) {
+    const matchArgs: KProbeMatchArg[] = [
+      { index: 0, operator: 'Prefix', values: r.paths },
+    ]
+    const perm = FILE_OP_PERM[r.operation]
+    if (perm !== null && perm !== undefined) {
+      matchArgs.push({ index: 1, operator: 'Equal', values: [perm] })
+    }
+
+    doc.spec.kprobes.push({
+      call: 'security_file_permission',
+      syscall: false,
+      args: [
+        { index: 0, type: 'file' },
+        { index: 1, type: 'int' },
+      ],
+      selectors: [{ matchArgs, matchActions: [{ action }] }],
+    })
+  }
+
+  return yaml.dump(doc, { lineWidth: -1 })
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+interface KProbeMatchArg {
+  index: number
+  operator: string
+  values: string[]
+}
+
+interface KProbeSpec {
+  call: string
+  syscall: boolean
+  args?: { index: number; type: string }[]
+  selectors: {
+    matchBinaries?: { operator: string; values: string[] }[]
+    matchArgs?: KProbeMatchArg[]
+    matchActions: { action: string }[]
+  }[]
+}
+
+interface TracingPolicyDoc {
+  apiVersion: string
+  kind: string
+  metadata: { name: string; namespace?: string }
+  spec: {
+    podSelector?: { matchLabels: Record<string, string> }
+    kprobes: KProbeSpec[]
+  }
+}
+
+// File permission values for security_file_permission arg[1]
+const FILE_OP_PERM: Record<string, string | null> = {
+  read:  '4',  // MAY_READ
+  write: '2',  // MAY_WRITE
+  open:  null, // no permission filter — monitor all access
+}
+
+export function formToYaml(input: PolicyFormInput, action: string): string {
+  const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
+
+  const doc: TracingPolicyDoc = {
+    apiVersion: 'cilium.io/v1alpha1',
+    kind,
+    metadata: { name: input.name, ...(input.namespace ? { namespace: input.namespace } : {}) },
+    spec: { kprobes: [] },
+  }
+
+  if (input.podSelector && Object.keys(input.podSelector).length > 0) {
+    doc.spec.podSelector = { matchLabels: input.podSelector }
+  }
+
+  // Process rules: sys_execve kprobe
+  for (const r of input.process ?? []) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [{
+        matchBinaries: [{ operator: 'In', values: r.binaries }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  // File rules: security_file_permission kprobe
+  // arg[0] = file object (path), arg[1] = permission int (MAY_READ=4, MAY_WRITE=2)
+  for (const r of input.file ?? []) {
+    const matchArgs: KProbeMatchArg[] = [
+      { index: 0, operator: 'Prefix', values: r.paths },
+    ]
+    const perm = FILE_OP_PERM[r.operation]
+    if (perm !== null && perm !== undefined) {
+      matchArgs.push({ index: 1, operator: 'Equal', values: [perm] })
+    }
+
+    doc.spec.kprobes.push({
+      call: 'security_file_permission',
+      syscall: false,
+      args: [
+        { index: 0, type: 'file' },
+        { index: 1, type: 'int' },
+      ],
+      selectors: [{ matchArgs, matchActions: [{ action }] }],
+    })
+  }
+
+  return yaml.dump(doc, { lineWidth: -1 })
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 13,
+        "newStart": 1,
+        "newLines": 19,
+        "lines": [
+          " import yaml from 'js-yaml'",
+          " import type { PolicyFormInput } from '../api/types'",
+          " ",
+          "+interface KProbeMatchArg {",
+          "+  index: number",
+          "+  operator: string",
+          "+  values: string[]",
+          "+}",
+          "+",
+          " interface KProbeSpec {",
+          "   call: string",
+          "   syscall: boolean",
+          "   args?: { index: number; type: string }[]",
+          "   selectors: {",
+          "     matchBinaries?: { operator: string; values: string[] }[]",
+          "-    matchArgs?: { index: number; operator: string; values: string[] }[]",
+          "+    matchArgs?: KProbeMatchArg[]",
+          "     matchActions: { action: string }[]",
+          "   }[]",
+          " }"
+        ]
+      },
+      {
+        "oldStart": 22,
+        "oldLines": 10,
+        "newStart": 28,
+        "newLines": 11,
+        "lines": [
+          "   }",
+          " }",
+          " ",
+          "-const FILE_OP_CALL: Record<string, string> = {",
+          "-  read: 'sys_read',",
+          "-  write: 'sys_write',",
+          "-  open: 'sys_openat',",
+          "+// File permission values for security_file_permission arg[1]",
+          "+const FILE_OP_PERM: Record<string, string | null> = {",
+          "+  read:  '4',  // MAY_READ",
+          "+  write: '2',  // MAY_WRITE",
+          "+  open:  null, // no permission filter — monitor all access",
+          " }",
+          " ",
+          " export function formToYaml(input: PolicyFormInput, action: string): string {"
+        ]
+      },
+      {
+        "oldStart": 42,
+        "oldLines": 31,
+        "newStart": 49,
+        "newLines": 38,
+        "lines": [
+          "     doc.spec.podSelector = { matchLabels: input.podSelector }",
+          "   }",
+          " ",
+          "+  // Process rules: sys_execve kprobe",
+          "   for (const r of input.process ?? []) {",
+          "     doc.spec.kprobes.push({",
+          "       call: 'sys_execve',",
+          "       syscall: true,",
+          "       args: [{ index: 0, type: 'string' }],",
+          "-      selectors: [",
+          "-        {",
+          "-          matchBinaries: [{ operator: 'In', values: r.binaries }],",
+          "-          matchActions: [{ action }],",
+          "-        },",
+          "-      ],",
+          "+      selectors: [{",
+          "+        matchBinaries: [{ operator: 'In', values: r.binaries }],",
+          "+        matchActions: [{ action }],",
+          "+      }],",
+          "     })",
+          "   }",
+          " ",
+          "+  // File rules: security_file_permission kprobe",
+          "+  // arg[0] = file object (path), arg[1] = permission int (MAY_READ=4, MAY_WRITE=2)",
+          "   for (const r of input.file ?? []) {",
+          "-    const call = FILE_OP_CALL[r.operation] ?? 'sys_write'",
+          "+    const matchArgs: KProbeMatchArg[] = [",
+          "+      { index: 0, operator: 'Prefix', values: r.paths },",
+          "+    ]",
+          "+    const perm = FILE_OP_PERM[r.operation]",
+          "+    if (perm !== null && perm !== undefined) {",
+          "+      matchArgs.push({ index: 1, operator: 'Equal', values: [perm] })",
+          "+    }",
+          "+",
+          "     doc.spec.kprobes.push({",
+          "-      call,",
+          "-      syscall: true,",
+          "-      selectors: [",
+          "-        {",
+          "-          matchArgs: [{ index: 0, operator: 'Prefix', values: r.paths }],",
+          "-          matchActions: [{ action }],",
+          "-        },",
+          "+      call: 'security_file_permission',",
+          "+      syscall: false,",
+          "+      args: [",
+          "+        { index: 0, type: 'file' },",
+          "+        { index: 1, type: 'int' },",
+          "       ],",
+          "+      selectors: [{ matchArgs, matchActions: [{ action }] }],",
+          "     })",
+          "   }",
+          " "
+        ]
+      }
+    ],
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+interface KProbeSpec {
+  call: string
+  syscall: boolean
+  args?: { index: number; type: string }[]
+  selectors: {
+    matchBinaries?: { operator: string; values: string[] }[]
+    matchArgs?: { index: number; operator: string; values: string[] }[]
+    matchActions: { action: string }[]
+  }[]
+}
+
+interface TracingPolicyDoc {
+  apiVersion: string
+  kind: string
+  metadata: { name: string; namespace?: string }
+  spec: {
+    podSelector?: { matchLabels: Record<string, string> }
+    kprobes: KProbeSpec[]
+  }
+}
+
+const FILE_OP_CALL: Record<string, string> = {
+  read: 'sys_read',
+  write: 'sys_write',
+  open: 'sys_openat',
+}
+
+export function formToYaml(input: PolicyFormInput, action: string): string {
+  const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
+
+  const doc: TracingPolicyDoc = {
+    apiVersion: 'cilium.io/v1alpha1',
+    kind,
+    metadata: { name: input.name, ...(input.namespace ? { namespace: input.namespace } : {}) },
+    spec: { kprobes: [] },
+  }
+
+  if (input.podSelector && Object.keys(input.podSelector).length > 0) {
+    doc.spec.podSelector = { matchLabels: input.podSelector }
+  }
+
+  for (const r of input.process ?? []) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [
+        {
+          matchBinaries: [{ operator: 'In', values: r.binaries }],
+          matchActions: [{ action }],
+        },
+      ],
+    })
+  }
+
+  for (const r of input.file ?? []) {
+    const call = FILE_OP_CALL[r.operation] ?? 'sys_write'
+    doc.spec.kprobes.push({
+      call,
+      syscall: true,
+      selectors: [
+        {
+          matchArgs: [{ index: 0, operator: 'Prefix', values: r.paths }],
+          matchActions: [{ action }],
+        },
+      ],
+    })
+  }
+
+  return yaml.dump(doc, { lineWidth: -1 })
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+// Backward-compatible mapping for old-style file kprobes
+const LEGACY_FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read:   'read',
+  sys_write:  'write',
+  sys_openat: 'open',
+}
+
+// MAY_READ=4, MAY_WRITE=2 for security_file_permission arg[1]
+const PERM_TO_OP: Record<string, 'read' | 'write' | 'open'> = {
+  '4': 'read',
+  '2': 'write',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      // Process rule
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (call === 'security_file_permission') {
+      // File rule (current format)
+      for (const sel of selectors) {
+        const args: any[] = sel.matchArgs ?? []
+        const pathArg = args.find((a: any) => a.index === 0)
+        const permArg = args.find((a: any) => a.index === 1)
+
+        const operation: 'read' | 'write' | 'open' =
+          PERM_TO_OP[permArg?.values?.[0]] ?? 'open'
+
+        for (const path of pathArg?.values ?? []) {
+          if (path) result.file!.push({ paths: [path], operation })
+        }
+      }
+
+    } else if (call in LEGACY_FILE_CALL_OP) {
+      // Legacy format (sys_read / sys_write / sys_openat)
+      const operation = LEGACY_FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+// Backward-compatible mapping for old-style file kprobes
+const LEGACY_FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read:   'read',
+  sys_write:  'write',
+  sys_openat: 'open',
+}
+
+// MAY_READ=4, MAY_WRITE=2 for security_file_permission arg[1]
+const PERM_TO_OP: Record<string, 'read' | 'write' | 'open'> = {
+  '4': 'read',
+  '2': 'write',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      // Process rule
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (call === 'security_file_permission') {
+      // File rule (current format)
+      for (const sel of selectors) {
+        const args: any[] = sel.matchArgs ?? []
+        const pathArg = args.find((a: any) => a.index === 0)
+        const permArg = args.find((a: any) => a.index === 1)
+
+        const operation: 'read' | 'write' | 'open' =
+          PERM_TO_OP[permArg?.values?.[0]] ?? 'open'
+
+        for (const path of pathArg?.values ?? []) {
+          if (path) result.file!.push({ paths: [path], operation })
+        }
+      }
+
+    } else if (call in LEGACY_FILE_CALL_OP) {
+      // Legacy format (sys_read / sys_write / sys_openat)
+      const operation = LEGACY_FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "content": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+// Backward-compatible mapping for old-style file kprobes
+const LEGACY_FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read:   'read',
+  sys_write:  'write',
+  sys_openat: 'open',
+}
+
+// MAY_READ=4, MAY_WRITE=2 for security_file_permission arg[1]
+const PERM_TO_OP: Record<string, 'read' | 'write' | 'open'> = {
+  '4': 'read',
+  '2': 'write',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      // Process rule
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+
+    } else if (call === 'security_file_permission') {
+      // File rule (current format)
+      for (const sel of selectors) {
+        const args: any[] = sel.matchArgs ?? []
+        const pathArg = args.find((a: any) => a.index === 0)
+        const permArg = args.find((a: any) => a.index === 1)
+
+        const operation: 'read' | 'write' | 'open' =
+          PERM_TO_OP[permArg?.values?.[0]] ?? 'open'
+
+        for (const path of pathArg?.values ?? []) {
+          if (path) result.file!.push({ paths: [path], operation })
+        }
+      }
+
+    } else if (call in LEGACY_FILE_CALL_OP) {
+      // Legacy format (sys_read / sys_write / sys_openat)
+      const operation = LEGACY_FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 17,
+        "newStart": 1,
+        "newLines": 22,
+        "lines": [
+          " import yaml from 'js-yaml'",
+          " import type { PolicyFormInput } from '../api/types'",
+          " ",
+          "-const FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {",
+          "-  sys_read: 'read',",
+          "-  sys_write: 'write',",
+          "+// Backward-compatible mapping for old-style file kprobes",
+          "+const LEGACY_FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {",
+          "+  sys_read:   'read',",
+          "+  sys_write:  'write',",
+          "   sys_openat: 'open',",
+          " }",
+          " ",
+          "+// MAY_READ=4, MAY_WRITE=2 for security_file_permission arg[1]",
+          "+const PERM_TO_OP: Record<string, 'read' | 'write' | 'open'> = {",
+          "+  '4': 'read',",
+          "+  '2': 'write',",
+          "+}",
+          "+",
+          " /**",
+          "  * Parses a TracingPolicy YAML string back into PolicyFormInput.",
+          "  * Returns null if the YAML cannot be parsed or doesn't match the expected schema.",
+          "- * Kprobes that don't match known calls (sys_execve, sys_read, sys_write, sys_openat)",
+          "- * are silently ignored — the user can see and edit them in the YAML tab.",
+          "  */",
+          " export function yamlToForm(rawYaml: string): PolicyFormInput | null {",
+          "   if (!rawYaml.trim()) return null"
+        ]
+      },
+      {
+        "oldStart": 39,
+        "oldLines": 6,
+        "newStart": 44,
+        "newLines": 7,
+        "lines": [
+          "     const selectors: any[] = kp.selectors ?? []",
+          " ",
+          "     if (call === 'sys_execve') {",
+          "+      // Process rule",
+          "       for (const sel of selectors) {",
+          "         for (const mb of sel.matchBinaries ?? []) {",
+          "           for (const bin of mb.values ?? []) {"
+        ]
+      },
+      {
+        "oldStart": 46,
+        "oldLines": 9,
+        "newStart": 52,
+        "newLines": 26,
+        "lines": [
+          "           }",
+          "         }",
+          "       }",
+          "-    } else if (call in FILE_CALL_OP) {",
+          "-      const operation = FILE_CALL_OP[call]",
+          "+",
+          "+    } else if (call === 'security_file_permission') {",
+          "+      // File rule (current format)",
+          "       for (const sel of selectors) {",
+          "+        const args: any[] = sel.matchArgs ?? []",
+          "+        const pathArg = args.find((a: any) => a.index === 0)",
+          "+        const permArg = args.find((a: any) => a.index === 1)",
+          "+",
+          "+        const operation: 'read' | 'write' | 'open' =",
+          "+          PERM_TO_OP[permArg?.values?.[0]] ?? 'open'",
+          "+",
+          "+        for (const path of pathArg?.values ?? []) {",
+          "+          if (path) result.file!.push({ paths: [path], operation })",
+          "+        }",
+          "+      }",
+          "+",
+          "+    } else if (call in LEGACY_FILE_CALL_OP) {",
+          "+      // Legacy format (sys_read / sys_write / sys_openat)",
+          "+      const operation = LEGACY_FILE_CALL_OP[call]",
+          "+      for (const sel of selectors) {",
+          "         for (const ma of sel.matchArgs ?? []) {",
+          "           for (const path of ma.values ?? []) {",
+          "             if (path) result.file!.push({ paths: [path], operation })"
+        ]
+      }
+    ],
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+const FILE_CALL_OP: Record<string, 'read' | 'write' | 'open'> = {
+  sys_read: 'read',
+  sys_write: 'write',
+  sys_openat: 'open',
+}
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ * Kprobes that don't match known calls (sys_execve, sys_read, sys_write, sys_openat)
+ * are silently ignored — the user can see and edit them in the YAML tab.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    process: [],
+    file: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    if (call === 'sys_execve') {
+      for (const sel of selectors) {
+        for (const mb of sel.matchBinaries ?? []) {
+          for (const bin of mb.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+      }
+    } else if (call in FILE_CALL_OP) {
+      const operation = FILE_CALL_OP[call]
+      for (const sel of selectors) {
+        for (const ma of sel.matchArgs ?? []) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path], operation })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "content": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates process kprobe for cluster-wide policy', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash', '/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('name: block-shells')
+    expect(out).toContain('kind: TracingPolicy')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('Post')
+    expect(out).toContain('/bin/bash')
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: TracingPolicyNamespaced')
+    expect(out).toContain('namespace: production')
+  })
+
+  it('generates security_file_permission kprobe for file rule', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-etc',
+      file: [{ paths: ['/etc/passwd'], operation: 'write' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain('syscall: false')
+    expect(out).toContain('/etc/passwd')
+    expect(out).toContain("'2'") // MAY_WRITE
+    expect(out).not.toContain('sys_write')
+  })
+
+  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).not.toContain("index: 1") // no permission filter for 'open'
+  })
+
+  it('generates security_file_permission with MAY_READ filter for read operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-read',
+      file: [{ paths: ['/etc/shadow'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain("'4'") // MAY_READ
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('podSelector')
+    expect(out).toContain('myapp')
+  })
+
+  it('returns multiple kprobes for mixed rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+})
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "content": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates process kprobe for cluster-wide policy', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash', '/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('name: block-shells')
+    expect(out).toContain('kind: TracingPolicy')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('Post')
+    expect(out).toContain('/bin/bash')
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: TracingPolicyNamespaced')
+    expect(out).toContain('namespace: production')
+  })
+
+  it('generates security_file_permission kprobe for file rule', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-etc',
+      file: [{ paths: ['/etc/passwd'], operation: 'write' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain('syscall: false')
+    expect(out).toContain('/etc/passwd')
+    expect(out).toContain("'2'") // MAY_WRITE
+    expect(out).not.toContain('sys_write')
+  })
+
+  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).not.toContain("index: 1") // no permission filter for 'open'
+  })
+
+  it('generates security_file_permission with MAY_READ filter for read operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-read',
+      file: [{ paths: ['/etc/shadow'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain("'4'") // MAY_READ
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('podSelector')
+    expect(out).toContain('myapp')
+  })
+
+  it('returns multiple kprobes for mixed rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+})
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "content": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates process kprobe for cluster-wide policy', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash', '/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('name: block-shells')
+    expect(out).toContain('kind: TracingPolicy')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('Post')
+    expect(out).toContain('/bin/bash')
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: TracingPolicyNamespaced')
+    expect(out).toContain('namespace: production')
+  })
+
+  it('generates security_file_permission kprobe for file rule', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-etc',
+      file: [{ paths: ['/etc/passwd'], operation: 'write' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain('syscall: false')
+    expect(out).toContain('/etc/passwd')
+    expect(out).toContain("'2'") // MAY_WRITE
+    expect(out).not.toContain('sys_write')
+  })
+
+  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).not.toContain("index: 1") // no permission filter for 'open'
+  })
+
+  it('generates security_file_permission with MAY_READ filter for read operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-read',
+      file: [{ paths: ['/etc/shadow'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain("'4'") // MAY_READ
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('podSelector')
+    expect(out).toContain('myapp')
+  })
+
+  it('returns multiple kprobes for mixed rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+})
+",
+    "structuredPatch": [
+      {
+        "oldStart": 8,
+        "oldLines": 12,
+        "newStart": 8,
+        "newLines": 12,
+        "lines": [
+          "       name: 'block-shells',",
+          "       process: [{ binaries: ['/bin/bash', '/bin/sh'] }],",
+          "     }",
+          "-    const yaml = formToYaml(input, 'Post')",
+          "-    expect(yaml).toContain('name: block-shells')",
+          "-    expect(yaml).toContain('kind: TracingPolicy')",
+          "-    expect(yaml).toContain('sys_execve')",
+          "-    expect(yaml).toContain('Post')",
+          "-    expect(yaml).toContain('/bin/bash')",
+          "+    const out = formToYaml(input, 'Post')",
+          "+    expect(out).toContain('name: block-shells')",
+          "+    expect(out).toContain('kind: TracingPolicy')",
+          "+    expect(out).toContain('sys_execve')",
+          "+    expect(out).toContain('Post')",
+          "+    expect(out).toContain('/bin/bash')",
+          "   })",
+          " ",
+          "   it('sets kind to TracingPolicyNamespaced when namespace is set', () => {"
+        ]
+      },
+      {
+        "oldStart": 22,
+        "oldLines": 30,
+        "newStart": 22,
+        "newLines": 53,
+        "lines": [
+          "       namespace: 'production',",
+          "       process: [{ binaries: ['/bin/sh'] }],",
+          "     }",
+          "-    const yaml = formToYaml(input, 'Post')",
+          "-    expect(yaml).toContain('kind: TracingPolicyNamespaced')",
+          "-    expect(yaml).toContain('namespace: production')",
+          "+    const out = formToYaml(input, 'Post')",
+          "+    expect(out).toContain('kind: TracingPolicyNamespaced')",
+          "+    expect(out).toContain('namespace: production')",
+          "   })",
+          " ",
+          "-  it('generates file kprobe for write operation', () => {",
+          "+  it('generates security_file_permission kprobe for file rule', () => {",
+          "     const input: PolicyFormInput = {",
+          "       name: 'watch-etc',",
+          "       file: [{ paths: ['/etc/passwd'], operation: 'write' }],",
+          "     }",
+          "-    const yaml = formToYaml(input, 'Post')",
+          "-    expect(yaml).toContain('sys_write')",
+          "-    expect(yaml).toContain('/etc/passwd')",
+          "+    const out = formToYaml(input, 'Post')",
+          "+    expect(out).toContain('security_file_permission')",
+          "+    expect(out).toContain('syscall: false')",
+          "+    expect(out).toContain('/etc/passwd')",
+          "+    expect(out).toContain("'2'") // MAY_WRITE",
+          "+    expect(out).not.toContain('sys_write')",
+          "   })",
+          " ",
+          "+  it('generates security_file_permission without permission filter for open operation', () => {",
+          "+    const input: PolicyFormInput = {",
+          "+      name: 'watch-open',",
+          "+      file: [{ paths: ['/etc'], operation: 'open' }],",
+          "+    }",
+          "+    const out = formToYaml(input, 'Post')",
+          "+    expect(out).toContain('security_file_permission')",
+          "+    expect(out).not.toContain("index: 1") // no permission filter for 'open'",
+          "+  })",
+          "+",
+          "+  it('generates security_file_permission with MAY_READ filter for read operation', () => {",
+          "+    const input: PolicyFormInput = {",
+          "+      name: 'watch-read',",
+          "+      file: [{ paths: ['/etc/shadow'], operation: 'read' }],",
+          "+    }",
+          "+    const out = formToYaml(input, 'Post')",
+          "+    expect(out).toContain('security_file_permission')",
+          "+    expect(out).toContain("'4'") // MAY_READ",
+          "+  })",
+          "+",
+          "   it('includes podSelector when provided', () => {",
+          "     const input: PolicyFormInput = {",
+          "       name: 'scoped',",
+          "       podSelector: { app: 'myapp' },",
+          "       process: [{ binaries: ['/bin/sh'] }],",
+          "     }",
+          "-    const yaml = formToYaml(input, 'Post')",
+          "-    expect(yaml).toContain('podSelector')",
+          "-    expect(yaml).toContain('myapp')",
+          "+    const out = formToYaml(input, 'Post')",
+          "+    expect(out).toContain('podSelector')",
+          "+    expect(out).toContain('myapp')",
+          "   })",
+          " ",
+          "   it('returns multiple kprobes for mixed rules', () => {"
+        ]
+      },
+      {
+        "oldStart": 54,
+        "oldLines": 8,
+        "newStart": 77,
+        "newLines": 8,
+        "lines": [
+          "       process: [{ binaries: ['/bin/bash'] }],",
+          "       file: [{ paths: ['/etc'], operation: 'open' }],",
+          "     }",
+          "-    const yaml = formToYaml(input, 'Post')",
+          "-    expect(yaml).toContain('sys_execve')",
+          "-    expect(yaml).toContain('sys_openat')",
+          "+    const out = formToYaml(input, 'Post')",
+          "+    expect(out).toContain('sys_execve')",
+          "+    expect(out).toContain('security_file_permission')",
+          "   })",
+          " })"
+        ]
+      }
+    ],
+    "originalFile": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates process kprobe for cluster-wide policy', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash', '/bin/sh'] }],
+    }
+    const yaml = formToYaml(input, 'Post')
+    expect(yaml).toContain('name: block-shells')
+    expect(yaml).toContain('kind: TracingPolicy')
+    expect(yaml).toContain('sys_execve')
+    expect(yaml).toContain('Post')
+    expect(yaml).toContain('/bin/bash')
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const yaml = formToYaml(input, 'Post')
+    expect(yaml).toContain('kind: TracingPolicyNamespaced')
+    expect(yaml).toContain('namespace: production')
+  })
+
+  it('generates file kprobe for write operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-etc',
+      file: [{ paths: ['/etc/passwd'], operation: 'write' }],
+    }
+    const yaml = formToYaml(input, 'Post')
+    expect(yaml).toContain('sys_write')
+    expect(yaml).toContain('/etc/passwd')
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const yaml = formToYaml(input, 'Post')
+    expect(yaml).toContain('podSelector')
+    expect(yaml).toContain('myapp')
+  })
+
+  it('returns multiple kprobes for mixed rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const yaml = formToYaml(input, 'Post')
+    expect(yaml).toContain('sys_execve')
+    expect(yaml).toContain('sys_openat')
+  })
+})
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -10 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -10 && npm run build 2>&1 | tail -5",
+    "timeout": 120000,
+    "description": "測試 + build"
+  },
+  "tool_response": {
+    "stdout": "     52|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  15:11:12
+   Duration  483ms (transform 22ms, setup 36ms, import 21ms, tests 9ms, environment 340ms)
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | grep "FAIL\\|AssertionError\\|expected\\|received" | head -15",
+    "timeout": 30000,
+    "description": "查看失敗的測試細節"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | grep "FAIL\\|AssertionError\\|expected\\|received" | head -15",
+    "timeout": 30000,
+    "description": "查看失敗的測試細節"
+  },
+  "tool_response": {
+    "stdout": " FAIL  src/utils/formToYaml.test.ts > formToYaml > generates security_file_permission without permission filter for open operation
+AssertionError: expected 'apiVersion: cilium.io/v1alpha1\
+kind:…' not to contain 'index: 1'",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).not.toContain("index: 1") // no permission filter for 'open'
+  })",
+    "new_string": "  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    // no MAY_READ ('4') or MAY_WRITE ('2') values in matchArgs for 'open'
+    expect(out).not.toContain("- '4'")
+    expect(out).not.toContain("- '2'")
+  })",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "old_string": "  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).not.toContain("index: 1") // no permission filter for 'open'
+  })",
+    "new_string": "  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    // no MAY_READ ('4') or MAY_WRITE ('2') values in matchArgs for 'open'
+    expect(out).not.toContain("- '4'")
+    expect(out).not.toContain("- '2'")
+  })",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.test.ts",
+    "oldString": "  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).not.toContain("index: 1") // no permission filter for 'open'
+  })",
+    "newString": "  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    // no MAY_READ ('4') or MAY_WRITE ('2') values in matchArgs for 'open'
+    expect(out).not.toContain("- '4'")
+    expect(out).not.toContain("- '2'")
+  })",
+    "originalFile": "import { describe, it, expect } from 'vitest'
+import { formToYaml } from './formToYaml'
+import type { PolicyFormInput } from '../api/types'
+
+describe('formToYaml', () => {
+  it('generates process kprobe for cluster-wide policy', () => {
+    const input: PolicyFormInput = {
+      name: 'block-shells',
+      process: [{ binaries: ['/bin/bash', '/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('name: block-shells')
+    expect(out).toContain('kind: TracingPolicy')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('Post')
+    expect(out).toContain('/bin/bash')
+  })
+
+  it('sets kind to TracingPolicyNamespaced when namespace is set', () => {
+    const input: PolicyFormInput = {
+      name: 'ns-policy',
+      namespace: 'production',
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('kind: TracingPolicyNamespaced')
+    expect(out).toContain('namespace: production')
+  })
+
+  it('generates security_file_permission kprobe for file rule', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-etc',
+      file: [{ paths: ['/etc/passwd'], operation: 'write' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain('syscall: false')
+    expect(out).toContain('/etc/passwd')
+    expect(out).toContain("'2'") // MAY_WRITE
+    expect(out).not.toContain('sys_write')
+  })
+
+  it('generates security_file_permission without permission filter for open operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-open',
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).not.toContain("index: 1") // no permission filter for 'open'
+  })
+
+  it('generates security_file_permission with MAY_READ filter for read operation', () => {
+    const input: PolicyFormInput = {
+      name: 'watch-read',
+      file: [{ paths: ['/etc/shadow'], operation: 'read' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('security_file_permission')
+    expect(out).toContain("'4'") // MAY_READ
+  })
+
+  it('includes podSelector when provided', () => {
+    const input: PolicyFormInput = {
+      name: 'scoped',
+      podSelector: { app: 'myapp' },
+      process: [{ binaries: ['/bin/sh'] }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('podSelector')
+    expect(out).toContain('myapp')
+  })
+
+  it('returns multiple kprobes for mixed rules', () => {
+    const input: PolicyFormInput = {
+      name: 'multi',
+      process: [{ binaries: ['/bin/bash'] }],
+      file: [{ paths: ['/etc'], operation: 'open' }],
+    }
+    const out = formToYaml(input, 'Post')
+    expect(out).toContain('sys_execve')
+    expect(out).toContain('security_file_permission')
+  })
+})
+",
+    "structuredPatch": [
+      {
+        "oldStart": 47,
+        "oldLines": 7,
+        "newStart": 47,
+        "newLines": 9,
+        "lines": [
+          "     }",
+          "     const out = formToYaml(input, 'Post')",
+          "     expect(out).toContain('security_file_permission')",
+          "-    expect(out).not.toContain("index: 1") // no permission filter for 'open'",
+          "+    // no MAY_READ ('4') or MAY_WRITE ('2') values in matchArgs for 'open'",
+          "+    expect(out).not.toContain("- '4'")",
+          "+    expect(out).not.toContain("- '2'")",
+          "   })",
+          " ",
+          "   it('generates security_file_permission with MAY_READ filter for read operation', () => {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -7 && npm run build 2>&1 | tail -4",
+    "timeout": 60000,
+    "description": "測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -7 && npm run build 2>&1 | tail -4",
+    "timeout": 60000,
+    "description": "測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  15:11:35
+   Duration  484ms (transform 21ms, setup 35ms, import 18ms, tests 5ms, environment 349ms)
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "fix: use security_file_permission kprobe for file rules (sys_read/write was incorrect)"",
+    "description": "提交修正"
+  }
+}
+
+----------------------------------------
+
