@@ -49,8 +49,7 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "tetragon",
-			// --event-types filters at source; only kprobe events are policy-triggered.
-			Command:   []string{"tetra", "getevents", "-o", "json", "--event-types", "process_kprobe"},
+			Command:   []string{"tetra", "getevents", "-o", "json"},
 			Stdin:     false,
 			Stdout:    true,
 			Stderr:    false,
