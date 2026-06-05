@@ -36,30 +36,10 @@ describe('formToYaml', () => {
     expect(out).toContain('security_file_permission')
     expect(out).toContain('syscall: false')
     expect(out).toContain('/etc/passwd')
-    expect(out).toContain("'2'") // MAY_WRITE
+    // path-only matching — no permission int filter
+    expect(out).not.toContain("'2'")
+    expect(out).not.toContain("'4'")
     expect(out).not.toContain('sys_write')
-  })
-
-  it('generates security_file_permission without permission filter for open operation', () => {
-    const input: PolicyFormInput = {
-      name: 'watch-open',
-      file: [{ paths: ['/etc'], operation: 'open' }],
-    }
-    const out = formToYaml(input, 'Post')
-    expect(out).toContain('security_file_permission')
-    // no MAY_READ ('4') or MAY_WRITE ('2') values in matchArgs for 'open'
-    expect(out).not.toContain("- '4'")
-    expect(out).not.toContain("- '2'")
-  })
-
-  it('generates security_file_permission with MAY_READ filter for read operation', () => {
-    const input: PolicyFormInput = {
-      name: 'watch-read',
-      file: [{ paths: ['/etc/shadow'], operation: 'read' }],
-    }
-    const out = formToYaml(input, 'Post')
-    expect(out).toContain('security_file_permission')
-    expect(out).toContain("'4'") // MAY_READ
   })
 
   it('includes podSelector when provided', () => {

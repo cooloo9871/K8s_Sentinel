@@ -28,13 +28,6 @@ interface TracingPolicyDoc {
   }
 }
 
-// File permission values for security_file_permission arg[1]
-const FILE_OP_PERM: Record<string, string | null> = {
-  read:  '4',  // MAY_READ
-  write: '2',  // MAY_WRITE
-  open:  null, // no permission filter — monitor all access
-}
-
 export function formToYaml(input: PolicyFormInput, action: string): string {
   const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
 
@@ -63,16 +56,9 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
   }
 
   // File rules: security_file_permission kprobe
-  // arg[0] = file object (path), arg[1] = permission int (MAY_READ=4, MAY_WRITE=2)
+  // arg[0] = file object (path). We match on path only — Tetragon captures all
+  // permission types (read/write/exec) for the matched paths.
   for (const r of input.file ?? []) {
-    const matchArgs: KProbeMatchArg[] = [
-      { index: 0, operator: 'Prefix', values: r.paths },
-    ]
-    const perm = FILE_OP_PERM[r.operation]
-    if (perm !== null && perm !== undefined) {
-      matchArgs.push({ index: 1, operator: 'Equal', values: [perm] })
-    }
-
     doc.spec.kprobes.push({
       call: 'security_file_permission',
       syscall: false,
@@ -80,7 +66,10 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
         { index: 0, type: 'file' },
         { index: 1, type: 'int' },
       ],
-      selectors: [{ matchArgs, matchActions: [{ action }] }],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: 'Prefix', values: r.paths }],
+        matchActions: [{ action }],
+      }],
     })
   }
 
