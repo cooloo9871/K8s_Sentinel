@@ -181,7 +181,7 @@ export function PolicyListPage() {
                   <TableHead>Mode</TableHead>
                   <TableHead>Namespace</TableHead>
                   <TableHead>Created</TableHead>
-                  <TableHead className="text-right w-24"></TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -193,20 +193,14 @@ export function PolicyListPage() {
                   </TableRow>
                 ) : (
                   filtered.map((p) => (
-                    <TableRow
-                      key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
-                      className="cursor-pointer"
-                      onClick={() =>
-                        navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
-                      }
-                    >
-                      <TableCell className="font-medium text-primary">{p.name}</TableCell>
+                    <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
+                      <TableCell className="font-medium">{p.name}</TableCell>
                       <TableCell>
                         <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
                           {p.scope}
                         </Badge>
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell>
                         <Select
                           value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
                           onValueChange={(v) => handleModeChange(p, v as 'Monitoring' | 'Protect')}
@@ -230,8 +224,17 @@ export function PolicyListPage() {
                         {p.namespace ?? '-'}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{p.createdAt}</TableCell>
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                            }
+                          >
+                            Edit
+                          </Button>
                           <Button
                             variant="destructive"
                             size="sm"
