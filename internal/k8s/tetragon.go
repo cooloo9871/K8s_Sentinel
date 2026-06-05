@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +17,7 @@ import (
 
 // TetragonEvent is a normalised Tetragon runtime event for the frontend.
 type TetragonEvent struct {
-	Type       string `json:"type"`       // "kprobe"
+	Type       string `json:"type"`
 	Time       string `json:"time"`
 	NodeName   string `json:"nodeName"`
 	Namespace  string `json:"namespace"`
@@ -25,23 +26,37 @@ type TetragonEvent struct {
 	Binary     string `json:"binary"`
 	Arguments  string `json:"arguments"`
 	ParentBin  string `json:"parentBin"`
-	Action     string `json:"action"`     // "monitor" or "kill"
+	Action     string `json:"action"` // "monitor" or "kill"
 	PolicyName string `json:"policyName"`
 	Function   string `json:"function"`
 }
 
-// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
-// parsing each JSON line into a TetragonEvent and sending it to out.
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
 func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
 	if s.typed == nil || s.restConfig == nil {
 		return fmt.Errorf("kubernetes clients not initialised")
 	}
 
-	podName, err := s.findTetragonPod(ctx)
+	pods, err := s.findAllTetragonPods(ctx)
 	if err != nil {
 		return err
 	}
 
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
 	req := s.typed.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
@@ -58,7 +73,7 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 
 	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
 	if err != nil {
-		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+		return fmt.Errorf("exec %s: %w", podName, err)
 	}
 
 	pr, pw := io.Pipe()
@@ -67,9 +82,7 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 	execDone := make(chan error, 1)
 	go func() {
 		defer pw.Close()
-		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
-			Stdout: pw,
-		})
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
 	}()
 
 	scanner := bufio.NewScanner(pr)
@@ -98,41 +111,45 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 	return <-execDone
 }
 
-func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
 	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
 		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 		})
 		if err == nil && len(list.Items) > 0 {
-			return list.Items[0].Name, nil
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
 		}
 	}
-	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
 }
 
-// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.
-// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
 func parseTetragonLog(line string) (TetragonEvent, bool) {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
 		return TetragonEvent{}, false
 	}
 
-	evt := TetragonEvent{
-		Time:     anyStr(raw, "time"),
-		NodeName: anyStr(raw, "nodeName", "node_name"),
-	}
-
-	// Try both camelCase (protobuf JSON) and snake_case field names
-	kp := anyMap(raw, "processKprobe", "process_kprobe")
+	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
 	if kp == nil {
-		return TetragonEvent{}, false // only process_kprobe events are policy-triggered
+		return TetragonEvent{}, false
 	}
 
-	evt.Type = "kprobe"
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
 	fillProcess(&evt, anyMap(kp, "process"))
-	evt.Function = anyStr(kp, "functionName", "function_name")
-	evt.PolicyName = anyStr(kp, "policyName", "policy_name")
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
 
 	action := anyStr(kp, "action")
 	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
@@ -150,7 +167,6 @@ func fillProcess(evt *TetragonEvent, proc map[string]any) {
 	}
 	evt.Binary = anyStr(proc, "binary")
 	evt.Arguments = anyStr(proc, "arguments")
-
 	pod := anyMap(proc, "pod")
 	if pod == nil {
 		return
@@ -162,7 +178,6 @@ func fillProcess(evt *TetragonEvent, proc map[string]any) {
 	}
 }
 
-// anyStr returns the first non-empty string value found among the given keys.
 func anyStr(m map[string]any, keys ...string) string {
 	for _, k := range keys {
 		if v, ok := m[k]; ok {
@@ -174,7 +189,6 @@ func anyStr(m map[string]any, keys ...string) string {
 	return ""
 }
 
-// anyMap returns the first map value found among the given keys.
 func anyMap(m map[string]any, keys ...string) map[string]any {
 	for _, k := range keys {
 		if v, ok := m[k]; ok {

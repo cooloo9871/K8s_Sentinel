@@ -108536,3 +108536,1189 @@ func mapField(m map[string]any, key string) map[string]any {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add -A && git commit -m "fix: handle camelCase protobuf JSON field names in Tetragon event parser"",
+    "timeout": 30000,
+    "description": "編譯 + 提交"
+  },
+  "tool_response": {
+    "stdout": "[main e385585] fix: handle camelCase protobuf JSON field names in Tetragon event parser
+ 2 files changed, 1362 insertions(+), 34 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "e385585",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "修正說明：
+
+**根本原因：** `tetra getevents -o json` 輸出的是 protobuf JSON encoding，欄位名稱是 **camelCase**：
+
+| 我們原本找的 (snake_case) | 實際輸出 (camelCase) |
+|---|---|
+| `process_kprobe` | `processKprobe` |
+| `function_name` | `functionName` |
+| `policy_name` | `policyName` |
+| `node_name` | `nodeName` |
+
+**修法：** `anyStr()` 和 `anyMap()` helper 依序嘗試多個 key，優先 camelCase，fallback snake_case：
+
+```go
+kp := anyMap(raw, "processKprobe", "process_kprobe")  // 先找 camelCase，找不到再找 snake_case
+```
+
+這樣無論 Tetragon 版本輸出哪種格式都能正確解析。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "還是一樣 Security Events 沒有收到任何訊息，你需要什麼資訊讓你判斷正準確一點？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": "修正說明：
+
+**根本原因：** `tetra getevents -o json` 輸出的是 protobuf JSON encoding，欄位名稱是 **camelCase**：
+
+| 我們原本找的 (snake_case) | 實際輸出 (camelCase) |
+|---|---|
+| `process_kprobe` | `processKprobe` |
+| `function_name` | `functionName` |
+| `policy_name` | `policyName` |
+| `node_name` | `nodeName` |
+
+**修法：** `anyStr()` 和 `anyMap()` helper 依序嘗試多個 key，優先 camelCase，fallback snake_case：
+
+```go
+kp := anyMap(raw, "processKprobe", "process_kprobe")  // 先找 camelCase，找不到再找 snake_case
+```
+
+這樣無論 Tetragon 版本輸出哪種格式都能正確解析。"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~/Sentinel$ kubectl exec -n kube-system $POD -c tetragon -- \\
+    tetra getevents -o json 2>/dev/null | head -3
+bigred@m1:~/Sentinel$ kubectl -n sentinel-system logs deployment/sentinel --tail=30
+2026/06/05 09:03:09 starting sentinel on :8080
+2026/06/05 09:03:38 "GET http://192.168.1.55:32605/api/events/stream HTTP/1.1" from 10.244.202.0:58103 - 200 13B in 16.194725111s
+2026/06/05 09:03:38 "GET http://192.168.1.55:32605/api/mode HTTP/1.1" from 10.244.202.0:27732 - 200 22B in 43.095512ms
+2026/06/05 09:03:39 "GET http://192.168.1.55:32605/api/events/stream HTTP/1.1" from 10.244.202.0:43336 - 200 13B in 1.346509804s
+2026/06/05 09:03:39 "GET http://192.168.1.55:32605/api/policies HTTP/1.1" from 10.244.202.0:27732 - 200 1131B in 26.690151ms
+2026/06/05 09:03:39 "GET http://192.168.1.55:32605/api/mode HTTP/1.1" from 10.244.202.0:55239 - 200 22B in 73.573153ms"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~/Sentinel$ kubectl exec -n kube-system $POD -c tetragon --     tetra getevents -o json 2>/dev/null | head -3
+{"process_exec":{"process":{"exec_id":"bTI6NzEzNTEzNDAzNTAyNDM5OjE5NDIwMTc=","pid":1942017,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/3430ba4a96a1e5f0241d0f9e09424cd3535fd509956269f06305445f6a1e1f4c","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process1723635084 --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/20241419259f65f1b33b7ef5fb2f9dd589a8915ef6504aa332da539f2fbaf5be.pid 8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273","flags":"execve clone","start_time":"2026-06-05T09:06:49.147468700Z","auid":4294967295,"parent_exec_id":"bTI6NTIxNTAwMDAwMDA6MTk1NA==","tid":1942017,"in_init_tree":false},"parent":{"exec_id":"bTI6NTIxNTAwMDAwMDA6MTk1NA==","pid":1954,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/3430ba4a96a1e5f0241d0f9e09424cd3535fd509956269f06305445f6a1e1f4c","binary":"/usr/local/bin/containerd-shim-runc-v2","arguments":"-namespace k8s.io -id 3430ba4a96a1e5f0241d0f9e09424cd3535fd509956269f06305445f6a1e1f4c -address /run/containerd/containerd.sock","flags":"procFS","start_time":"2026-05-28T02:55:47.893753685Z","auid":4294967295,"parent_exec_id":"bTI6NDUwMDAwMDAwOjE=","tid":1954,"in_init_tree":false}},"node_name":"m2","time":"2026-06-05T09:06:49.147255352Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exit":{"process":{"exec_id":"bTI6NzEzNTEzNDI2ODU3MDY4OjE5NDIwMjM=","pid":1942023,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/3430ba4a96a1e5f0241d0f9e09424cd3535fd509956269f06305445f6a1e1f4c","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process1723635084 --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/20241419259f65f1b33b7ef5fb2f9dd589a8915ef6504aa332da539f2fbaf5be.pid 8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273","flags":"execve","start_time":"2026-06-05T09:06:49.170611904Z","auid":4294967295,"parent_exec_id":"bTI6NzEzNTEzNDAzNTAyNDM5OjE5NDIwMTc=","refcnt":1,"tid":1942023,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNTEzNDAzNTAyNDM5OjE5NDIwMTc=","pid":1942017,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/3430ba4a96a1e5f0241d0f9e09424cd3535fd509956269f06305445f6a1e1f4c","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process1723635084 --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/20241419259f65f1b33b7ef5fb2f9dd589a8915ef6504aa332da539f2fbaf5be.pid 8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273","flags":"execve clone","start_time":"2026-06-05T09:06:49.147468700Z","auid":4294967295,"parent_exec_id":"bTI6NTIxNTAwMDAwMDA6MTk1NA==","tid":1942017,"in_init_tree":false},"time":"2026-06-05T09:06:49.170838127Z"},"node_name":"m2","time":"2026-06-05T09:06:49.170837351Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exec":{"process":{"exec_id":"bTI6NzEzNTEzNDI4MTg1NDIzOjE5NDIwMjY=","pid":1942026,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/rootfs","binary":"/proc/self/fd/6","arguments":"init","flags":"execve clone","start_time":"2026-06-05T09:06:49.171939333Z","auid":4294967295,"parent_exec_id":"bTI6NzEzNTEzNDAzNTAyNDM5OjE5NDIwMTc=","tid":1942026,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNTEzNDAzNTAyNDM5OjE5NDIwMTc=","pid":1942017,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/3430ba4a96a1e5f0241d0f9e09424cd3535fd509956269f06305445f6a1e1f4c","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process1723635084 --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273/20241419259f65f1b33b7ef5fb2f9dd589a8915ef6504aa332da539f2fbaf5be.pid 8a156dd9782ffec7ae14180bc01623749caeebf5eadb3559250ada23f44f8273","flags":"execve clone","start_time":"2026-06-05T09:06:49.147468700Z","auid":4294967295,"parent_exec_id":"bTI6NTIxNTAwMDAwMDA6MTk1NA==","tid":1942017,"in_init_tree":false}},"node_name":"m2","time":"2026-06-05T09:06:49.171968777Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}"
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "$ kubectl exec -n kube-system $POD -c tetragon --     tetra getevents -o json 2>/dev/null
+{"process_exec":{"process":{"exec_id":"bTI6NzEzNjE3NzMzNDEwMTY0OjE5NDMwMjM=","pid":1943023,"uid":1000,"cwd":"/","binary":"/usr/sbin/sshd","arguments":"-D -E /var/log/gitlab-shell/ssh.log -R","flags":"execve rootcwd clone inInitTree","start_time":"2026-06-05T09:08:33.477165436Z","auid":4294967295,"pod":{"namespace":"gitlab-system","name":"gitlab-gitlab-shell-6b59d9cbfc-txjvz","uid":"bb5ce7f8-ca52-4c4b-8144-b6184670c4bb","container":{"id":"containerd://0548cd0808d1173e8bf86c0dd53d4a84f296c135146e0310a447b1034d0786b5","name":"gitlab-shell","image":{"id":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell@sha256:a3c198006648be4b59c51fe7f803ff988292a0c2e0168b74b0a1187ab2847b51","name":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell:v14.47.0"},"start_time":"2026-05-28T02:56:45Z","pid":720549,"security_context":{}},"pod_labels":{"app":"gitlab-shell","app.kubernetes.io/name":"gitlab","app.kubernetes.io/version":"v18.10.0","chart":"gitlab-shell-9.10.0","heritage":"Helm","pod-template-hash":"6b59d9cbfc","release":"gitlab"},"workload":"gitlab-gitlab-shell","workload_kind":"Deployment"},"docker":"0548cd0808d1173e8bf86c0dd53d4a8","parent_exec_id":"bTI6MTE1MjQwMDAwMDAwOjcwNTE=","tid":1943023,"in_init_tree":true},"parent":{"exec_id":"bTI6MTE1MjQwMDAwMDAwOjcwNTE=","pid":7051,"uid":1000,"cwd":"/","binary":"/usr/sbin/sshd","flags":"procFS rootcwd inInitTree","start_time":"2026-05-28T02:56:50.983755362Z","auid":4294967295,"pod":{"namespace":"gitlab-system","name":"gitlab-gitlab-shell-6b59d9cbfc-txjvz","uid":"bb5ce7f8-ca52-4c4b-8144-b6184670c4bb","container":{"id":"containerd://0548cd0808d1173e8bf86c0dd53d4a84f296c135146e0310a447b1034d0786b5","name":"gitlab-shell","image":{"id":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell@sha256:a3c198006648be4b59c51fe7f803ff988292a0c2e0168b74b0a1187ab2847b51","name":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell:v14.47.0"},"start_time":"2026-05-28T02:56:45Z","pid":15,"security_context":{}},"pod_labels":{"app":"gitlab-shell","app.kubernetes.io/name":"gitlab","app.kubernetes.io/version":"v18.10.0","chart":"gitlab-shell-9.10.0","heritage":"Helm","pod-template-hash":"6b59d9cbfc","release":"gitlab"},"workload":"gitlab-gitlab-shell","workload_kind":"Deployment"},"docker":"0548cd0808d1173e8bf86c0dd53d4a8","parent_exec_id":"bTI6MTExMTEwMDAwMDAwOjY5NjM=","tid":7051,"in_init_tree":true}},"node_name":"m2","time":"2026-06-05T09:08:33.477164525Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exit":{"process":{"exec_id":"bTI6NzEzNjE3NzMzNDEwMTY0OjE5NDMwMjM=","pid":1943023,"uid":1000,"cwd":"/","binary":"/usr/sbin/sshd","arguments":"-D -E /var/log/gitlab-shell/ssh.log -R","flags":"execve rootcwd clone inInitTree","start_time":"2026-06-05T09:08:33.477165436Z","auid":4294967295,"pod":{"namespace":"gitlab-system","name":"gitlab-gitlab-shell-6b59d9cbfc-txjvz","uid":"bb5ce7f8-ca52-4c4b-8144-b6184670c4bb","container":{"id":"containerd://0548cd0808d1173e8bf86c0dd53d4a84f296c135146e0310a447b1034d0786b5","name":"gitlab-shell","image":{"id":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell@sha256:a3c198006648be4b59c51fe7f803ff988292a0c2e0168b74b0a1187ab2847b51","name":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell:v14.47.0"},"start_time":"2026-05-28T02:56:45Z","pid":720549,"security_context":{}},"pod_labels":{"app":"gitlab-shell","app.kubernetes.io/name":"gitlab","app.kubernetes.io/version":"v18.10.0","chart":"gitlab-shell-9.10.0","heritage":"Helm","pod-template-hash":"6b59d9cbfc","release":"gitlab"},"workload":"gitlab-gitlab-shell","workload_kind":"Deployment"},"docker":"0548cd0808d1173e8bf86c0dd53d4a8","parent_exec_id":"bTI6MTE1MjQwMDAwMDAwOjcwNTE=","tid":1943023,"in_init_tree":true},"parent":{"exec_id":"bTI6MTE1MjQwMDAwMDAwOjcwNTE=","pid":7051,"uid":1000,"cwd":"/","binary":"/usr/sbin/sshd","flags":"procFS rootcwd inInitTree","start_time":"2026-05-28T02:56:50.983755362Z","auid":4294967295,"pod":{"namespace":"gitlab-system","name":"gitlab-gitlab-shell-6b59d9cbfc-txjvz","uid":"bb5ce7f8-ca52-4c4b-8144-b6184670c4bb","container":{"id":"containerd://0548cd0808d1173e8bf86c0dd53d4a84f296c135146e0310a447b1034d0786b5","name":"gitlab-shell","image":{"id":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell@sha256:a3c198006648be4b59c51fe7f803ff988292a0c2e0168b74b0a1187ab2847b51","name":"registry.gitlab.com/gitlab-org/build/cng/gitlab-shell:v14.47.0"},"start_time":"2026-05-28T02:56:45Z","pid":15,"security_context":{}},"pod_labels":{"app":"gitlab-shell","app.kubernetes.io/name":"gitlab","app.kubernetes.io/version":"v18.10.0","chart":"gitlab-shell-9.10.0","heritage":"Helm","pod-template-hash":"6b59d9cbfc","release":"gitlab"},"workload":"gitlab-gitlab-shell","workload_kind":"Deployment"},"docker":"0548cd0808d1173e8bf86c0dd53d4a8","parent_exec_id":"bTI6MTExMTEwMDAwMDAwOjY5NjM=","tid":7051,"in_init_tree":true},"status":255,"time":"2026-06-05T09:08:33.521187970Z"},"node_name":"m2","time":"2026-06-05T09:08:33.521184920Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exec":{"process":{"exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","pid":1943024,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve clone","start_time":"2026-06-05T09:08:33.657456971Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943024,"in_init_tree":false},"parent":{"exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","pid":1871968,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/bin/containerd-shim-runc-v2","arguments":"-namespace k8s.io -id 14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07 -address /run/containerd/containerd.sock","flags":"execve clone","start_time":"2026-06-05T06:57:13.371109604Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NTkwNjQyMTA2OjE4NzE5NTk=","tid":1871968,"in_init_tree":false}},"node_name":"m2","time":"2026-06-05T09:08:33.657452270Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exit":{"process":{"exec_id":"bTI6NzEzNjE3OTQwNjA1OTgyOjE5NDMwMzI=","pid":1943032,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve","start_time":"2026-06-05T09:08:33.684361987Z","auid":4294967295,"parent_exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","refcnt":1,"tid":1943032,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","pid":1943024,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve clone","start_time":"2026-06-05T09:08:33.657456971Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943024,"in_init_tree":false},"time":"2026-06-05T09:08:33.684477921Z"},"node_name":"m2","time":"2026-06-05T09:08:33.684476560Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exec":{"process":{"exec_id":"bTI6NzEzNjE3OTQxOTczNDg5OjE5NDMwMzQ=","pid":1943034,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/rootfs","binary":"/proc/self/fd/7","arguments":"init","flags":"execve clone","start_time":"2026-06-05T09:08:33.685727567Z","auid":4294967295,"parent_exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","tid":1943034,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","pid":1943024,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve clone","start_time":"2026-06-05T09:08:33.657456971Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943024,"in_init_tree":false}},"node_name":"m2","time":"2026-06-05T09:08:33.685726380Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exit":{"process":{"exec_id":"bTI6NzEzNjE3OTQ4OTM1MTgxOjE5NDMwMzY=","pid":1943036,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve","start_time":"2026-06-05T09:08:33.692690869Z","auid":4294967295,"parent_exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","refcnt":1,"tid":1943036,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","pid":1943024,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve clone","start_time":"2026-06-05T09:08:33.657456971Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943024,"in_init_tree":false},"time":"2026-06-05T09:08:33.696094491Z"},"node_name":"m2","time":"2026-06-05T09:08:33.696090832Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exit":{"process":{"exec_id":"bTI6NzEzNjE3OTQxOTczNDg5OjE5NDMwMzQ=","pid":1943034,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/rootfs","binary":"/proc/self/fd/7","arguments":"init","flags":"execve clone","start_time":"2026-06-05T09:08:33.685727567Z","auid":4294967295,"parent_exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","tid":1943034,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","pid":1943024,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve clone","start_time":"2026-06-05T09:08:33.657456971Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943024,"in_init_tree":false},"time":"2026-06-05T09:08:33.699840693Z"},"node_name":"m2","time":"2026-06-05T09:08:33.699836514Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exit":{"process":{"exec_id":"bTI6NzEzNjE3OTEzNjk5MzEwOjE5NDMwMjQ=","pid":1943024,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/sbin/runc","arguments":"--root /run/containerd/runc/k8s.io --log /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/log.json --log-format json --systemd-cgroup exec --process /tmp/runc-process426218012 --console-socket /tmp/pty642715059/pty.sock --detach --pid-file /run/containerd/io.containerd.runtime.v2.task/k8s.io/4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608/ec251703b2e27ffaae5357233d050419454eb4d6115e0fdcf8bca7692d8bbd08.pid 4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","flags":"execve clone","start_time":"2026-06-05T09:08:33.657456971Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943024,"in_init_tree":false},"parent":{"exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","pid":1871968,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/bin/containerd-shim-runc-v2","arguments":"-namespace k8s.io -id 14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07 -address /run/containerd/containerd.sock","flags":"execve clone","start_time":"2026-06-05T06:57:13.371109604Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NTkwNjQyMTA2OjE4NzE5NTk=","tid":1871968,"in_init_tree":false},"time":"2026-06-05T09:08:33.737485140Z"},"node_name":"m2","time":"2026-06-05T09:08:33.737482008Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exec":{"process":{"exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/bash","arguments":"-c \\"cat /etc/shadow\\"","flags":"execve rootcwd clone","start_time":"2026-06-05T09:08:33.739827475Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943037,"in_init_tree":false},"parent":{"exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","pid":1871968,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07","binary":"/usr/local/bin/containerd-shim-runc-v2","arguments":"-namespace k8s.io -id 14e87e416e0fa661968b60971a2675c86edff89e64438cb00ef7c5263197ef07 -address /run/containerd/containerd.sock","flags":"execve clone","start_time":"2026-06-05T06:57:13.371109604Z","auid":4294967295,"parent_exec_id":"bTI6NzA1NzM3NTkwNjQyMTA2OjE4NzE5NTk=","tid":1871968,"in_init_tree":false}},"node_name":"m2","time":"2026-06-05T09:08:33.739825860Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exec":{"process":{"exec_id":"bTI6NzEzNjE4MDA2Nzc1MDM3OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/cat","arguments":"/etc/shadow","flags":"execve rootcwd","start_time":"2026-06-05T09:08:33.750530360Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","tid":1943037,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/bash","arguments":"-c \\"cat /etc/shadow\\"","flags":"execve rootcwd clone","start_time":"2026-06-05T09:08:33.739827475Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943037,"in_init_tree":false}},"node_name":"m2","time":"2026-06-05T09:08:33.750529812Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_kprobe":{"process":{"exec_id":"bTI6NzEzNjE4MDA2Nzc1MDM3OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/cat","arguments":"/etc/shadow","flags":"execve rootcwd","start_time":"2026-06-05T09:08:33.750530360Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","refcnt":1,"tid":1943037,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/bash","arguments":"-c \\"cat /etc/shadow\\"","flags":"execve rootcwd clone","start_time":"2026-06-05T09:08:33.739827475Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943037,"in_init_tree":false},"function_name":"security_file_permission","args":[{"file_arg":{"path":"/etc/shadow","permission":"-rw-r-----"}},{"int_arg":4}],"action":"KPROBE_ACTION_POST","policy_name":"monitor-sensitive-files","return_action":"KPROBE_ACTION_POST"},"node_name":"m2","time":"2026-06-05T09:08:33.757088519Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_kprobe":{"process":{"exec_id":"bTI6NzEzNjE4MDA2Nzc1MDM3OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/cat","arguments":"/etc/shadow","flags":"execve rootcwd","start_time":"2026-06-05T09:08:33.750530360Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","refcnt":1,"tid":1943037,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/bash","arguments":"-c \\"cat /etc/shadow\\"","flags":"execve rootcwd clone","start_time":"2026-06-05T09:08:33.739827475Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943037,"in_init_tree":false},"function_name":"security_file_permission","args":[{"file_arg":{"path":"/etc/shadow","permission":"-rw-r-----"}},{"int_arg":4}],"action":"KPROBE_ACTION_POST","policy_name":"monitor-sensitive-files","return_action":"KPROBE_ACTION_POST"},"node_name":"m2","time":"2026-06-05T09:08:33.760304345Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}
+{"process_exit":{"process":{"exec_id":"bTI6NzEzNjE4MDA2Nzc1MDM3OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/cat","arguments":"/etc/shadow","flags":"execve rootcwd","start_time":"2026-06-05T09:08:33.750530360Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","tid":1943037,"in_init_tree":false},"parent":{"exec_id":"bTI6NzEzNjE3OTk2MDcyNzg0OjE5NDMwMzc=","pid":1943037,"uid":0,"cwd":"/","binary":"/bin/bash","arguments":"-c \\"cat /etc/shadow\\"","flags":"execve rootcwd clone","start_time":"2026-06-05T09:08:33.739827475Z","auid":4294967295,"pod":{"namespace":"test1","name":"bx1","uid":"b2f8fd4d-515d-4dd2-b7a6-fbf6c5cc4fa5","container":{"id":"containerd://4e3e441e013267b23fab7fa92007e97323e8f7f94193fbe1bbc1f33088aaa608","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-05T06:58:09Z","pid":471,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"4e3e441e013267b23fab7fa92007e97","parent_exec_id":"bTI6NzA1NzM3NjI3MzUzNDIyOjE4NzE5Njg=","tid":1943037,"in_init_tree":false},"time":"2026-06-05T09:08:33.765472361Z"},"node_name":"m2","time":"2026-06-05T09:08:33.765470290Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 7,
+        "oldLines": 6,
+        "newStart": 7,
+        "newLines": 7,
+        "lines": [
+          "   "fmt"",
+          "   "io"",
+          "   "strings"",
+          "+  "sync"",
+          " ",
+          "   corev1 "k8s.io/api/core/v1"",
+          "   metav1 "k8s.io/apimachinery/pkg/apis/meta/v1""
+        ]
+      },
+      {
+        "oldStart": 16,
+        "oldLines": 7,
+        "newStart": 17,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " // TetragonEvent is a normalised Tetragon runtime event for the frontend.",
+          " type TetragonEvent struct {",
+          "-  Type       string `json:"type"`       // "kprobe"",
+          "+  Type       string `json:"type"`",
+          "   Time       string `json:"time"`",
+          "   NodeName   string `json:"nodeName"`",
+          "   Namespace  string `json:"namespace"`"
+        ]
+      },
+      {
+        "oldStart": 25,
+        "oldLines": 23,
+        "newStart": 26,
+        "newLines": 37,
+        "lines": [
+          "   Binary     string `json:"binary"`",
+          "   Arguments  string `json:"arguments"`",
+          "   ParentBin  string `json:"parentBin"`",
+          "-  Action     string `json:"action"`     // "monitor" or "kill"",
+          "+  Action     string `json:"action"` // "monitor" or "kill"",
+          "   PolicyName string `json:"policyName"`",
+          "   Function   string `json:"function"`",
+          " }",
+          " ",
+          "-// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",",
+          "-// parsing each JSON line into a TetragonEvent and sending it to out.",
+          "+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.",
+          "+// In a multi-node cluster each pod only sees its own node's events, so we",
+          "+// must aggregate all pods to get complete cluster coverage.",
+          " func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {",
+          "   if s.typed == nil || s.restConfig == nil {",
+          "     return fmt.Errorf("kubernetes clients not initialised")",
+          "   }",
+          " ",
+          "-  podName, err := s.findTetragonPod(ctx)",
+          "+  pods, err := s.findAllTetragonPods(ctx)",
+          "   if err != nil {",
+          "     return err",
+          "   }",
+          " ",
+          "+  var wg sync.WaitGroup",
+          "+  for _, podName := range pods {",
+          "+    wg.Add(1)",
+          "+    go func(name string) {",
+          "+      defer wg.Done()",
+          "+      _ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others",
+          "+    }(podName)",
+          "+  }",
+          "+  wg.Wait()",
+          "+  return nil",
+          "+}",
+          "+",
+          "+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {",
+          "   req := s.typed.CoreV1().RESTClient().Post().",
+          "     Resource("pods").",
+          "     Name(podName)."
+        ]
+      },
+      {
+        "oldStart": 58,
+        "oldLines": 7,
+        "newStart": 73,
+        "newLines": 7,
+        "lines": [
+          " ",
+          "   executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())",
+          "   if err != nil {",
+          "-    return fmt.Errorf("create exec for pod %s: %w", podName, err)",
+          "+    return fmt.Errorf("exec %s: %w", podName, err)",
+          "   }",
+          " ",
+          "   pr, pw := io.Pipe()"
+        ]
+      },
+      {
+        "oldStart": 67,
+        "oldLines": 9,
+        "newStart": 82,
+        "newLines": 7,
+        "lines": [
+          "   execDone := make(chan error, 1)",
+          "   go func() {",
+          "     defer pw.Close()",
+          "-    execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{",
+          "-      Stdout: pw,",
+          "-    })",
+          "+    execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})",
+          "   }()",
+          " ",
+          "   scanner := bufio.NewScanner(pr)"
+        ]
+      },
+      {
+        "oldStart": 98,
+        "oldLines": 41,
+        "newStart": 111,
+        "newLines": 45,
+        "lines": [
+          "   return <-execDone",
+          " }",
+          " ",
+          "-func (s *Store) findTetragonPod(ctx context.Context) (string, error) {",
+          "+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {",
+          "   for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {",
+          "     list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{",
+          "       LabelSelector: sel,",
+          "     })",
+          "     if err == nil && len(list.Items) > 0 {",
+          "-      return list.Items[0].Name, nil",
+          "+      names := make([]string, len(list.Items))",
+          "+      for i, p := range list.Items {",
+          "+        names[i] = p.Name",
+          "+      }",
+          "+      return names, nil",
+          "     }",
+          "   }",
+          "-  return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+          "+  return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+          " }",
+          " ",
+          "-// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.",
+          "-// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.",
+          "+// parseTetragonLog parses a single JSON line from tetra getevents -o json.",
+          "+// Only process_kprobe events are forwarded (policy-triggered).",
+          " func parseTetragonLog(line string) (TetragonEvent, bool) {",
+          "   var raw map[string]any",
+          "   if err := json.Unmarshal([]byte(line), &raw); err != nil {",
+          "     return TetragonEvent{}, false",
+          "   }",
+          " ",
+          "+  // Only process_kprobe events are triggered by TracingPolicies",
+          "+  kp := anyMap(raw, "process_kprobe", "processKprobe")",
+          "+  if kp == nil {",
+          "+    return TetragonEvent{}, false",
+          "+  }",
+          "+",
+          "   evt := TetragonEvent{",
+          "+    Type:     "kprobe",",
+          "     Time:     anyStr(raw, "time"),",
+          "-    NodeName: anyStr(raw, "nodeName", "node_name"),",
+          "+    NodeName: anyStr(raw, "node_name", "nodeName"),",
+          "   }",
+          " ",
+          "-  // Try both camelCase (protobuf JSON) and snake_case field names",
+          "-  kp := anyMap(raw, "processKprobe", "process_kprobe")",
+          "-  if kp == nil {",
+          "-    return TetragonEvent{}, false // only process_kprobe events are policy-triggered",
+          "-  }",
+          "-",
+          "-  evt.Type = "kprobe"",
+          "   fillProcess(&evt, anyMap(kp, "process"))",
+          "-  evt.Function = anyStr(kp, "functionName", "function_name")",
+          "-  evt.PolicyName = anyStr(kp, "policyName", "policy_name")",
+          "+  evt.Function = anyStr(kp, "function_name", "functionName")",
+          "+  evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+          " ",
+          "   action := anyStr(kp, "action")",
+          "   if strings.Contains(strings.ToUpper(action), "SIGKILL") {"
+        ]
+      },
+      {
+        "oldStart": 150,
+        "oldLines": 7,
+        "newStart": 167,
+        "newLines": 6,
+        "lines": [
+          "   }",
+          "   evt.Binary = anyStr(proc, "binary")",
+          "   evt.Arguments = anyStr(proc, "arguments")",
+          "-",
+          "   pod := anyMap(proc, "pod")",
+          "   if pod == nil {",
+          "     return"
+        ]
+      },
+      {
+        "oldStart": 162,
+        "oldLines": 7,
+        "newStart": 178,
+        "newLines": 6,
+        "lines": [
+          "   }",
+          " }",
+          " ",
+          "-// anyStr returns the first non-empty string value found among the given keys.",
+          " func anyStr(m map[string]any, keys ...string) string {",
+          "   for _, k := range keys {",
+          "     if v, ok := m[k]; ok {"
+        ]
+      },
+      {
+        "oldStart": 174,
+        "oldLines": 7,
+        "newStart": 189,
+        "newLines": 6,
+        "lines": [
+          "   return """,
+          " }",
+          " ",
+          "-// anyMap returns the first map value found among the given keys.",
+          " func anyMap(m map[string]any, keys ...string) map[string]any {",
+          "   for _, k := range keys {",
+          "     if v, ok := m[k]; ok {"
+        ]
+      }
+    ],
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`       // "kprobe"
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"`     // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents execs into a Tetragon pod and runs "tetra getevents -o json",
+// parsing each JSON line into a TetragonEvent and sending it to out.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	podName, err := s.findTetragonPod(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("create exec for pod %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: pw,
+		})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findTetragonPod(ctx context.Context) (string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			return list.Items[0].Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog handles both camelCase (protobuf JSON) and snake_case field names.
+// tetra getevents -o json uses protobuf JSON encoding which outputs camelCase.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "nodeName", "node_name"),
+	}
+
+	// Try both camelCase (protobuf JSON) and snake_case field names
+	kp := anyMap(raw, "processKprobe", "process_kprobe")
+	if kp == nil {
+		return TetragonEvent{}, false // only process_kprobe events are policy-triggered
+	}
+
+	evt.Type = "kprobe"
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "functionName", "function_name")
+	evt.PolicyName = anyStr(kp, "policyName", "policy_name")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+// anyStr returns the first non-empty string value found among the given keys.
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// anyMap returns the first map value found among the given keys.
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add -A && git commit -m "fix: stream from ALL Tetragon pods to cover all nodes in multi-node cluster"",
+    "timeout": 30000,
+    "description": "編譯 + 提交"
+  }
+}
+
+----------------------------------------
+
