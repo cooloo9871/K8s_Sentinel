@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -34,13 +34,15 @@ export function PolicyEditPage() {
   const { name } = useParams<{ name: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const prefill = (location.state as { prefill?: PolicyFormInput } | null)?.prefill
   const toast = useToast()
   const namespace = searchParams.get('namespace') || undefined
   const isNew = !name
 
   const [namespaces, setNamespaces] = useState<string[]>([])
   const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
-  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [formValues, setFormValues] = useState<PolicyFormInput>(() => prefill ?? EMPTY_FORM)
   const [yamlContent, setYamlContent] = useState('')
   const [yamlEditorKey, setYamlEditorKey] = useState(0)
   const [yamlValid, setYamlValid] = useState(true)

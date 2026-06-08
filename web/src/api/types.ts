@@ -45,6 +45,8 @@ export interface TetragonEvent {
   action: 'monitor' | 'kill' | ''
   policyName: string
   function: string
+  filePath: string  // extracted from security_file_permission args
+  netDest: string   // extracted from tcp_connect sock_arg (daddr:dport)
 }
 
 export interface CreatePolicyPayload {

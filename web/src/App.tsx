@@ -8,6 +8,7 @@ import { PolicyEditPage } from './pages/PolicyEditPage'
 import { ModePage } from './pages/ModePage'
 import { NamespacesPage } from './pages/NamespacesPage'
 import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/cluster/mode" element={<ModePage />} />
             <Route path="/cluster/namespaces" element={<NamespacesPage />} />
             <Route path="/security/events" element={<SecurityEventsPage />} />
+            <Route path="/security/discovery" element={<DiscoveryPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

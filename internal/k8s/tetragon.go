@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +30,8 @@ type TetragonEvent struct {
 	Action     string `json:"action"` // "monitor" or "kill"
 	PolicyName string `json:"policyName"`
 	Function   string `json:"function"`
+	FilePath   string `json:"filePath"` // extracted from file_arg (security_file_permission)
+	NetDest    string `json:"netDest"`  // extracted from sock_arg daddr:dport (tcp_connect)
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
@@ -158,15 +161,39 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		evt.Action = "monitor"
 	}
 
-	// For execve kprobes the matching is on args[0] (the binary being executed),
-	// not on process.binary (which is the calling process, e.g. bash).
-	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
-	if strings.Contains(evt.Function, "execve") {
-		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
-			if arg0, ok := args[0].(map[string]any); ok {
-				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
-					evt.ParentBin = evt.Binary // keep caller as parent
-					evt.Binary = execBin
+	// Extract additional context from kprobe args for Behavior Discovery.
+	if args, ok := kp["args"].([]any); ok {
+		for _, a := range args {
+			argMap, ok := a.(map[string]any)
+			if !ok {
+				continue
+			}
+			// execve: args[0] contains the executed binary path
+			if strings.Contains(evt.Function, "execve") {
+				if bin := anyStr(argMap, "string_arg", "stringArg"); bin != "" {
+					evt.ParentBin = evt.Binary
+					evt.Binary = bin
+				}
+			}
+			// security_file_permission: args[0] is file_arg with path
+			if fileArg := anyMap(argMap, "file_arg", "fileArg"); fileArg != nil {
+				evt.FilePath = anyStr(fileArg, "path")
+			}
+			// tcp_connect: args[0] is sock_arg with daddr/dport
+			if sockArg := anyMap(argMap, "sock_arg", "sockArg"); sockArg != nil {
+				daddr := anyStr(sockArg, "daddr", "dest_addr", "destAddr")
+				if daddr != "" {
+					dport := anyStr(sockArg, "dport", "dest_port", "destPort")
+					if dport == "" {
+						if dp, ok := sockArg["dport"].(float64); ok && dp > 0 {
+							dport = fmt.Sprintf("%d", int(dp))
+						}
+					}
+					if dport != "" && dport != "0" {
+						evt.NetDest = fmt.Sprintf("%s:%s", daddr, dport)
+					} else {
+						evt.NetDest = daddr
+					}
 				}
 			}
 		}
