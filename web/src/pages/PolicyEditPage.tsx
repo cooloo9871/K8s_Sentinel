@@ -26,6 +26,7 @@ const EMPTY_FORM: PolicyFormInput = {
   process: [],
   file: [],
   network: [],
+  networkMode: 'whitelist',
 }
 
 export function PolicyEditPage() {

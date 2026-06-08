@@ -205,10 +205,35 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <CardTitle className="text-sm font-medium">Network Rules</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <p className="mb-3 text-xs text-muted-foreground">
-              Whitelist mode: list <strong>allowed</strong> destination IPs/CIDRs.
-              Connections to any address <strong>not</strong> in this list will trigger the policy action.
-            </p>
+            {/* Mode selector */}
+            <div className="mb-4 flex flex-col gap-1.5">
+              <Label className="text-xs">Mode</Label>
+              <Select
+                value={value.networkMode ?? 'whitelist'}
+                onValueChange={(v) =>
+                  onChange({ ...value, networkMode: v as 'whitelist' | 'blacklist' })
+                }
+              >
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="whitelist">
+                      NotDAddr — Whitelist
+                    </SelectItem>
+                    <SelectItem value="blacklist">
+                      DAddr — Blacklist
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {value.networkMode === 'blacklist'
+                  ? '🚫 DAddr (Blacklist): block connections to listed addresses, allow everything else.'
+                  : '✅ NotDAddr (Whitelist): allow connections only to listed addresses, block everything else.'}
+              </p>
+            </div>
             <NetworkSection
               rules={value.network ?? []}
               onChange={setNetRules}

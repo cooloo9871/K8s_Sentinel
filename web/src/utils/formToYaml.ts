@@ -68,19 +68,18 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     })
   }
 
-  // Network rules: ONE tcp_connect kprobe using NotDAddr (whitelist).
-  // Values are ALLOWED addresses; anything NOT in the list triggers the action.
-  const allowedAddresses = (input.network ?? [])
-    .map((r) => r.address.trim())
-    .filter(Boolean)
-
-  if (allowedAddresses.length > 0) {
+  // Network rules: ONE tcp_connect kprobe.
+  // networkMode 'whitelist' → NotDAddr (block connections NOT in list)
+  // networkMode 'blacklist' → DAddr    (block connections IN list)
+  const netAddresses = (input.network ?? []).map((r) => r.address.trim()).filter(Boolean)
+  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
     doc.spec.kprobes.push({
       call: 'tcp_connect',
       syscall: false,
       args: [{ index: 0, type: 'sock' }],
       selectors: [{
-        matchArgs: [{ index: 0, operator: 'NotDAddr', values: allowedAddresses }],
+        matchArgs: [{ index: 0, operator: netOperator, values: netAddresses }],
         matchActions: [{ action }],
       }],
     })

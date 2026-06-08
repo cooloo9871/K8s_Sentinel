@@ -17,6 +17,7 @@ export interface PolicyFormInput {
   process?: ProcessRule[]
   file?: FileRule[]
   network?: NetworkRule[]
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr
 }
 
 export interface PolicyRecord {

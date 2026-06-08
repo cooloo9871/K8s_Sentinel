@@ -13,6 +13,7 @@ type PolicyFormInput struct {
 	Process     []ProcessRule     `json:"process,omitempty"`
 	File        []FileRule        `json:"file,omitempty"`
 	Network     []NetworkRule     `json:"network,omitempty"`
+	NetworkMode string            `json:"networkMode,omitempty"` // "whitelist" (NotDAddr) or "blacklist" (DAddr)
 }
 
 type ProcessRule struct {

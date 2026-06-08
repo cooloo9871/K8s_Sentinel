@@ -64,21 +64,26 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		})
 	}
 
-	// Network rules: ONE tcp_connect kprobe using NotDAddr (whitelist).
-	// Values are ALLOWED addresses; connections to any other address trigger the action.
-	var allowedAddresses []string
+	// Network rules: ONE tcp_connect kprobe.
+	// NetworkMode "blacklist" → DAddr    (block connections IN list)
+	// NetworkMode "whitelist" → NotDAddr (block connections NOT in list) — default
+	var netAddresses []string
 	for _, r := range input.Network {
 		if addr := strings.TrimSpace(r.Address); addr != "" {
-			allowedAddresses = append(allowedAddresses, addr)
+			netAddresses = append(netAddresses, addr)
 		}
 	}
-	if len(allowedAddresses) > 0 {
+	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:    "tcp_connect",
 			Syscall: false,
 			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
 			Selectors: []KProbeSelector{{
-				MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: allowedAddresses}},
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},
 				MatchActions: []ActionSelector{{Action: action}},
 			}},
 		})

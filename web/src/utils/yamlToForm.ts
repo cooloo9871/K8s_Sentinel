@@ -27,6 +27,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     process: [],
     file: [],
     network: [],
+    networkMode: 'whitelist',
   }
 
   const kprobes: any[] = doc.spec?.kprobes ?? []
@@ -62,18 +63,21 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       }
 
     } else if (call === 'tcp_connect') {
-      // Whitelist format: NotDAddr selector, each value is an allowed address
+      // Detect operator to set networkMode, then extract addresses
       for (const sel of selectors) {
         const args: any[] = sel.matchArgs ?? []
         const notDAddr = args.find((a: any) => a.operator === 'NotDAddr')
+        const dAddr    = args.find((a: any) => a.operator === 'DAddr')
         if (notDAddr) {
+          result.networkMode = 'whitelist'
           for (const addr of notDAddr.values ?? []) {
             if (addr) result.network!.push({ address: addr })
           }
-        } else {
-          // Legacy DAddr (old blacklist format) — import as whitelist entry
-          const dAddr = args.find((a: any) => a.operator === 'DAddr')
-          if (dAddr?.values?.[0]) result.network!.push({ address: dAddr.values[0] })
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
         }
       }
 
