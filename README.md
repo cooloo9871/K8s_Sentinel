@@ -1,7 +1,7 @@
 # Sentinel
 
 <p align="center">
-  <img src="assets/sentinel-lockup.svg" alt="Sentinel" width="320" />
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
 </p>
 
 Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管理 console**。透過網頁介面即可建立、編輯、刪除 TracingPolicy，並切換整體叢集的執行模式（Monitoring / Protect），不需要直接操作 `kubectl`。
@@ -123,30 +123,6 @@ deployment.apps/sentinel    1/1     1            1
 ```bash
 kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 # 開啟瀏覽器：http://localhost:8080
-```
-
-**方式 B — Ingress**
-
-建立 Ingress 資源指向 `sentinel` Service（port 80）：
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: sentinel
-  namespace: sentinel-system
-spec:
-  rules:
-    - host: sentinel.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: sentinel
-                port:
-                  number: 80
 ```
 
 ---
