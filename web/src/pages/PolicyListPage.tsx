@@ -33,6 +33,10 @@ export function PolicyListPage() {
   const [search, setSearch] = useState('')
   const [scopeFilter, setScopeFilter] = useState('all')
   const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
+  const [pendingModeChange, setPendingModeChange] = useState<{
+    policy: PolicyRecord
+    mode: 'Monitoring' | 'Protect'
+  } | null>(null)
 
   // Global mode state
   const [globalMode, setGlobalMode] = useState<Mode>('Monitoring')
@@ -204,7 +208,9 @@ export function PolicyListPage() {
                       <TableCell>
                         <Select
                           value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
-                          onValueChange={(v) => handleModeChange(p, v as 'Monitoring' | 'Protect')}
+                          onValueChange={(v) =>
+                            setPendingModeChange({ policy: p, mode: v as 'Monitoring' | 'Protect' })
+                          }
                         >
                           <SelectTrigger className="h-7 w-32 text-xs">
                             <SelectValue>
@@ -277,6 +283,42 @@ export function PolicyListPage() {
               onClick={handleGlobalModeSwitch}
             >
               Switch to {nextGlobalMode}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Per-policy mode change confirmation */}
+      <AlertDialog
+        open={!!pendingModeChange}
+        onOpenChange={(open) => { if (!open) setPendingModeChange(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Policy Mode</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                Switch <strong>{pendingModeChange?.policy.name}</strong> to{' '}
+                <strong>{pendingModeChange?.mode.toUpperCase()}</strong>?
+                {pendingModeChange?.mode === 'Protect' && (
+                  <p className="mt-2 text-destructive">
+                    ⚠ Protect mode will actively kill violating processes for this policy.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant={pendingModeChange?.mode === 'Protect' ? 'destructive' : 'default'}
+              onClick={() => {
+                if (pendingModeChange) {
+                  handleModeChange(pendingModeChange.policy, pendingModeChange.mode)
+                }
+              }}
+            >
+              Switch to {pendingModeChange?.mode}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
