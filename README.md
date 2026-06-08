@@ -28,7 +28,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管�
 ### 步驟一：Clone 專案
 
 ```bash
-git clone https://github.com/brobridge/sentinel.git
+git clone https://github.com/cooloo9871/Sentinel.git
 cd sentinel
 ```
 
