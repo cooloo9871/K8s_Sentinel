@@ -47,7 +47,8 @@ export function SecurityEventsPage() {
   const [podSearch, setPodSearch] = useState('')
 
   const filtered = events.filter((e) => {
-    if (e.type !== 'kprobe') return false // only show policy-triggered events
+    if (e.type !== 'kprobe') return false
+    if (e.policyName === 'sentinel-discovery') return false // hide discovery background policy
     if (filter === 'warning' && e.severity !== 'warning') return false
     if (filter === 'critical' && e.severity !== 'critical') return false
     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
