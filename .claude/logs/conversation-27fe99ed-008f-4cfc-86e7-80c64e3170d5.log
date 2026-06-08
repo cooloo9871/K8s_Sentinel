@@ -127810,3 +127810,400 @@ func anyMap(m map[string]any, keys ...string) map[string]any {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add -A && git commit -m "fix: show executed binary (args[0]) not caller process for sys_execve kprobe events"",
+    "timeout": 30000,
+    "description": "驗證並提交"
+  },
+  "tool_response": {
+    "stdout": "[main 683ce6f] fix: show executed binary (args[0]) not caller process for sys_execve kprobe events
+ 2 files changed, 583 insertions(+)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "683ce6f",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "一樣，在 Security Events 的 Binary 都還是只顯示 /bin/bash，我的規則明明是限制 ls 和 cat ，也確實都有限制，但是在 Security Events 的 Binary 都還是只顯示 /bin/bash"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNTg5MDU5NTg0Ojk3Nzk1OQ==","pid":977959,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t filter -C FLANNEL-FWD -s 10.244.0.0/16 -m comment --comment \\"flanneld forward\\" -j ACCEPT --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.002112826Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977959,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.002112666Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNTkwMDg0MzQwOjk3Nzk2MA==","pid":977960,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t filter -S FLANNEL-FWD 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.003137711Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977960,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.003137432Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNTkxMDQ4NTY1Ojk3Nzk2MQ==","pid":977961,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t filter -C FLANNEL-FWD -d 10.244.0.0/16 -m comment --comment \\"flanneld forward\\" -j ACCEPT --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.004101997Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977961,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.004101647Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjUwNjkxNDcxOjk3Nzk3NA==","pid":977974,"uid":0,"cwd":"/","binary":"/bin/calico-node","arguments":"-felix-live","flags":"execve rootcwd clone","start_time":"2026-06-08T05:35:37.063744573Z","auid":1000,"pod":{"namespace":"kube-system","name":"canal-gxx64","uid":"281ad6de-fe9b-47de-8ed8-18edb72c1f58","container":{"id":"containerd://02511702861a819c3ab4e4b4ed539a4eeb14a1ee3f504fd67a890c00d57370aa","name":"calico-node","image":{"id":"quay.io/calico/node@sha256:f2339c4ff3a57228cbc39a1f67ab81abded1997d843e0e0b1e86664c7c4eb6c0","name":"quay.io/calico/node:v3.31.3"},"start_time":"2026-05-29T09:36:28Z","pid":1918649,"maybe_exec_probe":true,"security_context":{"privileged":true}},"pod_labels":{"controller-revision-hash":"76d875fb44","k8s-app":"canal","pod-template-generation":"1"},"workload":"canal","workload_kind":"DaemonSet"},"docker":"02511702861a819c3ab4e4b4ed539a4","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjk3Nzk2Mg==","tid":977974,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.063744563Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjcxNDcyMjY1Ojk3Nzk4OQ==","pid":977989,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"--version","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.084525837Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977989,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.084525357Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjcyMjkzMDUxOjk3Nzk5MA==","pid":977990,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -S FLANNEL-POSTRTG 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.085346332Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977990,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.085346133Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjczNjA5NzI1Ojk3Nzk5MQ==","pid":977991,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -C POSTROUTING -m comment --comment \\"flanneld masq\\" -j FLANNEL-POSTRTG --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.086663087Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977991,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.086662807Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjc1MjEwODU4Ojk3Nzk5Mg==","pid":977992,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -S FLANNEL-POSTRTG 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.088264180Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977992,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.088263940Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjc2NDMyNDIyOjk3Nzk5Mw==","pid":977993,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -C FLANNEL-POSTRTG -m mark --mark 0x4000/0x4000 -m comment --comment \\"flanneld masq\\" -j RETURN --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.089485634Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977993,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.089485494Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjc3ODA5MjU2Ojk3Nzk5NA==","pid":977994,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -S FLANNEL-POSTRTG 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.090862668Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977994,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.090862348Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjc5MTAyNzgwOjk3Nzk5NQ==","pid":977995,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -C FLANNEL-POSTRTG -s 10.244.32.128/25 -d 10.244.0.0/16 -m comment --comment \\"flanneld masq\\" -j RETURN --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.092156032Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977995,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.092155862Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjgwMjAxNTE1Ojk3Nzk5Ng==","pid":977996,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -S FLANNEL-POSTRTG 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.093254857Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977996,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.093254597Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjgxMzgyODk5Ojk3Nzk5Nw==","pid":977997,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -C FLANNEL-POSTRTG -s 10.244.0.0/16 -d 10.244.32.128/25 -m comment --comment \\"flanneld masq\\" -j RETURN --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.094436241Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977997,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.094435981Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjgyNjM3NTczOjk3Nzk5OA==","pid":977998,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -S FLANNEL-POSTRTG 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.095690895Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977998,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.095690655Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjgzOTIxMTE3Ojk3Nzk5OQ==","pid":977999,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -C FLANNEL-POSTRTG ! -s 10.244.0.0/16 -d 10.244.32.128/25 -m comment --comment \\"flanneld masq\\" -j RETURN --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.096974349Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":977999,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.096974189Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjg1MTE3MDcyOjk3ODAwMA==","pid":978000,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -S FLANNEL-POSTRTG 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.098170424Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":978000,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.098170144Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjg2MjIyMTY3Ojk3ODAwMQ==","pid":978001,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -C FLANNEL-POSTRTG -s 10.244.0.0/16 ! -d 224.0.0.0/4 -m comment --comment \\"flanneld masq\\" -j MASQUERADE --random-fully --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.099275409Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":978001,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.099275250Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjg3NDc2MzQxOjk3ODAwMg==","pid":978002,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -S FLANNEL-POSTRTG 1 --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.100529603Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":978002,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.100529423Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjg4NjE2OTE2Ojk3ODAwMw==","pid":978003,"uid":0,"cwd":"/","binary":"/sbin/iptables","arguments":"-t nat -C FLANNEL-POSTRTG ! -s 10.244.0.0/16 -d 10.244.0.0/16 -m comment --comment \\"flanneld masq\\" -j MASQUERADE --random-fully --wait","flags":"execve rootcwd","start_time":"2026-06-08T05:35:37.101670247Z","auid":1000,"docker":"da43c4d0699a0d03c48f15a7ad0346b","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI2NjY=","tid":978003,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.101669999Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exit":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNjUwNjkxNDcxOjk3Nzk3NA==","pid":977974,"uid":0,"cwd":"/","binary":"/bin/calico-node","arguments":"-felix-live","flags":"execve rootcwd clone","start_time":"2026-06-08T05:35:37.063744573Z","auid":1000,"pod":{"namespace":"kube-system","name":"canal-gxx64","uid":"281ad6de-fe9b-47de-8ed8-18edb72c1f58","container":{"id":"containerd://02511702861a819c3ab4e4b4ed539a4eeb14a1ee3f504fd67a890c00d57370aa","name":"calico-node","image":{"id":"quay.io/calico/node@sha256:f2339c4ff3a57228cbc39a1f67ab81abded1997d843e0e0b1e86664c7c4eb6c0","name":"quay.io/calico/node:v3.31.3"},"start_time":"2026-05-29T09:36:28Z","pid":1918649,"maybe_exec_probe":true,"security_context":{"privileged":true}},"pod_labels":{"controller-revision-hash":"76d875fb44","k8s-app":"canal","pod-template-generation":"1"},"workload":"canal","workload_kind":"DaemonSet"},"docker":"02511702861a819c3ab4e4b4ed539a4","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjk3Nzk2Mg==","tid":977974,"in_init_tree":false},"time":"2026-06-08T05:35:37.102187925Z"},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.102187874Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNzI2MTgzNjUzOjk3ODAwNA==","pid":978004,"uid":0,"cwd":"/etc/service/enabled/felix","binary":"/usr/sbin/nft","arguments":"--json list maps ip","flags":"execve","start_time":"2026-06-08T05:35:37.139237146Z","auid":1000,"pod":{"namespace":"kube-system","name":"canal-gxx64","uid":"281ad6de-fe9b-47de-8ed8-18edb72c1f58","container":{"id":"containerd://02511702861a819c3ab4e4b4ed539a4eeb14a1ee3f504fd67a890c00d57370aa","name":"calico-node","image":{"id":"quay.io/calico/node@sha256:f2339c4ff3a57228cbc39a1f67ab81abded1997d843e0e0b1e86664c7c4eb6c0","name":"quay.io/calico/node:v3.31.3"},"start_time":"2026-05-29T09:36:28Z","pid":1918664,"security_context":{"privileged":true}},"pod_labels":{"controller-revision-hash":"76d875fb44","k8s-app":"canal","pod-template-generation":"1"},"workload":"canal","workload_kind":"DaemonSet"},"docker":"02511702861a819c3ab4e4b4ed539a4","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI0MDk=","tid":978004,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.139236876Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNzMxNDc5NTc5Ojk3ODAwNQ==","pid":978005,"uid":0,"cwd":"/etc/service/enabled/felix","binary":"/usr/sbin/iptables","arguments":"--version","flags":"execve","start_time":"2026-06-08T05:35:37.144533001Z","auid":1000,"pod":{"namespace":"kube-system","name":"canal-gxx64","uid":"281ad6de-fe9b-47de-8ed8-18edb72c1f58","container":{"id":"containerd://02511702861a819c3ab4e4b4ed539a4eeb14a1ee3f504fd67a890c00d57370aa","name":"calico-node","image":{"id":"quay.io/calico/node@sha256:f2339c4ff3a57228cbc39a1f67ab81abded1997d843e0e0b1e86664c7c4eb6c0","name":"quay.io/calico/node:v3.31.3"},"start_time":"2026-05-29T09:36:28Z","pid":1918665,"security_context":{"privileged":true}},"pod_labels":{"controller-revision-hash":"76d875fb44","k8s-app":"canal","pod-template-generation":"1"},"workload":"canal","workload_kind":"DaemonSet"},"docker":"02511702861a819c3ab4e4b4ed539a4","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI0MDk=","tid":978005,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.144532691Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNzMzMjExOTQxOjk3ODAwNg==","pid":978006,"uid":0,"cwd":"/etc/service/enabled/felix","binary":"/usr/sbin/nft","arguments":"--json list chains ip","flags":"execve","start_time":"2026-06-08T05:35:37.146265362Z","auid":1000,"pod":{"namespace":"kube-system","name":"canal-gxx64","uid":"281ad6de-fe9b-47de-8ed8-18edb72c1f58","container":{"id":"containerd://02511702861a819c3ab4e4b4ed539a4eeb14a1ee3f504fd67a890c00d57370aa","name":"calico-node","image":{"id":"quay.io/calico/node@sha256:f2339c4ff3a57228cbc39a1f67ab81abded1997d843e0e0b1e86664c7c4eb6c0","name":"quay.io/calico/node:v3.31.3"},"start_time":"2026-05-29T09:36:28Z","pid":1918666,"security_context":{"privileged":true}},"pod_labels":{"controller-revision-hash":"76d875fb44","k8s-app":"canal","pod-template-generation":"1"},"workload":"canal","workload_kind":"DaemonSet"},"docker":"02511702861a819c3ab4e4b4ed539a4","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI0MDk=","tid":978006,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.146265053Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_exec":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyODgyNzM4MTU0Mjc4Ojk3ODAwNw==","pid":978007,"uid":0,"cwd":"/etc/service/enabled/felix","binary":"/usr/sbin/nft","arguments":"--json list table ip calico","flags":"execve","start_time":"2026-06-08T05:35:37.151207710Z","auid":1000,"pod":{"namespace":"kube-system","name":"canal-gxx64","uid":"281ad6de-fe9b-47de-8ed8-18edb72c1f58","container":{"id":"containerd://02511702861a819c3ab4e4b4ed539a4eeb14a1ee3f504fd67a890c00d57370aa","name":"calico-node","image":{"id":"quay.io/calico/node@sha256:f2339c4ff3a57228cbc39a1f67ab81abded1997d843e0e0b1e86664c7c4eb6c0","name":"quay.io/calico/node:v3.31.3"},"start_time":"2026-05-29T09:36:28Z","pid":1918667,"security_context":{"privileged":true}},"pod_labels":{"controller-revision-hash":"76d875fb44","k8s-app":"canal","pod-template-generation":"1"},"workload":"canal","workload_kind":"DaemonSet"},"docker":"02511702861a819c3ab4e4b4ed539a4","parent_exec_id":"dGtkZXYtd29ya2VyMjowOjE3NzI0MDk=","tid":978007,"in_init_tree":false}},"node_name":"tkdev-worker2","time":"2026-06-08T05:35:37.151207470Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "[tkdev]bigred@andy-tkcdc-01:~$ kubectl exec -n kube-system $POD -c tetragon -- \\ 
+    tetra getevents -o json --namespace test1 2>/dev/null | \\
+    grep '"process_kprobe"' | head -3
+{"process_kprobe":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkzMDY1NjMxNDY1OTcxOjk4NTIxNg==","pid":985216,"uid":0,"cwd":"/","binary":"/bin/bash","flags":"execve","start_time":"2026-06-08T05:38:40.044520273Z","auid":1000,"pod":{"namespace":"test1","name":"bx1","uid":"4c07e121-2fc5-4082-aa60-00eaa72d857b","container":{"id":"containerd://1c6b6b75ff2077987b5a76c7b3a4b43b623311de499d69ec930a312361efd2bd","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-08T03:09:06Z","pid":311,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"1c6b6b75ff2077987b5a76c7b3a4b43","parent_exec_id":"dGtkZXYtd29ya2VyMjoxMzkyOTA4MTEyNjc0NTM2Ojk3OTA1MQ==","refcnt":1,"tid":985216,"in_init_tree":false},"parent":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyOTA4MTEyNjc0NTM2Ojk3OTA1MQ==","pid":979051,"uid":0,"cwd":"/","binary":"/bin/bash","flags":"execve rootcwd clone","start_time":"2026-06-08T05:36:02.525727848Z","auid":1000,"pod":{"namespace":"test1","name":"bx1","uid":"4c07e121-2fc5-4082-aa60-00eaa72d857b","container":{"id":"containerd://1c6b6b75ff2077987b5a76c7b3a4b43b623311de499d69ec930a312361efd2bd","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-08T03:09:06Z","pid":304,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"1c6b6b75ff2077987b5a76c7b3a4b43","parent_exec_id":"dGtkZXYtd29ya2VyMjoxMzkyOTA4MDgzNDAxOTMyOjk3OTAzOQ==","tid":979051,"in_init_tree":false},"function_name":"__x64_sys_execve","args":[{"string_arg":"/bin/cat"}],"action":"KPROBE_ACTION_SIGKILL","policy_name":"deny-process","return_action":"KPROBE_ACTION_POST"},"node_name":"tkdev-worker2","time":"2026-06-08T05:38:40.044762293Z","node_labels":{"app":"taroko","beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"tkdev-worker2","kubernetes.io/os":"linux","node-role.kubernetes.io/taroko-gateway":""}}
+{"process_kprobe":{"process":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkzMDY2OTA2NzYwNzQ3Ojk4NTIyMw==","pid":985223,"uid":0,"cwd":"/","binary":"/bin/bash","flags":"execve","start_time":"2026-06-08T05:38:41.319814739Z","auid":1000,"pod":{"namespace":"test1","name":"bx1","uid":"4c07e121-2fc5-4082-aa60-00eaa72d857b","container":{"id":"containerd://1c6b6b75ff2077987b5a76c7b3a4b43b623311de499d69ec930a312361efd2bd","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-08T03:09:06Z","pid":312,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"1c6b6b75ff2077987b5a76c7b3a4b43","parent_exec_id":"dGtkZXYtd29ya2VyMjoxMzkyOTA4MTEyNjc0NTM2Ojk3OTA1MQ==","refcnt":1,"tid":985223,"in_init_tree":false},"parent":{"exec_id":"dGtkZXYtd29ya2VyMjoxMzkyOTA4MTEyNjc0NTM2Ojk3OTA1MQ==","pid":979051,"uid":0,"cwd":"/","binary":"/bin/bash","flags":"execve rootcwd clone","start_time":"2026-06-08T05:36:02.525727848Z","auid":1000,"pod":{"namespace":"test1","name":"bx1","uid":"4c07e121-2fc5-4082-aa60-00eaa72d857b","container":{"id":"containerd://1c6b6b75ff2077987b5a76c7b3a4b43b623311de499d69ec930a312361efd2bd","name":"bx","image":{"id":"quay.io/cooloo9871/debug.alp@sha256:1470766cf8c2a61ba54d8f59b80dab0f4e04f5db8c983acc336c17d1d412b2ee","name":"quay.io/cooloo9871/debug.alp:latest"},"start_time":"2026-06-08T03:09:06Z","pid":304,"security_context":{}},"pod_labels":{"run":"bx1"},"workload":"bx1","workload_kind":"Pod"},"docker":"1c6b6b75ff2077987b5a76c7b3a4b43","parent_exec_id":"dGtkZXYtd29ya2VyMjoxMzkyOTA4MDgzNDAxOTMyOjk3OTAzOQ==","tid":979051,"in_init_tree":false},"function_name":"__x64_sys_execve","args":[{"string_arg":"/bin/cat"}],"action":"KPROBE_ACTION_SIGKILL","policy_name":"deny-process","return_actio"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	// For sys_execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Override Binary with the actual executed path from args[0].
+	if evt.Function == "sys_execve" {",
+    "new_string": "	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	// For sys_execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Override Binary with the actual executed path from args[0].
+	if evt.Function == "sys_execve" {",
+    "new_string": "	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	// For sys_execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Override Binary with the actual executed path from args[0].
+	if evt.Function == "sys_execve" {",
+    "newString": "	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For sys_execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Override Binary with the actual executed path from args[0].
+	if evt.Function == "sys_execve" {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 158,
+        "oldLines": 10,
+        "newStart": 158,
+        "newLines": 10,
+        "lines": [
+          "     evt.Action = "monitor"",
+          "   }",
+          " ",
+          "-  // For sys_execve kprobes the matching is on args[0] (the binary being executed),",
+          "+  // For execve kprobes the matching is on args[0] (the binary being executed),",
+          "   // not on process.binary (which is the calling process, e.g. bash).",
+          "-  // Override Binary with the actual executed path from args[0].",
+          "-  if evt.Function == "sys_execve" {",
+          "+  // Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.",
+          "+  if strings.Contains(evt.Function, "execve") {",
+          "     if args, ok := kp["args"].([]any); ok && len(args) > 0 {",
+          "       if arg0, ok := args[0].(map[string]any); ok {",
+          "         if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add -A && git commit -m "fix: match __x64_sys_execve (arch-prefixed) not just sys_execve for args[0] extraction"",
+    "timeout": 30000,
+    "description": "驗證並提交"
+  }
+}
+
+----------------------------------------
+
