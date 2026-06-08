@@ -49,11 +49,6 @@ export function AppSidebar() {
                   <NavLink to="/policies/tracing">TracingPolicy</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
-                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -65,6 +60,11 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/security/events')}>
                   <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

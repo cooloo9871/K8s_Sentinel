@@ -23,7 +23,7 @@ export function NetworkSection({ rules, onChange }: Props) {
           <Input
             placeholder="e.g. 127.0.0.1 or 10.0.0.0/8"
             value={r.address}
-            onChange={(e) => update(i, e.target.value)}
+            onChange={e => update(i, e.target.value)}
             className="h-8 text-sm"
           />
           <Button
@@ -37,9 +37,7 @@ export function NetworkSection({ rules, onChange }: Props) {
         </div>
       ))}
       <div>
-        <Button variant="outline" size="sm" onClick={add}>
-          + Add
-        </Button>
+        <Button variant="outline" size="sm" onClick={add}>+ Add</Button>
       </div>
     </div>
   )

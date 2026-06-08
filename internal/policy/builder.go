@@ -43,8 +43,6 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 	}
 
 	// File rules: ONE security_file_permission kprobe with all paths combined.
-	// sys_read/sys_write/sys_openat work on file descriptors and cannot filter
-	// by path. security_file_permission receives the file object directly.
 	var allPaths []string
 	for _, r := range input.File {
 		allPaths = append(allPaths, r.Paths...)
@@ -53,10 +51,7 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:    "security_file_permission",
 			Syscall: false,
-			Args: []KProbeArg{
-				{Index: 0, Type: "file"},
-				{Index: 1, Type: "int"},
-			},
+			Args:    []KProbeArg{{Index: 0, Type: "file"}, {Index: 1, Type: "int"}},
 			Selectors: []KProbeSelector{{
 				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: allPaths}},
 				MatchActions: []ActionSelector{{Action: action}},
@@ -80,36 +75,49 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		}
 	}
 
-	// Guard on either addresses OR ports — ports-only rules are valid
-	// (e.g. NotDPort:6379 = kill anything not using port 6379).
-	if len(netAddresses) > 0 || len(ports) > 0 {
-		var netSelectors []KProbeSelector
-		if input.NetworkMode == "blacklist" {
-			// Blacklist: ONE selector → DAddr AND/OR DPort (AND semantics).
-			var matchArgs []ArgSelector
-			if len(netAddresses) > 0 {
-				matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DAddr", Values: netAddresses})
-			}
-			if len(ports) > 0 {
-				matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
-			}
-			netSelectors = []KProbeSelector{{MatchArgs: matchArgs, MatchActions: []ActionSelector{{Action: action}}}}
-		} else {
-			// Whitelist: SEPARATE selectors → NotDAddr OR NotDPort (OR semantics).
-			if len(netAddresses) > 0 {
-				netSelectors = append(netSelectors, KProbeSelector{
-					MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: netAddresses}},
-					MatchActions: []ActionSelector{{Action: action}},
-				})
-			}
-			if len(ports) > 0 {
-				netSelectors = append(netSelectors, KProbeSelector{
-					MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDPort", Values: ports}},
-					MatchActions: []ActionSelector{{Action: action}},
-				})
-			}
-		}
+	var netSelectors []KProbeSelector
 
+	// Append selectors using blacklist/whitelist mode.
+	// An unrecognised NetworkMode with addresses/ports is treated as whitelist
+	// only when NetworkMode is the empty string (unset); any other unexpected
+	// value skips the address/port selectors entirely to avoid silently applying
+	// wrong semantics.
+	if input.NetworkMode != "" && input.NetworkMode != "blacklist" && input.NetworkMode != "whitelist" {
+		// Unknown mode — skip address/port selectors, keep binary-specific ones.
+		goto buildKProbe
+	}
+	if input.NetworkMode == "blacklist" {
+		var matchArgs []ArgSelector
+		if len(netAddresses) > 0 {
+			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DAddr", Values: netAddresses})
+		}
+		if len(ports) > 0 {
+			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
+		}
+		if len(matchArgs) > 0 {
+			netSelectors = append(netSelectors, KProbeSelector{
+				MatchArgs:    matchArgs,
+				MatchActions: []ActionSelector{{Action: action}},
+			})
+		}
+	} else {
+		// Whitelist: SEPARATE selectors → NotDAddr OR NotDPort (OR semantics).
+		if len(netAddresses) > 0 {
+			netSelectors = append(netSelectors, KProbeSelector{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: netAddresses}},
+				MatchActions: []ActionSelector{{Action: action}},
+			})
+		}
+		if len(ports) > 0 {
+			netSelectors = append(netSelectors, KProbeSelector{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDPort", Values: ports}},
+				MatchActions: []ActionSelector{{Action: action}},
+			})
+		}
+	}
+
+buildKProbe:
+	if len(netSelectors) > 0 {
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:      "tcp_connect",
 			Syscall:   false,

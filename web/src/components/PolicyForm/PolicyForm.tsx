@@ -17,7 +17,6 @@ import { NetworkSection } from './NetworkSection'
 import { formToYaml } from '../../utils/formToYaml'
 import type { PolicyFormInput, NetworkRule } from '../../api/types'
 
-type FileEntry = { path: string }
 type LabelEntry = { key: string; value: string }
 
 const CLUSTER_WIDE = '__cluster_wide__'
@@ -40,8 +39,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   }, [value, action])
 
   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
-  const fileEntries: FileEntry[] =
-    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+  const fileRules = value.file ?? []
 
   // Use local state for label entries so empty keys don't get discarded while typing
   const [localLabels, setLocalLabels] = useState<LabelEntry[]>(() =>
@@ -60,8 +58,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const setProcessBinaries = (binaries: string[]) =>
     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
 
-  const setFileEntries = (entries: FileEntry[]) =>
-    onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
+  const setFileRules = (rules: typeof fileRules) =>
+    onChange({ ...value, file: rules })
 
   const setNetRules = (rules: NetworkRule[]) =>
     onChange({ ...value, network: rules })
@@ -195,7 +193,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <CardTitle className="text-sm font-medium">File Rules</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <FileSection rules={fileEntries} onChange={setFileEntries} />
+            <FileSection rules={fileRules} onChange={setFileRules} />
           </CardContent>
         </Card>
 

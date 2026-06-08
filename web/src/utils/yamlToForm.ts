@@ -64,7 +64,6 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       }
 
     } else if (call === 'tcp_connect') {
-      // Detect operator to set networkMode, then extract addresses
       for (const sel of selectors) {
         const args: any[] = sel.matchArgs ?? []
         const notDAddr = args.find((a: any) => a.operator === 'NotDAddr')
@@ -80,9 +79,12 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
             if (addr) result.network!.push({ address: addr })
           }
         }
-        // Parse DPort / NotDPort into networkPorts
-        const dPort    = args.find((a: any) => a.operator === 'DPort' || a.operator === 'NotDPort')
+        const dPort = args.find((a: any) => a.operator === 'DPort' || a.operator === 'NotDPort')
         if (dPort) {
+          // DPort without a corresponding DAddr means blacklist (port-only rule).
+          if (dPort.operator === 'DPort' && !dAddr && !notDAddr) {
+            result.networkMode = 'blacklist'
+          }
           for (const port of dPort.values ?? []) {
             if (port) result.networkPorts!.push(String(port))
           }
@@ -95,7 +97,6 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       call === 'sys_write' ||
       call === 'sys_openat'
     ) {
-      // All file-related kprobes: extract path values from matchArgs index 0
       for (const sel of selectors) {
         for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
           for (const path of ma.values ?? []) {

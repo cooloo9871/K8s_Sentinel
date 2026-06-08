@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io/fs"
 	"log"
 	"net/http"
@@ -18,6 +19,7 @@ func main() {
 	}
 
 	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+	store.StartDiscoveryLoop(context.Background())
 
 	cfg := handler.Config{
 		Store: store,

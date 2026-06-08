@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IconActivity, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -11,16 +11,34 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
 
 type FilterType = 'all' | 'warning' | 'critical'
 
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
 function SeverityBadge({ severity }: { severity: Severity }) {
   if (severity === 'critical') {
-    return (
-      <Badge variant="destructive" className="font-medium">
-        Critical
-      </Badge>
-    )
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
   }
   return (
     <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
@@ -33,7 +51,7 @@ function RelativeTime({ iso }: { iso: string }) {
   if (!iso) return <span className="text-muted-foreground">—</span>
   const d = new Date(iso)
   if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
-  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
   const label = diff < 5 ? 'just now'
     : diff < 60 ? `${diff}s ago`
     : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
@@ -41,23 +59,61 @@ function RelativeTime({ iso }: { iso: string }) {
   return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
 }
 
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath) items.push({ label: 'File', value: e.filePath })
+  if (e.netDest)  items.push({ label: 'Network', value: e.netDest })
+  if (e.binary)   items.push({ label: 'Binary', value: e.arguments ? `${e.binary} ${e.arguments}` : e.binary })
+  if (e.parentBin) items.push({ label: 'Parent', value: e.parentBin })
+  if (e.function) items.push({ label: 'Function', value: e.function })
+  if (e.nodeName) items.push({ label: 'Node', value: e.nodeName })
+  items.push({ label: 'Time', value: new Date(e.time).toLocaleString() })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10">
+        <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex items-baseline gap-1.5 text-xs">
+              <span className="text-muted-foreground">{label}:</span>
+              <span className="font-mono">{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
 export function SecurityEventsPage() {
   const { events, connected, error, reconnect } = useSecurityEvents()
   const [filter, setFilter] = useState<FilterType>('all')
   const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Do NOT include e.time — dedup updates time on every new occurrence,
+  // which would change the key and auto-collapse the detail row.
+  const eventKey = (e: DisplayEvent) =>
+    `${e.pod}|${e.binary}|${e.policyName}|${e.function}|${e.action}`
 
   const filtered = events.filter((e) => {
-    if (e.type !== 'kprobe') return false
-    if (e.policyName === 'sentinel-discovery') return false // hide discovery background policy
     if (filter === 'warning' && e.severity !== 'warning') return false
     if (filter === 'critical' && e.severity !== 'critical') return false
     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
     return true
   })
 
-  const kprobeEvents = events.filter(e => e.type === 'kprobe')
-  const warningCount = kprobeEvents.filter(e => e.severity === 'warning').length
-  const criticalCount = kprobeEvents.filter(e => e.severity === 'critical').length
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
 
   return (
     <>
@@ -110,7 +166,6 @@ export function SecurityEventsPage() {
       )}
 
       <Card>
-        {/* Stats bar */}
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
           <span className="text-muted-foreground">
             {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
@@ -140,58 +195,69 @@ export function SecurityEventsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8" />
                   <TableHead className="w-24">Severity</TableHead>
-                  <TableHead>Binary</TableHead>
+                  <TableHead>Rule / Detail</TableHead>
                   <TableHead>Namespace</TableHead>
                   <TableHead>Pod / Container</TableHead>
                   <TableHead>Policy</TableHead>
-                  <TableHead>Function</TableHead>
-                  <TableHead>Node</TableHead>
                   <TableHead className="w-24">Time</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((e, i) => (
-                  <TableRow
-                    key={i}
-                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
-                  >
-                    <TableCell>
-                      <SeverityBadge severity={e.severity} />
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
-                      {e.arguments && (
-                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
-                          {e.arguments}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {e.namespace || '—'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {e.pod || '—'}
-                      {e.container && (
-                        <span className="text-xs text-muted-foreground"> / {e.container}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {e.policyName ? (
-                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
-                      ) : '—'}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {e.function || '—'}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {e.nodeName || '—'}
-                    </TableCell>
-                    <TableCell>
-                      <RelativeTime iso={e.time} />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <>
+                    <TableRow
+                      key={`row-${key}`}
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium">
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        {e.pod || '—'}
+                        {e.container && (
+                          <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </>
+                  )
+                })}
               </TableBody>
             </Table>
           )}

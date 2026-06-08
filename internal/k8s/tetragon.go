@@ -29,8 +29,6 @@ type TetragonEvent struct {
 	Action     string `json:"action"` // "monitor" or "kill"
 	PolicyName string `json:"policyName"`
 	Function   string `json:"function"`
-	FilePath   string `json:"filePath"` // extracted from file_arg (security_file_permission)
-	NetDest    string `json:"netDest"`  // extracted from sock_arg daddr:dport (tcp_connect)
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
@@ -46,18 +44,12 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		return err
 	}
 
-	// Log all pod names so the user can see which nodes are being connected to.
-	fmt.Printf("[sentinel-discovery] connecting to %d Tetragon pods: %v\n", len(pods), pods)
-
 	var wg sync.WaitGroup
 	for _, podName := range pods {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
-				// Surface per-pod errors so RBAC / connectivity issues are visible in Sentinel logs.
-				fmt.Printf("[sentinel-discovery] pod %s stream error: %v\n", name, err)
-			}
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
 		}(podName)
 	}
 	wg.Wait()
@@ -106,6 +98,17 @@ func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- Te
 		if !ok {
 			continue
 		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			if cid := extractContainerIDFromRunc(evt.Binary, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
 		select {
 		case out <- evt:
 		case <-ctx.Done():
@@ -136,7 +139,6 @@ func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
 }
 
 // parseTetragonLog parses a single JSON line from tetra getevents -o json.
-// Only process_kprobe events are forwarded (policy-triggered).
 func parseTetragonLog(line string) (TetragonEvent, bool) {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
@@ -148,22 +150,23 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		NodeName: anyStr(raw, "node_name", "nodeName"),
 	}
 
-	// process_exec — base sensor, fires for every pod WITHOUT needing a TracingPolicy.
-	// Used by Behavior Discovery to learn which processes run in each pod.
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
 	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
 		proc := anyMap(execData, "process")
 		if proc == nil {
 			return TetragonEvent{}, false
 		}
 		fillProcess(&evt, proc)
-		// Only forward events that have pod context (skip host/infra processes)
-		if evt.Pod == "" {
+		if evt.Pod == "" || evt.Binary == "" {
 			return TetragonEvent{}, false
 		}
 		evt.Type = "exec"
 		evt.Action = "monitor"
 		if parent := anyMap(execData, "parent"); parent != nil {
-			evt.ParentBin = anyStr(parent, "binary")
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
 		}
 		return evt, true
 	}
@@ -173,9 +176,21 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	if kp == nil {
 		return TetragonEvent{}, false
 	}
+
 	evt.Type = "kprobe"
 
 	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
 	evt.Function = anyStr(kp, "function_name", "functionName")
 	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
 
@@ -186,39 +201,15 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		evt.Action = "monitor"
 	}
 
-	// Extract additional context from kprobe args for Behavior Discovery.
-	if args, ok := kp["args"].([]any); ok {
-		for _, a := range args {
-			argMap, ok := a.(map[string]any)
-			if !ok {
-				continue
-			}
-			// execve: args[0] contains the executed binary path
-			if strings.Contains(evt.Function, "execve") {
-				if bin := anyStr(argMap, "string_arg", "stringArg"); bin != "" {
-					evt.ParentBin = evt.Binary
-					evt.Binary = bin
-				}
-			}
-			// security_file_permission: args[0] is file_arg with path
-			if fileArg := anyMap(argMap, "file_arg", "fileArg"); fileArg != nil {
-				evt.FilePath = anyStr(fileArg, "path")
-			}
-			// tcp_connect: args[0] is sock_arg with daddr/dport
-			if sockArg := anyMap(argMap, "sock_arg", "sockArg"); sockArg != nil {
-				daddr := anyStr(sockArg, "daddr", "dest_addr", "destAddr")
-				if daddr != "" {
-					dport := anyStr(sockArg, "dport", "dest_port", "destPort")
-					if dport == "" {
-						if dp, ok := sockArg["dport"].(float64); ok && dp > 0 {
-							dport = fmt.Sprintf("%d", int(dp))
-						}
-					}
-					if dport != "" && dport != "0" {
-						evt.NetDest = fmt.Sprintf("%s:%s", daddr, dport)
-					} else {
-						evt.NetDest = daddr
-					}
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
 				}
 			}
 		}

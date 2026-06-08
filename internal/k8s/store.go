@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,11 +34,22 @@ type Store struct {
 	client     dynamic.Interface
 	typed      *kubernetes.Clientset
 	restConfig *rest.Config
+	modeMu     sync.RWMutex
+	globalMode string // explicitly set by user; never auto-derived from policies
+	Discovery  *DiscoveryProfileStore
+	containers *containerResolver
 }
 
 // NewStore creates a Store wrapping the given clients.
 func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
-	return &Store{client: client, typed: typed, restConfig: cfg}
+	return &Store{
+		client:     client,
+		typed:      typed,
+		restConfig: cfg,
+		globalMode: "Monitoring",
+		Discovery:  NewDiscoveryProfileStore(),
+		containers: newContainerResolver(),
+	}
 }
 
 // List returns all cluster-wide and namespaced policies.
@@ -212,6 +224,32 @@ func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error)
 	return events, nil
 }
 
+// noisyLabelPrefixes are auto-generated labels that are not useful as pod selectors.
+var noisyLabelPrefixes = []string{
+	"pod-template-hash",
+	"controller-revision-hash",
+	"statefulset.kubernetes.io/pod-name",
+}
+
+// GetPodLabels returns the meaningful labels of a pod, filtering auto-generated noise.
+func (s *Store) GetPodLabels(ctx context.Context, namespace, name string) (map[string]string, error) {
+	pod, err := s.typed.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)
+	}
+	labels := make(map[string]string)
+outer:
+	for k, v := range pod.Labels {
+		for _, noisy := range noisyLabelPrefixes {
+			if strings.HasPrefix(k, noisy) {
+				continue outer
+			}
+		}
+		labels[k] = v
+	}
+	return labels, nil
+}
+
 // ListNamespaces returns all namespace names in the cluster.
 func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
 	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
@@ -225,46 +263,17 @@ func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+// GetMode returns the explicitly set global enforcement mode.
+// It never auto-derives the mode from policy actions.
 func (s *Store) GetMode(ctx context.Context) (string, error) {
-	records, err := s.List(ctx)
-	if err != nil {
-		return "", err
-	}
-	if len(records) == 0 {
-		return "Monitoring", nil
-	}
-
-	postCount, killCount := 0, 0
-	for _, r := range records {
-		var tp policy.TracingPolicy
-		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
-			continue
-		}
-		for _, kp := range tp.Spec.KProbes {
-			for _, sel := range kp.Selectors {
-				for _, act := range sel.MatchActions {
-					switch act.Action {
-					case policy.ActionPost:
-						postCount++
-					case policy.ActionSigkill:
-						killCount++
-					}
-				}
-			}
-		}
-	}
-
-	if killCount == 0 {
-		return "Monitoring", nil
-	}
-	if postCount == 0 {
-		return "Protect", nil
-	}
-	return "Mixed", nil
+	s.modeMu.RLock()
+	defer s.modeMu.RUnlock()
+	return s.globalMode, nil
 }
 
-// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+// SetMode applies the enforcement mode to all policies first, then updates the
+// cached globalMode. If any policy apply fails the cache is not updated, so
+// the displayed mode stays consistent with what was actually applied.
 func (s *Store) SetMode(ctx context.Context, mode string) error {
 	action := policy.ActionPost
 	if mode == "Protect" {
@@ -292,6 +301,11 @@ func (s *Store) SetMode(ctx context.Context, mode string) error {
 			return fmt.Errorf("apply policy %q: %w", r.Name, err)
 		}
 	}
+
+	// Only update cached mode after all policies are successfully applied.
+	s.modeMu.Lock()
+	s.globalMode = mode
+	s.modeMu.Unlock()
 	return nil
 }
 
@@ -406,73 +420,4 @@ func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string)
 		}
 	}
 	return s.Apply(ctx, tp)
-}
-
-const discoveryPolicyName = "sentinel-discovery"
-
-// discoveryPolicyYAML is a cluster-wide catch-all TracingPolicy that captures
-// all file access and network connections across every pod — no selectors means
-// every call is logged with action Post (Monitoring mode).
-const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
-kind: TracingPolicy
-metadata:
-  name: sentinel-discovery
-spec:
-  kprobes:
-  - call: "security_file_permission"
-    syscall: false
-    args:
-    - index: 0
-      type: "file"
-    - index: 1
-      type: "int"
-  - call: "tcp_connect"
-    syscall: false
-    args:
-    - index: 0
-      type: "sock"
-`
-
-// labelsToSkip contains auto-generated Kubernetes labels that are too noisy
-// or pod-instance-specific to be useful in a TracingPolicy podSelector.
-var labelsToSkip = map[string]bool{
-	"pod-template-hash":                   true,
-	"controller-revision-hash":            true,
-	"statefulset.kubernetes.io/pod-name":  true,
-	"batch.kubernetes.io/job-completion-index": true,
-}
-
-// GetPodLabels returns the labels of a pod, filtering out noisy auto-generated ones.
-func (s *Store) GetPodLabels(ctx context.Context, namespace, name string) (map[string]string, error) {
-	pod, err := s.typed.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)
-	}
-	result := make(map[string]string)
-	for k, v := range pod.Labels {
-		if !labelsToSkip[k] {
-			result[k] = v
-		}
-	}
-	return result, nil
-}
-
-// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.
-func (s *Store) IsDiscoveryEnabled(ctx context.Context) bool {
-	_, err := s.client.Resource(tracingPolicyGVR).Get(ctx, discoveryPolicyName, metav1.GetOptions{})
-	return err == nil
-}
-
-// EnableDiscovery creates (or updates) the catch-all discovery policy.
-func (s *Store) EnableDiscovery(ctx context.Context) error {
-	return s.ApplyRaw(ctx, discoveryPolicyYAML)
-}
-
-// DisableDiscovery removes the catch-all discovery policy.
-func (s *Store) DisableDiscovery(ctx context.Context) error {
-	err := s.client.Resource(tracingPolicyGVR).Delete(ctx, discoveryPolicyName, metav1.DeleteOptions{})
-	if k8serrors.IsNotFound(err) {
-		return nil
-	}
-	return err
 }

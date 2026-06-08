@@ -1,22 +1,19 @@
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-
-interface FileEntry {
-  path: string
-}
+import type { FileRule } from '../../api/types'
 
 interface Props {
-  rules: FileEntry[]
-  onChange: (rules: FileEntry[]) => void
+  rules: FileRule[]
+  onChange: (rules: FileRule[]) => void
 }
 
 export function FileSection({ rules, onChange }: Props) {
   const update = (i: number, path: string) => {
     const next = [...rules]
-    next[i] = { path }
+    next[i] = { paths: [path] }
     onChange(next)
   }
-  const add = () => onChange([...rules, { path: '' }])
+  const add = () => onChange([...rules, { paths: [''] }])
   const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
 
   return (
@@ -25,8 +22,8 @@ export function FileSection({ rules, onChange }: Props) {
         <div key={i} className="flex items-center gap-2">
           <Input
             placeholder="/etc/shadow"
-            value={r.path}
-            onChange={(e) => update(i, e.target.value)}
+            value={r.paths[0] ?? ''}
+            onChange={e => update(i, e.target.value)}
             className="h-8 text-sm"
           />
           <Button
@@ -40,9 +37,7 @@ export function FileSection({ rules, onChange }: Props) {
         </div>
       ))}
       <div>
-        <Button variant="outline" size="sm" onClick={add}>
-          + Add
-        </Button>
+        <Button variant="outline" size="sm" onClick={add}>+ Add</Button>
       </div>
     </div>
   )

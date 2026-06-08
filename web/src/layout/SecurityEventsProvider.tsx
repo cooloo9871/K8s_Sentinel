@@ -9,7 +9,7 @@ export type Severity = 'warning' | 'critical'
 
 export interface DisplayEvent extends TetragonEvent {
   count: number
-  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+  severity: Severity
 }
 
 function loadFromStorage(): DisplayEvent[] {
@@ -17,12 +17,13 @@ function loadFromStorage(): DisplayEvent[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const data = JSON.parse(raw) as any[]
-      // Backfill fields added after initial storage schema (count, severity)
-      return data.map((e) => ({
-        ...e,
-        count: e.count ?? 1,
-        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
-      })) as DisplayEvent[]
+      return data
+        .filter((e) => e.type === 'kprobe' && e.policyName)
+        .map((e) => ({
+          ...e,
+          count: e.count ?? 1,
+          severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+        })) as DisplayEvent[]
     }
   } catch {}
   return []
@@ -45,15 +46,11 @@ function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
   )
 }
 
-type RawEventListener = (raw: string) => void
-
 interface SecurityEventsContextValue {
   events: DisplayEvent[]
   connected: boolean
   error: string
   reconnect: () => void
-  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
-  subscribeRaw: (fn: RawEventListener) => () => void
 }
 
 const SecurityEventsContext = createContext<SecurityEventsContextValue>({
@@ -61,7 +58,6 @@ const SecurityEventsContext = createContext<SecurityEventsContextValue>({
   connected: false,
   error: '',
   reconnect: () => {},
-  subscribeRaw: () => () => {},
 })
 
 export function useSecurityEvents() {
@@ -74,13 +70,7 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   const [error, setError] = useState('')
   const esRef = useRef<EventSource | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
-  const rawListeners = useRef<Set<RawEventListener>>(new Set())
-
-  const subscribeRaw = useCallback((fn: RawEventListener) => {
-    rawListeners.current.add(fn)
-    return () => rawListeners.current.delete(fn)
-  }, [])
+  const eventsRef = useRef<DisplayEvent[]>(events)
 
   const connect = useCallback(() => {
     esRef.current?.close()
@@ -92,10 +82,10 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
     es.onopen = () => setConnected(true)
 
     es.onmessage = (e) => {
-      // Broadcast raw message to all subscribers (e.g. DiscoveryProvider)
-      rawListeners.current.forEach(fn => fn(e.data))
       try {
         const evt: TetragonEvent = JSON.parse(e.data)
+        // Only store kprobe events that belong to a named user-defined TracingPolicy.
+        if (evt.type !== 'kprobe' || !evt.policyName) return
         const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
         setEvents((prev) => {
           if (prev.length > 0 && isSameEvent(prev[0], evt)) {
@@ -113,31 +103,17 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
     })
 
     es.onerror = () => setConnected(false)
-  }, []) // useCallback — stable reference across renders
+  }, [])
 
-  // Keep ref in sync for flush-on-unmount
-  useEffect(() => {
-    eventsRef.current = events
-  }, [events])
+  useEffect(() => { eventsRef.current = events }, [events])
 
-  // Debounce localStorage writes: at most once every 2 s no matter how many
-  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
-  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
   useEffect(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      saveToStorage(events)
-    }, 2000)
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
+    saveTimerRef.current = setTimeout(() => saveToStorage(events), 2000)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
   }, [events])
 
-  // Flush the latest events to localStorage on unmount so no events are lost
-  // when the user navigates away within the debounce window.
-  useEffect(() => {
-    return () => { saveToStorage(eventsRef.current) }
-  }, [])
+  useEffect(() => { return () => { saveToStorage(eventsRef.current) } }, [])
 
   useEffect(() => {
     connect()
@@ -145,7 +121,7 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   }, [])
 
   return (
-    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, subscribeRaw }}>
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
       {children}
     </SecurityEventsContext.Provider>
   )
