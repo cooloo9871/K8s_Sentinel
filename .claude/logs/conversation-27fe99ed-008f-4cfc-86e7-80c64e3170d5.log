@@ -182870,3 +182870,2693 @@ export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "fix: correct sentinel-discovery YAML (no selectors), share SSE via subscribeRaw"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 897b6a4] fix: correct sentinel-discovery YAML (no selectors), share SSE via subscribeRaw
+ 4 files changed, 2908 insertions(+), 58 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "897b6a4",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "
+只能透過產生 sentinel-discovery 來收集 pod 執行的內容嗎?"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "1. 歐那要幫我做個按鈕來開啟是否要收集，開啟的話就創建 sentinel-discovery ，關閉就刪除 sentinel-discovery 
+2. 透過 Behavior Discovery 學習到，然後要 create policy 的時候都要指定當前 pod 的 label，沒指定會限制整個 namespace 的 pod"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.",
+    "new_string": "// labelsToSkip contains auto-generated Kubernetes labels that are too noisy
+// or pod-instance-specific to be useful in a TracingPolicy podSelector.
+var labelsToSkip = map[string]bool{
+	"pod-template-hash":                   true,
+	"controller-revision-hash":            true,
+	"statefulset.kubernetes.io/pod-name":  true,
+	"batch.kubernetes.io/job-completion-index": true,
+}
+
+// GetPodLabels returns the labels of a pod, filtering out noisy auto-generated ones.
+func (s *Store) GetPodLabels(ctx context.Context, namespace, name string) (map[string]string, error) {
+	pod, err := s.typed.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)
+	}
+	result := make(map[string]string)
+	for k, v := range pod.Labels {
+		if !labelsToSkip[k] {
+			result[k] = v
+		}
+	}
+	return result, nil
+}
+
+// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.",
+    "new_string": "// labelsToSkip contains auto-generated Kubernetes labels that are too noisy
+// or pod-instance-specific to be useful in a TracingPolicy podSelector.
+var labelsToSkip = map[string]bool{
+	"pod-template-hash":                   true,
+	"controller-revision-hash":            true,
+	"statefulset.kubernetes.io/pod-name":  true,
+	"batch.kubernetes.io/job-completion-index": true,
+}
+
+// GetPodLabels returns the labels of a pod, filtering out noisy auto-generated ones.
+func (s *Store) GetPodLabels(ctx context.Context, namespace, name string) (map[string]string, error) {
+	pod, err := s.typed.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)
+	}
+	result := make(map[string]string)
+	for k, v := range pod.Labels {
+		if !labelsToSkip[k] {
+			result[k] = v
+		}
+	}
+	return result, nil
+}
+
+// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.",
+    "newString": "// labelsToSkip contains auto-generated Kubernetes labels that are too noisy
+// or pod-instance-specific to be useful in a TracingPolicy podSelector.
+var labelsToSkip = map[string]bool{
+	"pod-template-hash":                   true,
+	"controller-revision-hash":            true,
+	"statefulset.kubernetes.io/pod-name":  true,
+	"batch.kubernetes.io/job-completion-index": true,
+}
+
+// GetPodLabels returns the labels of a pod, filtering out noisy auto-generated ones.
+func (s *Store) GetPodLabels(ctx context.Context, namespace, name string) (map[string]string, error) {
+	pod, err := s.typed.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)
+	}
+	result := make(map[string]string)
+	for k, v := range pod.Labels {
+		if !labelsToSkip[k] {
+			result[k] = v
+		}
+	}
+	return result, nil
+}
+
+// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"
+
+	"github.com/cooloo9871/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"`  // "cluster" or "namespaced"
+	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client     dynamic.Interface
+	typed      *kubernetes.Clientset
+	restConfig *rest.Config
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
+	return &Store{client: client, typed: typed, restConfig: cfg}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		Mode:      detectMode(string(rawYAML)),
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+
+// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
+func detectMode(rawYAML string) string {
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+		return "Monitoring"
+	}
+	post, kill := 0, 0
+	for _, kp := range tp.Spec.KProbes {
+		for _, sel := range kp.Selectors {
+			for _, act := range sel.MatchActions {
+				switch act.Action {
+				case policy.ActionSigkill:
+					kill++
+				case policy.ActionPost:
+					post++
+				// Unknown actions are intentionally ignored — they don't
+				// contribute to either counter, matching GetMode's behaviour.
+				}
+			}
+		}
+	}
+	if kill == 0 {
+		return "Monitoring"
+	}
+	if post == 0 {
+		return "Protect"
+	}
+	return "Mixed"
+}
+
+// SetPolicyMode updates all kprobe actions in a single policy.
+func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	record, err := s.Get(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
+		return fmt.Errorf("parse policy %q: %w", name, err)
+	}
+	for i := range tp.Spec.KProbes {
+		for j := range tp.Spec.KProbes[i].Selectors {
+			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+			}
+		}
+	}
+	return s.Apply(ctx, tp)
+}
+
+const discoveryPolicyName = "sentinel-discovery"
+
+// discoveryPolicyYAML is a cluster-wide catch-all TracingPolicy that captures
+// all file access and network connections across every pod — no selectors means
+// every call is logged with action Post (Monitoring mode).
+const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+`
+
+// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.
+func (s *Store) IsDiscoveryEnabled(ctx context.Context) bool {
+	_, err := s.client.Resource(tracingPolicyGVR).Get(ctx, discoveryPolicyName, metav1.GetOptions{})
+	return err == nil
+}
+
+// EnableDiscovery creates (or updates) the catch-all discovery policy.
+func (s *Store) EnableDiscovery(ctx context.Context) error {
+	return s.ApplyRaw(ctx, discoveryPolicyYAML)
+}
+
+// DisableDiscovery removes the catch-all discovery policy.
+func (s *Store) DisableDiscovery(ctx context.Context) error {
+	err := s.client.Resource(tracingPolicyGVR).Delete(ctx, discoveryPolicyName, metav1.DeleteOptions{})
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 433,
+        "oldLines": 6,
+        "newStart": 433,
+        "newLines": 30,
+        "lines": [
+          "       type: "sock"",
+          " `",
+          " ",
+          "+// labelsToSkip contains auto-generated Kubernetes labels that are too noisy",
+          "+// or pod-instance-specific to be useful in a TracingPolicy podSelector.",
+          "+var labelsToSkip = map[string]bool{",
+          "+  "pod-template-hash":                   true,",
+          "+  "controller-revision-hash":            true,",
+          "+  "statefulset.kubernetes.io/pod-name":  true,",
+          "+  "batch.kubernetes.io/job-completion-index": true,",
+          "+}",
+          "+",
+          "+// GetPodLabels returns the labels of a pod, filtering out noisy auto-generated ones.",
+          "+func (s *Store) GetPodLabels(ctx context.Context, namespace, name string) (map[string]string, error) {",
+          "+  pod, err := s.typed.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})",
+          "+  if err != nil {",
+          "+    return nil, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)",
+          "+  }",
+          "+  result := make(map[string]string)",
+          "+  for k, v := range pod.Labels {",
+          "+    if !labelsToSkip[k] {",
+          "+      result[k] = v",
+          "+    }",
+          "+  }",
+          "+  return result, nil",
+          "+}",
+          "+",
+          " // IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.",
+          " func (s *Store) IsDiscoveryEnabled(ctx context.Context) bool {",
+          "   _, err := s.client.Resource(tracingPolicyGVR).Get(ctx, discoveryPolicyName, metav1.GetOptions{})"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/discovery.go",
+    "old_string": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "new_string": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/discovery.go",
+    "old_string": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "new_string": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/discovery.go",
+    "oldString": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "newString": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+func getDiscoveryStatus(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		enabled := store.IsDiscoveryEnabled(r.Context())
+		writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+	}
+}
+
+func setDiscovery(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+			return
+		}
+		var err error
+		if req.Enabled {
+			err = store.EnableDiscovery(r.Context())
+		} else {
+			err = store.DisableDiscovery(r.Context())
+		}
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"enabled": req.Enabled})
+	}
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 4,
+        "oldLines": 6,
+        "newStart": 4,
+        "newLines": 7,
+        "lines": [
+          "   "encoding/json"",
+          "   "net/http"",
+          " ",
+          "+  "github.com/go-chi/chi/v5"",
+          "   "github.com/cooloo9871/sentinel/internal/k8s"",
+          " )",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat >> /home/bigred/Sentinel/internal/handler/discovery.go << 'EOF'
+
+func getPodLabels(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		namespace := chi.URLParam(r, "namespace")
+		pod := chi.URLParam(r, "pod")
+		labels, err := store.GetPodLabels(r.Context(), namespace, pod)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"labels": labels})
+	}
+}
+EOF
+echo "done"",
+    "description": "追加 getPodLabels handler"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat >> /home/bigred/Sentinel/internal/handler/discovery.go << 'EOF'
+
+func getPodLabels(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		namespace := chi.URLParam(r, "namespace")
+		pod := chi.URLParam(r, "pod")
+		labels, err := store.GetPodLabels(r.Context(), namespace, pod)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"labels": labels})
+	}
+}
+EOF
+echo "done"",
+    "description": "追加 getPodLabels handler"
+  },
+  "tool_response": {
+    "stdout": "done",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))",
+    "new_string": "	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))
+	r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))",
+    "new_string": "	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))
+	r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "oldString": "	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))",
+    "newString": "	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))
+	r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store *k8s.Store
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Get("/api/policies", listPolicies(cfg.Store))
+	r.Post("/api/policies", createPolicy(cfg.Store))
+	r.Post("/api/policies/preview", previewPolicy)
+	r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+	r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+	r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
+	r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+	r.Get("/api/namespaces", listNamespaces(cfg.Store))
+	r.Get("/api/mode", getMode(cfg.Store))
+	r.Put("/api/mode", setMode(cfg.Store))
+	r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
+	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 34,
+        "oldLines": 6,
+        "newStart": 34,
+        "newLines": 7,
+        "lines": [
+          "   r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))",
+          "   r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))",
+          "   r.Put("/api/discovery", setDiscovery(cfg.Store))",
+          "+  r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))",
+          " ",
+          "   return r",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1 && echo "Go OK"",
+    "timeout": 30000,
+    "description": "Go 驗證"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1 && echo "Go OK"",
+    "timeout": 30000,
+    "description": "Go 驗證"
+  },
+  "tool_response": {
+    "stdout": "Go OK",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}",
+    "new_string": "export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}
+
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}",
+    "new_string": "export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}
+
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}",
+    "newString": "export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}
+
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}
+
+",
+    "structuredPatch": [
+      {
+        "oldStart": 47,
+        "oldLines": 3,
+        "newStart": 47,
+        "newLines": 8,
+        "lines": [
+          "     api.put('/discovery', { enabled }).then((r) => r.data),",
+          " }",
+          " ",
+          "+export const podApi = {",
+          "+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>",
+          "+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),",
+          "+}",
+          "+"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi, podApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(false)
+  const [toggling, setToggling] = useState(false)
+  const [creatingFor, setCreatingFor] = useState<string | null>(null) // "ns/pod" while fetching labels
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+    discoveryApi.status()
+      .then(r => setDiscoveryEnabled(r.enabled))
+      .catch(() => {})
+  }, [])
+
+  const handleToggleDiscovery = async () => {
+    setToggling(true)
+    try {
+      const res = await discoveryApi.setEnabled(!discoveryEnabled)
+      setDiscoveryEnabled(res.enabled)
+      toast.success(res.enabled
+        ? 'File & Network discovery started.'
+        : 'Discovery stopped — sentinel-discovery policy removed.')
+    } catch {
+      toast.error('Failed to toggle discovery')
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = async (profile: typeof profiles[0]) => {
+    const key = `${profile.namespace}/${profile.pod}`
+    setCreatingFor(key)
+
+    let podSelector: Record<string, string> | undefined
+    try {
+      const res = await podApi.labels(profile.namespace, profile.pod)
+      if (Object.keys(res.labels).length > 0) {
+        podSelector = res.labels
+      }
+    } catch {
+      // Pod might no longer exist; proceed without podSelector
+    } finally {
+      setCreatingFor(null)
+    }
+
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      podSelector,
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant={discoveryEnabled ? 'destructive' : 'outline'}
+            size="sm"
+            onClick={handleToggleDiscovery}
+            disabled={toggling}
+          >
+            {toggling
+              ? 'Updating...'
+              : discoveryEnabled
+              ? '● File & Network: ON — Click to Stop'
+              : '○ File & Network: OFF — Click to Start'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Process behaviors appear automatically. Enable File &amp; Network discovery
+            above to also capture file access and network connections.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => {
+            const key = `${profile.namespace}/${profile.pod}`
+            const isCreating = creatingFor === key
+            return (
+              <Card key={key}>
+                <CardHeader className="border-b pb-3">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                  </div>
+                  <CardAction>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleCreatePolicy(profile)}
+                      disabled={
+                        isCreating ||
+                        (profile.binaries.length === 0 &&
+                          profile.filePaths.length === 0 &&
+                          profile.netDests.length === 0)
+                      }
+                    >
+                      {isCreating ? 'Loading...' : 'Create Policy'}
+                    </Button>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="pt-3 text-xs">
+                  {/* Process */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">Process</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                    </div>
+                    {profile.binaries.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {profile.binaries.slice(0, 6).map(b => (
+                          <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                            {b.split('/').pop()}
+                          </span>
+                        ))}
+                        {profile.binaries.length > 6 && (
+                          <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* File */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">File</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                    </div>
+                    {profile.filePaths.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.filePaths.slice(0, 4).map(f => (
+                          <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                        ))}
+                        {profile.filePaths.length > 4 && (
+                          <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* Network */}
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">Network</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                    </div>
+                    {profile.netDests.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.netDests.slice(0, 4).map(n => (
+                          <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                        ))}
+                        {profile.netDests.length > 4 && (
+                          <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t pt-2">
+                    <span className="text-muted-foreground">
+                      since <RelativeTime iso={profile.firstSeen} />
+                    </span>
+                    <RelativeTime iso={profile.lastSeen} />
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete all learned behaviors for all pods. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi, podApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(false)
+  const [toggling, setToggling] = useState(false)
+  const [creatingFor, setCreatingFor] = useState<string | null>(null) // "ns/pod" while fetching labels
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+    discoveryApi.status()
+      .then(r => setDiscoveryEnabled(r.enabled))
+      .catch(() => {})
+  }, [])
+
+  const handleToggleDiscovery = async () => {
+    setToggling(true)
+    try {
+      const res = await discoveryApi.setEnabled(!discoveryEnabled)
+      setDiscoveryEnabled(res.enabled)
+      toast.success(res.enabled
+        ? 'File & Network discovery started.'
+        : 'Discovery stopped — sentinel-discovery policy removed.')
+    } catch {
+      toast.error('Failed to toggle discovery')
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = async (profile: typeof profiles[0]) => {
+    const key = `${profile.namespace}/${profile.pod}`
+    setCreatingFor(key)
+
+    let podSelector: Record<string, string> | undefined
+    try {
+      const res = await podApi.labels(profile.namespace, profile.pod)
+      if (Object.keys(res.labels).length > 0) {
+        podSelector = res.labels
+      }
+    } catch {
+      // Pod might no longer exist; proceed without podSelector
+    } finally {
+      setCreatingFor(null)
+    }
+
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      podSelector,
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant={discoveryEnabled ? 'destructive' : 'outline'}
+            size="sm"
+            onClick={handleToggleDiscovery}
+            disabled={toggling}
+          >
+            {toggling
+              ? 'Updating...'
+              : discoveryEnabled
+              ? '● File & Network: ON — Click to Stop'
+              : '○ File & Network: OFF — Click to Start'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Process behaviors appear automatically. Enable File &amp; Network discovery
+            above to also capture file access and network connections.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => {
+            const key = `${profile.namespace}/${profile.pod}`
+            const isCreating = creatingFor === key
+            return (
+              <Card key={key}>
+                <CardHeader className="border-b pb-3">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                  </div>
+                  <CardAction>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleCreatePolicy(profile)}
+                      disabled={
+                        isCreating ||
+                        (profile.binaries.length === 0 &&
+                          profile.filePaths.length === 0 &&
+                          profile.netDests.length === 0)
+                      }
+                    >
+                      {isCreating ? 'Loading...' : 'Create Policy'}
+                    </Button>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="pt-3 text-xs">
+                  {/* Process */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">Process</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                    </div>
+                    {profile.binaries.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {profile.binaries.slice(0, 6).map(b => (
+                          <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                            {b.split('/').pop()}
+                          </span>
+                        ))}
+                        {profile.binaries.length > 6 && (
+                          <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* File */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">File</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                    </div>
+                    {profile.filePaths.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.filePaths.slice(0, 4).map(f => (
+                          <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                        ))}
+                        {profile.filePaths.length > 4 && (
+                          <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* Network */}
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">Network</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                    </div>
+                    {profile.netDests.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.netDests.slice(0, 4).map(n => (
+                          <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                        ))}
+                        {profile.netDests.length > 4 && (
+                          <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t pt-2">
+                    <span className="text-muted-foreground">
+                      since <RelativeTime iso={profile.firstSeen} />
+                    </span>
+                    <RelativeTime iso={profile.lastSeen} />
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete all learned behaviors for all pods. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi, podApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(false)
+  const [toggling, setToggling] = useState(false)
+  const [creatingFor, setCreatingFor] = useState<string | null>(null) // "ns/pod" while fetching labels
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+    discoveryApi.status()
+      .then(r => setDiscoveryEnabled(r.enabled))
+      .catch(() => {})
+  }, [])
+
+  const handleToggleDiscovery = async () => {
+    setToggling(true)
+    try {
+      const res = await discoveryApi.setEnabled(!discoveryEnabled)
+      setDiscoveryEnabled(res.enabled)
+      toast.success(res.enabled
+        ? 'File & Network discovery started.'
+        : 'Discovery stopped — sentinel-discovery policy removed.')
+    } catch {
+      toast.error('Failed to toggle discovery')
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = async (profile: typeof profiles[0]) => {
+    const key = `${profile.namespace}/${profile.pod}`
+    setCreatingFor(key)
+
+    let podSelector: Record<string, string> | undefined
+    try {
+      const res = await podApi.labels(profile.namespace, profile.pod)
+      if (Object.keys(res.labels).length > 0) {
+        podSelector = res.labels
+      }
+    } catch {
+      // Pod might no longer exist; proceed without podSelector
+    } finally {
+      setCreatingFor(null)
+    }
+
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      podSelector,
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant={discoveryEnabled ? 'destructive' : 'outline'}
+            size="sm"
+            onClick={handleToggleDiscovery}
+            disabled={toggling}
+          >
+            {toggling
+              ? 'Updating...'
+              : discoveryEnabled
+              ? '● File & Network: ON — Click to Stop'
+              : '○ File & Network: OFF — Click to Start'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Process behaviors appear automatically. Enable File &amp; Network discovery
+            above to also capture file access and network connections.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => {
+            const key = `${profile.namespace}/${profile.pod}`
+            const isCreating = creatingFor === key
+            return (
+              <Card key={key}>
+                <CardHeader className="border-b pb-3">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                  </div>
+                  <CardAction>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleCreatePolicy(profile)}
+                      disabled={
+                        isCreating ||
+                        (profile.binaries.length === 0 &&
+                          profile.filePaths.length === 0 &&
+                          profile.netDests.length === 0)
+                      }
+                    >
+                      {isCreating ? 'Loading...' : 'Create Policy'}
+                    </Button>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="pt-3 text-xs">
+                  {/* Process */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">Process</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                    </div>
+                    {profile.binaries.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {profile.binaries.slice(0, 6).map(b => (
+                          <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                            {b.split('/').pop()}
+                          </span>
+                        ))}
+                        {profile.binaries.length > 6 && (
+                          <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* File */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">File</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                    </div>
+                    {profile.filePaths.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.filePaths.slice(0, 4).map(f => (
+                          <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                        ))}
+                        {profile.filePaths.length > 4 && (
+                          <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* Network */}
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium">Network</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                    </div>
+                    {profile.netDests.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.netDests.slice(0, 4).map(n => (
+                          <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                        ))}
+                        {profile.netDests.length > 4 && (
+                          <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t pt-2">
+                    <span className="text-muted-foreground">
+                      since <RelativeTime iso={profile.firstSeen} />
+                    </span>
+                    <RelativeTime iso={profile.lastSeen} />
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete all learned behaviors for all pods. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 6,
+        "newStart": 1,
+        "newLines": 6,
+        "lines": [
+          " import { useEffect, useState } from 'react'",
+          " import { useNavigate } from 'react-router-dom'",
+          "-import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'",
+          "+import { IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'",
+          " import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'",
+          " import { Badge } from '@/components/ui/badge'",
+          " import { Button } from '@/components/ui/button'"
+        ]
+      },
+      {
+        "oldStart": 14,
+        "oldLines": 7,
+        "newStart": 14,
+        "newLines": 8,
+        "lines": [
+          "   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,",
+          " } from '@/components/ui/alert-dialog'",
+          " import { useDiscovery } from '../layout/DiscoveryProvider'",
+          "-import { discoveryApi, namespaceApi } from '../api/client'",
+          "+import { discoveryApi, namespaceApi, podApi } from '../api/client'",
+          "+import { useToast } from '../layout/AppToaster'",
+          " import type { PolicyFormInput } from '../api/types'",
+          " ",
+          " function RelativeTime({ iso }: { iso: string }) {"
+        ]
+      },
+      {
+        "oldStart": 31,
+        "oldLines": 23,
+        "newStart": 32,
+        "newLines": 40,
+        "lines": [
+          " export function DiscoveryPage() {",
+          "   const { profiles, clearProfiles } = useDiscovery()",
+          "   const navigate = useNavigate()",
+          "+  const toast = useToast()",
+          "   const [nsFilter, setNsFilter] = useState('all')",
+          "   const [podSearch, setPodSearch] = useState('')",
+          "   const [allNamespaces, setAllNamespaces] = useState<string[]>([])",
+          "   const [nsLoading, setNsLoading] = useState(true)",
+          "   const [clearDialog, setClearDialog] = useState(false)",
+          "+  const [discoveryEnabled, setDiscoveryEnabled] = useState(false)",
+          "+  const [toggling, setToggling] = useState(false)",
+          "+  const [creatingFor, setCreatingFor] = useState<string | null>(null) // "ns/pod" while fetching labels",
+          " ",
+          "   useEffect(() => {",
+          "     namespaceApi.list()",
+          "       .then(ns => setAllNamespaces(ns.sort()))",
+          "       .catch(() => {})",
+          "       .finally(() => setNsLoading(false))",
+          "+    discoveryApi.status()",
+          "+      .then(r => setDiscoveryEnabled(r.enabled))",
+          "+      .catch(() => {})",
+          "   }, [])",
+          " ",
+          "-  // Auto-enable the catch-all discovery policy",
+          "-  useEffect(() => {",
+          "-    discoveryApi.setEnabled(true).catch(() => {})",
+          "-  }, [])",
+          "+  const handleToggleDiscovery = async () => {",
+          "+    setToggling(true)",
+          "+    try {",
+          "+      const res = await discoveryApi.setEnabled(!discoveryEnabled)",
+          "+      setDiscoveryEnabled(res.enabled)",
+          "+      toast.success(res.enabled",
+          "+        ? 'File & Network discovery started.'",
+          "+        : 'Discovery stopped — sentinel-discovery policy removed.')",
+          "+    } catch {",
+          "+      toast.error('Failed to toggle discovery')",
+          "+    } finally {",
+          "+      setToggling(false)",
+          "+    }",
+          "+  }",
+          " ",
+          "   const filtered = profiles.filter(p => {",
+          "     if (nsFilter !== 'all' && p.namespace !== nsFilter) return false"
+        ]
+      },
+      {
+        "oldStart": 55,
+        "oldLines": 10,
+        "newStart": 73,
+        "newLines": 26,
+        "lines": [
+          "     return true",
+          "   })",
+          " ",
+          "-  const handleCreatePolicy = (profile: typeof profiles[0]) => {",
+          "+  const handleCreatePolicy = async (profile: typeof profiles[0]) => {",
+          "+    const key = `${profile.namespace}/${profile.pod}`",
+          "+    setCreatingFor(key)",
+          "+",
+          "+    let podSelector: Record<string, string> | undefined",
+          "+    try {",
+          "+      const res = await podApi.labels(profile.namespace, profile.pod)",
+          "+      if (Object.keys(res.labels).length > 0) {",
+          "+        podSelector = res.labels",
+          "+      }",
+          "+    } catch {",
+          "+      // Pod might no longer exist; proceed without podSelector",
+          "+    } finally {",
+          "+      setCreatingFor(null)",
+          "+    }",
+          "+",
+          "     const prefill: PolicyFormInput = {",
+          "       name: `${profile.pod}-policy`,",
+          "       namespace: profile.namespace || 'default',",
+          "+      podSelector,",
+          "       process: profile.binaries.map(b => ({ binaries: [b] })),",
+          "       file: profile.filePaths.map(p => ({ paths: [p] })),",
+          "       network: profile.netDests.map(a => ({ address: a })),"
+        ]
+      },
+      {
+        "oldStart": 78,
+        "oldLines": 10,
+        "newStart": 112,
+        "newLines": 18,
+        "lines": [
+          "           </p>",
+          "         </div>",
+          "         <div className="flex items-center gap-3">",
+          "-          <div className="flex items-center gap-1.5 text-sm">",
+          "-            <IconWifi size={16} className="text-green-500" />",
+          "-            <span className="text-green-600">Discovering</span>",
+          "-          </div>",
+          "+          <Button",
+          "+            variant={discoveryEnabled ? 'destructive' : 'outline'}",
+          "+            size="sm"",
+          "+            onClick={handleToggleDiscovery}",
+          "+            disabled={toggling}",
+          "+          >",
+          "+            {toggling",
+          "+              ? 'Updating...'",
+          "+              : discoveryEnabled",
+          "+              ? '● File & Network: ON — Click to Stop'",
+          "+              : '○ File & Network: OFF — Click to Start'}",
+          "+          </Button>",
+          "           <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>",
+          "             <IconTrash size={14} className="mr-1.5" />",
+          "             Clear"
+        ]
+      },
+      {
+        "oldStart": 127,
+        "oldLines": 112,
+        "newStart": 169,
+        "newLines": 115,
+        "lines": [
+          "           <IconShieldCheck size={48} strokeWidth={1.5} />",
+          "           <p className="text-base font-medium">Learning in progress...</p>",
+          "           <p className="max-w-sm text-center text-sm">",
+          "-            Behaviors appear here as pods execute processes, access files, and make",
+          "-            network connections. Data is persisted — come back anytime to see what's been learned.",
+          "+            Process behaviors appear automatically. Enable File &amp; Network discovery",
+          "+            above to also capture file access and network connections.",
+          "           </p>",
+          "         </div>",
+          "       ) : (",
+          "         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">",
+          "-          {filtered.map(profile => (",
+          "-            <Card key={`${profile.namespace}/${profile.pod}`}>",
+          "-              <CardHeader className="border-b pb-3">",
+          "-                <div>",
+          "-                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>",
+          "-                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>",
+          "-                </div>",
+          "-                <CardAction>",
+          "-                  <Button",
+          "-                    size="sm"",
+          "-                    variant="outline"",
+          "-                    className="h-7 text-xs"",
+          "-                    onClick={() => handleCreatePolicy(profile)}",
+          "-                    disabled={",
+          "-                      profile.binaries.length === 0 &&",
+          "-                      profile.filePaths.length === 0 &&",
+          "-                      profile.netDests.length === 0",
+          "-                    }",
+          "-                  >",
+          "-                    Create Policy",
+          "-                  </Button>",
+          "-                </CardAction>",
+          "-              </CardHeader>",
+          "-              <CardContent className="pt-3 text-xs">",
+          "-                {/* Process */}",
+          "-                <div className="mb-2">",
+          "-                  <div className="mb-1 flex items-center justify-between">",
+          "-                    <span className="font-medium">Process</span>",
+          "-                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>",
+          "+          {filtered.map(profile => {",
+          "+            const key = `${profile.namespace}/${profile.pod}`",
+          "+            const isCreating = creatingFor === key",
+          "+            return (",
+          "+              <Card key={key}>",
+          "+                <CardHeader className="border-b pb-3">",
+          "+                  <div>",
+          "+                    <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>",
+          "+                    <p className="text-xs text-muted-foreground">{profile.namespace}</p>",
+          "                   </div>",
+          "-                  {profile.binaries.length > 0 ? (",
+          "-                    <div className="flex flex-wrap gap-1">",
+          "-                      {profile.binaries.slice(0, 6).map(b => (",
+          "-                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>",
+          "-                          {b.split('/').pop()}",
+          "-                        </span>",
+          "-                      ))}",
+          "-                      {profile.binaries.length > 6 && (",
+          "-                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>",
+          "-                      )}",
+          "+                  <CardAction>",
+          "+                    <Button",
+          "+                      size="sm"",
+          "+                      variant="outline"",
+          "+                      className="h-7 text-xs"",
+          "+                      onClick={() => handleCreatePolicy(profile)}",
+          "+                      disabled={",
+          "+                        isCreating ||",
+          "+                        (profile.binaries.length === 0 &&",
+          "+                          profile.filePaths.length === 0 &&",
+          "+                          profile.netDests.length === 0)",
+          "+                      }",
+          "+                    >",
+          "+                      {isCreating ? 'Loading...' : 'Create Policy'}",
+          "+                    </Button>",
+          "+                  </CardAction>",
+          "+                </CardHeader>",
+          "+                <CardContent className="pt-3 text-xs">",
+          "+                  {/* Process */}",
+          "+                  <div className="mb-2">",
+          "+                    <div className="mb-1 flex items-center justify-between">",
+          "+                      <span className="font-medium">Process</span>",
+          "+                      <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>",
+          "                     </div>",
+          "-                  ) : <span className="text-muted-foreground">—</span>}",
+          "-                </div>",
+          "-",
+          "-                {/* File */}",
+          "-                <div className="mb-2">",
+          "-                  <div className="mb-1 flex items-center justify-between">",
+          "-                    <span className="font-medium">File</span>",
+          "-                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>",
+          "+                    {profile.binaries.length > 0 ? (",
+          "+                      <div className="flex flex-wrap gap-1">",
+          "+                        {profile.binaries.slice(0, 6).map(b => (",
+          "+                          <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>",
+          "+                            {b.split('/').pop()}",
+          "+                          </span>",
+          "+                        ))}",
+          "+                        {profile.binaries.length > 6 && (",
+          "+                          <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>",
+          "+                        )}",
+          "+                      </div>",
+          "+                    ) : <span className="text-muted-foreground">—</span>}",
+          "                   </div>",
+          "-                  {profile.filePaths.length > 0 ? (",
+          "-                    <div className="flex flex-col gap-0.5">",
+          "-                      {profile.filePaths.slice(0, 4).map(f => (",
+          "-                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>",
+          "-                      ))}",
+          "-                      {profile.filePaths.length > 4 && (",
+          "-                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>",
+          "-                      )}",
+          "-                    </div>",
+          "-                  ) : <span className="text-muted-foreground">—</span>}",
+          "-                </div>",
+          " ",
+          "-                {/* Network */}",
+          "-                <div>",
+          "-                  <div className="mb-1 flex items-center justify-between">",
+          "-                    <span className="font-medium">Network</span>",
+          "-                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>",
+          "+                  {/* File */}",
+          "+                  <div className="mb-2">",
+          "+                    <div className="mb-1 flex items-center justify-between">",
+          "+                      <span className="font-medium">File</span>",
+          "+                      <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>",
+          "+                    </div>",
+          "+                    {profile.filePaths.length > 0 ? (",
+          "+                      <div className="flex flex-col gap-0.5">",
+          "+                        {profile.filePaths.slice(0, 4).map(f => (",
+          "+                          <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>",
+          "+                        ))}",
+          "+                        {profile.filePaths.length > 4 && (",
+          "+                          <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>",
+          "+                        )}",
+          "+                      </div>",
+          "+                    ) : <span className="text-muted-foreground">—</span>}",
+          "                   </div>",
+          "-                  {profile.netDests.length > 0 ? (",
+          "-                    <div className="flex flex-col gap-0.5">",
+          "-                      {profile.netDests.slice(0, 4).map(n => (",
+          "-                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>",
+          "-                      ))}",
+          "-                      {profile.netDests.length > 4 && (",
+          "-                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>",
+          "-                      )}",
+          "+",
+          "+                  {/* Network */}",
+          "+                  <div>",
+          "+                    <div className="mb-1 flex items-center justify-between">",
+          "+                      <span className="font-medium">Network</span>",
+          "+                      <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>",
+          "                     </div>",
+          "-                  ) : <span className="text-muted-foreground">—</span>}",
+          "-                </div>",
+          "+                    {profile.netDests.length > 0 ? (",
+          "+                      <div className="flex flex-col gap-0.5">",
+          "+                        {profile.netDests.slice(0, 4).map(n => (",
+          "+                          <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>",
+          "+                        ))}",
+          "+                        {profile.netDests.length > 4 && (",
+          "+                          <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>",
+          "+                        )}",
+          "+                      </div>",
+          "+                    ) : <span className="text-muted-foreground">—</span>}",
+          "+                  </div>",
+          " ",
+          "-                <div className="mt-3 flex items-center justify-between border-t pt-2">",
+          "-                  <span className="text-muted-foreground">",
+          "-                    since <RelativeTime iso={profile.firstSeen} />",
+          "-                  </span>",
+          "-                  <RelativeTime iso={profile.lastSeen} />",
+          "-                </div>",
+          "-              </CardContent>",
+          "-            </Card>",
+          "-          ))}",
+          "+                  <div className="mt-3 flex items-center justify-between border-t pt-2">",
+          "+                    <span className="text-muted-foreground">",
+          "+                      since <RelativeTime iso={profile.firstSeen} />",
+          "+                    </span>",
+          "+                    <RelativeTime iso={profile.lastSeen} />",
+          "+                  </div>",
+          "+                </CardContent>",
+          "+              </Card>",
+          "+            )",
+          "+          })}",
+          "         </div>",
+          "       )}",
+          " ",
+          "-      {/* Clear confirmation */}",
+          "       <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>",
+          "         <AlertDialogContent>",
+          "           <AlertDialogHeader>",
+          "             <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>",
+          "             <AlertDialogDescription>",
+          "-              This will delete all learned behaviors for all pods. Discovery will start fresh.",
+          "-              This action cannot be undone.",
+          "+              Delete all learned behaviors for all pods. This cannot be undone.",
+          "             </AlertDialogDescription>",
+          "           </AlertDialogHeader>",
+          "           <AlertDialogFooter>"
+        ]
+      }
+    ],
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi } from '../api/client'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+  }, [])
+
+  // Auto-enable the catch-all discovery policy
+  useEffect(() => {
+    discoveryApi.setEnabled(true).catch(() => {})
+  }, [])
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: typeof profiles[0]) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <IconWifi size={16} className="text-green-500" />
+            <span className="text-green-600">Discovering</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Behaviors appear here as pods execute processes, access files, and make
+            network connections. Data is persisted — come back anytime to see what's been learned.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => (
+            <Card key={`${profile.namespace}/${profile.pod}`}>
+              <CardHeader className="border-b pb-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                </div>
+                <CardAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => handleCreatePolicy(profile)}
+                    disabled={
+                      profile.binaries.length === 0 &&
+                      profile.filePaths.length === 0 &&
+                      profile.netDests.length === 0
+                    }
+                  >
+                    Create Policy
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="pt-3 text-xs">
+                {/* Process */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Process</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                  </div>
+                  {profile.binaries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.binaries.slice(0, 6).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                          {b.split('/').pop()}
+                        </span>
+                      ))}
+                      {profile.binaries.length > 6 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* File */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">File</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                  </div>
+                  {profile.filePaths.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.filePaths.slice(0, 4).map(f => (
+                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                      ))}
+                      {profile.filePaths.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* Network */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Network</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                  </div>
+                  {profile.netDests.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.netDests.slice(0, 4).map(n => (
+                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                      ))}
+                      {profile.netDests.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">
+                    since <RelativeTime iso={profile.firstSeen} />
+                  </span>
+                  <RelativeTime iso={profile.lastSeen} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Clear confirmation */}
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all learned behaviors for all pods. Discovery will start fresh.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  19:57:26
+   Duration  474ms (transform 22ms, setup 33ms, import 20ms, tests 4ms, environment 336ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: discovery toggle button, auto-fill pod labels as podSelector when creating policy"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+

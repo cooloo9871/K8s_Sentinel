@@ -433,6 +433,30 @@ spec:
       type: "sock"
 `
 
+// labelsToSkip contains auto-generated Kubernetes labels that are too noisy
+// or pod-instance-specific to be useful in a TracingPolicy podSelector.
+var labelsToSkip = map[string]bool{
+	"pod-template-hash":                   true,
+	"controller-revision-hash":            true,
+	"statefulset.kubernetes.io/pod-name":  true,
+	"batch.kubernetes.io/job-completion-index": true,
+}
+
+// GetPodLabels returns the labels of a pod, filtering out noisy auto-generated ones.
+func (s *Store) GetPodLabels(ctx context.Context, namespace, name string) (map[string]string, error) {
+	pod, err := s.typed.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get pod %s/%s: %w", namespace, name, err)
+	}
+	result := make(map[string]string)
+	for k, v := range pod.Labels {
+		if !labelsToSkip[k] {
+			result[k] = v
+		}
+	}
+	return result, nil
+}
+
 // IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.
 func (s *Store) IsDiscoveryEnabled(ctx context.Context) bool {
 	_, err := s.client.Resource(tracingPolicyGVR).Get(ctx, discoveryPolicyName, metav1.GetOptions{})

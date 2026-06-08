@@ -34,6 +34,7 @@ func New(cfg Config) http.Handler {
 	r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
 	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
 	r.Put("/api/discovery", setDiscovery(cfg.Store))
+	r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
 
 	return r
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
@@ -34,5 +35,18 @@ func setDiscovery(store *k8s.Store) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"enabled": req.Enabled})
+	}
+}
+
+func getPodLabels(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		namespace := chi.URLParam(r, "namespace")
+		pod := chi.URLParam(r, "pod")
+		labels, err := store.GetPodLabels(r.Context(), namespace, pod)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"labels": labels})
 	}
 }

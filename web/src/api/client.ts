@@ -47,3 +47,8 @@ export const discoveryApi = {
     api.put('/discovery', { enabled }).then((r) => r.data),
 }
 
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}
+
