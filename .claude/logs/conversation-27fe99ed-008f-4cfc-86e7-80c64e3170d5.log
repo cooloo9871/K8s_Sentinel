@@ -185905,3 +185905,654 @@ export function SecurityEventsPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -3 && git add -A && git commit -m "fix: hide sentinel-discovery events from Security Events page"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[main b5f2049] fix: hide sentinel-discovery events from Security Events page
+ 2 files changed, 347 insertions(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "b5f2049",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "~$ kubectl exec -n kube-system $POD -c tetragon -- \\
+    tetra getevents -o json 2>/dev/null | \\                                                                                                              python3 -c "                                                                                                                                       import sys, json
+  for line in sys.stdin:
+      try:
+          e = json.loads(line)
+          if 'process_exec' in e:
+              proc = e['process_exec'].get('process', {})
+              pod = proc.get('pod', {})
+              if pod.get('name'):
+                  print(f\\"EXEC: ns={pod.get('namespace')} pod={pod.get('name')} bin={proc.get('binary')}\\")
+      except: pass
+  "
+ : command not found"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~$ kubectl exec -n kube-system $POD -c tetragon -- \\
+    tetra getevents -o json 2>/dev/null | \\
+    grep '"process_exec"' | \\
+    grep '"name":"test2"' | head -5
+^C
+bigred@m1:~$ kubectl exec -n kube-system $POD -c tetragon -- \\
+    tetra getevents -o json 2>/dev/null | \\
+    grep '"process_exec"' | \\
+    grep '"namespace":"default"' | head -5
+兩個執行完都沒內容"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "$ kubectl exec -n kube-system $TEST2_TETRAGON -c tetragon -- \\
+    tetra getevents -o json 2>/dev/null | \\                                                                                                              grep '"process_exec"' | \\
+    grep '"namespace":"default"'
+ : command not found"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~$ kubectl exec -n kube-system $TEST2_TETRAGON -c tetragon -- tetra getevents -o json 2>/dev/null | grep '"process_exec"' | grep '"namespace":"default"' 還是沒有"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~$ kubectl exec -n kube-system $TEST2_TETRAGON -c tetragon -- tetra getevents -o json 2>/dev/null | grep '"process_exec"' | grep '"namespace":"default"'
+{"process_exec":{"process":{"exec_id":"bTI6OTg0NTkzMDUwNTU0OTkyOjY5Nzg1","pid":69785,"uid":0,"cwd":"/","binary":"/usr/bin/curl","arguments":"10.96.48.132:6000","flags":"execve rootcwd clone","start_time":"2026-06-08T12:24:48.794514792Z","auid":4294967295,"pod":{"namespace":"default","name":"test2","uid":"032a8067-3f5f-4d5f-9d7a-3062e917e750","container":{"id":"containerd://c6e446defd4bff14c7e31894dd4cc91b973783f634026110386704aac34aa671","name":"test2","image":{"id":"docker.io/library/nginx@sha256:5aca99593157f4ae539a5dec1092a0ad8762f8e2eb1789085a13a0f5622369f6","name":"docker.io/library/nginx:latest"},"start_time":"2026-06-08T07:23:41Z","pid":122,"security_context":{}},"pod_labels":{"run":"test2"},"workload":"test2","workload_kind":"Pod"},"docker":"c6e446defd4bff14c7e31894dd4cc91","parent_exec_id":"bTI6OTY2NTI0NTU4NDA3MTMyOjQxMDUyNDU=","tid":69785,"in_init_tree":false},"parent":{"exec_id":"bTI6OTY2NTI0NTU4NDA3MTMyOjQxMDUyNDU=","pid":4105245,"uid":0,"cwd":"/run/containerd/io.containerd.runtime.v2.task/k8s.io/fba34e0bc882265573f2e1fba6917db86c99da4853334ea1bb687de0a4a2f44e","binary":"/usr/local/bin/containerd-shim-runc-v2","arguments":"-namespace k8s.io -id fba34e0bc882265573f2e1fba6917db86c99da4853334ea1bb687de0a4a2f44e -address /run/containerd/containerd.sock","flags":"execve clone","start_time":"2026-06-08T07:23:40.302161297Z","auid":4294967295,"parent_exec_id":"bTI6OTY2NTI0NTQxOTkzNzM1OjQxMDUyMzY=","tid":4105245,"in_init_tree":false}},"node_name":"m2","time":"2026-06-08T12:24:48.794307820Z","node_labels":{"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/os":"linux","kubernetes.io/arch":"amd64","kubernetes.io/hostname":"m2","kubernetes.io/os":"linux","node-role.kubernetes.io/control-plane":"","node.kubernetes.io/exclude-from-external-load-balancers":""}}"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "offset": 33,
+    "limit": 20
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "offset": 33,
+    "limit": 20
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+      "content": "	NetDest    string `json:"netDest"`  // extracted from sock_arg daddr:dport (tcp_connect)
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {",
+      "numLines": 20,
+      "startLine": 33,
+      "totalLines": 262
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "offset": 52,
+    "limit": 12
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "offset": 52,
+    "limit": 12
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+      "content": "		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").",
+      "numLines": 12,
+      "startLine": 52,
+      "totalLines": 262
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}",
+    "new_string": "	// Log all pod names so the user can see which nodes are being connected to.
+	fmt.Printf("[sentinel-discovery] connecting to %d Tetragon pods: %v\
+", len(pods), pods)
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
+				// Surface per-pod errors so RBAC / connectivity issues are visible in Sentinel logs.
+				fmt.Printf("[sentinel-discovery] pod %s stream error: %v\
+", name, err)
+			}
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}",
+    "new_string": "	// Log all pod names so the user can see which nodes are being connected to.
+	fmt.Printf("[sentinel-discovery] connecting to %d Tetragon pods: %v\
+", len(pods), pods)
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
+				// Surface per-pod errors so RBAC / connectivity issues are visible in Sentinel logs.
+				fmt.Printf("[sentinel-discovery] pod %s stream error: %v\
+", name, err)
+			}
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}",
+    "newString": "	// Log all pod names so the user can see which nodes are being connected to.
+	fmt.Printf("[sentinel-discovery] connecting to %d Tetragon pods: %v\
+", len(pods), pods)
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
+				// Surface per-pod errors so RBAC / connectivity issues are visible in Sentinel logs.
+				fmt.Printf("[sentinel-discovery] pod %s stream error: %v\
+", name, err)
+			}
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	FilePath   string `json:"filePath"` // extracted from file_arg (security_file_permission)
+	NetDest    string `json:"netDest"`  // extracted from sock_arg daddr:dport (tcp_connect)
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, fires for every pod WITHOUT needing a TracingPolicy.
+	// Used by Behavior Discovery to learn which processes run in each pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		// Only forward events that have pod context (skip host/infra processes)
+		if evt.Pod == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			evt.ParentBin = anyStr(parent, "binary")
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// Extract additional context from kprobe args for Behavior Discovery.
+	if args, ok := kp["args"].([]any); ok {
+		for _, a := range args {
+			argMap, ok := a.(map[string]any)
+			if !ok {
+				continue
+			}
+			// execve: args[0] contains the executed binary path
+			if strings.Contains(evt.Function, "execve") {
+				if bin := anyStr(argMap, "string_arg", "stringArg"); bin != "" {
+					evt.ParentBin = evt.Binary
+					evt.Binary = bin
+				}
+			}
+			// security_file_permission: args[0] is file_arg with path
+			if fileArg := anyMap(argMap, "file_arg", "fileArg"); fileArg != nil {
+				evt.FilePath = anyStr(fileArg, "path")
+			}
+			// tcp_connect: args[0] is sock_arg with daddr/dport
+			if sockArg := anyMap(argMap, "sock_arg", "sockArg"); sockArg != nil {
+				daddr := anyStr(sockArg, "daddr", "dest_addr", "destAddr")
+				if daddr != "" {
+					dport := anyStr(sockArg, "dport", "dest_port", "destPort")
+					if dport == "" {
+						if dp, ok := sockArg["dport"].(float64); ok && dp > 0 {
+							dport = fmt.Sprintf("%d", int(dp))
+						}
+					}
+					if dport != "" && dport != "0" {
+						evt.NetDest = fmt.Sprintf("%s:%s", daddr, dport)
+					} else {
+						evt.NetDest = daddr
+					}
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 46,
+        "oldLines": 12,
+        "newStart": 46,
+        "newLines": 18,
+        "lines": [
+          "     return err",
+          "   }",
+          " ",
+          "+  // Log all pod names so the user can see which nodes are being connected to.",
+          "+  fmt.Printf("[sentinel-discovery] connecting to %d Tetragon pods: %v\
+", len(pods), pods)",
+          "+",
+          "   var wg sync.WaitGroup",
+          "   for _, podName := range pods {",
+          "     wg.Add(1)",
+          "     go func(name string) {",
+          "       defer wg.Done()",
+          "-      _ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others",
+          "+      if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {",
+          "+        // Surface per-pod errors so RBAC / connectivity issues are visible in Sentinel logs.",
+          "+        fmt.Printf("[sentinel-discovery] pod %s stream error: %v\
+", name, err)",
+          "+      }",
+          "     }(podName)",
+          "   }",
+          "   wg.Wait()"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add -A && git commit -m "fix: log per-pod stream errors to surface RBAC/connectivity issues in multi-node clusters"",
+    "timeout": 30000,
+    "description": "build + 提交"
+  }
+}
+
+----------------------------------------
+

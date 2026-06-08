@@ -46,12 +46,18 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		return err
 	}
 
+	// Log all pod names so the user can see which nodes are being connected to.
+	fmt.Printf("[sentinel-discovery] connecting to %d Tetragon pods: %v\n", len(pods), pods)
+
 	var wg sync.WaitGroup
 	for _, podName := range pods {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+			if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
+				// Surface per-pod errors so RBAC / connectivity issues are visible in Sentinel logs.
+				fmt.Printf("[sentinel-discovery] pod %s stream error: %v\n", name, err)
+			}
 		}(podName)
 	}
 	wg.Wait()
