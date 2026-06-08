@@ -175146,3 +175146,392 @@ export function DiscoveryPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: auto catch-all discovery policy for file/network behaviors, Start/Stop control"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 87cbd1b] feat: auto catch-all discovery policy for file/network behaviors, Start/Stop control
+ 6 files changed, 2391 insertions(+), 16 deletions(-)
+ create mode 100644 internal/handler/discovery.go",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "87cbd1b",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Behavior Discovery 幫我放在 Policies 的分類裡，並且在 TracingPolicy 下方"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "new_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "new_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "newString": "        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import faviconUrl from '../assets/favicon.svg'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={faviconUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 49,
+        "oldLines": 6,
+        "newStart": 49,
+        "newLines": 11,
+        "lines": [
+          "                   <NavLink to="/policies/tracing">TracingPolicy</NavLink>",
+          "                 </SidebarMenuButton>",
+          "               </SidebarMenuItem>",
+          "+              <SidebarMenuItem>",
+          "+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>",
+          "+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>",
+          "+                </SidebarMenuButton>",
+          "+              </SidebarMenuItem>",
+          "             </SidebarMenu>",
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>"
+        ]
+      },
+      {
+        "oldStart": 62,
+        "oldLines": 11,
+        "newStart": 67,
+        "newLines": 6,
+        "lines": [
+          "                   <NavLink to="/security/events">Events</NavLink>",
+          "                 </SidebarMenuButton>",
+          "               </SidebarMenuItem>",
+          "-              <SidebarMenuItem>",
+          "-                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>",
+          "-                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>",
+          "-                </SidebarMenuButton>",
+          "-              </SidebarMenuItem>",
+          "             </SidebarMenu>",
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -3 && git add -A && git commit -m "feat: move Behavior Discovery under Policies section in sidebar"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  }
+}
+
+----------------------------------------
+
