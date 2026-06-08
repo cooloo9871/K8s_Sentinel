@@ -79,10 +79,8 @@ export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
 
       const ns = evt.namespace ?? ''
       const pod = evt.pod ?? ''
-      // Debug: log the first few events to confirm subscription is working
-      if (process.env.NODE_ENV === 'development' || true) {
-        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
-      }
+      // Debug: log events with pod context to confirm subscription is working
+      if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
       if (!ns || !pod) return
 
       const key = `${ns}/${pod}`

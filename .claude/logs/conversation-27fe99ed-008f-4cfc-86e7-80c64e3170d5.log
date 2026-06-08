@@ -186994,3 +186994,289 @@ export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -3 && git add -A && git commit -m "debug: add console.debug to DiscoveryProvider to verify event subscription"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  },
+  "tool_response": {
+    "stdout": "> tsc && vite build
+
+src/layout/DiscoveryProvider.tsx(83,11): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+[main 49e29e9] debug: add console.debug to DiscoveryProvider to verify event subscription
+ 2 files changed, 442 insertions(+)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "49e29e9",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@us-tkcdc:~/Sentinel$ sudo podman build -t quay.io/cooloo9871/sentinel:latest . && sudo podman push quay.io/cooloo9871/sentinel:latest
+[1/3] STEP 1/6: FROM docker.io/library/node:20-alpine AS frontend
+[1/3] STEP 2/6: WORKDIR /app/web
+--> Using cache c20871fbaa07ce3331a2efcacc8e1e192f80714a8698c106c4bebdd9fe91ea9e
+--> c20871fbaa07
+[1/3] STEP 3/6: COPY web/package*.json ./
+--> Using cache edb8efd3614e1e7b679f704b6e2d5fbc43e6c61d7db733d5cf70bd790f03153d
+--> edb8efd3614e
+[1/3] STEP 4/6: RUN npm ci
+--> Using cache b039bda280b34347f2b9e2b231f67bfc8cc8de994b0bfb257c83c4ee879c2e01
+--> b039bda280b3
+[1/3] STEP 5/6: COPY web/ ./
+--> 21667ab5a46c
+[1/3] STEP 6/6: RUN npm run build
+
+> web@1.0.0 build
+> tsc && vite build
+
+src/layout/DiscoveryProvider.tsx(83,11): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+Error: building at STEP "RUN npm run build": while running runtime: exit status 2"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "old_string": "      // Debug: log the first few events to confirm subscription is working
+      if (process.env.NODE_ENV === 'development' || true) {
+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
+      }",
+    "new_string": "      // Debug: log events with pod context to confirm subscription is working
+      if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "old_string": "      // Debug: log the first few events to confirm subscription is working
+      if (process.env.NODE_ENV === 'development' || true) {
+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
+      }",
+    "new_string": "      // Debug: log events with pod context to confirm subscription is working
+      if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "oldString": "      // Debug: log the first few events to confirm subscription is working
+      if (process.env.NODE_ENV === 'development' || true) {
+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
+      }",
+    "newString": "      // Debug: log events with pod context to confirm subscription is working
+      if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useSecurityEvents } from './SecurityEventsProvider'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const { subscribeRaw } = useSecurityEvents()
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  useEffect(() => { profileMapRef.current = profileMap }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      // Debug: log the first few events to confirm subscription is working
+      if (process.env.NODE_ENV === 'development' || true) {
+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
+      }
+      if (!ns || !pod) return
+
+      const key = `${ns}/${pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing: PodProfile = prev[key] ?? {
+          namespace: ns,
+          pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        const binaries = evt.binary && !existing.binaries.includes(evt.binary)
+          ? [...existing.binaries, evt.binary]
+          : existing.binaries
+        const filePaths = evt.filePath && !existing.filePaths.includes(evt.filePath)
+          ? [...existing.filePaths, evt.filePath]
+          : existing.filePaths
+        const netDests = evt.netDest && !existing.netDests.includes(evt.netDest)
+          ? [...existing.netDests, evt.netDest]
+          : existing.netDests
+        const lastSeen = now > existing.lastSeen ? now : existing.lastSeen
+
+        // Skip state update if nothing changed
+        if (
+          binaries === existing.binaries &&
+          filePaths === existing.filePaths &&
+          netDests === existing.netDests &&
+          lastSeen === existing.lastSeen
+        ) return prev
+
+        return { ...prev, [key]: { ...existing, binaries, filePaths, netDests, lastSeen } }
+      })
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    return subscribeRaw(handleRaw)
+  }, [subscribeRaw, handleRaw])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 79,
+        "oldLines": 10,
+        "newStart": 79,
+        "newLines": 8,
+        "lines": [
+          " ",
+          "       const ns = evt.namespace ?? ''",
+          "       const pod = evt.pod ?? ''",
+          "-      // Debug: log the first few events to confirm subscription is working",
+          "-      if (process.env.NODE_ENV === 'development' || true) {",
+          "-        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)",
+          "-      }",
+          "+      // Debug: log events with pod context to confirm subscription is working",
+          "+      if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)",
+          "       if (!ns || !pod) return",
+          " ",
+          "       const key = `${ns}/${pod}`"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -4 && git add -A && git commit -m "fix: remove process.env reference causing TS build error in DiscoveryProvider"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  }
+}
+
+----------------------------------------
+
