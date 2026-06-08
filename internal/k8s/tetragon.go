@@ -158,6 +158,20 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		evt.Action = "monitor"
 	}
 
+	// For sys_execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Override Binary with the actual executed path from args[0].
+	if evt.Function == "sys_execve" {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
 	return evt, true
 }
 
