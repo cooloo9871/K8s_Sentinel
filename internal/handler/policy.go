@@ -7,8 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"sigs.k8s.io/yaml"
 
-	"github.com/brobridge/sentinel/internal/k8s"
-	"github.com/brobridge/sentinel/internal/policy"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/policy"
 )
 
 type createPolicyRequest struct {

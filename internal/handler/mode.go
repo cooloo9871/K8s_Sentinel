@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/brobridge/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
 func getMode(store *k8s.Store) http.HandlerFunc {

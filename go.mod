@@ -1,4 +1,4 @@
-module github.com/brobridge/sentinel
+module github.com/cooloo9871/sentinel
 
 go 1.22.2
 

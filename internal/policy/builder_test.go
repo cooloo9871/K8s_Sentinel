@@ -3,7 +3,7 @@ package policy_test
 import (
 	"testing"
 
-	"github.com/brobridge/sentinel/internal/policy"
+	"github.com/cooloo9871/sentinel/internal/policy"
 	"sigs.k8s.io/yaml"
 )
 

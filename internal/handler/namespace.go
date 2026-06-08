@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/brobridge/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
 func listNamespaces(store *k8s.Store) http.HandlerFunc {

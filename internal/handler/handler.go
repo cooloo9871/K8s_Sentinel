@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/brobridge/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
 // Config holds dependencies for all handlers.

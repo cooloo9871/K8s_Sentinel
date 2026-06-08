@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/yaml"
 
-	"github.com/brobridge/sentinel/internal/policy"
+	"github.com/cooloo9871/sentinel/internal/policy"
 )
 
 // PolicyRecord is a policy as returned by the list/get API.

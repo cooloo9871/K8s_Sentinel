@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/brobridge/sentinel/internal/handler"
-	k8sclient "github.com/brobridge/sentinel/internal/k8s"
-	sentinelweb "github.com/brobridge/sentinel/web"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
+	sentinelweb "github.com/cooloo9871/sentinel/web"
 )
 
 func main() {
