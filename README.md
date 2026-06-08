@@ -25,7 +25,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管�
 
 - Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 TracingPolicy CRD
 - `kubectl` 已設定好 kubeconfig
-- 容器 registry 存取權限（若需自行 build 映像）
+- container registry 存取權限（若需自行 build 映像）
 
 ---
 
@@ -38,7 +38,7 @@ cd Sentinel
 
 ---
 
-### 步驟二：更新容器映像（選用）
+### 步驟二：更新 container 映像（選用）
 
 若要使用自行 build 的映像，編輯 `deploy/base/deployment.yaml`：
 
@@ -131,7 +131,7 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 
 | 資源 | 名稱 | 說明 |
 |------|------|------|
-| Namespace | `sentinel-system` | 所有資源的命名空間 |
+| Namespace | `sentinel-system` | 所有資源的 namespace |
 | ServiceAccount | `sentinel` | Pod 使用的服務帳號 |
 | ClusterRole | `sentinel` | TracingPolicy CRUD + Namespace 讀取權限 |
 | ClusterRoleBinding | `sentinel` | 綁定 ServiceAccount 與 ClusterRole |

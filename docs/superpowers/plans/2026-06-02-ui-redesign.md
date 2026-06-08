@@ -819,7 +819,7 @@ export function DashboardPage() {
           <StatCard
             title="Namespaces"
             value={namespaceCount}
-            subtitle="已列管的命名空間"
+            subtitle="已列管的namespace"
             borderColor="#28a745"
           />
         </CCol>
@@ -827,7 +827,7 @@ export function DashboardPage() {
           <StatCard
             title="Cluster-scoped"
             value={clusterCount}
-            subtitle="跨命名空間 Policy"
+            subtitle="跨namespace Policy"
             borderColor="#dc3545"
           />
         </CCol>

@@ -188,7 +188,7 @@ CLUSTER
 | 卡片 | `Card` | `CCard` + `CCardHeader` + `CCardBody` |
 | 表格 | `Table` | `CTable` + `CTableHead` + `CTableBody` |
 | 標籤/徽章 | `Tag` | `CBadge` |
-| 表單容器 | `Form` + `Form.Item` | `CForm` + `CFormLabel` |
+| 表單container | `Form` + `Form.Item` | `CForm` + `CFormLabel` |
 | 文字輸入 | `Input` | `CFormInput` |
 | 下拉選單 | `Select` | `CFormSelect` |
 | 切換開關 | `Switch` | `CFormSwitch` |
@@ -214,7 +214,7 @@ web/src/
 │   ├── AppLayout.tsx           # 主框架（Sidebar + Header + Content）
 │   ├── AppSidebar.tsx          # CSidebar + 多層導覽
 │   ├── AppHeader.tsx           # CHeader + 麵包屑 + Mode Badge
-│   └── AppToaster.tsx          # 全域 CToast 容器
+│   └── AppToaster.tsx          # 全域 CToast container
 ├── pages/
 │   ├── DashboardPage.tsx       # 新增
 │   ├── ModePage.tsx            # 新增
@@ -230,7 +230,7 @@ web/src/
     │   ├── FileSection.tsx      # 重寫
     │   └── NetworkSection.tsx   # 重寫
     ├── ModeToggle.tsx           # 重寫（CFormSwitch）
-    └── YamlEditor.tsx           # 保留（Monaco，僅調整容器樣式）
+    └── YamlEditor.tsx           # 保留（Monaco，僅調整container樣式）
 ```
 
 ### 刪除檔案
