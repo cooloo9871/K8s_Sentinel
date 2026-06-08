@@ -73,29 +73,34 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 			netAddresses = append(netAddresses, addr)
 		}
 	}
-	if len(netAddresses) > 0 {
-		var ports []string
-		for _, p := range input.NetworkPorts {
-			if t := strings.TrimSpace(p); t != "" {
-				ports = append(ports, t)
-			}
+	var ports []string
+	for _, p := range input.NetworkPorts {
+		if t := strings.TrimSpace(p); t != "" {
+			ports = append(ports, t)
 		}
+	}
 
+	// Guard on either addresses OR ports — ports-only rules are valid
+	// (e.g. NotDPort:6379 = kill anything not using port 6379).
+	if len(netAddresses) > 0 || len(ports) > 0 {
 		var netSelectors []KProbeSelector
 		if input.NetworkMode == "blacklist" {
-			// Blacklist: ONE selector → DAddr AND DPort (AND semantics).
-			// Kill connections matching THIS address AND THIS port.
-			matchArgs := []ArgSelector{{Index: 0, Operator: "DAddr", Values: netAddresses}}
+			// Blacklist: ONE selector → DAddr AND/OR DPort (AND semantics).
+			var matchArgs []ArgSelector
+			if len(netAddresses) > 0 {
+				matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DAddr", Values: netAddresses})
+			}
 			if len(ports) > 0 {
 				matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
 			}
 			netSelectors = []KProbeSelector{{MatchArgs: matchArgs, MatchActions: []ActionSelector{{Action: action}}}}
 		} else {
 			// Whitelist: SEPARATE selectors → NotDAddr OR NotDPort (OR semantics).
-			// Kill if (dest NOT in list) OR (port NOT in list).
-			// = Allow only if (dest IN list) AND (port IN list).
-			netSelectors = []KProbeSelector{
-				{MatchArgs: []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: netAddresses}}, MatchActions: []ActionSelector{{Action: action}}},
+			if len(netAddresses) > 0 {
+				netSelectors = append(netSelectors, KProbeSelector{
+					MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: netAddresses}},
+					MatchActions: []ActionSelector{{Action: action}},
+				})
 			}
 			if len(ports) > 0 {
 				netSelectors = append(netSelectors, KProbeSelector{

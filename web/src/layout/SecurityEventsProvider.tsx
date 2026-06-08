@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { TetragonEvent } from '../api/types'
 
 const MAX_EVENTS = 500
@@ -69,8 +69,9 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   const [error, setError] = useState('')
   const esRef = useRef<EventSource | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
 
-  const connect = () => {
+  const connect = useCallback(() => {
     esRef.current?.close()
     setError('')
 
@@ -99,7 +100,12 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
     })
 
     es.onerror = () => setConnected(false)
-  }
+  }, []) // useCallback — stable reference across renders
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
 
   // Debounce localStorage writes: at most once every 2 s no matter how many
   // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
@@ -113,6 +119,12 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
   }, [events])
+
+  // Flush the latest events to localStorage on unmount so no events are lost
+  // when the user navigates away within the debounce window.
+  useEffect(() => {
+    return () => { saveToStorage(eventsRef.current) }
+  }, [])
 
   useEffect(() => {
     connect()

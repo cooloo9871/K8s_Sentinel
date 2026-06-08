@@ -83,11 +83,11 @@ export function PolicyEditPage() {
       const parsed = yamlToForm(yamlContent)
       if (parsed) {
         setFormValues(parsed)
-        if (parsed.namespace !== undefined) {
-          setPolicyMode(
-            yamlContent.toLowerCase().includes('sigkill') ? 'Protect' : 'Monitoring'
-          )
-        }
+        // Always sync policyMode — the old namespace guard incorrectly skipped
+        // cluster-wide policies (namespace === undefined) causing mode to stay stale.
+        setPolicyMode(
+          yamlContent.toLowerCase().includes('sigkill') ? 'Protect' : 'Monitoring'
+        )
       }
     }
     setActiveTab(tab)

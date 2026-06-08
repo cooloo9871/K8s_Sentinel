@@ -72,30 +72,28 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
   // networkMode 'whitelist' → NotDAddr (block connections NOT in list)
   // networkMode 'blacklist' → DAddr    (block connections IN list)
   const netAddresses = (input.network ?? []).map((r) => r.address.trim()).filter(Boolean)
-  if (netAddresses.length > 0) {
-    const ports = (input.networkPorts ?? []).map((p) => p.trim()).filter(Boolean)
+  const ports = (input.networkPorts ?? []).map((p) => p.trim()).filter(Boolean)
 
+  // Guard on either addresses OR ports — ports-only rules are valid
+  // (e.g. NotDPort:6379 = kill anything not on port 6379).
+  if (netAddresses.length > 0 || ports.length > 0) {
     let selectors: { matchArgs: { index: number; operator: string; values: string[] }[]; matchActions: { action: string }[] }[]
 
     if (input.networkMode === 'blacklist') {
       // Blacklist: ONE selector → DAddr AND DPort (AND semantics).
-      // Kill connections that match THIS address AND THIS port.
-      const matchArgs: { index: number; operator: string; values: string[] }[] = [
-        { index: 0, operator: 'DAddr', values: netAddresses },
-      ]
+      const matchArgs: { index: number; operator: string; values: string[] }[] = []
+      if (netAddresses.length > 0) matchArgs.push({ index: 0, operator: 'DAddr', values: netAddresses })
       if (ports.length > 0) matchArgs.push({ index: 0, operator: 'DPort', values: ports })
       selectors = [{ matchArgs, matchActions: [{ action }] }]
     } else {
       // Whitelist: SEPARATE selectors → NotDAddr OR NotDPort (OR semantics).
       // Kill if (dest NOT in address list) OR (port NOT in port list).
-      // = Allow only if (dest IN address list) AND (port IN port list).
-      selectors = [
-        { matchArgs: [{ index: 0, operator: 'NotDAddr', values: netAddresses }], matchActions: [{ action }] },
-      ]
+      selectors = []
+      if (netAddresses.length > 0) {
+        selectors.push({ matchArgs: [{ index: 0, operator: 'NotDAddr', values: netAddresses }], matchActions: [{ action }] })
+      }
       if (ports.length > 0) {
-        selectors.push(
-          { matchArgs: [{ index: 0, operator: 'NotDPort', values: ports }], matchActions: [{ action }] }
-        )
+        selectors.push({ matchArgs: [{ index: 0, operator: 'NotDPort', values: ports }], matchActions: [{ action }] })
       }
     }
 
