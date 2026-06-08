@@ -143476,3 +143476,770 @@ export function PolicyListPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3 && git add -A && git commit -m "feat: add confirmation dialog for per-policy mode change in TracingPolicy list"",
+    "timeout": 60000,
+    "description": "驗證 + 提交"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[main 4f3fd97] feat: add confirmation dialog for per-policy mode change in TracingPolicy list
+ 2 files changed, 1590 insertions(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "4f3fd97",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "幫我把 ~/favicon.svg 這個圖片，放在 UI dashboard 左上角的 Sentinel 的 logo
+然後 ~/sentinel-lockup.svg 這個圖片幫我放在 README.md 上"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -lh ~/favicon.svg ~/sentinel-lockup.svg 2>/dev/null && echo "---" && head -5 ~/favicon.svg && echo "---" && head -5 ~/sentinel-lockup.svg",
+    "description": "確認 SVG 檔案存在並預覽內容"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -lh ~/favicon.svg ~/sentinel-lockup.svg 2>/dev/null && echo "---" && head -5 ~/favicon.svg && echo "---" && head -5 ~/sentinel-lockup.svg",
+    "description": "確認 SVG 檔案存在並預覽內容"
+  },
+  "tool_response": {
+    "stdout": "-rw-rw-r-- 1 bigred bigred  753 Jun  8 14:20 /home/bigred/favicon.svg
+-rw-rw-r-- 1 bigred bigred 1.1K Jun  8 14:20 /home/bigred/sentinel-lockup.svg
+---
+<svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sentinel">
+  <defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#22D3EE"/><stop offset="1" stop-color="#4F46E5"/></linearGradient></defs>
+  <rect width="100" height="100" rx="22" fill="#0B1220"/>
+  <path d="M50 16 L78 27 V52 C78 70 65 82 50 89 C35 82 22 70 22 52 V27 Z" fill="url(#sg)"/>
+  <path d="M50 24 L71 32 V52 C71 65 61 74 50 80 C39 74 29 65 29 52 V32 Z" fill="#0B1220"/>
+---
+<svg width="360" height="96" viewBox="0 0 360 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sentinel">
+  <defs>
+    <linearGradient id="sg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#22D3EE"/><stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cp ~/favicon.svg /home/bigred/Sentinel/web/src/assets/favicon.svg && cp ~/sentinel-lockup.svg /home/bigred/Sentinel/assets/sentinel-lockup.svg && echo "copied"",
+    "description": "複製 SVG 到 repo"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cp ~/favicon.svg /home/bigred/Sentinel/web/src/assets/favicon.svg && cp ~/sentinel-lockup.svg /home/bigred/Sentinel/assets/sentinel-lockup.svg && echo "copied"",
+    "description": "複製 SVG 到 repo"
+  },
+  "tool_response": {
+    "error": "Exit code 1
+cp: cannot create regular file '/home/bigred/Sentinel/web/src/assets/favicon.svg': No such file or directory",
+    "is_interrupt": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "mkdir -p /home/bigred/Sentinel/web/src/assets /home/bigred/Sentinel/assets && cp ~/favicon.svg /home/bigred/Sentinel/web/src/assets/favicon.svg && cp ~/sentinel-lockup.svg /home/bigred/Sentinel/assets/sentinel-lockup.svg && echo "copied"",
+    "description": "建立目錄並複製"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "mkdir -p /home/bigred/Sentinel/web/src/assets /home/bigred/Sentinel/assets && cp ~/favicon.svg /home/bigred/Sentinel/web/src/assets/favicon.svg && cp ~/sentinel-lockup.svg /home/bigred/Sentinel/assets/sentinel-lockup.svg && echo "copied"",
+    "description": "建立目錄並複製"
+  },
+  "tool_response": {
+    "stdout": "copied",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "import { useLocation, NavLink } from 'react-router-dom'",
+    "new_string": "import { useLocation, NavLink } from 'react-router-dom'
+import faviconUrl from '../assets/favicon.svg'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "import { useLocation, NavLink } from 'react-router-dom'",
+    "new_string": "import { useLocation, NavLink } from 'react-router-dom'
+import faviconUrl from '../assets/favicon.svg'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "import { useLocation, NavLink } from 'react-router-dom'",
+    "newString": "import { useLocation, NavLink } from 'react-router-dom'
+import faviconUrl from '../assets/favicon.svg'",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 4,
+        "newStart": 1,
+        "newLines": 5,
+        "lines": [
+          " import { useLocation, NavLink } from 'react-router-dom'",
+          "+import faviconUrl from '../assets/favicon.svg'",
+          " import {",
+          "   Sidebar,",
+          "   SidebarHeader,"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>",
+    "new_string": "        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={faviconUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>",
+    "new_string": "        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={faviconUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>",
+    "newString": "        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={faviconUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import faviconUrl from '../assets/favicon.svg'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
+            </svg>
+          </span>
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Security</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 22,
+        "oldLines": 11,
+        "newStart": 22,
+        "newLines": 7,
+        "lines": [
+          "     <Sidebar collapsible="offcanvas">",
+          "       <SidebarHeader>",
+          "         <div className="flex items-center gap-2.5 px-2 py-3">",
+          "-          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">",
+          "-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">",
+          "-              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />",
+          "-            </svg>",
+          "-          </span>",
+          "+          <img src={faviconUrl} alt="Sentinel" className="size-8 shrink-0" />",
+          "           <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>",
+          "         </div>",
+          "       </SidebarHeader>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "# Sentinel",
+    "new_string": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup.svg" alt="Sentinel" width="320" />
+</p>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "# Sentinel",
+    "new_string": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup.svg" alt="Sentinel" width="320" />
+</p>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "# Sentinel",
+    "newString": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup.svg" alt="Sentinel" width="320" />
+</p>",
+    "originalFile": "# Sentinel
+
+Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管理 console**。透過網頁介面即可建立、編輯、刪除 TracingPolicy，並切換整體叢集的執行模式（Monitoring / Protect），不需要直接操作 `kubectl`。
+
+---
+
+## 功能
+
+- **Dashboard**：Policy 總數、執行模式、Namespace 數量一覽，並可直接切換模式
+- **TracingPolicy 管理**：列表搜尋、新增、編輯、刪除，支援 namespace 與 cluster 兩種範疇
+- **表單編輯器**：以欄位填寫 Process / File / Network 規則，即時預覽產生的 YAML
+- **YAML 編輯器**：直接貼上或編輯原始 YAML，內建語法驗證
+- **執行模式切換**：Monitoring（觀測，不攔截）↔ Protect（主動 Sigkill 違規行為），切換前需確認
+- **Namespace 檢視**：列出叢集所有 Namespace 與其套用的 Policy 數量
+
+---
+
+## 部署到 Kubernetes
+
+### 前置需求
+
+- Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 TracingPolicy CRD
+- `kubectl` 已設定好 kubeconfig
+- 容器 registry 存取權限（若需自行 build 映像）
+
+---
+
+### 步驟一：Clone 專案
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+---
+
+### 步驟二：更新容器映像（選用）
+
+若要使用自行 build 的映像，編輯 `deploy/base/deployment.yaml`：
+
+```yaml
+containers:
+  - name: sentinel
+    image: your-registry/sentinel:your-tag  # 替換此行
+```
+
+Build 並推送映像：
+
+```bash
+docker build -t your-registry/sentinel:latest .
+docker push your-registry/sentinel:latest
+```
+
+預設使用公開映像 `quay.io/cooloo9871/sentinel:latest`，可直接跳過此步驟。
+
+---
+
+### 步驟三：部署
+
+**方式 A — Kubernetes Job（推薦，不需要本機 helm）**
+
+透過 Job 在叢集內部執行安裝，pod 負責 helm 安裝 Tetragon 以及 Sentinel 部署：
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+```
+
+查看安裝進度：
+
+```bash
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+Job 執行流程：
+1. 偵測是否已有 Tetragon DaemonSet，沒有則在 pod 內透過 Helm 安裝最新版
+2. Clone Sentinel 原始碼
+3. 建立 `sentinel-system` namespace（已存在則跳過）
+4. 套用 Sentinel K8s 資源並等待 Deployment 就緒
+
+Job 完成 10 分鐘後自動清除 pod（`ttlSecondsAfterFinished: 600`）。手動清除：
+
+```bash
+kubectl delete -f deploy/install-job.yaml
+```
+
+---
+
+**方式 B — 本機安裝腳本**
+
+需要本機有 `kubectl`，helm 不存在時會自動下載到暫存目錄：
+
+```bash
+bash deploy/install.sh
+```
+
+確認所有資源正常建立：
+
+```bash
+kubectl get all -n sentinel-system
+```
+
+```
+NAME                             READY   STATUS    RESTARTS   AGE
+pod/sentinel-xxxxxxxxx-xxxxx     1/1     Running   0          30s
+
+NAME               TYPE        CLUSTER-IP      PORT(S)   AGE
+service/sentinel   ClusterIP   10.96.xxx.xxx   80/TCP    30s
+
+NAME                        READY   UP-TO-DATE   AVAILABLE
+deployment.apps/sentinel    1/1     1            1
+```
+
+---
+
+### 步驟四：存取 UI
+
+**方式 A — Port-forward（快速測試）**
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟瀏覽器：http://localhost:8080
+```
+
+**方式 B — Ingress**
+
+建立 Ingress 資源指向 `sentinel` Service（port 80）：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sentinel
+  namespace: sentinel-system
+spec:
+  rules:
+    - host: sentinel.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinel
+                port:
+                  number: 80
+```
+
+---
+
+### 部署的 Kubernetes 資源
+
+| 資源 | 名稱 | 說明 |
+|------|------|------|
+| Namespace | `sentinel-system` | 所有資源的命名空間 |
+| ServiceAccount | `sentinel` | Pod 使用的服務帳號 |
+| ClusterRole | `sentinel` | TracingPolicy CRUD + Namespace 讀取權限 |
+| ClusterRoleBinding | `sentinel` | 綁定 ServiceAccount 與 ClusterRole |
+| Deployment | `sentinel` | 應用程式 Pod，1 個 replica |
+| Service | `sentinel` | ClusterIP，port 80 → 8080 |
+
+---
+
+### RBAC 權限說明
+
+Sentinel 需要以下叢集層級權限才能正常運作：
+
+| API Group | 資源 | 操作 |
+|-----------|------|------|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | get, list, watch, create, update, patch, delete |
+| `""` (core) | `namespaces` | get, list |
+
+---
+
+### 解除安裝
+
+```bash
+# 移除 Sentinel
+kubectl delete -k deploy/base/
+kubectl delete namespace sentinel-system
+
+# 移除 Tetragon（若是由本腳本安裝）
+kubectl delete -f deploy/tetragon.yaml
+```
+
+---
+
+## 本機開發
+
+```bash
+# 後端（需要 kubeconfig）
+go run ./cmd/server/
+
+# 前端 Dev Server（自動 proxy /api → localhost:8080）
+cd web && npm install && npm run dev
+```
+
+---
+
+## 授權
+
+[Apache License 2.0](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 5,
+        "newStart": 1,
+        "newLines": 9,
+        "lines": [
+          " # Sentinel",
+          " ",
+          "+<p align="center">",
+          "+  <img src="assets/sentinel-lockup.svg" alt="Sentinel" width="320" />",
+          "+</p>",
+          "+",
+          " Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管理 console**。透過網頁介面即可建立、編輯、刪除 TracingPolicy，並切換整體叢集的執行模式（Monitoring / Protect），不需要直接操作 `kubectl`。",
+          " ",
+          " ---"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -5",
+    "timeout": 60000,
+    "description": "確認 SVG import 正常 build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -5",
+    "timeout": 60000,
+    "description": "確認 SVG import 正常 build"
+  },
+  "tool_response": {
+    "stdout": "[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: add favicon.svg logo to sidebar, add sentinel-lockup.svg to README"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+

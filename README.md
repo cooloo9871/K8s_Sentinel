@@ -1,5 +1,9 @@
 # Sentinel
 
+<p align="center">
+  <img src="assets/sentinel-lockup.svg" alt="Sentinel" width="320" />
+</p>
+
 Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管理 console**。透過網頁介面即可建立、編輯、刪除 TracingPolicy，並切換整體叢集的執行模式（Monitoring / Protect），不需要直接操作 `kubectl`。
 
 ---

@@ -1,4 +1,5 @@
 import { useLocation, NavLink } from 'react-router-dom'
+import faviconUrl from '../assets/favicon.svg'
 import {
   Sidebar,
   SidebarHeader,
@@ -21,11 +22,7 @@ export function AppSidebar() {
     <Sidebar collapsible="offcanvas">
       <SidebarHeader>
         <div className="flex items-center gap-2.5 px-2 py-3">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#2d7dd2]">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect x="1" y="1" width="12" height="12" rx="2" stroke="white" strokeWidth="2" />
-            </svg>
-          </span>
+          <img src={faviconUrl} alt="Sentinel" className="size-8 shrink-0" />
           <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
         </div>
       </SidebarHeader>

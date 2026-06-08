@@ -1,0 +1,15 @@
+<svg width="360" height="96" viewBox="0 0 360 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sentinel">
+  <defs>
+    <linearGradient id="sg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#22D3EE"/><stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8,8) scale(0.8)">
+    <path d="M50 7 L85 21 V51 C85 71 69 85 50 93 C31 85 15 71 15 51 V21 Z" fill="url(#sg)"/>
+    <path d="M50 16 L77 27 V51 C77 66 65 77 50 84 C35 77 23 66 23 51 V27 Z" fill="#0B1220"/>
+    <path d="M31 50 Q50 35 69 50 Q50 65 31 50 Z" fill="none" stroke="url(#sg)" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="50" cy="50" r="7.5" fill="url(#sg)"/><circle cx="50" cy="50" r="2.6" fill="#0B1220"/>
+  </g>
+  <text x="96" y="52" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="38" font-weight="600" fill="#0B1220">Sentinel</text>
+  <text x="97" y="74" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" letter-spacing="3" fill="#0EA5B7">TRACING POLICY CONSOLE</text>
+</svg>
