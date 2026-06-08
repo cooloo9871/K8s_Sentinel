@@ -407,3 +407,54 @@ func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string)
 	}
 	return s.Apply(ctx, tp)
 }
+
+const discoveryPolicyName = "sentinel-discovery"
+
+// discoveryPolicyYAML is a cluster-wide catch-all TracingPolicy that captures
+// all file access and network connections across every pod — no selectors means
+// every call is logged with action Post (Monitoring mode).
+const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    selectors:
+    - matchActions:
+      - action: Post
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchActions:
+      - action: Post
+`
+
+// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.
+func (s *Store) IsDiscoveryEnabled(ctx context.Context) bool {
+	_, err := s.client.Resource(tracingPolicyGVR).Get(ctx, discoveryPolicyName, metav1.GetOptions{})
+	return err == nil
+}
+
+// EnableDiscovery creates (or updates) the catch-all discovery policy.
+func (s *Store) EnableDiscovery(ctx context.Context) error {
+	return s.ApplyRaw(ctx, discoveryPolicyYAML)
+}
+
+// DisableDiscovery removes the catch-all discovery policy.
+func (s *Store) DisableDiscovery(ctx context.Context) error {
+	err := s.client.Resource(tracingPolicyGVR).Delete(ctx, discoveryPolicyName, metav1.DeleteOptions{})
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}

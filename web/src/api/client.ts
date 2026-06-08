@@ -41,3 +41,9 @@ export const namespaceApi = {
   list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
 }
 
+export const discoveryApi = {
+  status: (): Promise<{ enabled: boolean }> => api.get('/discovery').then((r) => r.data),
+  setEnabled: (enabled: boolean): Promise<{ enabled: boolean }> =>
+    api.put('/discovery', { enabled }).then((r) => r.data),
+}
+

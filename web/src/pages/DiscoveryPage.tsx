@@ -1,6 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { IconSearch, IconShieldCheck } from '@tabler/icons-react'
+import {
+  IconSearch,
+  IconShieldCheck,
+  IconPlayerPlay,
+  IconPlayerStop,
+} from '@tabler/icons-react'
 import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +14,8 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import { discoveryApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
 import type { PolicyFormInput } from '../api/types'
 
 interface PodProfile {
@@ -66,8 +73,30 @@ function RelativeTime({ iso }: { iso: string }) {
 export function DiscoveryPage() {
   const { events, connected } = useSecurityEvents()
   const navigate = useNavigate()
+  const toast = useToast()
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(false)
+  const [toggling, setToggling] = useState(false)
+
+  useEffect(() => {
+    discoveryApi.status().then(r => setDiscoveryEnabled(r.enabled)).catch(() => {})
+  }, [])
+
+  const handleToggleDiscovery = async () => {
+    setToggling(true)
+    try {
+      const res = await discoveryApi.setEnabled(!discoveryEnabled)
+      setDiscoveryEnabled(res.enabled)
+      toast.success(res.enabled
+        ? 'Discovery started — file and network behaviors will be captured.'
+        : 'Discovery stopped.')
+    } catch {
+      toast.error('Failed to toggle discovery mode')
+    } finally {
+      setToggling(false)
+    }
+  }
 
   const profiles = useMemo(() => buildProfiles(events), [events])
 
@@ -101,8 +130,7 @@ export function DiscoveryPage() {
         <div>
           <h4 className="text-xl font-semibold">Behavior Discovery</h4>
           <p className="text-sm text-muted-foreground">
-            Observed behaviors from active monitoring policies.
-            Use them to generate new TracingPolicies.
+            Observe pod behaviors and generate TracingPolicies from learned patterns.
           </p>
         </div>
         <div className="flex items-center gap-1.5 text-sm">
@@ -115,24 +143,52 @@ export function DiscoveryPage() {
         </div>
       </div>
 
-      {events.length === 0 ? (
+      {/* Discovery control banner */}
+      <div className={`mb-6 flex items-center justify-between rounded-xl border px-5 py-4 ${
+        discoveryEnabled ? 'border-green-200 bg-green-50' : 'bg-card'
+      }`}>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className={`size-2 rounded-full ${discoveryEnabled ? 'animate-pulse bg-green-500' : 'bg-muted-foreground'}`} />
+            <p className="text-sm font-medium">
+              {discoveryEnabled ? 'Discovery Active' : 'Discovery Inactive'}
+            </p>
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {discoveryEnabled
+              ? 'Capturing all file access and network connections cluster-wide (Monitoring mode).'
+              : 'Process behaviors are always collected. Start discovery to also capture file and network behaviors.'}
+          </p>
+        </div>
+        <Button
+          variant={discoveryEnabled ? 'outline' : 'default'}
+          size="sm"
+          onClick={handleToggleDiscovery}
+          disabled={toggling}
+          className="shrink-0"
+        >
+          {discoveryEnabled ? (
+            <><IconPlayerStop size={14} className="mr-1.5" />Stop Discovery</>
+          ) : (
+            <><IconPlayerPlay size={14} className="mr-1.5" />Start Discovery</>
+          )}
+        </Button>
+      </div>
+
+      {profiles.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
           <IconShieldCheck size={48} strokeWidth={1.5} />
           <p className="text-base font-medium">No behavior data yet</p>
           <div className="max-w-md text-center text-sm space-y-2">
             <p>
-              <strong>Process behaviors</strong> are collected automatically from all pods
-              via Tetragon's base sensor — no policy needed. They will appear here as pods
-              execute processes.
+              <strong>Process behaviors</strong> are captured automatically from all pods
+              without any policy. They appear here as pods execute processes.
             </p>
             <p>
-              <strong>File &amp; Network behaviors</strong> require a monitoring TracingPolicy
-              to be active for the target namespace.
+              Click <strong>Start Discovery</strong> above to also capture
+              file access and network connections across the entire cluster.
             </p>
           </div>
-          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
-            Create a Monitoring Policy
-          </Button>
         </div>
       ) : (
         <>
@@ -180,7 +236,11 @@ export function DiscoveryPage() {
                       variant="outline"
                       className="h-7 text-xs"
                       onClick={() => handleCreatePolicy(profile)}
-                      disabled={profile.binaries.length === 0 && profile.filePaths.length === 0 && profile.netDests.length === 0}
+                      disabled={
+                        profile.binaries.length === 0 &&
+                        profile.filePaths.length === 0 &&
+                        profile.netDests.length === 0
+                      }
                     >
                       Create Policy
                     </Button>
@@ -222,7 +282,11 @@ export function DiscoveryPage() {
                           <span className="text-muted-foreground">+{profile.filePaths.length - 3} more</span>
                         )}
                       </div>
-                    ) : <span className="text-muted-foreground">—</span>}
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {discoveryEnabled ? '—' : 'Start discovery to capture file behaviors'}
+                      </span>
+                    )}
                   </div>
 
                   {/* Network */}
@@ -240,7 +304,11 @@ export function DiscoveryPage() {
                           <span className="text-muted-foreground">+{profile.netDests.length - 3} more</span>
                         )}
                       </div>
-                    ) : <span className="text-muted-foreground">—</span>}
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {discoveryEnabled ? '—' : 'Start discovery to capture network behaviors'}
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between border-t pt-2">

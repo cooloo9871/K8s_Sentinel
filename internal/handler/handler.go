@@ -32,6 +32,8 @@ func New(cfg Config) http.Handler {
 	r.Get("/api/mode", getMode(cfg.Store))
 	r.Put("/api/mode", setMode(cfg.Store))
 	r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
+	r.Get("/api/discovery", getDiscoveryStatus(cfg.Store))
+	r.Put("/api/discovery", setDiscovery(cfg.Store))
 
 	return r
 }
