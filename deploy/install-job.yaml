@@ -37,7 +37,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: installer
-          image: dtzar/helm-kubectl:3.17
+          image: quay.io/cooloo9871/helm-kubectl:3.17
           command:
             - /bin/sh
             - -c
