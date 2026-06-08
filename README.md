@@ -57,21 +57,41 @@ docker push your-registry/sentinel:latest
 
 ### 步驟三：部署
 
-執行安裝腳本，會自動偵測並安裝 Tetragon（若尚未安裝），然後部署 Sentinel：
+**方式 A — Kubernetes Job（推薦，不需要本機 helm）**
+
+透過 Job 在叢集內部執行安裝，pod 負責 helm 安裝 Tetragon 以及 Sentinel 部署：
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+```
+
+查看安裝進度：
+
+```bash
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+Job 執行流程：
+1. 偵測是否已有 Tetragon DaemonSet，沒有則在 pod 內透過 Helm 安裝最新版
+2. Clone Sentinel 原始碼
+3. 建立 `sentinel-system` namespace（已存在則跳過）
+4. 套用 Sentinel K8s 資源並等待 Deployment 就緒
+
+Job 完成 10 分鐘後自動清除 pod（`ttlSecondsAfterFinished: 600`）。手動清除：
+
+```bash
+kubectl delete -f deploy/install-job.yaml
+```
+
+---
+
+**方式 B — 本機安裝腳本**
+
+需要本機有 `kubectl`，helm 不存在時會自動下載到暫存目錄：
 
 ```bash
 bash deploy/install.sh
 ```
-
-腳本執行流程：
-1. 偵測 `kube-system` 是否已有 Tetragon DaemonSet，沒有則安裝最新版
-   - `helm` 已安裝：直接使用
-   - `helm` 不存在：自動下載 helm 二進位到暫存目錄，用完即刪
-2. 建立 `sentinel-system` namespace（已存在則跳過）
-3. 套用 Sentinel K8s 資源
-4. 等待 Deployment 就緒
-
-每次執行都會取得最新版的 Tetragon chart。
 
 確認所有資源正常建立：
 

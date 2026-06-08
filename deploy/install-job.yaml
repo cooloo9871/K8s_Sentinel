@@ -1,0 +1,81 @@
+# Sentinel installer Job
+# Usage: kubectl apply -f deploy/install-job.yaml
+# Logs:  kubectl logs -n kube-system job/sentinel-installer -f
+# Clean: kubectl delete -f deploy/install-job.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentinel-installer
+  namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sentinel-installer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: sentinel-installer
+    namespace: kube-system
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sentinel-installer
+  namespace: kube-system
+spec:
+  ttlSecondsAfterFinished: 600   # auto-delete pod 10 min after completion
+  template:
+    spec:
+      serviceAccountName: sentinel-installer
+      restartPolicy: OnFailure
+      containers:
+        - name: installer
+          image: dtzar/helm-kubectl:3.17
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Install git (Alpine-based image)
+              apk add --no-cache git > /dev/null 2>&1
+
+              # ── Tetragon ────────────────────────────────────────────
+              echo "[1/4] Tetragon"
+              if kubectl get daemonset tetragon -n kube-system > /dev/null 2>&1; then
+                echo "  already installed, skipping"
+              else
+                echo "  installing via Helm..."
+                helm repo add cilium https://helm.cilium.io --force-update
+                helm repo update cilium
+                helm install tetragon cilium/tetragon -n kube-system
+                echo "  waiting for DaemonSet..."
+                kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s
+                echo "  ready"
+              fi
+
+              # ── Clone repo ──────────────────────────────────────────
+              echo "[2/4] Cloning Sentinel repository"
+              git clone --depth=1 https://github.com/cooloo9871/Sentinel.git /tmp/sentinel
+
+              # ── Namespace ───────────────────────────────────────────
+              echo "[3/4] Creating sentinel-system namespace"
+              kubectl create namespace sentinel-system \
+                --dry-run=client -o yaml | kubectl apply -f -
+
+              # ── Sentinel ────────────────────────────────────────────
+              echo "[4/4] Deploying Sentinel"
+              kubectl apply -k /tmp/sentinel/deploy/base/
+              kubectl rollout status deployment/sentinel \
+                -n sentinel-system --timeout=120s
+
+              echo ""
+              echo "Done. Access Sentinel:"
+              echo "  kubectl port-forward -n sentinel-system svc/sentinel 8080:80"
