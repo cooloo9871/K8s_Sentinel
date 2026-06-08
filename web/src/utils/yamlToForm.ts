@@ -80,8 +80,8 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
             if (addr) result.network!.push({ address: addr })
           }
         }
-        // Parse DPort entries into networkPorts
-        const dPort = args.find((a: any) => a.operator === 'DPort')
+        // Parse DPort / NotDPort into networkPorts
+        const dPort    = args.find((a: any) => a.operator === 'DPort' || a.operator === 'NotDPort')
         if (dPort) {
           for (const port of dPort.values ?? []) {
             if (port) result.networkPorts!.push(String(port))

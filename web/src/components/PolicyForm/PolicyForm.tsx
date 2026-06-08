@@ -230,8 +230,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               </Select>
               <p className="text-xs text-muted-foreground">
                 {value.networkMode === 'blacklist'
-                  ? '🚫 DAddr (Blacklist): block connections to listed addresses, allow everything else.'
-                  : '✅ NotDAddr (Whitelist): allow connections only to listed addresses, block everything else.'}
+                  ? '🚫 DAddr (Blacklist): kill connections whose destination is IN the address list AND in the port list.'
+                  : '✅ NotDAddr (Whitelist): two separate selectors — kill if (dest NOT in address list) OR (port NOT in port list). Only connections matching BOTH address AND port are allowed.'}
               </p>
             </div>
             {/* Address list */}

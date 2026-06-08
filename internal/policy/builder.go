@@ -74,28 +74,42 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		}
 	}
 	if len(netAddresses) > 0 {
-		netOperator := "NotDAddr"
-		if input.NetworkMode == "blacklist" {
-			netOperator = "DAddr"
-		}
-		netMatchArgs := []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}}
 		var ports []string
 		for _, p := range input.NetworkPorts {
 			if t := strings.TrimSpace(p); t != "" {
 				ports = append(ports, t)
 			}
 		}
-		if len(ports) > 0 {
-			netMatchArgs = append(netMatchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
+
+		var netSelectors []KProbeSelector
+		if input.NetworkMode == "blacklist" {
+			// Blacklist: ONE selector → DAddr AND DPort (AND semantics).
+			// Kill connections matching THIS address AND THIS port.
+			matchArgs := []ArgSelector{{Index: 0, Operator: "DAddr", Values: netAddresses}}
+			if len(ports) > 0 {
+				matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
+			}
+			netSelectors = []KProbeSelector{{MatchArgs: matchArgs, MatchActions: []ActionSelector{{Action: action}}}}
+		} else {
+			// Whitelist: SEPARATE selectors → NotDAddr OR NotDPort (OR semantics).
+			// Kill if (dest NOT in list) OR (port NOT in list).
+			// = Allow only if (dest IN list) AND (port IN list).
+			netSelectors = []KProbeSelector{
+				{MatchArgs: []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: netAddresses}}, MatchActions: []ActionSelector{{Action: action}}},
+			}
+			if len(ports) > 0 {
+				netSelectors = append(netSelectors, KProbeSelector{
+					MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDPort", Values: ports}},
+					MatchActions: []ActionSelector{{Action: action}},
+				})
+			}
 		}
+
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
-			Call:    "tcp_connect",
-			Syscall: false,
-			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
-			Selectors: []KProbeSelector{{
-				MatchArgs:    netMatchArgs,
-				MatchActions: []ActionSelector{{Action: action}},
-			}},
+			Call:      "tcp_connect",
+			Syscall:   false,
+			Args:      []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: netSelectors,
 		})
 	}
 
