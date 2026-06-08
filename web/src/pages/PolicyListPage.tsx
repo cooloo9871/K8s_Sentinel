@@ -106,6 +106,7 @@ export function PolicyListPage() {
         <div className="flex items-center gap-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Global Enforcement Mode</p>
+            <p className="text-xs text-muted-foreground/70">Switch all policies to Monitoring / Protect at once</p>
             <div className="mt-1 flex items-center gap-2">
               <Badge
                 variant={globalMode === 'Protect' ? 'destructive' : globalMode === 'Mixed' ? 'outline' : 'secondary'}
