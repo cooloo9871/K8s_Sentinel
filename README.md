@@ -25,7 +25,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管�
 
 - Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 TracingPolicy CRD
 - `kubectl` 已設定好 kubeconfig
-- container registry 存取權限（若需自行 build 映像）
+- container registry 存取權限（若需自行 build image）
 
 ---
 
@@ -38,9 +38,9 @@ cd Sentinel
 
 ---
 
-### 步驟二：更新 container 映像（選用）
+### 步驟二：更新 container image（選用）
 
-若要使用自行 build 的映像，編輯 `deploy/base/deployment.yaml`：
+若要使用自行 build 的 image，編輯 `deploy/base/deployment.yaml`：
 
 ```yaml
 containers:
@@ -48,14 +48,14 @@ containers:
     image: your-registry/sentinel:your-tag  # 替換此行
 ```
 
-Build 並推送映像：
+Build 並推送 image：
 
 ```bash
 docker build -t your-registry/sentinel:latest .
 docker push your-registry/sentinel:latest
 ```
 
-預設使用公開映像 `quay.io/cooloo9871/sentinel:latest`，可直接跳過此步驟。
+預設使用公開 image `quay.io/cooloo9871/sentinel:latest`，可直接跳過此步驟。
 
 ---
 
