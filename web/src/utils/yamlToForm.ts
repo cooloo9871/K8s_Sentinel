@@ -36,6 +36,13 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
 
     if (call === 'sys_execve') {
       for (const sel of selectors) {
+        // New format: matchArgs index:0 with Postfix operator
+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          for (const bin of ma.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+        }
+        // Legacy format: matchBinaries (backward compat)
         for (const mb of sel.matchBinaries ?? []) {
           for (const bin of mb.values ?? []) {
             if (bin) result.process!.push({ binaries: [bin] })

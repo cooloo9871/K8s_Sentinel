@@ -20,7 +20,7 @@ export function ProcessSection({ binaries, onChange }: Props) {
       {binaries.map((b, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
-            placeholder="/usr/bin/nginx"
+            placeholder="/cat  (matches /bin/cat, /usr/bin/cat, ...)"
             value={b}
             onChange={(e) => update(i, e.target.value)}
             className="h-8 text-sm"

@@ -3,16 +3,18 @@ import { formToYaml } from './formToYaml'
 import type { PolicyFormInput } from '../api/types'
 
 describe('formToYaml', () => {
-  it('generates a single sys_execve kprobe for process rules', () => {
+  it('generates a single sys_execve kprobe using matchArgs Postfix', () => {
     const input: PolicyFormInput = {
       name: 'block-shells',
-      process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],
+      process: [{ binaries: ['/bash'] }, { binaries: ['/sh'] }],
     }
     const out = formToYaml(input, 'Post')
     expect(out).toContain('kind: TracingPolicy')
     expect(out).toContain('sys_execve')
-    expect(out).toContain('/bin/bash')
-    expect(out).toContain('/bin/sh')
+    expect(out).toContain('Postfix')
+    expect(out).toContain('/bash')
+    expect(out).toContain('/sh')
+    expect(out).not.toContain('matchBinaries')
     // Only ONE kprobe definition — no duplicate
     expect(out.split('sys_execve').length - 1).toBe(1)
   })

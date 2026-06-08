@@ -21,8 +21,9 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		tp.Spec.PodSelector = &LabelSelector{MatchLabels: input.PodSelector}
 	}
 
-	// Process rules: ONE sys_execve kprobe with all binaries combined.
-	// Multiple kprobes for the same function name cause BPF link pin conflicts.
+	// Process rules: ONE sys_execve kprobe with all values combined.
+	// matchArgs + Postfix: "/cat" matches /bin/cat, /usr/bin/cat, etc.
+	// Multiple kprobes for the same function cause BPF link pin conflicts.
 	var allBinaries []string
 	for _, r := range input.Process {
 		allBinaries = append(allBinaries, r.Binaries...)
@@ -33,8 +34,8 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 			Syscall: true,
 			Args:    []KProbeArg{{Index: 0, Type: "string"}},
 			Selectors: []KProbeSelector{{
-				MatchBinaries: []BinarySelector{{Operator: "In", Values: allBinaries}},
-				MatchActions:  []ActionSelector{{Action: action}},
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Postfix", Values: allBinaries}},
+				MatchActions: []ActionSelector{{Action: action}},
 			}},
 		})
 	}

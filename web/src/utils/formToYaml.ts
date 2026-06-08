@@ -6,7 +6,6 @@ interface KProbeSpec {
   syscall: boolean
   args?: { index: number; type: string }[]
   selectors: {
-    matchBinaries?: { operator: string; values: string[] }[]
     matchArgs?: { index: number; operator: string; values: string[] }[]
     matchActions: { action: string }[]
   }[]
@@ -36,8 +35,9 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     doc.spec.podSelector = { matchLabels: input.podSelector }
   }
 
-  // Process rules: ONE sys_execve kprobe with all binaries in a single matchBinaries.
-  // Multiple kprobes for the same function name would fail to pin their BPF links.
+  // Process rules: ONE sys_execve kprobe with all values combined.
+  // Uses matchArgs + Postfix: "/cat" matches /bin/cat, /usr/bin/cat, etc.
+  // Multiple kprobes for the same function cause BPF link pin conflicts.
   const allBinaries = (input.process ?? []).flatMap((r) => r.binaries).filter(Boolean)
   if (allBinaries.length > 0) {
     doc.spec.kprobes.push({
@@ -45,14 +45,13 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
       syscall: true,
       args: [{ index: 0, type: 'string' }],
       selectors: [{
-        matchBinaries: [{ operator: 'In', values: allBinaries }],
+        matchArgs: [{ index: 0, operator: 'Postfix', values: allBinaries }],
         matchActions: [{ action }],
       }],
     })
   }
 
-  // File rules: ONE security_file_permission kprobe with all paths in a single matchArgs.
-  // Values in the same matchArgs entry are OR'd by Tetragon.
+  // File rules: ONE security_file_permission kprobe with all paths combined.
   const allPaths = (input.file ?? []).flatMap((r) => r.paths).filter(Boolean)
   if (allPaths.length > 0) {
     doc.spec.kprobes.push({

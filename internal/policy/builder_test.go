@@ -49,9 +49,15 @@ func TestBuildMultipleProcessRulesCombined(t *testing.T) {
 	if len(got.Spec.KProbes) != 1 {
 		t.Fatalf("kprobes len = %d, want 1 (all binaries must be in one kprobe)", len(got.Spec.KProbes))
 	}
-	binaries := got.Spec.KProbes[0].Selectors[0].MatchBinaries[0].Values
-	if len(binaries) != 2 {
-		t.Errorf("binaries len = %d, want 2", len(binaries))
+	args := got.Spec.KProbes[0].Selectors[0].MatchArgs
+	if len(args) == 0 {
+		t.Fatal("expected matchArgs for process rule")
+	}
+	if args[0].Operator != "Postfix" {
+		t.Errorf("operator = %q, want Postfix", args[0].Operator)
+	}
+	if len(args[0].Values) != 2 {
+		t.Errorf("binaries len = %d, want 2", len(args[0].Values))
 	}
 }
 
