@@ -7,8 +7,7 @@ export interface FileRule {
 }
 
 export interface NetworkRule {
-  cidr: string  // destination CIDR, e.g. "192.168.0.0/16"
-  port: string  // destination port, e.g. "6379"
+  address: string  // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
 }
 
 export interface PolicyFormInput {

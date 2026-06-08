@@ -1,5 +1,7 @@
 package policy
 
+import "strings"
+
 // Build converts PolicyFormInput into a TracingPolicy CRD object.
 // action must be ActionPost ("Post") or ActionSigkill ("Sigkill").
 func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
@@ -62,30 +64,23 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		})
 	}
 
-	// Network rules: ONE tcp_connect kprobe, each rule is a separate selector (OR'd).
-	// DAddr matches destination CIDR, DPort matches destination port (sock-type operators).
-	var netSelectors []KProbeSelector
+	// Network rules: ONE tcp_connect kprobe using NotDAddr (whitelist).
+	// Values are ALLOWED addresses; connections to any other address trigger the action.
+	var allowedAddresses []string
 	for _, r := range input.Network {
-		var matchArgs []ArgSelector
-		if r.CIDR != "" {
-			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DAddr", Values: []string{r.CIDR}})
-		}
-		if r.Port != "" {
-			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: []string{r.Port}})
-		}
-		if len(matchArgs) > 0 {
-			netSelectors = append(netSelectors, KProbeSelector{
-				MatchArgs:    matchArgs,
-				MatchActions: []ActionSelector{{Action: action}},
-			})
+		if addr := strings.TrimSpace(r.Address); addr != "" {
+			allowedAddresses = append(allowedAddresses, addr)
 		}
 	}
-	if len(netSelectors) > 0 {
+	if len(allowedAddresses) > 0 {
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
-			Call:      "tcp_connect",
-			Syscall:   false,
-			Args:      []KProbeArg{{Index: 0, Type: "sock"}},
-			Selectors: netSelectors,
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: allowedAddresses}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
 		})
 	}
 

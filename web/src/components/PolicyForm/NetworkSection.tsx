@@ -8,12 +8,12 @@ interface Props {
 }
 
 export function NetworkSection({ rules, onChange }: Props) {
-  const update = (i: number, patch: Partial<NetworkRule>) => {
+  const update = (i: number, address: string) => {
     const next = [...rules]
-    next[i] = { ...next[i], ...patch }
+    next[i] = { address }
     onChange(next)
   }
-  const add = () => onChange([...rules, { cidr: '', port: '' }])
+  const add = () => onChange([...rules, { address: '' }])
   const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
 
   return (
@@ -21,19 +21,10 @@ export function NetworkSection({ rules, onChange }: Props) {
       {rules.map((r, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
-            placeholder="Destination CIDR (e.g. 192.168.0.0/16)"
-            value={r.cidr}
-            onChange={(e) => update(i, { cidr: e.target.value })}
-            className="h-8 flex-[2] text-sm"
-          />
-          <Input
-            placeholder="Port (e.g. 6379)"
-            value={r.port}
-            onChange={(e) => update(i, { port: e.target.value })}
-            className="h-8 w-28 shrink-0 text-sm"
-            type="number"
-            min={1}
-            max={65535}
+            placeholder="e.g. 127.0.0.1 or 10.0.0.0/8"
+            value={r.address}
+            onChange={(e) => update(i, e.target.value)}
+            className="h-8 text-sm"
           />
           <Button
             variant="ghost"

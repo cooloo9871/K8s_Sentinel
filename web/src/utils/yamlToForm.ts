@@ -62,12 +62,19 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       }
 
     } else if (call === 'tcp_connect') {
-      // Each selector becomes one network rule (selectors are OR'd)
+      // Whitelist format: NotDAddr selector, each value is an allowed address
       for (const sel of selectors) {
         const args: any[] = sel.matchArgs ?? []
-        const cidr = args.find((a: any) => a.operator === 'DAddr')?.values?.[0] ?? ''
-        const port = args.find((a: any) => a.operator === 'DPort')?.values?.[0] ?? ''
-        if (cidr || port) result.network!.push({ cidr, port })
+        const notDAddr = args.find((a: any) => a.operator === 'NotDAddr')
+        if (notDAddr) {
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else {
+          // Legacy DAddr (old blacklist format) — import as whitelist entry
+          const dAddr = args.find((a: any) => a.operator === 'DAddr')
+          if (dAddr?.values?.[0]) result.network!.push({ address: dAddr.values[0] })
+        }
       }
 
     } else if (

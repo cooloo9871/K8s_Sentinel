@@ -66,6 +66,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const setNetRules = (rules: NetworkRule[]) =>
     onChange({ ...value, network: rules })
 
+
   const syncLabelsToParent = (entries: LabelEntry[]) => {
     setLocalLabels(entries)
     const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
@@ -205,7 +206,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
           </CardHeader>
           <CardContent className="pt-4">
             <p className="mb-3 text-xs text-muted-foreground">
-              Monitor or block outbound TCP connections by destination CIDR and/or port.
+              Whitelist mode: list <strong>allowed</strong> destination IPs/CIDRs.
+              Connections to any address <strong>not</strong> in this list will trigger the policy action.
             </p>
             <NetworkSection
               rules={value.network ?? []}

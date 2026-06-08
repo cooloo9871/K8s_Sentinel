@@ -68,23 +68,21 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     })
   }
 
-  // Network rules: ONE tcp_connect kprobe with multiple selectors (one per rule, OR'd).
-  // Each selector uses DAddr for CIDR and DPort for port (sock-type operators).
-  const netSelectors = (input.network ?? [])
-    .map((r) => {
-      const matchArgs: { index: number; operator: string; values: string[] }[] = []
-      if (r.cidr.trim()) matchArgs.push({ index: 0, operator: 'DAddr', values: [r.cidr.trim()] })
-      if (r.port.trim()) matchArgs.push({ index: 0, operator: 'DPort', values: [r.port.trim()] })
-      return matchArgs.length > 0 ? { matchArgs, matchActions: [{ action }] } : null
-    })
-    .filter((s): s is NonNullable<typeof s> => s !== null)
+  // Network rules: ONE tcp_connect kprobe using NotDAddr (whitelist).
+  // Values are ALLOWED addresses; anything NOT in the list triggers the action.
+  const allowedAddresses = (input.network ?? [])
+    .map((r) => r.address.trim())
+    .filter(Boolean)
 
-  if (netSelectors.length > 0) {
+  if (allowedAddresses.length > 0) {
     doc.spec.kprobes.push({
       call: 'tcp_connect',
       syscall: false,
       args: [{ index: 0, type: 'sock' }],
-      selectors: netSelectors,
+      selectors: [{
+        matchArgs: [{ index: 0, operator: 'NotDAddr', values: allowedAddresses }],
+        matchActions: [{ action }],
+      }],
     })
   }
 

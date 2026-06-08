@@ -24,8 +24,7 @@ type FileRule struct {
 }
 
 type NetworkRule struct {
-	CIDR string `json:"cidr,omitempty"` // destination CIDR, e.g. "192.168.0.0/16"
-	Port string `json:"port,omitempty"` // destination port, e.g. "6379"
+	Address string `json:"address"` // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
 }
 
 // TracingPolicy is the Tetragon CRD object used for YAML serialisation.
