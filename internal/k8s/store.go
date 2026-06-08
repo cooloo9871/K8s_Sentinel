@@ -426,17 +426,11 @@ spec:
       type: "file"
     - index: 1
       type: "int"
-    selectors:
-    - matchActions:
-      - action: Post
   - call: "tcp_connect"
     syscall: false
     args:
     - index: 0
       type: "sock"
-    selectors:
-    - matchActions:
-      - action: Post
 `
 
 // IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.

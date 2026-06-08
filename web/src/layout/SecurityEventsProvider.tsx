@@ -45,11 +45,15 @@ function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
   )
 }
 
+type RawEventListener = (raw: string) => void
+
 interface SecurityEventsContextValue {
   events: DisplayEvent[]
   connected: boolean
   error: string
   reconnect: () => void
+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
+  subscribeRaw: (fn: RawEventListener) => () => void
 }
 
 const SecurityEventsContext = createContext<SecurityEventsContextValue>({
@@ -57,6 +61,7 @@ const SecurityEventsContext = createContext<SecurityEventsContextValue>({
   connected: false,
   error: '',
   reconnect: () => {},
+  subscribeRaw: () => () => {},
 })
 
 export function useSecurityEvents() {
@@ -70,6 +75,12 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   const esRef = useRef<EventSource | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+  const rawListeners = useRef<Set<RawEventListener>>(new Set())
+
+  const subscribeRaw = useCallback((fn: RawEventListener) => {
+    rawListeners.current.add(fn)
+    return () => rawListeners.current.delete(fn)
+  }, [])
 
   const connect = useCallback(() => {
     esRef.current?.close()
@@ -81,6 +92,8 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
     es.onopen = () => setConnected(true)
 
     es.onmessage = (e) => {
+      // Broadcast raw message to all subscribers (e.g. DiscoveryProvider)
+      rawListeners.current.forEach(fn => fn(e.data))
       try {
         const evt: TetragonEvent = JSON.parse(e.data)
         const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
@@ -132,7 +145,7 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   }, [])
 
   return (
-    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, subscribeRaw }}>
       {children}
     </SecurityEventsContext.Provider>
   )

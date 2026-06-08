@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useSecurityEvents } from './SecurityEventsProvider'
 
 const STORAGE_KEY = 'sentinel_discovery_profiles'
 const SAVE_DEBOUNCE_MS = 3000
@@ -44,15 +45,12 @@ function saveToStorage(map: ProfileMap) {
 }
 
 export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const { subscribeRaw } = useSecurityEvents()
   const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
-  const esRef = useRef<EventSource | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const profileMapRef = useRef<ProfileMap>(profileMap)
 
-  // Keep ref in sync for flush-on-unmount
-  useEffect(() => {
-    profileMapRef.current = profileMap
-  }, [profileMap])
+  useEffect(() => { profileMapRef.current = profileMap }, [profileMap])
 
   // Debounced localStorage save
   useEffect(() => {
@@ -66,27 +64,30 @@ export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
     return () => { saveToStorage(profileMapRef.current) }
   }, [])
 
-  const handleEvent = useCallback((raw: string) => {
+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
     try {
       const evt = JSON.parse(raw) as {
-        type: string
-        namespace: string
-        pod: string
+        type?: string
+        namespace?: string
+        pod?: string
         binary?: string
         filePath?: string
         netDest?: string
-        time: string
+        time?: string
       }
 
-      if (!evt.namespace || !evt.pod) return
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return
 
-      const key = `${evt.namespace}/${evt.pod}`
+      const key = `${ns}/${pod}`
       const now = evt.time || new Date().toISOString()
 
       setProfileMap(prev => {
-        const existing = prev[key] ?? {
-          namespace: evt.namespace,
-          pod: evt.pod,
+        const existing: PodProfile = prev[key] ?? {
+          namespace: ns,
+          pod,
           binaries: [],
           filePaths: [],
           netDests: [],
@@ -94,47 +95,33 @@ export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
           lastSeen: now,
         }
 
-        let changed = false
-        const binaries = [...existing.binaries]
-        const filePaths = [...existing.filePaths]
-        const netDests = [...existing.netDests]
+        const binaries = evt.binary && !existing.binaries.includes(evt.binary)
+          ? [...existing.binaries, evt.binary]
+          : existing.binaries
+        const filePaths = evt.filePath && !existing.filePaths.includes(evt.filePath)
+          ? [...existing.filePaths, evt.filePath]
+          : existing.filePaths
+        const netDests = evt.netDest && !existing.netDests.includes(evt.netDest)
+          ? [...existing.netDests, evt.netDest]
+          : existing.netDests
+        const lastSeen = now > existing.lastSeen ? now : existing.lastSeen
 
-        if (evt.binary && !binaries.includes(evt.binary)) {
-          binaries.push(evt.binary)
-          changed = true
-        }
-        if (evt.filePath && !filePaths.includes(evt.filePath)) {
-          filePaths.push(evt.filePath)
-          changed = true
-        }
-        if (evt.netDest && !netDests.includes(evt.netDest)) {
-          netDests.push(evt.netDest)
-          changed = true
-        }
-        if (now > existing.lastSeen) changed = true
+        // Skip state update if nothing changed
+        if (
+          binaries === existing.binaries &&
+          filePaths === existing.filePaths &&
+          netDests === existing.netDests &&
+          lastSeen === existing.lastSeen
+        ) return prev
 
-        if (!changed && now <= existing.lastSeen) return prev // no-op
-
-        return {
-          ...prev,
-          [key]: { ...existing, binaries, filePaths, netDests, lastSeen: now },
-        }
+        return { ...prev, [key]: { ...existing, binaries, filePaths, netDests, lastSeen } }
       })
     } catch {}
   }, [])
 
-  // SSE connection — separate from SecurityEventsProvider so Discovery
-  // accumulates profiles independently of the 500-event security alert window.
   useEffect(() => {
-    const connect = () => {
-      const es = new EventSource('/api/events/stream')
-      esRef.current = es
-      es.onmessage = (e) => handleEvent(e.data)
-      es.onerror = () => {}
-    }
-    connect()
-    return () => esRef.current?.close()
-  }, [handleEvent])
+    return subscribeRaw(handleRaw)
+  }, [subscribeRaw, handleRaw])
 
   const clearProfiles = useCallback(() => {
     setProfileMap({})

@@ -180014,3 +180014,2859 @@ export function DiscoveryPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -3 && git add -A && git commit -m "fix: persistent DiscoveryProvider with localStorage — profiles never disappear"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[main 6e233e5] fix: persistent DiscoveryProvider with localStorage — profiles never disappear
+ 4 files changed, 3084 insertions(+), 67 deletions(-)
+ create mode 100644 web/src/layout/DiscoveryProvider.tsx",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "6e233e5",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "
+我進到 pod 執行命令和網路行為，但在 Behavior Discovery 都沒有學習到
+
+bigred@m1:~$ kubectl exec -it test2 -- bash
+root@test2:/# curl 10.96.48.132:6000
+Hi, I am bx1 from np1 namespace
+root@test2:/# curl 10.96.199.162:7000
+Hi, I am bx2 from np2 namespace
+root@test2:/# curl 10.96.199.162:7000"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "offset": 280,
+    "limit": 55
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "offset": 280,
+    "limit": 55
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+      "content": "		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {",
+      "numLines": 55,
+      "startLine": 280,
+      "totalLines": 461
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "discoveryPolicyYAML\\|sentinel-discovery\\|matchActions" /home/bigred/Sentinel/internal/k8s/store.go | head -20",
+    "description": "找到 discoveryPolicyYAML 位置"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "discoveryPolicyYAML\\|sentinel-discovery\\|matchActions" /home/bigred/Sentinel/internal/k8s/store.go | head -20",
+    "description": "找到 discoveryPolicyYAML 位置"
+  },
+  "tool_response": {
+    "stdout": "411:const discoveryPolicyName = "sentinel-discovery"
+413:// discoveryPolicyYAML is a cluster-wide catch-all TracingPolicy that captures
+416:const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+419:  name: sentinel-discovery
+430:    - matchActions:
+438:    - matchActions:
+442:// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.
+450:	return s.ApplyRaw(ctx, discoveryPolicyYAML)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "offset": 411,
+    "limit": 45
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "offset": 411,
+    "limit": 45
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+      "content": "const discoveryPolicyName = "sentinel-discovery"
+
+// discoveryPolicyYAML is a cluster-wide catch-all TracingPolicy that captures
+// all file access and network connections across every pod — no selectors means
+// every call is logged with action Post (Monitoring mode).
+const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    selectors:
+    - matchActions:
+      - action: Post
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchActions:
+      - action: Post
+`
+
+// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.
+func (s *Store) IsDiscoveryEnabled(ctx context.Context) bool {
+	_, err := s.client.Resource(tracingPolicyGVR).Get(ctx, discoveryPolicyName, metav1.GetOptions{})
+	return err == nil
+}
+
+// EnableDiscovery creates (or updates) the catch-all discovery policy.
+func (s *Store) EnableDiscovery(ctx context.Context) error {
+	return s.ApplyRaw(ctx, discoveryPolicyYAML)
+}
+
+// DisableDiscovery removes the catch-all discovery policy.
+func (s *Store) DisableDiscovery(ctx context.Context) error {
+	err := s.client.Resource(tracingPolicyGVR).Delete(ctx, discoveryPolicyName, metav1.DeleteOptions{})",
+      "numLines": 45,
+      "startLine": 411,
+      "totalLines": 461
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    selectors:
+    - matchActions:
+      - action: Post
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchActions:
+      - action: Post
+`",
+    "new_string": "const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+`",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "old_string": "const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    selectors:
+    - matchActions:
+      - action: Post
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchActions:
+      - action: Post
+`",
+    "new_string": "const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+`",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/store.go",
+    "oldString": "const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    selectors:
+    - matchActions:
+      - action: Post
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchActions:
+      - action: Post
+`",
+    "newString": "const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+`",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"
+
+	"github.com/cooloo9871/sentinel/internal/policy"
+)
+
+// PolicyRecord is a policy as returned by the list/get API.
+type PolicyRecord struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Scope     string `json:"scope"`  // "cluster" or "namespaced"
+	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
+}
+
+// Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
+type Store struct {
+	client     dynamic.Interface
+	typed      *kubernetes.Clientset
+	restConfig *rest.Config
+}
+
+// NewStore creates a Store wrapping the given clients.
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
+	return &Store{client: client, typed: typed, restConfig: cfg}
+}
+
+// List returns all cluster-wide and namespaced policies.
+func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
+	var records []PolicyRecord
+
+	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicy: %w", err)
+	}
+	for _, item := range clusterList.Items {
+		r, err := toRecord(item, "cluster")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	nsList, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list TracingPolicyNamespaced: %w", err)
+	}
+	for _, item := range nsList.Items {
+		r, err := toRecord(item, "namespaced")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
+}
+
+// Get returns a single policy by name and optional namespace.
+func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, error) {
+	var item *unstructured.Unstructured
+	var err error
+	scope := "cluster"
+
+	if namespace != "" {
+		scope = "namespaced"
+		item, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	} else {
+		item, err = s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("get policy %q: %w", name, err)
+	}
+	return toRecord(*item, scope)
+}
+
+// Apply creates or updates a policy from a TracingPolicy struct.
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+	data, err := json.Marshal(tp)
+	if err != nil {
+		return fmt.Errorf("marshal policy: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(data, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal to unstructured: %w", err)
+	}
+
+	name := tp.Metadata.Name
+	ns := tp.Metadata.Namespace
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
+	if err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
+		return fmt.Errorf("unmarshal YAML: %w", err)
+	}
+
+	name := obj.GetName()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		return s.applyNamespaced(ctx, ns, name, obj)
+	}
+	return s.applyCluster(ctx, name, obj)
+}
+
+// Delete removes a policy by name and optional namespace.
+func (s *Store) Delete(ctx context.Context, name, namespace string) error {
+	var err error
+	if namespace != "" {
+		err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	} else {
+		err = s.client.Resource(tracingPolicyGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	}
+	if err != nil {
+		return fmt.Errorf("delete policy %q: %w", name, err)
+	}
+	return nil
+}
+
+// SecurityEvent is a security-relevant Kubernetes event returned by the API.
+type SecurityEvent struct {
+	Namespace         string `json:"namespace"`
+	InvolvedKind      string `json:"involvedKind"`
+	InvolvedName      string `json:"involvedName"`
+	InvolvedNamespace string `json:"involvedNamespace"`
+	Reason            string `json:"reason"`
+	Message           string `json:"message"`
+	Type              string `json:"type"`
+	Count             int64  `json:"count"`
+	FirstTime         string `json:"firstTime"`
+	LastTime          string `json:"lastTime"`
+	Source            string `json:"source"`
+}
+
+// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
+func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
+	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+
+	var events []SecurityEvent
+	for _, item := range list.Items {
+		evType, _, _ := unstructured.NestedString(item.Object, "type")
+		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
+
+		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
+		if evType != "Warning" && !isTetragon {
+			continue
+		}
+
+		reason, _, _ := unstructured.NestedString(item.Object, "reason")
+		message, _, _ := unstructured.NestedString(item.Object, "message")
+		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
+		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
+		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
+		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
+		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
+
+		var count int64
+		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
+			if n, ok := v.(int64); ok {
+				count = n
+			}
+		}
+
+		events = append(events, SecurityEvent{
+			Namespace:         item.GetNamespace(),
+			InvolvedKind:      involvedKind,
+			InvolvedName:      involvedName,
+			InvolvedNamespace: involvedNS,
+			Reason:            reason,
+			Message:           message,
+			Type:              evType,
+			Count:             count,
+			FirstTime:         firstTime,
+			LastTime:          lastTime,
+			Source:            source,
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].LastTime > events[j].LastTime
+	})
+
+	return events, nil
+}
+
+// ListNamespaces returns all namespace names in the cluster.
+func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
+	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
+// GetMode scans all policies and returns "Monitoring", "Protect", or "Mixed".
+func (s *Store) GetMode(ctx context.Context) (string, error) {
+	records, err := s.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "Monitoring", nil
+	}
+
+	postCount, killCount := 0, 0
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			continue
+		}
+		for _, kp := range tp.Spec.KProbes {
+			for _, sel := range kp.Selectors {
+				for _, act := range sel.MatchActions {
+					switch act.Action {
+					case policy.ActionPost:
+						postCount++
+					case policy.ActionSigkill:
+						killCount++
+					}
+				}
+			}
+		}
+	}
+
+	if killCount == 0 {
+		return "Monitoring", nil
+	}
+	if postCount == 0 {
+		return "Protect", nil
+	}
+	return "Mixed", nil
+}
+
+// SetMode updates all policies to use either "Post" (Monitoring) or "Sigkill" (Protect).
+func (s *Store) SetMode(ctx context.Context, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	records, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		var tp policy.TracingPolicy
+		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
+			return fmt.Errorf("parse policy %q: %w", r.Name, err)
+		}
+		for i := range tp.Spec.KProbes {
+			for j := range tp.Spec.KProbes[i].Selectors {
+				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+				}
+			}
+		}
+		if err := s.Apply(ctx, tp); err != nil {
+			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error) {
+	rawJSON, err := json.Marshal(item.Object)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	rawYAML, err := yaml.JSONToYAML(rawJSON)
+	if err != nil {
+		return PolicyRecord{}, err
+	}
+	createdAt := ""
+	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
+		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return PolicyRecord{
+		Name:      item.GetName(),
+		Namespace: item.GetNamespace(),
+		Scope:     scope,
+		Mode:      detectMode(string(rawYAML)),
+		CreatedAt: createdAt,
+		RawYAML:   string(rawYAML),
+	}, nil
+}
+
+// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
+func detectMode(rawYAML string) string {
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+		return "Monitoring"
+	}
+	post, kill := 0, 0
+	for _, kp := range tp.Spec.KProbes {
+		for _, sel := range kp.Selectors {
+			for _, act := range sel.MatchActions {
+				switch act.Action {
+				case policy.ActionSigkill:
+					kill++
+				case policy.ActionPost:
+					post++
+				// Unknown actions are intentionally ignored — they don't
+				// contribute to either counter, matching GetMode's behaviour.
+				}
+			}
+		}
+	}
+	if kill == 0 {
+		return "Monitoring"
+	}
+	if post == 0 {
+		return "Protect"
+	}
+	return "Mixed"
+}
+
+// SetPolicyMode updates all kprobe actions in a single policy.
+func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
+	action := policy.ActionPost
+	if mode == "Protect" {
+		action = policy.ActionSigkill
+	}
+
+	record, err := s.Get(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	var tp policy.TracingPolicy
+	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
+		return fmt.Errorf("parse policy %q: %w", name, err)
+	}
+	for i := range tp.Spec.KProbes {
+		for j := range tp.Spec.KProbes[i].Selectors {
+			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
+				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
+			}
+		}
+	}
+	return s.Apply(ctx, tp)
+}
+
+const discoveryPolicyName = "sentinel-discovery"
+
+// discoveryPolicyYAML is a cluster-wide catch-all TracingPolicy that captures
+// all file access and network connections across every pod — no selectors means
+// every call is logged with action Post (Monitoring mode).
+const discoveryPolicyYAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sentinel-discovery
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    selectors:
+    - matchActions:
+      - action: Post
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchActions:
+      - action: Post
+`
+
+// IsDiscoveryEnabled reports whether the sentinel-discovery policy is active.
+func (s *Store) IsDiscoveryEnabled(ctx context.Context) bool {
+	_, err := s.client.Resource(tracingPolicyGVR).Get(ctx, discoveryPolicyName, metav1.GetOptions{})
+	return err == nil
+}
+
+// EnableDiscovery creates (or updates) the catch-all discovery policy.
+func (s *Store) EnableDiscovery(ctx context.Context) error {
+	return s.ApplyRaw(ctx, discoveryPolicyYAML)
+}
+
+// DisableDiscovery removes the catch-all discovery policy.
+func (s *Store) DisableDiscovery(ctx context.Context) error {
+	err := s.client.Resource(tracingPolicyGVR).Delete(ctx, discoveryPolicyName, metav1.DeleteOptions{})
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 426,
+        "oldLines": 17,
+        "newStart": 426,
+        "newLines": 11,
+        "lines": [
+          "       type: "file"",
+          "     - index: 1",
+          "       type: "int"",
+          "-    selectors:",
+          "-    - matchActions:",
+          "-      - action: Post",
+          "   - call: "tcp_connect"",
+          "     syscall: false",
+          "     args:",
+          "     - index: 0",
+          "       type: "sock"",
+          "-    selectors:",
+          "-    - matchActions:",
+          "-      - action: Post",
+          " `",
+          " ",
+          " // IsDiscoveryEnabled reports whether the sentinel-discovery policy is active."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 60,
+    "limit": 20
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 60,
+    "limit": 20
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+      "content": "})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es",
+      "numLines": 20,
+      "startLine": 60,
+      "totalLines": 140
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 43,
+    "limit": 20
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 43,
+    "limit": 20
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+      "content": "    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {",
+      "numLines": 20,
+      "startLine": 43,
+      "totalLines": 140
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})",
+    "new_string": "type RawEventListener = (raw: string) => void
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
+  subscribeRaw: (fn: RawEventListener) => () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  subscribeRaw: () => () => {},
+})",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})",
+    "new_string": "type RawEventListener = (raw: string) => void
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
+  subscribeRaw: (fn: RawEventListener) => () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  subscribeRaw: () => () => {},
+})",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})",
+    "newString": "type RawEventListener = (raw: string) => void
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
+  subscribeRaw: (fn: RawEventListener) => () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  subscribeRaw: () => () => {},
+})",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw) as any[]
+      // Backfill fields added after initial storage schema (count, severity)
+      return data.map((e) => ({
+        ...e,
+        count: e.count ?? 1,
+        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+      })) as DisplayEvent[]
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }, []) // useCallback — stable reference across renders
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
+
+  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [events])
+
+  // Flush the latest events to localStorage on unmount so no events are lost
+  // when the user navigates away within the debounce window.
+  useEffect(() => {
+    return () => { saveToStorage(eventsRef.current) }
+  }, [])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 45,
+        "oldLines": 11,
+        "newStart": 45,
+        "newLines": 15,
+        "lines": [
+          "   )",
+          " }",
+          " ",
+          "+type RawEventListener = (raw: string) => void",
+          "+",
+          " interface SecurityEventsContextValue {",
+          "   events: DisplayEvent[]",
+          "   connected: boolean",
+          "   error: string",
+          "   reconnect: () => void",
+          "+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */",
+          "+  subscribeRaw: (fn: RawEventListener) => () => void",
+          " }",
+          " ",
+          " const SecurityEventsContext = createContext<SecurityEventsContextValue>({"
+        ]
+      },
+      {
+        "oldStart": 57,
+        "oldLines": 6,
+        "newStart": 61,
+        "newLines": 7,
+        "lines": [
+          "   connected: false,",
+          "   error: '',",
+          "   reconnect: () => {},",
+          "+  subscribeRaw: () => () => {},",
+          " })",
+          " ",
+          " export function useSecurityEvents() {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount",
+    "new_string": "  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+  const rawListeners = useRef<Set<RawEventListener>>(new Set())
+
+  const subscribeRaw = useCallback((fn: RawEventListener) => {
+    rawListeners.current.add(fn)
+    return () => rawListeners.current.delete(fn)
+  }, [])",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount",
+    "new_string": "  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+  const rawListeners = useRef<Set<RawEventListener>>(new Set())
+
+  const subscribeRaw = useCallback((fn: RawEventListener) => {
+    rawListeners.current.add(fn)
+    return () => rawListeners.current.delete(fn)
+  }, [])",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount",
+    "newString": "  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+  const rawListeners = useRef<Set<RawEventListener>>(new Set())
+
+  const subscribeRaw = useCallback((fn: RawEventListener) => {
+    rawListeners.current.add(fn)
+    return () => rawListeners.current.delete(fn)
+  }, [])",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw) as any[]
+      // Backfill fields added after initial storage schema (count, severity)
+      return data.map((e) => ({
+        ...e,
+        count: e.count ?? 1,
+        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+      })) as DisplayEvent[]
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+type RawEventListener = (raw: string) => void
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
+  subscribeRaw: (fn: RawEventListener) => () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  subscribeRaw: () => () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }, []) // useCallback — stable reference across renders
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
+
+  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [events])
+
+  // Flush the latest events to localStorage on unmount so no events are lost
+  // when the user navigates away within the debounce window.
+  useEffect(() => {
+    return () => { saveToStorage(eventsRef.current) }
+  }, [])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 75,
+        "oldLines": 7,
+        "newStart": 75,
+        "newLines": 13,
+        "lines": [
+          "   const esRef = useRef<EventSource | null>(null)",
+          "   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)",
+          "   const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount",
+          "+  const rawListeners = useRef<Set<RawEventListener>>(new Set())",
+          " ",
+          "+  const subscribeRaw = useCallback((fn: RawEventListener) => {",
+          "+    rawListeners.current.add(fn)",
+          "+    return () => rawListeners.current.delete(fn)",
+          "+  }, [])",
+          "+",
+          "   const connect = useCallback(() => {",
+          "     esRef.current?.close()",
+          "     setError('')"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 86,
+    "limit": 15
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 86,
+    "limit": 15
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+      "content": "    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]",
+      "numLines": 15,
+      "startLine": 86,
+      "totalLines": 151
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)",
+    "new_string": "    es.onmessage = (e) => {
+      // Broadcast raw message to all subscribers (e.g. DiscoveryProvider)
+      rawListeners.current.forEach(fn => fn(e.data))
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)",
+    "new_string": "    es.onmessage = (e) => {
+      // Broadcast raw message to all subscribers (e.g. DiscoveryProvider)
+      rawListeners.current.forEach(fn => fn(e.data))
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)",
+    "newString": "    es.onmessage = (e) => {
+      // Broadcast raw message to all subscribers (e.g. DiscoveryProvider)
+      rawListeners.current.forEach(fn => fn(e.data))
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw) as any[]
+      // Backfill fields added after initial storage schema (count, severity)
+      return data.map((e) => ({
+        ...e,
+        count: e.count ?? 1,
+        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+      })) as DisplayEvent[]
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+type RawEventListener = (raw: string) => void
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
+  subscribeRaw: (fn: RawEventListener) => () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  subscribeRaw: () => () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+  const rawListeners = useRef<Set<RawEventListener>>(new Set())
+
+  const subscribeRaw = useCallback((fn: RawEventListener) => {
+    rawListeners.current.add(fn)
+    return () => rawListeners.current.delete(fn)
+  }, [])
+
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }, []) // useCallback — stable reference across renders
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
+
+  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [events])
+
+  // Flush the latest events to localStorage on unmount so no events are lost
+  // when the user navigates away within the debounce window.
+  useEffect(() => {
+    return () => { saveToStorage(eventsRef.current) }
+  }, [])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 92,
+        "oldLines": 6,
+        "newStart": 92,
+        "newLines": 8,
+        "lines": [
+          "     es.onopen = () => setConnected(true)",
+          " ",
+          "     es.onmessage = (e) => {",
+          "+      // Broadcast raw message to all subscribers (e.g. DiscoveryProvider)",
+          "+      rawListeners.current.forEach(fn => fn(e.data))",
+          "       try {",
+          "         const evt: TetragonEvent = JSON.parse(e.data)",
+          "         const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "SecurityEventsContext.Provider\\|reconnect:" /home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx | tail -5",
+    "description": "找 context value 位置"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "SecurityEventsContext.Provider\\|reconnect:" /home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx | tail -5",
+    "description": "找 context value 位置"
+  },
+  "tool_response": {
+    "stdout": "54:  reconnect: () => void
+63:  reconnect: () => {},
+148:    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+150:    </SecurityEventsContext.Provider>",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>",
+    "new_string": "    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, subscribeRaw }}>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>",
+    "new_string": "    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, subscribeRaw }}>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>",
+    "newString": "    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, subscribeRaw }}>",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw) as any[]
+      // Backfill fields added after initial storage schema (count, severity)
+      return data.map((e) => ({
+        ...e,
+        count: e.count ?? 1,
+        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+      })) as DisplayEvent[]
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+type RawEventListener = (raw: string) => void
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  /** Subscribe to every raw SSE message — used by DiscoveryProvider to share the connection */
+  subscribeRaw: (fn: RawEventListener) => () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  subscribeRaw: () => () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events) // latest events for flush-on-unmount
+  const rawListeners = useRef<Set<RawEventListener>>(new Set())
+
+  const subscribeRaw = useCallback((fn: RawEventListener) => {
+    rawListeners.current.add(fn)
+    return () => rawListeners.current.delete(fn)
+  }, [])
+
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      // Broadcast raw message to all subscribers (e.g. DiscoveryProvider)
+      rawListeners.current.forEach(fn => fn(e.data))
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }, []) // useCallback — stable reference across renders
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
+
+  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [events])
+
+  // Flush the latest events to localStorage on unmount so no events are lost
+  // when the user navigates away within the debounce window.
+  useEffect(() => {
+    return () => { saveToStorage(eventsRef.current) }
+  }, [])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 145,
+        "oldLines": 7,
+        "newStart": 145,
+        "newLines": 7,
+        "lines": [
+          "   }, [])",
+          " ",
+          "   return (",
+          "-    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>",
+          "+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, subscribeRaw }}>",
+          "       {children}",
+          "     </SecurityEventsContext.Provider>",
+          "   )"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "content": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useSecurityEvents } from './SecurityEventsProvider'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const { subscribeRaw } = useSecurityEvents()
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  useEffect(() => { profileMapRef.current = profileMap }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return
+
+      const key = `${ns}/${pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing: PodProfile = prev[key] ?? {
+          namespace: ns,
+          pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        const binaries = evt.binary && !existing.binaries.includes(evt.binary)
+          ? [...existing.binaries, evt.binary]
+          : existing.binaries
+        const filePaths = evt.filePath && !existing.filePaths.includes(evt.filePath)
+          ? [...existing.filePaths, evt.filePath]
+          : existing.filePaths
+        const netDests = evt.netDest && !existing.netDests.includes(evt.netDest)
+          ? [...existing.netDests, evt.netDest]
+          : existing.netDests
+        const lastSeen = now > existing.lastSeen ? now : existing.lastSeen
+
+        // Skip state update if nothing changed
+        if (
+          binaries === existing.binaries &&
+          filePaths === existing.filePaths &&
+          netDests === existing.netDests &&
+          lastSeen === existing.lastSeen
+        ) return prev
+
+        return { ...prev, [key]: { ...existing, binaries, filePaths, netDests, lastSeen } }
+      })
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    return subscribeRaw(handleRaw)
+  }, [subscribeRaw, handleRaw])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "content": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useSecurityEvents } from './SecurityEventsProvider'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const { subscribeRaw } = useSecurityEvents()
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  useEffect(() => { profileMapRef.current = profileMap }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return
+
+      const key = `${ns}/${pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing: PodProfile = prev[key] ?? {
+          namespace: ns,
+          pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        const binaries = evt.binary && !existing.binaries.includes(evt.binary)
+          ? [...existing.binaries, evt.binary]
+          : existing.binaries
+        const filePaths = evt.filePath && !existing.filePaths.includes(evt.filePath)
+          ? [...existing.filePaths, evt.filePath]
+          : existing.filePaths
+        const netDests = evt.netDest && !existing.netDests.includes(evt.netDest)
+          ? [...existing.netDests, evt.netDest]
+          : existing.netDests
+        const lastSeen = now > existing.lastSeen ? now : existing.lastSeen
+
+        // Skip state update if nothing changed
+        if (
+          binaries === existing.binaries &&
+          filePaths === existing.filePaths &&
+          netDests === existing.netDests &&
+          lastSeen === existing.lastSeen
+        ) return prev
+
+        return { ...prev, [key]: { ...existing, binaries, filePaths, netDests, lastSeen } }
+      })
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    return subscribeRaw(handleRaw)
+  }, [subscribeRaw, handleRaw])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "content": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useSecurityEvents } from './SecurityEventsProvider'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const { subscribeRaw } = useSecurityEvents()
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  useEffect(() => { profileMapRef.current = profileMap }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return
+
+      const key = `${ns}/${pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing: PodProfile = prev[key] ?? {
+          namespace: ns,
+          pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        const binaries = evt.binary && !existing.binaries.includes(evt.binary)
+          ? [...existing.binaries, evt.binary]
+          : existing.binaries
+        const filePaths = evt.filePath && !existing.filePaths.includes(evt.filePath)
+          ? [...existing.filePaths, evt.filePath]
+          : existing.filePaths
+        const netDests = evt.netDest && !existing.netDests.includes(evt.netDest)
+          ? [...existing.netDests, evt.netDest]
+          : existing.netDests
+        const lastSeen = now > existing.lastSeen ? now : existing.lastSeen
+
+        // Skip state update if nothing changed
+        if (
+          binaries === existing.binaries &&
+          filePaths === existing.filePaths &&
+          netDests === existing.netDests &&
+          lastSeen === existing.lastSeen
+        ) return prev
+
+        return { ...prev, [key]: { ...existing, binaries, filePaths, netDests, lastSeen } }
+      })
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    return subscribeRaw(handleRaw)
+  }, [subscribeRaw, handleRaw])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 4,
+        "newStart": 1,
+        "newLines": 5,
+        "lines": [
+          " import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'",
+          "+import { useSecurityEvents } from './SecurityEventsProvider'",
+          " ",
+          " const STORAGE_KEY = 'sentinel_discovery_profiles'",
+          " const SAVE_DEBOUNCE_MS = 3000"
+        ]
+      },
+      {
+        "oldStart": 44,
+        "oldLines": 15,
+        "newStart": 45,
+        "newLines": 12,
+        "lines": [
+          " }",
+          " ",
+          " export function DiscoveryProvider({ children }: { children: React.ReactNode }) {",
+          "+  const { subscribeRaw } = useSecurityEvents()",
+          "   const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())",
+          "-  const esRef = useRef<EventSource | null>(null)",
+          "   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)",
+          "   const profileMapRef = useRef<ProfileMap>(profileMap)",
+          " ",
+          "-  // Keep ref in sync for flush-on-unmount",
+          "-  useEffect(() => {",
+          "-    profileMapRef.current = profileMap",
+          "-  }, [profileMap])",
+          "+  useEffect(() => { profileMapRef.current = profileMap }, [profileMap])",
+          " ",
+          "   // Debounced localStorage save",
+          "   useEffect(() => {"
+        ]
+      },
+      {
+        "oldStart": 66,
+        "oldLines": 27,
+        "newStart": 64,
+        "newLines": 30,
+        "lines": [
+          "     return () => { saveToStorage(profileMapRef.current) }",
+          "   }, [])",
+          " ",
+          "-  const handleEvent = useCallback((raw: string) => {",
+          "+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed",
+          "+  const handleRaw = useCallback((raw: string) => {",
+          "     try {",
+          "       const evt = JSON.parse(raw) as {",
+          "-        type: string",
+          "-        namespace: string",
+          "-        pod: string",
+          "+        type?: string",
+          "+        namespace?: string",
+          "+        pod?: string",
+          "         binary?: string",
+          "         filePath?: string",
+          "         netDest?: string",
+          "-        time: string",
+          "+        time?: string",
+          "       }",
+          " ",
+          "-      if (!evt.namespace || !evt.pod) return",
+          "+      const ns = evt.namespace ?? ''",
+          "+      const pod = evt.pod ?? ''",
+          "+      if (!ns || !pod) return",
+          " ",
+          "-      const key = `${evt.namespace}/${evt.pod}`",
+          "+      const key = `${ns}/${pod}`",
+          "       const now = evt.time || new Date().toISOString()",
+          " ",
+          "       setProfileMap(prev => {",
+          "-        const existing = prev[key] ?? {",
+          "-          namespace: evt.namespace,",
+          "-          pod: evt.pod,",
+          "+        const existing: PodProfile = prev[key] ?? {",
+          "+          namespace: ns,",
+          "+          pod,",
+          "           binaries: [],",
+          "           filePaths: [],",
+          "           netDests: [],"
+        ]
+      },
+      {
+        "oldStart": 94,
+        "oldLines": 47,
+        "newStart": 95,
+        "newLines": 33,
+        "lines": [
+          "           lastSeen: now,",
+          "         }",
+          " ",
+          "-        let changed = false",
+          "-        const binaries = [...existing.binaries]",
+          "-        const filePaths = [...existing.filePaths]",
+          "-        const netDests = [...existing.netDests]",
+          "+        const binaries = evt.binary && !existing.binaries.includes(evt.binary)",
+          "+          ? [...existing.binaries, evt.binary]",
+          "+          : existing.binaries",
+          "+        const filePaths = evt.filePath && !existing.filePaths.includes(evt.filePath)",
+          "+          ? [...existing.filePaths, evt.filePath]",
+          "+          : existing.filePaths",
+          "+        const netDests = evt.netDest && !existing.netDests.includes(evt.netDest)",
+          "+          ? [...existing.netDests, evt.netDest]",
+          "+          : existing.netDests",
+          "+        const lastSeen = now > existing.lastSeen ? now : existing.lastSeen",
+          " ",
+          "-        if (evt.binary && !binaries.includes(evt.binary)) {",
+          "-          binaries.push(evt.binary)",
+          "-          changed = true",
+          "-        }",
+          "-        if (evt.filePath && !filePaths.includes(evt.filePath)) {",
+          "-          filePaths.push(evt.filePath)",
+          "-          changed = true",
+          "-        }",
+          "-        if (evt.netDest && !netDests.includes(evt.netDest)) {",
+          "-          netDests.push(evt.netDest)",
+          "-          changed = true",
+          "-        }",
+          "-        if (now > existing.lastSeen) changed = true",
+          "+        // Skip state update if nothing changed",
+          "+        if (",
+          "+          binaries === existing.binaries &&",
+          "+          filePaths === existing.filePaths &&",
+          "+          netDests === existing.netDests &&",
+          "+          lastSeen === existing.lastSeen",
+          "+        ) return prev",
+          " ",
+          "-        if (!changed && now <= existing.lastSeen) return prev // no-op",
+          "-",
+          "-        return {",
+          "-          ...prev,",
+          "-          [key]: { ...existing, binaries, filePaths, netDests, lastSeen: now },",
+          "-        }",
+          "+        return { ...prev, [key]: { ...existing, binaries, filePaths, netDests, lastSeen } }",
+          "       })",
+          "     } catch {}",
+          "   }, [])",
+          " ",
+          "-  // SSE connection — separate from SecurityEventsProvider so Discovery",
+          "-  // accumulates profiles independently of the 500-event security alert window.",
+          "   useEffect(() => {",
+          "-    const connect = () => {",
+          "-      const es = new EventSource('/api/events/stream')",
+          "-      esRef.current = es",
+          "-      es.onmessage = (e) => handleEvent(e.data)",
+          "-      es.onerror = () => {}",
+          "-    }",
+          "-    connect()",
+          "-    return () => esRef.current?.close()",
+          "-  }, [handleEvent])",
+          "+    return subscribeRaw(handleRaw)",
+          "+  }, [subscribeRaw, handleRaw])",
+          " ",
+          "   const clearProfiles = useCallback(() => {",
+          "     setProfileMap({})"
+        ]
+      }
+    ],
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    profileMapRef.current = profileMap
+  }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  const handleEvent = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type: string
+        namespace: string
+        pod: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time: string
+      }
+
+      if (!evt.namespace || !evt.pod) return
+
+      const key = `${evt.namespace}/${evt.pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing = prev[key] ?? {
+          namespace: evt.namespace,
+          pod: evt.pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        let changed = false
+        const binaries = [...existing.binaries]
+        const filePaths = [...existing.filePaths]
+        const netDests = [...existing.netDests]
+
+        if (evt.binary && !binaries.includes(evt.binary)) {
+          binaries.push(evt.binary)
+          changed = true
+        }
+        if (evt.filePath && !filePaths.includes(evt.filePath)) {
+          filePaths.push(evt.filePath)
+          changed = true
+        }
+        if (evt.netDest && !netDests.includes(evt.netDest)) {
+          netDests.push(evt.netDest)
+          changed = true
+        }
+        if (now > existing.lastSeen) changed = true
+
+        if (!changed && now <= existing.lastSeen) return prev // no-op
+
+        return {
+          ...prev,
+          [key]: { ...existing, binaries, filePaths, netDests, lastSeen: now },
+        }
+      })
+    } catch {}
+  }, [])
+
+  // SSE connection — separate from SecurityEventsProvider so Discovery
+  // accumulates profiles independently of the 500-event security alert window.
+  useEffect(() => {
+    const connect = () => {
+      const es = new EventSource('/api/events/stream')
+      esRef.current = es
+      es.onmessage = (e) => handleEvent(e.data)
+      es.onerror = () => {}
+    }
+    connect()
+    return () => esRef.current?.close()
+  }, [handleEvent])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "Go + 前端完整驗證"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "Go + 前端完整驗證"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  19:51:07
+   Duration  489ms (transform 23ms, setup 38ms, import 20ms, tests 5ms, environment 351ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "fix: correct sentinel-discovery YAML (no selectors), share SSE via subscribeRaw"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+
