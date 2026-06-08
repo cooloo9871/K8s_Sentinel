@@ -51,8 +51,8 @@ containers:
 Build 並推送 image：
 
 ```bash
-docker build -t your-registry/sentinel:latest .
-docker push your-registry/sentinel:latest
+podman build -t your-registry/sentinel:latest .
+podman push your-registry/sentinel:latest
 ```
 
 預設使用公開 image `quay.io/cooloo9871/sentinel:latest`，可直接跳過此步驟。
