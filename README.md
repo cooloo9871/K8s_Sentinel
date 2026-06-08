@@ -29,7 +29,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管�
 
 ```bash
 git clone https://github.com/cooloo9871/Sentinel.git
-cd sentinel
+cd Sentinel
 ```
 
 ---
