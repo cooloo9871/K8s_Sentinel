@@ -186556,3 +186556,441 @@ func anyMap(m map[string]any, keys ...string) map[string]any {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add -A && git commit -m "fix: log per-pod stream errors to surface RBAC/connectivity issues in multi-node clusters"",
+    "timeout": 30000,
+    "description": "build + 提交"
+  },
+  "tool_response": {
+    "stdout": "[main 8492acc] fix: log per-pod stream errors to surface RBAC/connectivity issues in multi-node clusters
+ 2 files changed, 658 insertions(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "8492acc",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "$ kubectl auth can-i create pods/exec -n kube-system \\
+    --as=system:serviceaccount:sentinel-system:sentinel
+yesbigred@m1:~$ kubectl get pods -n kube-system -l 'app.kubernetes.io/name=tetragon' -o wide
+NAME             READY   STATUS    RESTARTS   AGE    IP             NODE   NOMINATED NODE   READINESS GATES
+tetragon-7lv7q   2/2     Running   0          4d4h   192.168.1.55   m1     <none>           <none>
+tetragon-bfxsh   2/2     Running   0          4d4h   192.168.1.58   w1     <none>           <none>
+tetragon-skj62   2/2     Running   0          4d4h   192.168.1.57   m3     <none>           <none>
+tetragon-xf7sg   2/2     Running   0          4d4h   192.168.1.59   w2     <none>           <none>
+tetragon-zdcpn   2/2     Running   0          4d4h   192.168.1.56   m2     <none>           <none>
+bigred@m1:~$ kubectl get pods -n kube-system -l 'app.kubernetes.io/name=tetragon' -o wide^C
+bigred@m1:~$ kubectl -n kube-system exec -it tetragon-zdcpn -- bash
+Defaulted container "export-stdout" out of: export-stdout, tetragon
+error: Internal error occurred: Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "05f972bb08b1ed135d1dab995ec565d5508f529c7d8e9ab639777ea21e5aa6d9": OCI runtime exec failed: exec failed: unable to start container process: exec: "bash": executable file not found in $PATH
+bigred@m1:~$ kubectl -n kube-system exec -it tetragon-zdcpn -- sh
+Defaulted container "export-stdout" out of: export-stdout, tetragon
+~ "
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "bigred@m1:~$ kubectl -n sentinel-system logs sentinel-79f9ddc6b5-dr4p8
+2026/06/08 12:35:43 starting sentinel on :8080
+[sentinel-discovery] connecting to 5 Tetragon pods: [tetragon-7lv7q tetragon-bfxsh tetragon-skj62 tetragon-xf7sg tetragon-zdcpn]
+bigred@m1:~$"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "offset": 60,
+    "limit": 25
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "offset": 60,
+    "limit": 25
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+      "content": "  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return
+
+      const key = `${ns}/${pod}`",
+      "numLines": 25,
+      "startLine": 60,
+      "totalLines": 141
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "old_string": "  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return",
+    "new_string": "  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      // Debug: log the first few events to confirm subscription is working
+      if (process.env.NODE_ENV === 'development' || true) {
+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
+      }
+      if (!ns || !pod) return",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "old_string": "  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return",
+    "new_string": "  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      // Debug: log the first few events to confirm subscription is working
+      if (process.env.NODE_ENV === 'development' || true) {
+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
+      }
+      if (!ns || !pod) return",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "oldString": "  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return",
+    "newString": "  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      // Debug: log the first few events to confirm subscription is working
+      if (process.env.NODE_ENV === 'development' || true) {
+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)
+      }
+      if (!ns || !pod) return",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useSecurityEvents } from './SecurityEventsProvider'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const { subscribeRaw } = useSecurityEvents()
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  useEffect(() => { profileMapRef.current = profileMap }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  // Subscribe to the shared SSE stream via SecurityEventsProvider — no second connection needed
+  const handleRaw = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type?: string
+        namespace?: string
+        pod?: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time?: string
+      }
+
+      const ns = evt.namespace ?? ''
+      const pod = evt.pod ?? ''
+      if (!ns || !pod) return
+
+      const key = `${ns}/${pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing: PodProfile = prev[key] ?? {
+          namespace: ns,
+          pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        const binaries = evt.binary && !existing.binaries.includes(evt.binary)
+          ? [...existing.binaries, evt.binary]
+          : existing.binaries
+        const filePaths = evt.filePath && !existing.filePaths.includes(evt.filePath)
+          ? [...existing.filePaths, evt.filePath]
+          : existing.filePaths
+        const netDests = evt.netDest && !existing.netDests.includes(evt.netDest)
+          ? [...existing.netDests, evt.netDest]
+          : existing.netDests
+        const lastSeen = now > existing.lastSeen ? now : existing.lastSeen
+
+        // Skip state update if nothing changed
+        if (
+          binaries === existing.binaries &&
+          filePaths === existing.filePaths &&
+          netDests === existing.netDests &&
+          lastSeen === existing.lastSeen
+        ) return prev
+
+        return { ...prev, [key]: { ...existing, binaries, filePaths, netDests, lastSeen } }
+      })
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    return subscribeRaw(handleRaw)
+  }, [subscribeRaw, handleRaw])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 79,
+        "oldLines": 6,
+        "newStart": 79,
+        "newLines": 10,
+        "lines": [
+          " ",
+          "       const ns = evt.namespace ?? ''",
+          "       const pod = evt.pod ?? ''",
+          "+      // Debug: log the first few events to confirm subscription is working",
+          "+      if (process.env.NODE_ENV === 'development' || true) {",
+          "+        if (ns && pod) console.debug('[Discovery] event:', ns, pod, evt.binary, evt.filePath, evt.netDest)",
+          "+      }",
+          "       if (!ns || !pod) return",
+          " ",
+          "       const key = `${ns}/${pod}`"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -3 && git add -A && git commit -m "debug: add console.debug to DiscoveryProvider to verify event subscription"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  }
+}
+
+----------------------------------------
+
