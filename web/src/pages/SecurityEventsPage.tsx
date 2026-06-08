@@ -139,7 +139,7 @@ export function SecurityEventsPage() {
                 <TableRow>
                   <TableHead className="w-24">Severity</TableHead>
                   <TableHead>Binary</TableHead>
-                  <TableHead>Pod / Namespace</TableHead>
+                  <TableHead>Namespace / Pod</TableHead>
                   <TableHead>Policy</TableHead>
                   <TableHead>Function</TableHead>
                   <TableHead>Node</TableHead>
@@ -164,11 +164,11 @@ export function SecurityEventsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {e.pod ? (
+                      {e.namespace || e.pod ? (
                         <>
-                          <p className="text-sm font-medium">{e.pod}</p>
+                          <p className="text-sm font-medium">{e.namespace || '—'}</p>
                           <p className="text-xs text-muted-foreground">
-                            {e.namespace}{e.container ? ` / ${e.container}` : ''}
+                            {e.pod}{e.container ? ` / ${e.container}` : ''}
                           </p>
                         </>
                       ) : (
