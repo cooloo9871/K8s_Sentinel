@@ -13,8 +13,9 @@ import {
 } from '@/components/ui/select'
 import { ProcessSection } from './ProcessSection'
 import { FileSection } from './FileSection'
+import { NetworkSection } from './NetworkSection'
 import { formToYaml } from '../../utils/formToYaml'
-import type { PolicyFormInput } from '../../api/types'
+import type { PolicyFormInput, NetworkRule } from '../../api/types'
 
 type FileEntry = { path: string }
 type LabelEntry = { key: string; value: string }
@@ -61,6 +62,9 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
 
   const setFileEntries = (entries: FileEntry[]) =>
     onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
+
+  const setNetRules = (rules: NetworkRule[]) =>
+    onChange({ ...value, network: rules })
 
   const syncLabelsToParent = (entries: LabelEntry[]) => {
     setLocalLabels(entries)
@@ -191,6 +195,22 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
           </CardHeader>
           <CardContent className="pt-4">
             <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+        {/* Network Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Network Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Monitor or block outbound TCP connections by destination CIDR and/or port.
+            </p>
+            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />
           </CardContent>
         </Card>
 

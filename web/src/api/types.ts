@@ -6,12 +6,18 @@ export interface FileRule {
   paths: string[]
 }
 
+export interface NetworkRule {
+  cidr: string  // destination CIDR, e.g. "192.168.0.0/16"
+  port: string  // destination port, e.g. "6379"
+}
+
 export interface PolicyFormInput {
   name: string
   namespace?: string
   podSelector?: Record<string, string>
   process?: ProcessRule[]
   file?: FileRule[]
+  network?: NetworkRule[]
 }
 
 export interface PolicyRecord {

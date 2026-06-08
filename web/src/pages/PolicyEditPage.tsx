@@ -25,6 +25,7 @@ const EMPTY_FORM: PolicyFormInput = {
   namespace: 'default',
   process: [],
   file: [],
+  network: [],
 }
 
 export function PolicyEditPage() {

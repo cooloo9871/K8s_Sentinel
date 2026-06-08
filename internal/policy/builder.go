@@ -62,5 +62,32 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		})
 	}
 
+	// Network rules: ONE tcp_connect kprobe, each rule is a separate selector (OR'd).
+	// DAddr matches destination CIDR, DPort matches destination port (sock-type operators).
+	var netSelectors []KProbeSelector
+	for _, r := range input.Network {
+		var matchArgs []ArgSelector
+		if r.CIDR != "" {
+			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DAddr", Values: []string{r.CIDR}})
+		}
+		if r.Port != "" {
+			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: []string{r.Port}})
+		}
+		if len(matchArgs) > 0 {
+			netSelectors = append(netSelectors, KProbeSelector{
+				MatchArgs:    matchArgs,
+				MatchActions: []ActionSelector{{Action: action}},
+			})
+		}
+	}
+	if len(netSelectors) > 0 {
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:      "tcp_connect",
+			Syscall:   false,
+			Args:      []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: netSelectors,
+		})
+	}
+
 	return tp, nil
 }

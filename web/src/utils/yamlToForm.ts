@@ -26,6 +26,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       : undefined,
     process: [],
     file: [],
+    network: [],
   }
 
   const kprobes: any[] = doc.spec?.kprobes ?? []
@@ -58,6 +59,15 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
             }
           }
         }
+      }
+
+    } else if (call === 'tcp_connect') {
+      // Each selector becomes one network rule (selectors are OR'd)
+      for (const sel of selectors) {
+        const args: any[] = sel.matchArgs ?? []
+        const cidr = args.find((a: any) => a.operator === 'DAddr')?.values?.[0] ?? ''
+        const port = args.find((a: any) => a.operator === 'DPort')?.values?.[0] ?? ''
+        if (cidr || port) result.network!.push({ cidr, port })
       }
 
     } else if (
