@@ -68,6 +68,7 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
   const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const connect = () => {
     esRef.current?.close()
@@ -100,9 +101,17 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
     es.onerror = () => setConnected(false)
   }
 
-  // Persist events to localStorage whenever they change
+  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
   useEffect(() => {
-    saveToStorage(events)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
   }, [events])
 
   useEffect(() => {

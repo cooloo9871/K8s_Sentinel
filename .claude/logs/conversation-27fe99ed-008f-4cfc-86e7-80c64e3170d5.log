@@ -155221,3 +155221,575 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: add port restriction (DPort) to Network Rules, ANDed with address condition"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 7c6215c] feat: add port restriction (DPort) to Network Rules, ANDed with address condition
+ 8 files changed, 2304 insertions(+), 7 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "7c6215c",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Sentinel 的 Security Events 資訊都是存在瀏覽器的 localstorage 裡，這樣訊息一多會不會造成瀏覽器很卡？"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 60,
+    "limit": 20
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 60,
+    "limit": 20
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+      "content": "})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)",
+      "numLines": 20,
+      "startLine": 60,
+      "totalLines": 119
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 104,
+    "limit": 15
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "offset": 104,
+    "limit": 15
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+      "content": "  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}",
+      "numLines": 15,
+      "startLine": 104,
+      "totalLines": 119
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)",
+    "new_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)",
+    "new_string": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)",
+    "newString": "export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw) as any[]
+      // Backfill fields added after initial storage schema (count, severity)
+      return data.map((e) => ({
+        ...e,
+        count: e.count ?? 1,
+        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+      })) as DisplayEvent[]
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 68,
+        "oldLines": 6,
+        "newStart": 68,
+        "newLines": 7,
+        "lines": [
+          "   const [connected, setConnected] = useState(false)",
+          "   const [error, setError] = useState('')",
+          "   const esRef = useRef<EventSource | null>(null)",
+          "+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)",
+          " ",
+          "   const connect = () => {",
+          "     esRef.current?.close()"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])",
+    "new_string": "  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [events])",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])",
+    "new_string": "  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [events])",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])",
+    "newString": "  // Debounce localStorage writes: at most once every 2 s no matter how many
+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would
+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToStorage(events)
+    }, 2000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [events])",
+    "originalFile": "import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_EVENTS = 500
+const DEDUP_WINDOW_MS = 5000
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  count: number
+  severity: Severity // warning = monitor (not blocked), critical = kill (blocked)
+}
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const data = JSON.parse(raw) as any[]
+      // Backfill fields added after initial storage schema (count, severity)
+      return data.map((e) => ({
+        ...e,
+        count: e.count ?? 1,
+        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+      })) as DisplayEvent[]
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary === b.binary &&
+    a.pod === b.pod &&
+    a.function === b.function &&
+    a.policyName === b.policyName &&
+    a.action === b.action &&
+    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+  )
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const connect = () => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        setEvents((prev) => {
+          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
+          }
+          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+        })
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }
+
+  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage(events)
+  }, [events])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 101,
+        "oldLines": 9,
+        "newStart": 101,
+        "newLines": 17,
+        "lines": [
+          "     es.onerror = () => setConnected(false)",
+          "   }",
+          " ",
+          "-  // Persist events to localStorage whenever they change",
+          "+  // Debounce localStorage writes: at most once every 2 s no matter how many",
+          "+  // events arrive. Without debouncing, rapid event streams (e.g. 50/s) would",
+          "+  // call JSON.stringify(500 events) and localStorage.setItem 50 times/s.",
+          "   useEffect(() => {",
+          "-    saveToStorage(events)",
+          "+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)",
+          "+    saveTimerRef.current = setTimeout(() => {",
+          "+      saveToStorage(events)",
+          "+    }, 2000)",
+          "+    return () => {",
+          "+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)",
+          "+    }",
+          "   }, [events])",
+          " ",
+          "   useEffect(() => {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npx tsc --noEmit --skipLibCheck 2>&1 && npm run build 2>&1 | tail -3 && git add -A && git commit -m "perf: debounce localStorage writes to at most once per 2s to prevent jank on rapid event streams"",
+    "timeout": 60000,
+    "description": "驗證 + 提交"
+  }
+}
+
+----------------------------------------
+
