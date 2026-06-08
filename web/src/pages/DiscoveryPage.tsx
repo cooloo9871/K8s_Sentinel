@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { IconSearch, IconShieldCheck, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'
 import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,39 +9,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
 import { discoveryApi, namespaceApi } from '../api/client'
 import type { PolicyFormInput } from '../api/types'
-
-interface PodProfile {
-  namespace: string
-  pod: string
-  binaries: string[]
-  filePaths: string[]
-  netDests: string[]
-  eventCount: number
-  lastSeen: string
-}
-
-function buildProfiles(events: ReturnType<typeof useSecurityEvents>['events']): PodProfile[] {
-  const map = new Map<string, PodProfile>()
-  for (const e of events) {
-    if (!e.namespace && !e.pod) continue
-    const key = `${e.namespace}/${e.pod}`
-    if (!map.has(key)) {
-      map.set(key, { namespace: e.namespace, pod: e.pod, binaries: [], filePaths: [], netDests: [], eventCount: 0, lastSeen: e.time })
-    }
-    const p = map.get(key)!
-    p.eventCount += e.count ?? 1
-    if (e.time > p.lastSeen) p.lastSeen = e.time
-    if (e.binary && !p.binaries.includes(e.binary)) p.binaries.push(e.binary)
-    if (e.filePath && !p.filePaths.includes(e.filePath)) p.filePaths.push(e.filePath)
-    if (e.netDest && !p.netDests.includes(e.netDest)) p.netDests.push(e.netDest)
-  }
-  return Array.from(map.values()).sort(
-    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
-  )
-}
 
 function RelativeTime({ iso }: { iso: string }) {
   if (!iso) return null
@@ -55,14 +29,14 @@ function RelativeTime({ iso }: { iso: string }) {
 }
 
 export function DiscoveryPage() {
-  const { events, connected } = useSecurityEvents()
+  const { profiles, clearProfiles } = useDiscovery()
   const navigate = useNavigate()
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
   const [allNamespaces, setAllNamespaces] = useState<string[]>([])
   const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
 
-  // Fetch all cluster namespaces for the filter dropdown
   useEffect(() => {
     namespaceApi.list()
       .then(ns => setAllNamespaces(ns.sort()))
@@ -70,12 +44,10 @@ export function DiscoveryPage() {
       .finally(() => setNsLoading(false))
   }, [])
 
-  // Auto-enable the catch-all discovery policy whenever this page is open
+  // Auto-enable the catch-all discovery policy
   useEffect(() => {
     discoveryApi.setEnabled(true).catch(() => {})
   }, [])
-
-  const profiles = useMemo(() => buildProfiles(events), [events])
 
   const filtered = profiles.filter(p => {
     if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
@@ -83,7 +55,7 @@ export function DiscoveryPage() {
     return true
   })
 
-  const handleCreatePolicy = (profile: PodProfile) => {
+  const handleCreatePolicy = (profile: typeof profiles[0]) => {
     const prefill: PolicyFormInput = {
       name: `${profile.pod}-policy`,
       namespace: profile.namespace || 'default',
@@ -102,15 +74,18 @@ export function DiscoveryPage() {
         <div>
           <h4 className="text-xl font-semibold">Behavior Discovery</h4>
           <p className="text-sm text-muted-foreground">
-            Observing pod behaviors cluster-wide. Use learned patterns to generate TracingPolicies.
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
           </p>
         </div>
-        <div className="flex items-center gap-1.5 text-sm">
-          {connected ? (
-            <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Discovering</span></>
-          ) : (
-            <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
-          )}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <IconWifi size={16} className="text-green-500" />
+            <span className="text-green-600">Discovering</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
         </div>
       </div>
 
@@ -143,19 +118,17 @@ export function DiscoveryPage() {
           />
         </div>
         <span className="ml-auto text-sm text-muted-foreground">
-          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} ·{' '}
-          {events.filter(e => e.type === 'exec').length} exec ·{' '}
-          {events.filter(e => e.type === 'kprobe').length} kprobe
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
         </span>
       </div>
 
       {profiles.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
           <IconShieldCheck size={48} strokeWidth={1.5} />
-          <p className="text-base font-medium">Waiting for behavior data...</p>
+          <p className="text-base font-medium">Learning in progress...</p>
           <p className="max-w-sm text-center text-sm">
-            Discovery is active. Behaviors will appear as pods execute processes,
-            access files, and make network connections.
+            Behaviors appear here as pods execute processes, access files, and make
+            network connections. Data is persisted — come back anytime to see what's been learned.
           </p>
         </div>
       ) : (
@@ -173,7 +146,11 @@ export function DiscoveryPage() {
                     variant="outline"
                     className="h-7 text-xs"
                     onClick={() => handleCreatePolicy(profile)}
-                    disabled={profile.binaries.length === 0 && profile.filePaths.length === 0 && profile.netDests.length === 0}
+                    disabled={
+                      profile.binaries.length === 0 &&
+                      profile.filePaths.length === 0 &&
+                      profile.netDests.length === 0
+                    }
                   >
                     Create Policy
                   </Button>
@@ -183,18 +160,18 @@ export function DiscoveryPage() {
                 {/* Process */}
                 <div className="mb-2">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="font-medium text-foreground">Process</span>
+                    <span className="font-medium">Process</span>
                     <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
                   </div>
                   {profile.binaries.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {profile.binaries.slice(0, 5).map(b => (
-                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                      {profile.binaries.slice(0, 6).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
                           {b.split('/').pop()}
                         </span>
                       ))}
-                      {profile.binaries.length > 5 && (
-                        <span className="text-muted-foreground">+{profile.binaries.length - 5} more</span>
+                      {profile.binaries.length > 6 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
                       )}
                     </div>
                   ) : <span className="text-muted-foreground">—</span>}
@@ -203,16 +180,16 @@ export function DiscoveryPage() {
                 {/* File */}
                 <div className="mb-2">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="font-medium text-foreground">File</span>
+                    <span className="font-medium">File</span>
                     <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
                   </div>
                   {profile.filePaths.length > 0 ? (
                     <div className="flex flex-col gap-0.5">
-                      {profile.filePaths.slice(0, 3).map(f => (
+                      {profile.filePaths.slice(0, 4).map(f => (
                         <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
                       ))}
-                      {profile.filePaths.length > 3 && (
-                        <span className="text-muted-foreground">+{profile.filePaths.length - 3} more</span>
+                      {profile.filePaths.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
                       )}
                     </div>
                   ) : <span className="text-muted-foreground">—</span>}
@@ -221,23 +198,25 @@ export function DiscoveryPage() {
                 {/* Network */}
                 <div>
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="font-medium text-foreground">Network</span>
+                    <span className="font-medium">Network</span>
                     <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
                   </div>
                   {profile.netDests.length > 0 ? (
                     <div className="flex flex-col gap-0.5">
-                      {profile.netDests.slice(0, 3).map(n => (
+                      {profile.netDests.slice(0, 4).map(n => (
                         <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
                       ))}
-                      {profile.netDests.length > 3 && (
-                        <span className="text-muted-foreground">+{profile.netDests.length - 3} more</span>
+                      {profile.netDests.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
                       )}
                     </div>
                   ) : <span className="text-muted-foreground">—</span>}
                 </div>
 
                 <div className="mt-3 flex items-center justify-between border-t pt-2">
-                  <span className="text-muted-foreground">{profile.eventCount} events</span>
+                  <span className="text-muted-foreground">
+                    since <RelativeTime iso={profile.firstSeen} />
+                  </span>
                   <RelativeTime iso={profile.lastSeen} />
                 </div>
               </CardContent>
@@ -245,6 +224,25 @@ export function DiscoveryPage() {
           ))}
         </div>
       )}
+
+      {/* Clear confirmation */}
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all learned behaviors for all pods. Discovery will start fresh.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

@@ -177151,3 +177151,2866 @@ export function DiscoveryPage() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -3 && git add -A && git commit -m "feat: auto-start discovery on page open, show all cluster namespaces in filter"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[main e1d73a3] feat: auto-start discovery on page open, show all cluster namespaces in filter
+ 2 files changed, 1753 insertions(+), 213 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "e1d73a3",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 707ms
+--> 84e50592a2aa
+[2/3] STEP 1/7: FROM docker.io/library/golang:1.22-alpine AS backend
+[2/3] STEP 2/7: WORKDIR /app
+--> Using cache c8e53962c6ee504ab0f12382c68b598f49d4c42f02df744a0ac933b796b3036c
+--> c8e53962c6ee
+[2/3] STEP 3/7: COPY go.mod go.sum ./
+--> Using cache 2e0f235119d16aac76c04aaa3fd8fe6f2a0982bf6e3092152287e052ccdd22a4
+--> 2e0f235119d1
+[2/3] STEP 4/7: RUN go mod download
+--> Using cache 4bf30098c2d63ea412171e4fd92fa66447c3472caf82363734c3a70eed05de98
+--> 4bf30098c2d6
+[2/3] STEP 5/7: COPY . .
+--> 213d4d1a390e
+[2/3] STEP 6/7: COPY --from=frontend /app/web/dist ./web/dist
+--> 2b5be5be5144
+[2/3] STEP 7/7: RUN CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/
+Error: committing container for step {Env:[PATH=/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin GOLANG_VERSION=1.22.12 GOTOOLCHAIN=local GOPATH=/go] Command:run Args:[CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/] Flags:[] Attrs:map[] Message:RUN CGO_ENABLED=0 GOOS=linux go build -o {
+  "event": "UserPromptSubmit",
+  "user_prompt": "Behavior Discovery 有 bug，他會一下顯示一下就消失了，我要的是他學習到後會一直記錄在 Behavior Discovery，讓我可以去看他總共執行過甚麼命令和檔案和網路，然後我最後要可以把他套用變成 TracingPolicy"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "content": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    profileMapRef.current = profileMap
+  }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  const handleEvent = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type: string
+        namespace: string
+        pod: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time: string
+      }
+
+      if (!evt.namespace || !evt.pod) return
+
+      const key = `${evt.namespace}/${evt.pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing = prev[key] ?? {
+          namespace: evt.namespace,
+          pod: evt.pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        let changed = false
+        const binaries = [...existing.binaries]
+        const filePaths = [...existing.filePaths]
+        const netDests = [...existing.netDests]
+
+        if (evt.binary && !binaries.includes(evt.binary)) {
+          binaries.push(evt.binary)
+          changed = true
+        }
+        if (evt.filePath && !filePaths.includes(evt.filePath)) {
+          filePaths.push(evt.filePath)
+          changed = true
+        }
+        if (evt.netDest && !netDests.includes(evt.netDest)) {
+          netDests.push(evt.netDest)
+          changed = true
+        }
+        if (now > existing.lastSeen) changed = true
+
+        if (!changed && now <= existing.lastSeen) return prev // no-op
+
+        return {
+          ...prev,
+          [key]: { ...existing, binaries, filePaths, netDests, lastSeen: now },
+        }
+      })
+    } catch {}
+  }, [])
+
+  // SSE connection — separate from SecurityEventsProvider so Discovery
+  // accumulates profiles independently of the 500-event security alert window.
+  useEffect(() => {
+    const connect = () => {
+      const es = new EventSource('/api/events/stream')
+      esRef.current = es
+      es.onmessage = (e) => handleEvent(e.data)
+      es.onerror = () => {}
+    }
+    connect()
+    return () => esRef.current?.close()
+  }, [handleEvent])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "content": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    profileMapRef.current = profileMap
+  }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  const handleEvent = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type: string
+        namespace: string
+        pod: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time: string
+      }
+
+      if (!evt.namespace || !evt.pod) return
+
+      const key = `${evt.namespace}/${evt.pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing = prev[key] ?? {
+          namespace: evt.namespace,
+          pod: evt.pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        let changed = false
+        const binaries = [...existing.binaries]
+        const filePaths = [...existing.filePaths]
+        const netDests = [...existing.netDests]
+
+        if (evt.binary && !binaries.includes(evt.binary)) {
+          binaries.push(evt.binary)
+          changed = true
+        }
+        if (evt.filePath && !filePaths.includes(evt.filePath)) {
+          filePaths.push(evt.filePath)
+          changed = true
+        }
+        if (evt.netDest && !netDests.includes(evt.netDest)) {
+          netDests.push(evt.netDest)
+          changed = true
+        }
+        if (now > existing.lastSeen) changed = true
+
+        if (!changed && now <= existing.lastSeen) return prev // no-op
+
+        return {
+          ...prev,
+          [key]: { ...existing, binaries, filePaths, netDests, lastSeen: now },
+        }
+      })
+    } catch {}
+  }, [])
+
+  // SSE connection — separate from SecurityEventsProvider so Discovery
+  // accumulates profiles independently of the 500-event security alert window.
+  useEffect(() => {
+    const connect = () => {
+      const es = new EventSource('/api/events/stream')
+      esRef.current = es
+      es.onmessage = (e) => handleEvent(e.data)
+      es.onerror = () => {}
+    }
+    connect()
+    return () => esRef.current?.close()
+  }, [handleEvent])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/web/src/layout/DiscoveryProvider.tsx",
+    "content": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+
+const STORAGE_KEY = 'sentinel_discovery_profiles'
+const SAVE_DEBOUNCE_MS = 3000
+
+export interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]   // unique process binaries observed
+  filePaths: string[]  // unique file paths accessed
+  netDests: string[]   // unique network destinations (addr:port)
+  firstSeen: string
+  lastSeen: string
+}
+
+type ProfileMap = Record<string, PodProfile> // key = "namespace/pod"
+
+interface DiscoveryContextValue {
+  profiles: PodProfile[]
+  clearProfiles: () => void
+}
+
+const DiscoveryContext = createContext<DiscoveryContextValue>({
+  profiles: [],
+  clearProfiles: () => {},
+})
+
+export function useDiscovery() {
+  return useContext(DiscoveryContext)
+}
+
+function loadFromStorage(): ProfileMap {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ProfileMap
+  } catch {}
+  return {}
+}
+
+function saveToStorage(map: ProfileMap) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+}
+
+export function DiscoveryProvider({ children }: { children: React.ReactNode }) {
+  const [profileMap, setProfileMap] = useState<ProfileMap>(() => loadFromStorage())
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileMapRef = useRef<ProfileMap>(profileMap)
+
+  // Keep ref in sync for flush-on-unmount
+  useEffect(() => {
+    profileMapRef.current = profileMap
+  }, [profileMap])
+
+  // Debounced localStorage save
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(profileMap), SAVE_DEBOUNCE_MS)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [profileMap])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { saveToStorage(profileMapRef.current) }
+  }, [])
+
+  const handleEvent = useCallback((raw: string) => {
+    try {
+      const evt = JSON.parse(raw) as {
+        type: string
+        namespace: string
+        pod: string
+        binary?: string
+        filePath?: string
+        netDest?: string
+        time: string
+      }
+
+      if (!evt.namespace || !evt.pod) return
+
+      const key = `${evt.namespace}/${evt.pod}`
+      const now = evt.time || new Date().toISOString()
+
+      setProfileMap(prev => {
+        const existing = prev[key] ?? {
+          namespace: evt.namespace,
+          pod: evt.pod,
+          binaries: [],
+          filePaths: [],
+          netDests: [],
+          firstSeen: now,
+          lastSeen: now,
+        }
+
+        let changed = false
+        const binaries = [...existing.binaries]
+        const filePaths = [...existing.filePaths]
+        const netDests = [...existing.netDests]
+
+        if (evt.binary && !binaries.includes(evt.binary)) {
+          binaries.push(evt.binary)
+          changed = true
+        }
+        if (evt.filePath && !filePaths.includes(evt.filePath)) {
+          filePaths.push(evt.filePath)
+          changed = true
+        }
+        if (evt.netDest && !netDests.includes(evt.netDest)) {
+          netDests.push(evt.netDest)
+          changed = true
+        }
+        if (now > existing.lastSeen) changed = true
+
+        if (!changed && now <= existing.lastSeen) return prev // no-op
+
+        return {
+          ...prev,
+          [key]: { ...existing, binaries, filePaths, netDests, lastSeen: now },
+        }
+      })
+    } catch {}
+  }, [])
+
+  // SSE connection — separate from SecurityEventsProvider so Discovery
+  // accumulates profiles independently of the 500-event security alert window.
+  useEffect(() => {
+    const connect = () => {
+      const es = new EventSource('/api/events/stream')
+      esRef.current = es
+      es.onmessage = (e) => handleEvent(e.data)
+      es.onerror = () => {}
+    }
+    connect()
+    return () => esRef.current?.close()
+  }, [handleEvent])
+
+  const clearProfiles = useCallback(() => {
+    setProfileMap({})
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
+
+  const profiles = Object.values(profileMap).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+
+  return (
+    <DiscoveryContext.Provider value={{ profiles, clearProfiles }}>
+      {children}
+    </DiscoveryContext.Provider>
+  )
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { SecurityEventsProvider } from './layout/SecurityEventsProvider'",
+    "new_string": "import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { SecurityEventsProvider } from './layout/SecurityEventsProvider'",
+    "new_string": "import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "import { SecurityEventsProvider } from './layout/SecurityEventsProvider'",
+    "newString": "import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+      <SecurityEventsProvider>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+            <Route path="/policies/tracing" element={<PolicyListPage />} />
+            <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+            <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="/security/events" element={<SecurityEventsPage />} />
+            <Route path="/security/discovery" element={<DiscoveryPage />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </SecurityEventsProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 2,
+        "oldLines": 6,
+        "newStart": 2,
+        "newLines": 7,
+        "lines": [
+          " import { AppLayout } from './layout/AppLayout'",
+          " import { AppToaster } from './layout/AppToaster'",
+          " import { SecurityEventsProvider } from './layout/SecurityEventsProvider'",
+          "+import { DiscoveryProvider } from './layout/DiscoveryProvider'",
+          " import { DashboardPage } from './pages/DashboardPage'",
+          " import { PolicyListPage } from './pages/PolicyListPage'",
+          " import { PolicyEditPage } from './pages/PolicyEditPage'"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "      <AppToaster>
+      <SecurityEventsProvider>",
+    "new_string": "      <AppToaster>
+      <SecurityEventsProvider>
+      <DiscoveryProvider>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "      <AppToaster>
+      <SecurityEventsProvider>",
+    "new_string": "      <AppToaster>
+      <SecurityEventsProvider>
+      <DiscoveryProvider>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "      <AppToaster>
+      <SecurityEventsProvider>",
+    "newString": "      <AppToaster>
+      <SecurityEventsProvider>
+      <DiscoveryProvider>",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+      <SecurityEventsProvider>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+            <Route path="/policies/tracing" element={<PolicyListPage />} />
+            <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+            <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="/security/events" element={<SecurityEventsPage />} />
+            <Route path="/security/discovery" element={<DiscoveryPage />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </SecurityEventsProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 16,
+        "oldLines": 6,
+        "newStart": 16,
+        "newLines": 7,
+        "lines": [
+          "     <BrowserRouter>",
+          "       <AppToaster>",
+          "       <SecurityEventsProvider>",
+          "+      <DiscoveryProvider>",
+          "         <Routes>",
+          "           <Route element={<AppLayout />}>",
+          "             <Route path="/" element={<Navigate to="/dashboard" replace />} />"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "      </SecurityEventsProvider>
+      </AppToaster>",
+    "new_string": "      </DiscoveryProvider>
+      </SecurityEventsProvider>
+      </AppToaster>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "      </SecurityEventsProvider>
+      </AppToaster>",
+    "new_string": "      </DiscoveryProvider>
+      </SecurityEventsProvider>
+      </AppToaster>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "      </SecurityEventsProvider>
+      </AppToaster>",
+    "newString": "      </DiscoveryProvider>
+      </SecurityEventsProvider>
+      </AppToaster>",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+      <SecurityEventsProvider>
+      <DiscoveryProvider>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+            <Route path="/policies/tracing" element={<PolicyListPage />} />
+            <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+            <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+            <Route path="/cluster/mode" element={<ModePage />} />
+            <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+            <Route path="/security/events" element={<SecurityEventsPage />} />
+            <Route path="/security/discovery" element={<DiscoveryPage />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </SecurityEventsProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 32,
+        "oldLines": 6,
+        "newStart": 32,
+        "newLines": 7,
+        "lines": [
+          "             <Route path="*" element={<Navigate to="/dashboard" replace />} />",
+          "           </Route>",
+          "         </Routes>",
+          "+      </DiscoveryProvider>",
+          "       </SecurityEventsProvider>",
+          "       </AppToaster>",
+          "     </BrowserRouter>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi } from '../api/client'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+  }, [])
+
+  // Auto-enable the catch-all discovery policy
+  useEffect(() => {
+    discoveryApi.setEnabled(true).catch(() => {})
+  }, [])
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: typeof profiles[0]) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <IconWifi size={16} className="text-green-500" />
+            <span className="text-green-600">Discovering</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Behaviors appear here as pods execute processes, access files, and make
+            network connections. Data is persisted — come back anytime to see what's been learned.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => (
+            <Card key={`${profile.namespace}/${profile.pod}`}>
+              <CardHeader className="border-b pb-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                </div>
+                <CardAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => handleCreatePolicy(profile)}
+                    disabled={
+                      profile.binaries.length === 0 &&
+                      profile.filePaths.length === 0 &&
+                      profile.netDests.length === 0
+                    }
+                  >
+                    Create Policy
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="pt-3 text-xs">
+                {/* Process */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Process</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                  </div>
+                  {profile.binaries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.binaries.slice(0, 6).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                          {b.split('/').pop()}
+                        </span>
+                      ))}
+                      {profile.binaries.length > 6 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* File */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">File</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                  </div>
+                  {profile.filePaths.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.filePaths.slice(0, 4).map(f => (
+                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                      ))}
+                      {profile.filePaths.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* Network */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Network</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                  </div>
+                  {profile.netDests.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.netDests.slice(0, 4).map(n => (
+                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                      ))}
+                      {profile.netDests.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">
+                    since <RelativeTime iso={profile.firstSeen} />
+                  </span>
+                  <RelativeTime iso={profile.lastSeen} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Clear confirmation */}
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all learned behaviors for all pods. Discovery will start fresh.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi } from '../api/client'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+  }, [])
+
+  // Auto-enable the catch-all discovery policy
+  useEffect(() => {
+    discoveryApi.setEnabled(true).catch(() => {})
+  }, [])
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: typeof profiles[0]) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <IconWifi size={16} className="text-green-500" />
+            <span className="text-green-600">Discovering</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Behaviors appear here as pods execute processes, access files, and make
+            network connections. Data is persisted — come back anytime to see what's been learned.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => (
+            <Card key={`${profile.namespace}/${profile.pod}`}>
+              <CardHeader className="border-b pb-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                </div>
+                <CardAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => handleCreatePolicy(profile)}
+                    disabled={
+                      profile.binaries.length === 0 &&
+                      profile.filePaths.length === 0 &&
+                      profile.netDests.length === 0
+                    }
+                  >
+                    Create Policy
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="pt-3 text-xs">
+                {/* Process */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Process</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                  </div>
+                  {profile.binaries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.binaries.slice(0, 6).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                          {b.split('/').pop()}
+                        </span>
+                      ))}
+                      {profile.binaries.length > 6 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* File */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">File</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                  </div>
+                  {profile.filePaths.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.filePaths.slice(0, 4).map(f => (
+                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                      ))}
+                      {profile.filePaths.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* Network */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Network</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                  </div>
+                  {profile.netDests.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.netDests.slice(0, 4).map(n => (
+                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                      ))}
+                      {profile.netDests.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">
+                    since <RelativeTime iso={profile.firstSeen} />
+                  </span>
+                  <RelativeTime iso={profile.lastSeen} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Clear confirmation */}
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all learned behaviors for all pods. Discovery will start fresh.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "content": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi } from '../api/client'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+  }, [])
+
+  // Auto-enable the catch-all discovery policy
+  useEffect(() => {
+    discoveryApi.setEnabled(true).catch(() => {})
+  }, [])
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: typeof profiles[0]) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <IconWifi size={16} className="text-green-500" />
+            <span className="text-green-600">Discovering</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Behaviors appear here as pods execute processes, access files, and make
+            network connections. Data is persisted — come back anytime to see what's been learned.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => (
+            <Card key={`${profile.namespace}/${profile.pod}`}>
+              <CardHeader className="border-b pb-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                </div>
+                <CardAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => handleCreatePolicy(profile)}
+                    disabled={
+                      profile.binaries.length === 0 &&
+                      profile.filePaths.length === 0 &&
+                      profile.netDests.length === 0
+                    }
+                  >
+                    Create Policy
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="pt-3 text-xs">
+                {/* Process */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Process</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                  </div>
+                  {profile.binaries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.binaries.slice(0, 6).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                          {b.split('/').pop()}
+                        </span>
+                      ))}
+                      {profile.binaries.length > 6 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* File */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">File</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                  </div>
+                  {profile.filePaths.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.filePaths.slice(0, 4).map(f => (
+                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                      ))}
+                      {profile.filePaths.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* Network */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Network</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                  </div>
+                  {profile.netDests.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.netDests.slice(0, 4).map(n => (
+                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                      ))}
+                      {profile.netDests.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">
+                    since <RelativeTime iso={profile.firstSeen} />
+                  </span>
+                  <RelativeTime iso={profile.lastSeen} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Clear confirmation */}
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all learned behaviors for all pods. Discovery will start fresh.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 6,
+        "newStart": 1,
+        "newLines": 6,
+        "lines": [
+          "-import { useEffect, useMemo, useState } from 'react'",
+          "+import { useEffect, useState } from 'react'",
+          " import { useNavigate } from 'react-router-dom'",
+          "-import { IconSearch, IconShieldCheck, IconWifi, IconWifiOff } from '@tabler/icons-react'",
+          "+import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'",
+          " import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'",
+          " import { Badge } from '@/components/ui/badge'",
+          " import { Button } from '@/components/ui/button'"
+        ]
+      },
+      {
+        "oldStart": 9,
+        "oldLines": 40,
+        "newStart": 9,
+        "newLines": 14,
+        "lines": [
+          " import {",
+          "   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,",
+          " } from '@/components/ui/select'",
+          "-import { useSecurityEvents } from '../layout/SecurityEventsProvider'",
+          "+import {",
+          "+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,",
+          "+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,",
+          "+} from '@/components/ui/alert-dialog'",
+          "+import { useDiscovery } from '../layout/DiscoveryProvider'",
+          " import { discoveryApi, namespaceApi } from '../api/client'",
+          " import type { PolicyFormInput } from '../api/types'",
+          " ",
+          "-interface PodProfile {",
+          "-  namespace: string",
+          "-  pod: string",
+          "-  binaries: string[]",
+          "-  filePaths: string[]",
+          "-  netDests: string[]",
+          "-  eventCount: number",
+          "-  lastSeen: string",
+          "-}",
+          "-",
+          "-function buildProfiles(events: ReturnType<typeof useSecurityEvents>['events']): PodProfile[] {",
+          "-  const map = new Map<string, PodProfile>()",
+          "-  for (const e of events) {",
+          "-    if (!e.namespace && !e.pod) continue",
+          "-    const key = `${e.namespace}/${e.pod}`",
+          "-    if (!map.has(key)) {",
+          "-      map.set(key, { namespace: e.namespace, pod: e.pod, binaries: [], filePaths: [], netDests: [], eventCount: 0, lastSeen: e.time })",
+          "-    }",
+          "-    const p = map.get(key)!",
+          "-    p.eventCount += e.count ?? 1",
+          "-    if (e.time > p.lastSeen) p.lastSeen = e.time",
+          "-    if (e.binary && !p.binaries.includes(e.binary)) p.binaries.push(e.binary)",
+          "-    if (e.filePath && !p.filePaths.includes(e.filePath)) p.filePaths.push(e.filePath)",
+          "-    if (e.netDest && !p.netDests.includes(e.netDest)) p.netDests.push(e.netDest)",
+          "-  }",
+          "-  return Array.from(map.values()).sort(",
+          "-    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)",
+          "-  )",
+          "-}",
+          "-",
+          " function RelativeTime({ iso }: { iso: string }) {",
+          "   if (!iso) return null",
+          "   const d = new Date(iso)"
+        ]
+      },
+      {
+        "oldStart": 55,
+        "oldLines": 14,
+        "newStart": 29,
+        "newLines": 15,
+        "lines": [
+          " }",
+          " ",
+          " export function DiscoveryPage() {",
+          "-  const { events, connected } = useSecurityEvents()",
+          "+  const { profiles, clearProfiles } = useDiscovery()",
+          "   const navigate = useNavigate()",
+          "   const [nsFilter, setNsFilter] = useState('all')",
+          "   const [podSearch, setPodSearch] = useState('')",
+          "   const [allNamespaces, setAllNamespaces] = useState<string[]>([])",
+          "   const [nsLoading, setNsLoading] = useState(true)",
+          "+  const [clearDialog, setClearDialog] = useState(false)",
+          "+  const [connected, setConnected] = useState(true)",
+          " ",
+          "-  // Fetch all cluster namespaces for the filter dropdown",
+          "   useEffect(() => {",
+          "     namespaceApi.list()",
+          "       .then(ns => setAllNamespaces(ns.sort()))"
+        ]
+      },
+      {
+        "oldStart": 70,
+        "oldLines": 20,
+        "newStart": 45,
+        "newLines": 18,
+        "lines": [
+          "       .finally(() => setNsLoading(false))",
+          "   }, [])",
+          " ",
+          "-  // Auto-enable the catch-all discovery policy whenever this page is open",
+          "+  // Auto-enable the catch-all discovery policy",
+          "   useEffect(() => {",
+          "     discoveryApi.setEnabled(true).catch(() => {})",
+          "   }, [])",
+          " ",
+          "-  const profiles = useMemo(() => buildProfiles(events), [events])",
+          "-",
+          "   const filtered = profiles.filter(p => {",
+          "     if (nsFilter !== 'all' && p.namespace !== nsFilter) return false",
+          "     if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false",
+          "     return true",
+          "   })",
+          " ",
+          "-  const handleCreatePolicy = (profile: PodProfile) => {",
+          "+  const handleCreatePolicy = (profile: typeof profiles[0]) => {",
+          "     const prefill: PolicyFormInput = {",
+          "       name: `${profile.pod}-policy`,",
+          "       namespace: profile.namespace || 'default',"
+        ]
+      },
+      {
+        "oldStart": 102,
+        "oldLines": 15,
+        "newStart": 75,
+        "newLines": 18,
+        "lines": [
+          "         <div>",
+          "           <h4 className="text-xl font-semibold">Behavior Discovery</h4>",
+          "           <p className="text-sm text-muted-foreground">",
+          "-            Observing pod behaviors cluster-wide. Use learned patterns to generate TracingPolicies.",
+          "+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.",
+          "           </p>",
+          "         </div>",
+          "-        <div className="flex items-center gap-1.5 text-sm">",
+          "-          {connected ? (",
+          "-            <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Discovering</span></>",
+          "-          ) : (",
+          "-            <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>",
+          "-          )}",
+          "+        <div className="flex items-center gap-3">",
+          "+          <div className="flex items-center gap-1.5 text-sm">",
+          "+            <IconWifi size={16} className="text-green-500" />",
+          "+            <span className="text-green-600">Discovering</span>",
+          "+          </div>",
+          "+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>",
+          "+            <IconTrash size={14} className="mr-1.5" />",
+          "+            Clear",
+          "+          </Button>",
+          "         </div>",
+          "       </div>",
+          " "
+        ]
+      },
+      {
+        "oldStart": 143,
+        "oldLines": 19,
+        "newStart": 119,
+        "newLines": 17,
+        "lines": [
+          "           />",
+          "         </div>",
+          "         <span className="ml-auto text-sm text-muted-foreground">",
+          "-          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} ·{' '}",
+          "-          {events.filter(e => e.type === 'exec').length} exec ·{' '}",
+          "-          {events.filter(e => e.type === 'kprobe').length} kprobe",
+          "+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned",
+          "         </span>",
+          "       </div>",
+          " ",
+          "       {profiles.length === 0 ? (",
+          "         <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">",
+          "           <IconShieldCheck size={48} strokeWidth={1.5} />",
+          "-          <p className="text-base font-medium">Waiting for behavior data...</p>",
+          "+          <p className="text-base font-medium">Learning in progress...</p>",
+          "           <p className="max-w-sm text-center text-sm">",
+          "-            Discovery is active. Behaviors will appear as pods execute processes,",
+          "-            access files, and make network connections.",
+          "+            Behaviors appear here as pods execute processes, access files, and make",
+          "+            network connections. Data is persisted — come back anytime to see what's been learned.",
+          "           </p>",
+          "         </div>",
+          "       ) : ("
+        ]
+      },
+      {
+        "oldStart": 173,
+        "oldLines": 7,
+        "newStart": 147,
+        "newLines": 11,
+        "lines": [
+          "                     variant="outline"",
+          "                     className="h-7 text-xs"",
+          "                     onClick={() => handleCreatePolicy(profile)}",
+          "-                    disabled={profile.binaries.length === 0 && profile.filePaths.length === 0 && profile.netDests.length === 0}",
+          "+                    disabled={",
+          "+                      profile.binaries.length === 0 &&",
+          "+                      profile.filePaths.length === 0 &&",
+          "+                      profile.netDests.length === 0",
+          "+                    }",
+          "                   >",
+          "                     Create Policy",
+          "                   </Button>"
+        ]
+      },
+      {
+        "oldStart": 183,
+        "oldLines": 18,
+        "newStart": 161,
+        "newLines": 18,
+        "lines": [
+          "                 {/* Process */}",
+          "                 <div className="mb-2">",
+          "                   <div className="mb-1 flex items-center justify-between">",
+          "-                    <span className="font-medium text-foreground">Process</span>",
+          "+                    <span className="font-medium">Process</span>",
+          "                     <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>",
+          "                   </div>",
+          "                   {profile.binaries.length > 0 ? (",
+          "                     <div className="flex flex-wrap gap-1">",
+          "-                      {profile.binaries.slice(0, 5).map(b => (",
+          "-                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">",
+          "+                      {profile.binaries.slice(0, 6).map(b => (",
+          "+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>",
+          "                           {b.split('/').pop()}",
+          "                         </span>",
+          "                       ))}",
+          "-                      {profile.binaries.length > 5 && (",
+          "-                        <span className="text-muted-foreground">+{profile.binaries.length - 5} more</span>",
+          "+                      {profile.binaries.length > 6 && (",
+          "+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>",
+          "                       )}",
+          "                     </div>",
+          "                   ) : <span className="text-muted-foreground">—</span>}"
+        ]
+      },
+      {
+        "oldStart": 203,
+        "oldLines": 16,
+        "newStart": 181,
+        "newLines": 16,
+        "lines": [
+          "                 {/* File */}",
+          "                 <div className="mb-2">",
+          "                   <div className="mb-1 flex items-center justify-between">",
+          "-                    <span className="font-medium text-foreground">File</span>",
+          "+                    <span className="font-medium">File</span>",
+          "                     <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>",
+          "                   </div>",
+          "                   {profile.filePaths.length > 0 ? (",
+          "                     <div className="flex flex-col gap-0.5">",
+          "-                      {profile.filePaths.slice(0, 3).map(f => (",
+          "+                      {profile.filePaths.slice(0, 4).map(f => (",
+          "                         <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>",
+          "                       ))}",
+          "-                      {profile.filePaths.length > 3 && (",
+          "-                        <span className="text-muted-foreground">+{profile.filePaths.length - 3} more</span>",
+          "+                      {profile.filePaths.length > 4 && (",
+          "+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>",
+          "                       )}",
+          "                     </div>",
+          "                   ) : <span className="text-muted-foreground">—</span>}"
+        ]
+      },
+      {
+        "oldStart": 221,
+        "oldLines": 23,
+        "newStart": 199,
+        "newLines": 25,
+        "lines": [
+          "                 {/* Network */}",
+          "                 <div>",
+          "                   <div className="mb-1 flex items-center justify-between">",
+          "-                    <span className="font-medium text-foreground">Network</span>",
+          "+                    <span className="font-medium">Network</span>",
+          "                     <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>",
+          "                   </div>",
+          "                   {profile.netDests.length > 0 ? (",
+          "                     <div className="flex flex-col gap-0.5">",
+          "-                      {profile.netDests.slice(0, 3).map(n => (",
+          "+                      {profile.netDests.slice(0, 4).map(n => (",
+          "                         <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>",
+          "                       ))}",
+          "-                      {profile.netDests.length > 3 && (",
+          "-                        <span className="text-muted-foreground">+{profile.netDests.length - 3} more</span>",
+          "+                      {profile.netDests.length > 4 && (",
+          "+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>",
+          "                       )}",
+          "                     </div>",
+          "                   ) : <span className="text-muted-foreground">—</span>}",
+          "                 </div>",
+          " ",
+          "                 <div className="mt-3 flex items-center justify-between border-t pt-2">",
+          "-                  <span className="text-muted-foreground">{profile.eventCount} events</span>",
+          "+                  <span className="text-muted-foreground">",
+          "+                    since <RelativeTime iso={profile.firstSeen} />",
+          "+                  </span>",
+          "                   <RelativeTime iso={profile.lastSeen} />",
+          "                 </div>",
+          "               </CardContent>"
+        ]
+      },
+      {
+        "oldStart": 245,
+        "oldLines": 6,
+        "newStart": 225,
+        "newLines": 25,
+        "lines": [
+          "           ))}",
+          "         </div>",
+          "       )}",
+          "+",
+          "+      {/* Clear confirmation */}",
+          "+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>",
+          "+        <AlertDialogContent>",
+          "+          <AlertDialogHeader>",
+          "+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>",
+          "+            <AlertDialogDescription>",
+          "+              This will delete all learned behaviors for all pods. Discovery will start fresh.",
+          "+              This action cannot be undone.",
+          "+            </AlertDialogDescription>",
+          "+          </AlertDialogHeader>",
+          "+          <AlertDialogFooter>",
+          "+            <AlertDialogCancel>Cancel</AlertDialogCancel>",
+          "+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>",
+          "+              Clear All",
+          "+            </AlertDialogAction>",
+          "+          </AlertDialogFooter>",
+          "+        </AlertDialogContent>",
+          "+      </AlertDialog>",
+          "     </>",
+          "   )",
+          " }"
+        ]
+      }
+    ],
+    "originalFile": "import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import { discoveryApi, namespaceApi } from '../api/client'
+import type { PolicyFormInput } from '../api/types'
+
+interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]
+  filePaths: string[]
+  netDests: string[]
+  eventCount: number
+  lastSeen: string
+}
+
+function buildProfiles(events: ReturnType<typeof useSecurityEvents>['events']): PodProfile[] {
+  const map = new Map<string, PodProfile>()
+  for (const e of events) {
+    if (!e.namespace && !e.pod) continue
+    const key = `${e.namespace}/${e.pod}`
+    if (!map.has(key)) {
+      map.set(key, { namespace: e.namespace, pod: e.pod, binaries: [], filePaths: [], netDests: [], eventCount: 0, lastSeen: e.time })
+    }
+    const p = map.get(key)!
+    p.eventCount += e.count ?? 1
+    if (e.time > p.lastSeen) p.lastSeen = e.time
+    if (e.binary && !p.binaries.includes(e.binary)) p.binaries.push(e.binary)
+    if (e.filePath && !p.filePaths.includes(e.filePath)) p.filePaths.push(e.filePath)
+    if (e.netDest && !p.netDests.includes(e.netDest)) p.netDests.push(e.netDest)
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { events, connected } = useSecurityEvents()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+
+  // Fetch all cluster namespaces for the filter dropdown
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+  }, [])
+
+  // Auto-enable the catch-all discovery policy whenever this page is open
+  useEffect(() => {
+    discoveryApi.setEnabled(true).catch(() => {})
+  }, [])
+
+  const profiles = useMemo(() => buildProfiles(events), [events])
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: PodProfile) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Observing pod behaviors cluster-wide. Use learned patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm">
+          {connected ? (
+            <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Discovering</span></>
+          ) : (
+            <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+          )}
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} ·{' '}
+          {events.filter(e => e.type === 'exec').length} exec ·{' '}
+          {events.filter(e => e.type === 'kprobe').length} kprobe
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Waiting for behavior data...</p>
+          <p className="max-w-sm text-center text-sm">
+            Discovery is active. Behaviors will appear as pods execute processes,
+            access files, and make network connections.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => (
+            <Card key={`${profile.namespace}/${profile.pod}`}>
+              <CardHeader className="border-b pb-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                </div>
+                <CardAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => handleCreatePolicy(profile)}
+                    disabled={profile.binaries.length === 0 && profile.filePaths.length === 0 && profile.netDests.length === 0}
+                  >
+                    Create Policy
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="pt-3 text-xs">
+                {/* Process */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium text-foreground">Process</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                  </div>
+                  {profile.binaries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.binaries.slice(0, 5).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                          {b.split('/').pop()}
+                        </span>
+                      ))}
+                      {profile.binaries.length > 5 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 5} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* File */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium text-foreground">File</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                  </div>
+                  {profile.filePaths.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.filePaths.slice(0, 3).map(f => (
+                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                      ))}
+                      {profile.filePaths.length > 3 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 3} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* Network */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium text-foreground">Network</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                  </div>
+                  {profile.netDests.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.netDests.slice(0, 3).map(n => (
+                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                      ))}
+                      {profile.netDests.length > 3 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 3} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">{profile.eventCount} events</span>
+                  <RelativeTime iso={profile.lastSeen} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "測試 + build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "測試 + build"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  19:39:21
+   Duration  490ms (transform 22ms, setup 33ms, import 20ms, tests 4ms, environment 358ms)
+
+src/pages/DiscoveryPage.tsx(3,60): error TS6133: 'IconWifiOff' is declared but its value is never read.
+src/pages/DiscoveryPage.tsx(39,10): error TS6133: 'connected' is declared but its value is never read.
+src/pages/DiscoveryPage.tsx(39,21): error TS6133: 'setConnected' is declared but its value is never read.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'",
+    "new_string": "import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'",
+    "new_string": "import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "oldString": "import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'",
+    "newString": "import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'",
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi } from '../api/client'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+  }, [])
+
+  // Auto-enable the catch-all discovery policy
+  useEffect(() => {
+    discoveryApi.setEnabled(true).catch(() => {})
+  }, [])
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: typeof profiles[0]) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <IconWifi size={16} className="text-green-500" />
+            <span className="text-green-600">Discovering</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Behaviors appear here as pods execute processes, access files, and make
+            network connections. Data is persisted — come back anytime to see what's been learned.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => (
+            <Card key={`${profile.namespace}/${profile.pod}`}>
+              <CardHeader className="border-b pb-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                </div>
+                <CardAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => handleCreatePolicy(profile)}
+                    disabled={
+                      profile.binaries.length === 0 &&
+                      profile.filePaths.length === 0 &&
+                      profile.netDests.length === 0
+                    }
+                  >
+                    Create Policy
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="pt-3 text-xs">
+                {/* Process */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Process</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                  </div>
+                  {profile.binaries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.binaries.slice(0, 6).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                          {b.split('/').pop()}
+                        </span>
+                      ))}
+                      {profile.binaries.length > 6 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* File */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">File</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                  </div>
+                  {profile.filePaths.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.filePaths.slice(0, 4).map(f => (
+                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                      ))}
+                      {profile.filePaths.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* Network */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Network</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                  </div>
+                  {profile.netDests.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.netDests.slice(0, 4).map(n => (
+                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                      ))}
+                      {profile.netDests.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">
+                    since <RelativeTime iso={profile.firstSeen} />
+                  </span>
+                  <RelativeTime iso={profile.lastSeen} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Clear confirmation */}
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all learned behaviors for all pods. Discovery will start fresh.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 6,
+        "newStart": 1,
+        "newLines": 6,
+        "lines": [
+          " import { useEffect, useState } from 'react'",
+          " import { useNavigate } from 'react-router-dom'",
+          "-import { IconSearch, IconShieldCheck, IconTrash, IconWifi, IconWifiOff } from '@tabler/icons-react'",
+          "+import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'",
+          " import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'",
+          " import { Badge } from '@/components/ui/badge'",
+          " import { Button } from '@/components/ui/button'"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)",
+    "new_string": "  const [clearDialog, setClearDialog] = useState(false)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)",
+    "new_string": "  const [clearDialog, setClearDialog] = useState(false)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "oldString": "  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)",
+    "newString": "  const [clearDialog, setClearDialog] = useState(false)",
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck, IconTrash, IconWifi } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDiscovery } from '../layout/DiscoveryProvider'
+import { discoveryApi, namespaceApi } from '../api/client'
+import type { PolicyFormInput } from '../api/types'
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { profiles, clearProfiles } = useDiscovery()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [allNamespaces, setAllNamespaces] = useState<string[]>([])
+  const [nsLoading, setNsLoading] = useState(true)
+  const [clearDialog, setClearDialog] = useState(false)
+  const [connected, setConnected] = useState(true)
+
+  useEffect(() => {
+    namespaceApi.list()
+      .then(ns => setAllNamespaces(ns.sort()))
+      .catch(() => {})
+      .finally(() => setNsLoading(false))
+  }, [])
+
+  // Auto-enable the catch-all discovery policy
+  useEffect(() => {
+    discoveryApi.setEnabled(true).catch(() => {})
+  }, [])
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: typeof profiles[0]) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Continuously learning pod behaviors. Use patterns to generate TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <IconWifi size={16} className="text-green-500" />
+            <span className="text-green-600">Discovering</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        {nsLoading ? (
+          <Skeleton className="h-9 w-44 rounded-md" />
+        ) : (
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {allNamespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search pod..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-9 w-44 pl-8"
+          />
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} pod{filtered.length !== 1 ? 's' : ''} · {profiles.length} total learned
+        </span>
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">Learning in progress...</p>
+          <p className="max-w-sm text-center text-sm">
+            Behaviors appear here as pods execute processes, access files, and make
+            network connections. Data is persisted — come back anytime to see what's been learned.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(profile => (
+            <Card key={`${profile.namespace}/${profile.pod}`}>
+              <CardHeader className="border-b pb-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                </div>
+                <CardAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => handleCreatePolicy(profile)}
+                    disabled={
+                      profile.binaries.length === 0 &&
+                      profile.filePaths.length === 0 &&
+                      profile.netDests.length === 0
+                    }
+                  >
+                    Create Policy
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="pt-3 text-xs">
+                {/* Process */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Process</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                  </div>
+                  {profile.binaries.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {profile.binaries.slice(0, 6).map(b => (
+                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                          {b.split('/').pop()}
+                        </span>
+                      ))}
+                      {profile.binaries.length > 6 && (
+                        <span className="text-muted-foreground">+{profile.binaries.length - 6} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* File */}
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">File</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                  </div>
+                  {profile.filePaths.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.filePaths.slice(0, 4).map(f => (
+                        <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                      ))}
+                      {profile.filePaths.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.filePaths.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                {/* Network */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium">Network</span>
+                    <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                  </div>
+                  {profile.netDests.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {profile.netDests.slice(0, 4).map(n => (
+                        <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                      ))}
+                      {profile.netDests.length > 4 && (
+                        <span className="text-muted-foreground">+{profile.netDests.length - 4} more</span>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">
+                    since <RelativeTime iso={profile.firstSeen} />
+                  </span>
+                  <RelativeTime iso={profile.lastSeen} />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Clear confirmation */}
+      <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discovery Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete all learned behaviors for all pods. Discovery will start fresh.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { clearProfiles(); setClearDialog(false) }}>
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 36,
+        "oldLines": 7,
+        "newStart": 36,
+        "newLines": 6,
+        "lines": [
+          "   const [allNamespaces, setAllNamespaces] = useState<string[]>([])",
+          "   const [nsLoading, setNsLoading] = useState(true)",
+          "   const [clearDialog, setClearDialog] = useState(false)",
+          "-  const [connected, setConnected] = useState(true)",
+          " ",
+          "   useEffect(() => {",
+          "     namespaceApi.list()"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | tail -3 && git add -A && git commit -m "fix: persistent DiscoveryProvider with localStorage — profiles never disappear"",
+    "timeout": 60000,
+    "description": "build + 提交"
+  }
+}
+
+----------------------------------------
+
