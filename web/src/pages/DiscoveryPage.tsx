@@ -107,7 +107,11 @@ export function DiscoveryPage() {
         </div>
         <div className="flex items-center gap-1.5 text-sm">
           <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
-          <span className="text-muted-foreground">{events.length} events · {profiles.length} pods</span>
+          <span className="text-muted-foreground">
+            {events.filter(e => e.type === 'exec').length} exec ·{' '}
+            {events.filter(e => e.type === 'kprobe').length} kprobe ·{' '}
+            {profiles.length} pods
+          </span>
         </div>
       </div>
 
@@ -115,10 +119,17 @@ export function DiscoveryPage() {
         <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
           <IconShieldCheck size={48} strokeWidth={1.5} />
           <p className="text-base font-medium">No behavior data yet</p>
-          <p className="max-w-sm text-center text-sm">
-            Create TracingPolicies in <strong>Monitoring</strong> mode to start observing
-            process, file, and network behaviors across your cluster.
-          </p>
+          <div className="max-w-md text-center text-sm space-y-2">
+            <p>
+              <strong>Process behaviors</strong> are collected automatically from all pods
+              via Tetragon's base sensor — no policy needed. They will appear here as pods
+              execute processes.
+            </p>
+            <p>
+              <strong>File &amp; Network behaviors</strong> require a monitoring TracingPolicy
+              to be active for the target namespace.
+            </p>
+          </div>
           <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
             Create a Monitoring Policy
           </Button>

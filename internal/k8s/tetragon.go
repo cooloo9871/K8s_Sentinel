@@ -137,17 +137,37 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		return TetragonEvent{}, false
 	}
 
-	// Only process_kprobe events are triggered by TracingPolicies
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, fires for every pod WITHOUT needing a TracingPolicy.
+	// Used by Behavior Discovery to learn which processes run in each pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		// Only forward events that have pod context (skip host/infra processes)
+		if evt.Pod == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			evt.ParentBin = anyStr(parent, "binary")
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
 	kp := anyMap(raw, "process_kprobe", "processKprobe")
 	if kp == nil {
 		return TetragonEvent{}, false
 	}
-
-	evt := TetragonEvent{
-		Type:     "kprobe",
-		Time:     anyStr(raw, "time"),
-		NodeName: anyStr(raw, "node_name", "nodeName"),
-	}
+	evt.Type = "kprobe"
 
 	fillProcess(&evt, anyMap(kp, "process"))
 	evt.Function = anyStr(kp, "function_name", "functionName")

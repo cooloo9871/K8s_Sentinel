@@ -170428,3 +170428,2511 @@ export function AppSidebar() {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: add Behavior Discovery page — observe pod behaviors and generate TracingPolicies"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main b8cfc5a] feat: add Behavior Discovery page — observe pod behaviors and generate TracingPolicies
+ 7 files changed, 3867 insertions(+), 11 deletions(-)
+ create mode 100644 web/src/pages/DiscoveryPage.tsx",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "b8cfc5a",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "build image 失敗✓ built in 856ms
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+--> 88a0ae751f2d
+[2/3] STEP 1/7: FROM docker.io/library/golang:1.22-alpine AS backend
+[2/3] STEP 2/7: WORKDIR /app
+--> Using cache c8e53962c6ee504ab0f12382c68b598f49d4c42f02df744a0ac933b796b3036c
+--> c8e53962c6ee
+[2/3] STEP 3/7: COPY go.mod go.sum ./
+--> Using cache 2e0f235119d16aac76c04aaa3fd8fe6f2a0982bf6e3092152287e052ccdd22a4
+--> 2e0f235119d1
+[2/3] STEP 4/7: RUN go mod download
+--> Using cache 4bf30098c2d63ea412171e4fd92fa66447c3472caf82363734c3a70eed05de98
+--> 4bf30098c2d6
+[2/3] STEP 5/7: COPY . .
+--> 13cbaa583909
+[2/3] STEP 6/7: COPY --from=frontend /app/web/dist ./web/dist
+--> b4c960e7c635
+[2/3] STEP 7/7: RUN CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/
+# github.com/cooloo9871/sentinel/internal/k8s
+internal/k8s/tetragon.go:11:2: sync redeclared in this block
+        internal/k8s/tetragon.go:10:2: other declaration of sync
+internal/k8s/tetragon.go:11:2: "sync" imported and not used
+Error: building at STEP "RUN CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/": while running runtime: exit status 1"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "head -20 /home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "description": "確認 import 區塊"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "head -20 /home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "description": "確認 import 區塊"
+  },
+  "tool_response": {
+    "stdout": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	"strings"
+	"sync"
+	"sync"",
+    "new_string": "	"strings"
+	"sync"",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	"strings"
+	"sync"
+	"sync"",
+    "new_string": "	"strings"
+	"sync"",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	"strings"
+	"sync"
+	"sync"",
+    "newString": "	"strings"
+	"sync"",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	FilePath   string `json:"filePath"` // extracted from file_arg (security_file_permission)
+	NetDest    string `json:"netDest"`  // extracted from sock_arg daddr:dport (tcp_connect)
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// Extract additional context from kprobe args for Behavior Discovery.
+	if args, ok := kp["args"].([]any); ok {
+		for _, a := range args {
+			argMap, ok := a.(map[string]any)
+			if !ok {
+				continue
+			}
+			// execve: args[0] contains the executed binary path
+			if strings.Contains(evt.Function, "execve") {
+				if bin := anyStr(argMap, "string_arg", "stringArg"); bin != "" {
+					evt.ParentBin = evt.Binary
+					evt.Binary = bin
+				}
+			}
+			// security_file_permission: args[0] is file_arg with path
+			if fileArg := anyMap(argMap, "file_arg", "fileArg"); fileArg != nil {
+				evt.FilePath = anyStr(fileArg, "path")
+			}
+			// tcp_connect: args[0] is sock_arg with daddr/dport
+			if sockArg := anyMap(argMap, "sock_arg", "sockArg"); sockArg != nil {
+				daddr := anyStr(sockArg, "daddr", "dest_addr", "destAddr")
+				if daddr != "" {
+					dport := anyStr(sockArg, "dport", "dest_port", "destPort")
+					if dport == "" {
+						if dp, ok := sockArg["dport"].(float64); ok && dp > 0 {
+							dport = fmt.Sprintf("%d", int(dp))
+						}
+					}
+					if dport != "" && dport != "0" {
+						evt.NetDest = fmt.Sprintf("%s:%s", daddr, dport)
+					} else {
+						evt.NetDest = daddr
+					}
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 8,
+        "oldLines": 7,
+        "newStart": 8,
+        "newLines": 6,
+        "lines": [
+          "   "io"",
+          "   "strings"",
+          "   "sync"",
+          "-  "sync"",
+          " ",
+          "   corev1 "k8s.io/api/core/v1"",
+          "   metav1 "k8s.io/apimachinery/pkg/apis/meta/v1""
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add internal/k8s/tetragon.go && git commit -m "fix: remove duplicate sync import in tetragon.go"",
+    "timeout": 30000,
+    "description": "驗證 + 提交"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && git add internal/k8s/tetragon.go && git commit -m "fix: remove duplicate sync import in tetragon.go"",
+    "timeout": 30000,
+    "description": "驗證 + 提交"
+  },
+  "tool_response": {
+    "error": "Exit code 128
+warning: could not open directory 'web/internal/k8s/': No such file or directory
+fatal: pathspec 'internal/k8s/tetragon.go' did not match any files",
+    "is_interrupt": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && go build ./... && git add internal/k8s/tetragon.go && git commit -m "fix: remove duplicate sync import in tetragon.go"",
+    "timeout": 30000,
+    "description": "從根目錄提交"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && go build ./... && git add internal/k8s/tetragon.go && git commit -m "fix: remove duplicate sync import in tetragon.go"",
+    "timeout": 30000,
+    "description": "從根目錄提交"
+  },
+  "tool_response": {
+    "stdout": "[main 7bd4748] fix: remove duplicate sync import in tetragon.go
+ 1 file changed, 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "7bd4748",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "$ sudo podman push quay.io/cooloo9871/sentinel:latest
+Getting image source signatures
+Copying blob df0108779cfd skipped: already exists
+Copying blob 97ae0a42274e skipped: already exists
+Copying blob c65b8028e68e skipped: already exists
+Copying blob 7750c1a1cd8e skipped: already exists
+Copying blob 4744ace31f42 skipped: already exists
+Copying blob 02c91f6b395a skipped: already exists
+Copying blob ffdf8cfdbafe skipped: already exists
+Copying blob a0ce62815afc skipped: already exists
+Copying blob 83717d7c33ed skipped: already exists
+Copying blob 7f53453a06ce skipped: already exists
+Copying blob 88d89c9f554a skipped: already exists
+Copying blob 674938dfff19 skipped: already exists
+Copying blob 6f1cdceb6a31 done   |
+Copying blob 104ecf4af9a8 skipped: already exists
+Copying config b861c3ccd8 done   |
+Writing manifest to image destination
+Error: writing manifest: uploading manifest latest to quay.io/cooloo9871/sentinel: received unexpected HTTP status: 502 Bad Gateway"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "我產生一個 pod，並且他沒有設定任何的 TracingPolicyNamespaced ，並在在他裡面執行 curl www.google.com ，Behavior Discovery 他並沒有學習到這個 pod 有執行的 process 啊？"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+    "new_string": "	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, fires for every pod WITHOUT needing a TracingPolicy.
+	// Used by Behavior Discovery to learn which processes run in each pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		// Only forward events that have pod context (skip host/infra processes)
+		if evt.Pod == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			evt.ParentBin = anyStr(parent, "binary")
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+    "new_string": "	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, fires for every pod WITHOUT needing a TracingPolicy.
+	// Used by Behavior Discovery to learn which processes run in each pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		// Only forward events that have pod context (skip host/infra processes)
+		if evt.Pod == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			evt.ParentBin = anyStr(parent, "binary")
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+    "newString": "	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, fires for every pod WITHOUT needing a TracingPolicy.
+	// Used by Behavior Discovery to learn which processes run in each pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		// Only forward events that have pod context (skip host/infra processes)
+		if evt.Pod == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			evt.ParentBin = anyStr(parent, "binary")
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	FilePath   string `json:"filePath"` // extracted from file_arg (security_file_permission)
+	NetDest    string `json:"netDest"`  // extracted from sock_arg daddr:dport (tcp_connect)
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+// Only process_kprobe events are forwarded (policy-triggered).
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	// Only process_kprobe events are triggered by TracingPolicies
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Type:     "kprobe",
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// Extract additional context from kprobe args for Behavior Discovery.
+	if args, ok := kp["args"].([]any); ok {
+		for _, a := range args {
+			argMap, ok := a.(map[string]any)
+			if !ok {
+				continue
+			}
+			// execve: args[0] contains the executed binary path
+			if strings.Contains(evt.Function, "execve") {
+				if bin := anyStr(argMap, "string_arg", "stringArg"); bin != "" {
+					evt.ParentBin = evt.Binary
+					evt.Binary = bin
+				}
+			}
+			// security_file_permission: args[0] is file_arg with path
+			if fileArg := anyMap(argMap, "file_arg", "fileArg"); fileArg != nil {
+				evt.FilePath = anyStr(fileArg, "path")
+			}
+			// tcp_connect: args[0] is sock_arg with daddr/dport
+			if sockArg := anyMap(argMap, "sock_arg", "sockArg"); sockArg != nil {
+				daddr := anyStr(sockArg, "daddr", "dest_addr", "destAddr")
+				if daddr != "" {
+					dport := anyStr(sockArg, "dport", "dest_port", "destPort")
+					if dport == "" {
+						if dp, ok := sockArg["dport"].(float64); ok && dp > 0 {
+							dport = fmt.Sprintf("%d", int(dp))
+						}
+					}
+					if dport != "" && dport != "0" {
+						evt.NetDest = fmt.Sprintf("%s:%s", daddr, dport)
+					} else {
+						evt.NetDest = daddr
+					}
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 137,
+        "oldLines": 18,
+        "newStart": 137,
+        "newLines": 38,
+        "lines": [
+          "     return TetragonEvent{}, false",
+          "   }",
+          " ",
+          "-  // Only process_kprobe events are triggered by TracingPolicies",
+          "-  kp := anyMap(raw, "process_kprobe", "processKprobe")",
+          "-  if kp == nil {",
+          "-    return TetragonEvent{}, false",
+          "-  }",
+          "-",
+          "   evt := TetragonEvent{",
+          "-    Type:     "kprobe",",
+          "     Time:     anyStr(raw, "time"),",
+          "     NodeName: anyStr(raw, "node_name", "nodeName"),",
+          "   }",
+          " ",
+          "+  // process_exec — base sensor, fires for every pod WITHOUT needing a TracingPolicy.",
+          "+  // Used by Behavior Discovery to learn which processes run in each pod.",
+          "+  if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {",
+          "+    proc := anyMap(execData, "process")",
+          "+    if proc == nil {",
+          "+      return TetragonEvent{}, false",
+          "+    }",
+          "+    fillProcess(&evt, proc)",
+          "+    // Only forward events that have pod context (skip host/infra processes)",
+          "+    if evt.Pod == "" {",
+          "+      return TetragonEvent{}, false",
+          "+    }",
+          "+    evt.Type = "exec"",
+          "+    evt.Action = "monitor"",
+          "+    if parent := anyMap(execData, "parent"); parent != nil {",
+          "+      evt.ParentBin = anyStr(parent, "binary")",
+          "+    }",
+          "+    return evt, true",
+          "+  }",
+          "+",
+          "+  // process_kprobe — triggered only by active TracingPolicies.",
+          "+  kp := anyMap(raw, "process_kprobe", "processKprobe")",
+          "+  if kp == nil {",
+          "+    return TetragonEvent{}, false",
+          "+  }",
+          "+  evt.Type = "kprobe"",
+          "+",
+          "   fillProcess(&evt, anyMap(kp, "process"))",
+          "   evt.Function = anyStr(kp, "function_name", "functionName")",
+          "   evt.PolicyName = anyStr(kp, "policy_name", "policyName")"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 40,
+    "limit": 15
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 40,
+    "limit": 15
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+      "content": "    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })",
+      "numLines": 15,
+      "startLine": 40,
+      "totalLines": 200
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })",
+    "new_string": "  const filtered = events.filter((e) => {
+    if (e.type !== 'kprobe') return false // only show policy-triggered events
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })",
+    "new_string": "  const filtered = events.filter((e) => {
+    if (e.type !== 'kprobe') return false // only show policy-triggered events
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })",
+    "newString": "  const filtered = events.filter((e) => {
+    if (e.type !== 'kprobe') return false // only show policy-triggered events
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })",
+    "originalFile": "import { useState } from 'react'
+import { IconActivity, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return (
+      <Badge variant="destructive" className="font-medium">
+        Critical
+      </Badge>
+    )
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Pod / Container</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <SeverityBadge severity={e.severity} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {e.namespace || '—'}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {e.pod || '—'}
+                      {e.container && (
+                        <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 47,
+        "oldLines": 6,
+        "newStart": 47,
+        "newLines": 7,
+        "lines": [
+          "   const [podSearch, setPodSearch] = useState('')",
+          " ",
+          "   const filtered = events.filter((e) => {",
+          "+    if (e.type !== 'kprobe') return false // only show policy-triggered events",
+          "     if (filter === 'warning' && e.severity !== 'warning') return false",
+          "     if (filter === 'critical' && e.severity !== 'critical') return false",
+          "     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "events.filter(e => e.action" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "description": "找 stats bar 計數位置"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "events.filter(e => e.action" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "description": "找 stats bar 計數位置"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "returnCodeInterpretation": "No matches found",
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "monitor\\|kills\\|action" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "找 stats 計數"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "monitor\\|kills\\|action" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "找 stats 計數"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "warningCount\\|criticalCount\\|filter(e =>" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "找計數相關邏輯"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "warningCount\\|criticalCount\\|filter(e =>" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "找計數相關邏輯"
+  },
+  "tool_response": {
+    "stdout": "57:  const warningCount = events.filter(e => e.severity === 'warning').length
+58:  const criticalCount = events.filter(e => e.severity === 'critical').length
+118:            <span className="text-amber-700">{warningCount} warning</span>
+122:            <span className="text-destructive">{criticalCount} critical</span>",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length",
+    "new_string": "  const kprobeEvents = events.filter(e => e.type === 'kprobe')
+  const warningCount = kprobeEvents.filter(e => e.severity === 'warning').length
+  const criticalCount = kprobeEvents.filter(e => e.severity === 'critical').length",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length",
+    "new_string": "  const kprobeEvents = events.filter(e => e.type === 'kprobe')
+  const warningCount = kprobeEvents.filter(e => e.severity === 'warning').length
+  const criticalCount = kprobeEvents.filter(e => e.severity === 'critical').length",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length",
+    "newString": "  const kprobeEvents = events.filter(e => e.type === 'kprobe')
+  const warningCount = kprobeEvents.filter(e => e.severity === 'warning').length
+  const criticalCount = kprobeEvents.filter(e => e.severity === 'critical').length",
+    "originalFile": "import { useState } from 'react'
+import { IconActivity, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return (
+      <Badge variant="destructive" className="font-medium">
+        Critical
+      </Badge>
+    )
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const filtered = events.filter((e) => {
+    if (e.type !== 'kprobe') return false // only show policy-triggered events
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-48"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        {/* Stats bar */}
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead>Binary</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Pod / Container</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Function</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e, i) => (
+                  <TableRow
+                    key={i}
+                    className={e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : ''}
+                  >
+                    <TableCell>
+                      <SeverityBadge severity={e.severity} />
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-mono text-sm font-medium">{e.binary || '—'}</p>
+                      {e.arguments && (
+                        <p className="truncate font-mono text-xs text-muted-foreground max-w-[200px]" title={e.arguments}>
+                          {e.arguments}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {e.namespace || '—'}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {e.pod || '—'}
+                      {e.container && (
+                        <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {e.policyName ? (
+                        <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.function || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {e.nodeName || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <RelativeTime iso={e.time} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 54,
+        "oldLines": 8,
+        "newStart": 54,
+        "newLines": 9,
+        "lines": [
+          "     return true",
+          "   })",
+          " ",
+          "-  const warningCount = events.filter(e => e.severity === 'warning').length",
+          "-  const criticalCount = events.filter(e => e.severity === 'critical').length",
+          "+  const kprobeEvents = events.filter(e => e.type === 'kprobe')",
+          "+  const warningCount = kprobeEvents.filter(e => e.severity === 'warning').length",
+          "+  const criticalCount = kprobeEvents.filter(e => e.severity === 'critical').length",
+          " ",
+          "   return (",
+          "     <>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "      <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">{events.length} events · {profiles.length} pods</span>
+        </div>",
+    "new_string": "      <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">
+            {events.filter(e => e.type === 'exec').length} exec ·{' '}
+            {events.filter(e => e.type === 'kprobe').length} kprobe ·{' '}
+            {profiles.length} pods
+          </span>
+        </div>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "      <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">{events.length} events · {profiles.length} pods</span>
+        </div>",
+    "new_string": "      <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">
+            {events.filter(e => e.type === 'exec').length} exec ·{' '}
+            {events.filter(e => e.type === 'kprobe').length} kprobe ·{' '}
+            {profiles.length} pods
+          </span>
+        </div>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "oldString": "      <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">{events.length} events · {profiles.length} pods</span>
+        </div>",
+    "newString": "      <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">
+            {events.filter(e => e.type === 'exec').length} exec ·{' '}
+            {events.filter(e => e.type === 'kprobe').length} kprobe ·{' '}
+            {profiles.length} pods
+          </span>
+        </div>",
+    "originalFile": "import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import type { PolicyFormInput } from '../api/types'
+
+interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]
+  filePaths: string[]
+  netDests: string[]
+  eventCount: number
+  lastSeen: string
+}
+
+function buildProfiles(events: ReturnType<typeof useSecurityEvents>['events']): PodProfile[] {
+  const map = new Map<string, PodProfile>()
+
+  for (const e of events) {
+    if (!e.namespace && !e.pod) continue
+    const key = `${e.namespace}/${e.pod}`
+    if (!map.has(key)) {
+      map.set(key, {
+        namespace: e.namespace,
+        pod: e.pod,
+        binaries: [],
+        filePaths: [],
+        netDests: [],
+        eventCount: 0,
+        lastSeen: e.time,
+      })
+    }
+    const p = map.get(key)!
+    p.eventCount += e.count ?? 1
+    if (e.time > p.lastSeen) p.lastSeen = e.time
+
+    if (e.binary && !p.binaries.includes(e.binary)) p.binaries.push(e.binary)
+    if (e.filePath && !p.filePaths.includes(e.filePath)) p.filePaths.push(e.filePath)
+    if (e.netDest && !p.netDests.includes(e.netDest)) p.netDests.push(e.netDest)
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { events, connected } = useSecurityEvents()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const profiles = useMemo(() => buildProfiles(events), [events])
+
+  const namespaces = useMemo(
+    () => Array.from(new Set(profiles.map(p => p.namespace))).filter(Boolean).sort(),
+    [profiles]
+  )
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: PodProfile) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Observed behaviors from active monitoring policies.
+            Use them to generate new TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">{events.length} events · {profiles.length} pods</span>
+        </div>
+      </div>
+
+      {events.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <p className="max-w-sm text-center text-sm">
+            Create TracingPolicies in <strong>Monitoring</strong> mode to start observing
+            process, file, and network behaviors across your cluster.
+          </p>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Filters */}
+          <div className="mb-4 flex items-center gap-2">
+            <Select value={nsFilter} onValueChange={setNsFilter}>
+              <SelectTrigger className="h-9 w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Namespaces</SelectItem>
+                  {namespaces.map(ns => (
+                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <div className="relative">
+              <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search pod..."
+                value={podSearch}
+                onChange={e => setPodSearch(e.target.value)}
+                className="h-9 w-44 pl-8"
+              />
+            </div>
+            <span className="ml-auto text-sm text-muted-foreground">
+              {filtered.length} pod{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {/* Pod cards */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map(profile => (
+              <Card key={`${profile.namespace}/${profile.pod}`}>
+                <CardHeader className="border-b pb-3">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                  </div>
+                  <CardAction>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleCreatePolicy(profile)}
+                      disabled={profile.binaries.length === 0 && profile.filePaths.length === 0 && profile.netDests.length === 0}
+                    >
+                      Create Policy
+                    </Button>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="pt-3 text-xs">
+                  {/* Process */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-foreground">Process</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                    </div>
+                    {profile.binaries.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {profile.binaries.slice(0, 5).map(b => (
+                          <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                            {b.split('/').pop()}
+                          </span>
+                        ))}
+                        {profile.binaries.length > 5 && (
+                          <span className="text-muted-foreground">+{profile.binaries.length - 5} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* File */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-foreground">File</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                    </div>
+                    {profile.filePaths.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.filePaths.slice(0, 3).map(f => (
+                          <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                        ))}
+                        {profile.filePaths.length > 3 && (
+                          <span className="text-muted-foreground">+{profile.filePaths.length - 3} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* Network */}
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-foreground">Network</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                    </div>
+                    {profile.netDests.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.netDests.slice(0, 3).map(n => (
+                          <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                        ))}
+                        {profile.netDests.length > 3 && (
+                          <span className="text-muted-foreground">+{profile.netDests.length - 3} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t pt-2">
+                    <span className="text-muted-foreground">{profile.eventCount} events</span>
+                    <RelativeTime iso={profile.lastSeen} />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 107,
+        "oldLines": 7,
+        "newStart": 107,
+        "newLines": 11,
+        "lines": [
+          "         </div>",
+          "         <div className="flex items-center gap-1.5 text-sm">",
+          "           <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />",
+          "-          <span className="text-muted-foreground">{events.length} events · {profiles.length} pods</span>",
+          "+          <span className="text-muted-foreground">",
+          "+            {events.filter(e => e.type === 'exec').length} exec ·{' '}",
+          "+            {events.filter(e => e.type === 'kprobe').length} kprobe ·{' '}",
+          "+            {profiles.length} pods",
+          "+          </span>",
+          "         </div>",
+          "       </div>",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "      <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <p className="max-w-sm text-center text-sm">
+            Create TracingPolicies in <strong>Monitoring</strong> mode to start observing
+            process, file, and network behaviors across your cluster.
+          </p>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>",
+    "new_string": "      <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <div className="max-w-md text-center text-sm space-y-2">
+            <p>
+              <strong>Process behaviors</strong> are collected automatically from all pods
+              via Tetragon's base sensor — no policy needed. They will appear here as pods
+              execute processes.
+            </p>
+            <p>
+              <strong>File &amp; Network behaviors</strong> require a monitoring TracingPolicy
+              to be active for the target namespace.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "old_string": "      <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <p className="max-w-sm text-center text-sm">
+            Create TracingPolicies in <strong>Monitoring</strong> mode to start observing
+            process, file, and network behaviors across your cluster.
+          </p>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>",
+    "new_string": "      <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <div className="max-w-md text-center text-sm space-y-2">
+            <p>
+              <strong>Process behaviors</strong> are collected automatically from all pods
+              via Tetragon's base sensor — no policy needed. They will appear here as pods
+              execute processes.
+            </p>
+            <p>
+              <strong>File &amp; Network behaviors</strong> require a monitoring TracingPolicy
+              to be active for the target namespace.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/DiscoveryPage.tsx",
+    "oldString": "      <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <p className="max-w-sm text-center text-sm">
+            Create TracingPolicies in <strong>Monitoring</strong> mode to start observing
+            process, file, and network behaviors across your cluster.
+          </p>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>",
+    "newString": "      <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <div className="max-w-md text-center text-sm space-y-2">
+            <p>
+              <strong>Process behaviors</strong> are collected automatically from all pods
+              via Tetragon's base sensor — no policy needed. They will appear here as pods
+              execute processes.
+            </p>
+            <p>
+              <strong>File &amp; Network behaviors</strong> require a monitoring TracingPolicy
+              to be active for the target namespace.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>",
+    "originalFile": "import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IconSearch, IconShieldCheck } from '@tabler/icons-react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import type { PolicyFormInput } from '../api/types'
+
+interface PodProfile {
+  namespace: string
+  pod: string
+  binaries: string[]
+  filePaths: string[]
+  netDests: string[]
+  eventCount: number
+  lastSeen: string
+}
+
+function buildProfiles(events: ReturnType<typeof useSecurityEvents>['events']): PodProfile[] {
+  const map = new Map<string, PodProfile>()
+
+  for (const e of events) {
+    if (!e.namespace && !e.pod) continue
+    const key = `${e.namespace}/${e.pod}`
+    if (!map.has(key)) {
+      map.set(key, {
+        namespace: e.namespace,
+        pod: e.pod,
+        binaries: [],
+        filePaths: [],
+        netDests: [],
+        eventCount: 0,
+        lastSeen: e.time,
+      })
+    }
+    const p = map.get(key)!
+    p.eventCount += e.count ?? 1
+    if (e.time > p.lastSeen) p.lastSeen = e.time
+
+    if (e.binary && !p.binaries.includes(e.binary)) p.binaries.push(e.binary)
+    if (e.filePath && !p.filePaths.includes(e.filePath)) p.filePaths.push(e.filePath)
+    if (e.netDest && !p.netDests.includes(e.netDest)) p.netDests.push(e.netDest)
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => `${a.namespace}/${a.pod}`.localeCompare(`${b.namespace}/${b.pod}`)
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  const label = diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : `${Math.floor(diff / 3600)}h ago`
+  return <span className="text-xs text-muted-foreground">{label}</span>
+}
+
+export function DiscoveryPage() {
+  const { events, connected } = useSecurityEvents()
+  const navigate = useNavigate()
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+
+  const profiles = useMemo(() => buildProfiles(events), [events])
+
+  const namespaces = useMemo(
+    () => Array.from(new Set(profiles.map(p => p.namespace))).filter(Boolean).sort(),
+    [profiles]
+  )
+
+  const filtered = profiles.filter(p => {
+    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const handleCreatePolicy = (profile: PodProfile) => {
+    const prefill: PolicyFormInput = {
+      name: `${profile.pod}-policy`,
+      namespace: profile.namespace || 'default',
+      process: profile.binaries.map(b => ({ binaries: [b] })),
+      file: profile.filePaths.map(p => ({ paths: [p] })),
+      network: profile.netDests.map(a => ({ address: a })),
+      networkPorts: [],
+      networkMode: profile.netDests.length > 0 ? 'whitelist' : undefined,
+    }
+    navigate('/policies/tracing/new', { state: { prefill } })
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Behavior Discovery</h4>
+          <p className="text-sm text-muted-foreground">
+            Observed behaviors from active monitoring policies.
+            Use them to generate new TracingPolicies.
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className={`size-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span className="text-muted-foreground">
+            {events.filter(e => e.type === 'exec').length} exec ·{' '}
+            {events.filter(e => e.type === 'kprobe').length} kprobe ·{' '}
+            {profiles.length} pods
+          </span>
+        </div>
+      </div>
+
+      {events.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <IconShieldCheck size={48} strokeWidth={1.5} />
+          <p className="text-base font-medium">No behavior data yet</p>
+          <p className="max-w-sm text-center text-sm">
+            Create TracingPolicies in <strong>Monitoring</strong> mode to start observing
+            process, file, and network behaviors across your cluster.
+          </p>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>
+            Create a Monitoring Policy
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Filters */}
+          <div className="mb-4 flex items-center gap-2">
+            <Select value={nsFilter} onValueChange={setNsFilter}>
+              <SelectTrigger className="h-9 w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Namespaces</SelectItem>
+                  {namespaces.map(ns => (
+                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <div className="relative">
+              <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search pod..."
+                value={podSearch}
+                onChange={e => setPodSearch(e.target.value)}
+                className="h-9 w-44 pl-8"
+              />
+            </div>
+            <span className="ml-auto text-sm text-muted-foreground">
+              {filtered.length} pod{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {/* Pod cards */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map(profile => (
+              <Card key={`${profile.namespace}/${profile.pod}`}>
+                <CardHeader className="border-b pb-3">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">{profile.pod}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{profile.namespace}</p>
+                  </div>
+                  <CardAction>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleCreatePolicy(profile)}
+                      disabled={profile.binaries.length === 0 && profile.filePaths.length === 0 && profile.netDests.length === 0}
+                    >
+                      Create Policy
+                    </Button>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="pt-3 text-xs">
+                  {/* Process */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-foreground">Process</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.binaries.length}</Badge>
+                    </div>
+                    {profile.binaries.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {profile.binaries.slice(0, 5).map(b => (
+                          <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                            {b.split('/').pop()}
+                          </span>
+                        ))}
+                        {profile.binaries.length > 5 && (
+                          <span className="text-muted-foreground">+{profile.binaries.length - 5} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* File */}
+                  <div className="mb-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-foreground">File</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.filePaths.length}</Badge>
+                    </div>
+                    {profile.filePaths.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.filePaths.slice(0, 3).map(f => (
+                          <span key={f} className="truncate font-mono text-[10px] text-muted-foreground" title={f}>{f}</span>
+                        ))}
+                        {profile.filePaths.length > 3 && (
+                          <span className="text-muted-foreground">+{profile.filePaths.length - 3} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  {/* Network */}
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-foreground">Network</span>
+                      <Badge variant="secondary" className="text-[10px]">{profile.netDests.length}</Badge>
+                    </div>
+                    {profile.netDests.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {profile.netDests.slice(0, 3).map(n => (
+                          <span key={n} className="font-mono text-[10px] text-muted-foreground">{n}</span>
+                        ))}
+                        {profile.netDests.length > 3 && (
+                          <span className="text-muted-foreground">+{profile.netDests.length - 3} more</span>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t pt-2">
+                    <span className="text-muted-foreground">{profile.eventCount} events</span>
+                    <RelativeTime iso={profile.lastSeen} />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 119,
+        "oldLines": 10,
+        "newStart": 119,
+        "newLines": 17,
+        "lines": [
+          "         <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">",
+          "           <IconShieldCheck size={48} strokeWidth={1.5} />",
+          "           <p className="text-base font-medium">No behavior data yet</p>",
+          "-          <p className="max-w-sm text-center text-sm">",
+          "-            Create TracingPolicies in <strong>Monitoring</strong> mode to start observing",
+          "-            process, file, and network behaviors across your cluster.",
+          "-          </p>",
+          "+          <div className="max-w-md text-center text-sm space-y-2">",
+          "+            <p>",
+          "+              <strong>Process behaviors</strong> are collected automatically from all pods",
+          "+              via Tetragon's base sensor — no policy needed. They will appear here as pods",
+          "+              execute processes.",
+          "+            </p>",
+          "+            <p>",
+          "+              <strong>File &amp; Network behaviors</strong> require a monitoring TracingPolicy",
+          "+              to be active for the target namespace.",
+          "+            </p>",
+          "+          </div>",
+          "           <Button variant="outline" onClick={() => navigate('/policies/tracing/new')}>",
+          "             Create a Monitoring Policy",
+          "           </Button>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && echo "Go OK" && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "完整驗證"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && echo "Go OK" && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "完整驗證"
+  },
+  "tool_response": {
+    "stdout": "Go OK
+npm error errno -2
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/home/bigred/Sentinel/package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+npm error A complete log of this run can be found in: /home/bigred/.npm/_logs/2026-06-08T09_18_21_145Z-debug-0.log
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+npm error A complete log of this run can be found in: /home/bigred/.npm/_logs/2026-06-08T09_18_21_206Z-debug-0.log",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "在 web 目錄執行"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 60000,
+    "description": "在 web 目錄執行"
+  },
+  "tool_response": {
+    "stdout": " Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  17:18:26
+   Duration  488ms (transform 20ms, setup 35ms, import 18ms, tests 5ms, environment 353ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: stream process_exec events for base-sensor discovery (no policy required)"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+

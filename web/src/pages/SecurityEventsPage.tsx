@@ -47,14 +47,16 @@ export function SecurityEventsPage() {
   const [podSearch, setPodSearch] = useState('')
 
   const filtered = events.filter((e) => {
+    if (e.type !== 'kprobe') return false // only show policy-triggered events
     if (filter === 'warning' && e.severity !== 'warning') return false
     if (filter === 'critical' && e.severity !== 'critical') return false
     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
     return true
   })
 
-  const warningCount = events.filter(e => e.severity === 'warning').length
-  const criticalCount = events.filter(e => e.severity === 'critical').length
+  const kprobeEvents = events.filter(e => e.type === 'kprobe')
+  const warningCount = kprobeEvents.filter(e => e.severity === 'warning').length
+  const criticalCount = kprobeEvents.filter(e => e.severity === 'critical').length
 
   return (
     <>
