@@ -153008,3 +153008,2216 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: add whitelist/blacklist mode selector for Network Rules (NotDAddr vs DAddr)"",
+    "description": "提交"
+  },
+  "tool_response": {
+    "stdout": "[main 75f6c5b] feat: add whitelist/blacklist mode selector for Network Rules (NotDAddr vs DAddr)
+ 8 files changed, 2185 insertions(+), 23 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "75f6c5b",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Network Rules 的設定地方，我還要加可以限制 port 的功能"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "  network?: NetworkRule[]
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr",
+    "new_string": "  network?: NetworkRule[]
+  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "  network?: NetworkRule[]
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr",
+    "new_string": "  network?: NetworkRule[]
+  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "oldString": "  network?: NetworkRule[]
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr",
+    "newString": "  network?: NetworkRule[]
+  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr",
+    "originalFile": "export interface ProcessRule {
+  binaries: string[]
+}
+
+export interface FileRule {
+  paths: string[]
+}
+
+export interface NetworkRule {
+  address: string  // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
+}
+
+export interface PolicyFormInput {
+  name: string
+  namespace?: string
+  podSelector?: Record<string, string>
+  process?: ProcessRule[]
+  file?: FileRule[]
+  network?: NetworkRule[]
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr
+}
+
+export interface PolicyRecord {
+  name: string
+  namespace?: string
+  scope: 'cluster' | 'namespaced'
+  mode: 'Monitoring' | 'Protect' | 'Mixed'
+  createdAt: string
+  rawYaml: string
+}
+
+export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface TetragonEvent {
+  type: 'exec' | 'exit' | 'kprobe'
+  time: string
+  nodeName: string
+  namespace: string
+  pod: string
+  container: string
+  binary: string
+  arguments: string
+  parentBin: string
+  action: 'monitor' | 'kill' | ''
+  policyName: string
+  function: string
+}
+
+export interface CreatePolicyPayload {
+  source: 'form' | 'yaml'
+  form?: PolicyFormInput
+  action?: string
+  rawYaml?: string
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 17,
+        "oldLines": 6,
+        "newStart": 17,
+        "newLines": 7,
+        "lines": [
+          "   process?: ProcessRule[]",
+          "   file?: FileRule[]",
+          "   network?: NetworkRule[]",
+          "+  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)",
+          "   networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr",
+          " }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "  network: [],
+  networkMode: 'whitelist',",
+    "new_string": "  network: [],
+  networkPorts: [],
+  networkMode: 'whitelist',",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "old_string": "  network: [],
+  networkMode: 'whitelist',",
+    "new_string": "  network: [],
+  networkPorts: [],
+  networkMode: 'whitelist',",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyEditPage.tsx",
+    "oldString": "  network: [],
+  networkMode: 'whitelist',",
+    "newString": "  network: [],
+  networkPorts: [],
+  networkMode: 'whitelist',",
+    "originalFile": "import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { policyApi, namespaceApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { PolicyForm } from '../components/PolicyForm/PolicyForm'
+import { YamlEditor } from '../components/YamlEditor'
+import { formToYaml } from '../utils/formToYaml'
+import { yamlToForm } from '../utils/yamlToForm'
+import type { PolicyFormInput } from '../api/types'
+
+const EMPTY_FORM: PolicyFormInput = {
+  name: '',
+  namespace: 'default',
+  process: [],
+  file: [],
+  network: [],
+  networkMode: 'whitelist',
+}
+
+export function PolicyEditPage() {
+  const { name } = useParams<{ name: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const namespace = searchParams.get('namespace') || undefined
+  const isNew = !name
+
+  const [namespaces, setNamespaces] = useState<string[]>([])
+  const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
+  const [formValues, setFormValues] = useState<PolicyFormInput>(EMPTY_FORM)
+  const [yamlContent, setYamlContent] = useState('')
+  const [yamlEditorKey, setYamlEditorKey] = useState(0)
+  const [yamlValid, setYamlValid] = useState(true)
+  const [activeTab, setActiveTab] = useState('form')
+  const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(!isNew)
+
+  const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
+
+  useEffect(() => {
+    const work: Promise<void>[] = [namespaceApi.list().then(setNamespaces)]
+    if (!isNew && name) {
+      work.push(
+        policyApi.get(name, namespace).then((r) => {
+          setYamlContent(r.rawYaml)
+          setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          // Pre-populate form from existing policy YAML
+          const parsed = yamlToForm(r.rawYaml)
+          if (parsed) setFormValues(parsed)
+        })
+      )
+    }
+    Promise.all(work).finally(() => setPageLoading(false))
+  }, [name, namespace, isNew])
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      // Form → YAML: regenerate YAML from current form state
+      try {
+        const generated = formToYaml(formValues, action)
+        setYamlContent(generated)
+        setYamlValid(true)
+        setYamlEditorKey((k) => k + 1)
+      } catch {
+        setYamlEditorKey((k) => k + 1)
+      }
+    } else if (tab === 'form' && activeTab === 'yaml' && yamlValid) {
+      // YAML → Form: back-parse current YAML into form so Form-tab saves
+      // reflect the user's YAML edits rather than the stale pre-YAML form state.
+      const parsed = yamlToForm(yamlContent)
+      if (parsed) {
+        setFormValues(parsed)
+        if (parsed.namespace !== undefined) {
+          setPolicyMode(
+            yamlContent.toLowerCase().includes('sigkill') ? 'Protect' : 'Monitoring'
+          )
+        }
+      }
+    }
+    setActiveTab(tab)
+  }
+
+  const handleSave = async () => {
+    if (activeTab === 'form') {
+      if (!formValues.name.trim()) {
+        toast.error('Policy name is required')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'form' as const, form: formValues, action }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply policy')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!yamlValid) {
+        toast.error('Fix YAML errors before saving')
+        return
+      }
+      setLoading(true)
+      try {
+        const payload = { source: 'yaml' as const, rawYaml: yamlContent }
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload)
+        toast.success('Policy applied')
+        navigate('/policies/tracing')
+      } catch {
+        toast.error('Failed to apply YAML')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-lg font-semibold">
+            {isNew ? 'New Policy' : 'Edit Policy'}
+          </h4>
+          {!isNew && (
+            <p className="text-sm text-muted-foreground">{name}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Per-policy mode selector */}
+          <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground">Mode</Label>
+            <Select
+              value={policyMode}
+              onValueChange={(v) => setPolicyMode(v as 'Monitoring' | 'Protect')}
+            >
+              <SelectTrigger className="h-9 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="Monitoring">Monitoring</SelectItem>
+                  <SelectItem value="Protect">Protect</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
+          <TabsTrigger
+            value="form"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            Form
+          </TabsTrigger>
+          <TabsTrigger
+            value="yaml"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+          >
+            YAML
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <PolicyForm
+            namespaces={namespaces}
+            action={action}
+            value={formValues}
+            onChange={setFormValues}
+          />
+        </TabsContent>
+        <TabsContent value="yaml">
+          <YamlEditor
+            key={yamlEditorKey}
+            initialValue={yamlContent}
+            onValueChange={(v, valid) => {
+              setYamlContent(v)
+              setYamlValid(valid)
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 26,
+        "oldLines": 6,
+        "newStart": 26,
+        "newLines": 7,
+        "lines": [
+          "   process: [],",
+          "   file: [],",
+          "   network: [],",
+          "+  networkPorts: [],",
+          "   networkMode: 'whitelist',",
+          " }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />",
+    "new_string": "            {/* Address list */}
+            <p className="mb-1 text-xs font-medium text-foreground">Addresses</p>
+            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />
+
+            {/* Port list */}
+            <div className="mt-4">
+              <p className="mb-1 text-xs font-medium text-foreground">
+                Ports
+                <span className="ml-1 font-normal text-muted-foreground">
+                  (optional — leave empty to match all ports)
+                </span>
+              </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                DPort: rule triggers only when destination port matches.
+                ANDed with the address condition above.
+              </p>
+              <div className="flex flex-col gap-2">
+                {(value.networkPorts ?? []).map((port, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="e.g. 6379"
+                      value={port}
+                      onChange={(e) => {
+                        const next = [...(value.networkPorts ?? [])]
+                        next[i] = e.target.value
+                        onChange({ ...value, networkPorts: next })
+                      }}
+                      className="h-8 w-36 text-sm"
+                      type="number"
+                      min={1}
+                      max={65535}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        onChange({
+                          ...value,
+                          networkPorts: (value.networkPorts ?? []).filter((_, j) => j !== i),
+                        })
+                      }
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      onChange({ ...value, networkPorts: [...(value.networkPorts ?? []), ''] })
+                    }
+                  >
+                    + Add Port
+                  </Button>
+                </div>
+              </div>
+            </div>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "old_string": "            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />",
+    "new_string": "            {/* Address list */}
+            <p className="mb-1 text-xs font-medium text-foreground">Addresses</p>
+            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />
+
+            {/* Port list */}
+            <div className="mt-4">
+              <p className="mb-1 text-xs font-medium text-foreground">
+                Ports
+                <span className="ml-1 font-normal text-muted-foreground">
+                  (optional — leave empty to match all ports)
+                </span>
+              </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                DPort: rule triggers only when destination port matches.
+                ANDed with the address condition above.
+              </p>
+              <div className="flex flex-col gap-2">
+                {(value.networkPorts ?? []).map((port, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="e.g. 6379"
+                      value={port}
+                      onChange={(e) => {
+                        const next = [...(value.networkPorts ?? [])]
+                        next[i] = e.target.value
+                        onChange({ ...value, networkPorts: next })
+                      }}
+                      className="h-8 w-36 text-sm"
+                      type="number"
+                      min={1}
+                      max={65535}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        onChange({
+                          ...value,
+                          networkPorts: (value.networkPorts ?? []).filter((_, j) => j !== i),
+                        })
+                      }
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      onChange({ ...value, networkPorts: [...(value.networkPorts ?? []), ''] })
+                    }
+                  >
+                    + Add Port
+                  </Button>
+                </div>
+              </div>
+            </div>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/components/PolicyForm/PolicyForm.tsx",
+    "oldString": "            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />",
+    "newString": "            {/* Address list */}
+            <p className="mb-1 text-xs font-medium text-foreground">Addresses</p>
+            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />
+
+            {/* Port list */}
+            <div className="mt-4">
+              <p className="mb-1 text-xs font-medium text-foreground">
+                Ports
+                <span className="ml-1 font-normal text-muted-foreground">
+                  (optional — leave empty to match all ports)
+                </span>
+              </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                DPort: rule triggers only when destination port matches.
+                ANDed with the address condition above.
+              </p>
+              <div className="flex flex-col gap-2">
+                {(value.networkPorts ?? []).map((port, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="e.g. 6379"
+                      value={port}
+                      onChange={(e) => {
+                        const next = [...(value.networkPorts ?? [])]
+                        next[i] = e.target.value
+                        onChange({ ...value, networkPorts: next })
+                      }}
+                      className="h-8 w-36 text-sm"
+                      type="number"
+                      min={1}
+                      max={65535}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        onChange({
+                          ...value,
+                          networkPorts: (value.networkPorts ?? []).filter((_, j) => j !== i),
+                        })
+                      }
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      onChange({ ...value, networkPorts: [...(value.networkPorts ?? []), ''] })
+                    }
+                  >
+                    + Add Port
+                  </Button>
+                </div>
+              </div>
+            </div>",
+    "originalFile": "import { useEffect, useMemo, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ProcessSection } from './ProcessSection'
+import { FileSection } from './FileSection'
+import { NetworkSection } from './NetworkSection'
+import { formToYaml } from '../../utils/formToYaml'
+import type { PolicyFormInput, NetworkRule } from '../../api/types'
+
+type FileEntry = { path: string }
+type LabelEntry = { key: string; value: string }
+
+const CLUSTER_WIDE = '__cluster_wide__'
+
+interface Props {
+  namespaces: string[]
+  action: string
+  value: PolicyFormInput
+  onChange: (v: PolicyFormInput) => void
+}
+
+export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const yamlPreview = useMemo(() => {
+    if (!value.name) return ''
+    try {
+      return formToYaml(value, action)
+    } catch {
+      return ''
+    }
+  }, [value, action])
+
+  const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
+  const fileEntries: FileEntry[] =
+    value.file?.map((f) => ({ path: f.paths[0] ?? '' })) ?? []
+
+  // Use local state for label entries so empty keys don't get discarded while typing
+  const [localLabels, setLocalLabels] = useState<LabelEntry[]>(() =>
+    Object.entries(value.podSelector ?? {}).map(([k, v]) => ({ key: k, value: v }))
+  )
+
+  // Sync when parent loads a different policy (e.g., switching from edit to new)
+  useEffect(() => {
+    setLocalLabels(
+      Object.entries(value.podSelector ?? {}).map(([k, v]) => ({ key: k, value: v }))
+    )
+  // Sort keys before stringifying so that {b:2,a:1} and {a:1,b:2} produce
+  // identical strings and don't trigger unnecessary resets mid-input.
+  }, [JSON.stringify(Object.fromEntries(Object.entries(value.podSelector ?? {}).sort(([a], [b]) => a.localeCompare(b))))])
+
+  const setProcessBinaries = (binaries: string[]) =>
+    onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
+
+  const setFileEntries = (entries: FileEntry[]) =>
+    onChange({ ...value, file: entries.map((e) => ({ paths: [e.path] })) })
+
+  const setNetRules = (rules: NetworkRule[]) =>
+    onChange({ ...value, network: rules })
+
+
+  const syncLabelsToParent = (entries: LabelEntry[]) => {
+    setLocalLabels(entries)
+    const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
+      if (key.trim()) acc[key.trim()] = v.trim()
+      return acc
+    }, {})
+    onChange({
+      ...value,
+      podSelector: Object.keys(selector).length > 0 ? selector : undefined,
+    })
+  }
+
+  const addLabel = () => syncLabelsToParent([...localLabels, { key: '', value: '' }])
+  const removeLabel = (i: number) => syncLabelsToParent(localLabels.filter((_, j) => j !== i))
+  const updateLabel = (i: number, patch: Partial<LabelEntry>) => {
+    const next = [...localLabels]
+    next[i] = { ...next[i], ...patch }
+    syncLabelsToParent(next)
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      {/* Left: form cards */}
+      <div className="flex flex-col gap-4">
+
+        {/* Basic Info */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="policy-name">
+                  Policy Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="policy-name"
+                  placeholder="my-policy"
+                  value={value.name}
+                  onChange={(e) => onChange({ ...value, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Namespace</Label>
+                <Select
+                  value={value.namespace ?? CLUSTER_WIDE}
+                  onValueChange={(v) =>
+                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
+                      {namespaces.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pod Selector */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Pod Selector</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Target specific pods by label. Leave empty to apply to all pods in the namespace.
+            </p>
+            <div className="flex flex-col gap-2">
+              {localLabels.map((entry, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    placeholder="Key (e.g. app)"
+                    value={entry.key}
+                    onChange={(e) => updateLabel(i, { key: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">=</span>
+                  <Input
+                    placeholder="Value (e.g. nginx)"
+                    value={entry.value}
+                    onChange={(e) => updateLabel(i, { value: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeLabel(i)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button variant="outline" size="sm" onClick={addLabel}>
+                  + Add Label
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Process Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
+          </CardContent>
+        </Card>
+
+        {/* File Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <FileSection rules={fileEntries} onChange={setFileEntries} />
+          </CardContent>
+        </Card>
+
+        {/* Network Rules */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Network Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {/* Mode selector */}
+            <div className="mb-4 flex flex-col gap-1.5">
+              <Label className="text-xs">Mode</Label>
+              <Select
+                value={value.networkMode ?? 'whitelist'}
+                onValueChange={(v) =>
+                  onChange({ ...value, networkMode: v as 'whitelist' | 'blacklist' })
+                }
+              >
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="whitelist">
+                      NotDAddr — Whitelist
+                    </SelectItem>
+                    <SelectItem value="blacklist">
+                      DAddr — Blacklist
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {value.networkMode === 'blacklist'
+                  ? '🚫 DAddr (Blacklist): block connections to listed addresses, allow everything else.'
+                  : '✅ NotDAddr (Whitelist): allow connections only to listed addresses, block everything else.'}
+              </p>
+            </div>
+            <NetworkSection
+              rules={value.network ?? []}
+              onChange={setNetRules}
+            />
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* Right: YAML preview */}
+      <div className="sticky top-20 self-start">
+        <div className="overflow-hidden rounded-lg">
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
+          >
+            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
+              YAML Preview
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                color: yamlPreview ? '#4ec94e' : '#6c757d',
+                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
+              }}
+            >
+              {yamlPreview ? '✓ valid' : '—'}
+            </span>
+          </div>
+          <pre
+            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
+            style={{
+              margin: 0,
+              background: '#1e1e1e',
+              color: '#d4d4d4',
+              minHeight: 200,
+              maxHeight: 500,
+            }}
+          >
+            {yamlPreview || (
+              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
+            )}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 234,
+        "oldLines": 10,
+        "newStart": 234,
+        "newLines": 69,
+        "lines": [
+          "                   : '✅ NotDAddr (Whitelist): allow connections only to listed addresses, block everything else.'}",
+          "               </p>",
+          "             </div>",
+          "+            {/* Address list */}",
+          "+            <p className="mb-1 text-xs font-medium text-foreground">Addresses</p>",
+          "             <NetworkSection",
+          "               rules={value.network ?? []}",
+          "               onChange={setNetRules}",
+          "             />",
+          "+",
+          "+            {/* Port list */}",
+          "+            <div className="mt-4">",
+          "+              <p className="mb-1 text-xs font-medium text-foreground">",
+          "+                Ports",
+          "+                <span className="ml-1 font-normal text-muted-foreground">",
+          "+                  (optional — leave empty to match all ports)",
+          "+                </span>",
+          "+              </p>",
+          "+              <p className="mb-2 text-xs text-muted-foreground">",
+          "+                DPort: rule triggers only when destination port matches.",
+          "+                ANDed with the address condition above.",
+          "+              </p>",
+          "+              <div className="flex flex-col gap-2">",
+          "+                {(value.networkPorts ?? []).map((port, i) => (",
+          "+                  <div key={i} className="flex items-center gap-2">",
+          "+                    <Input",
+          "+                      placeholder="e.g. 6379"",
+          "+                      value={port}",
+          "+                      onChange={(e) => {",
+          "+                        const next = [...(value.networkPorts ?? [])]",
+          "+                        next[i] = e.target.value",
+          "+                        onChange({ ...value, networkPorts: next })",
+          "+                      }}",
+          "+                      className="h-8 w-36 text-sm"",
+          "+                      type="number"",
+          "+                      min={1}",
+          "+                      max={65535}",
+          "+                    />",
+          "+                    <Button",
+          "+                      variant="ghost"",
+          "+                      size="sm"",
+          "+                      onClick={() =>",
+          "+                        onChange({",
+          "+                          ...value,",
+          "+                          networkPorts: (value.networkPorts ?? []).filter((_, j) => j !== i),",
+          "+                        })",
+          "+                      }",
+          "+                      className="shrink-0 text-muted-foreground hover:text-destructive"",
+          "+                    >",
+          "+                      ✕",
+          "+                    </Button>",
+          "+                  </div>",
+          "+                ))}",
+          "+                <div>",
+          "+                  <Button",
+          "+                    variant="outline"",
+          "+                    size="sm"",
+          "+                    onClick={() =>",
+          "+                      onChange({ ...value, networkPorts: [...(value.networkPorts ?? []), ''] })",
+          "+                    }",
+          "+                  >",
+          "+                    + Add Port",
+          "+                  </Button>",
+          "+                </div>",
+          "+              </div>",
+          "+            </div>",
+          "           </CardContent>",
+          "         </Card>",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "old_string": "  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    doc.spec.kprobes.push({
+      call: 'tcp_connect',
+      syscall: false,
+      args: [{ index: 0, type: 'sock' }],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: netOperator, values: netAddresses }],
+        matchActions: [{ action }],
+      }],
+    })
+  }",
+    "new_string": "  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    const matchArgs: { index: number; operator: string; values: string[] }[] = [
+      { index: 0, operator: netOperator, values: netAddresses },
+    ]
+    const ports = (input.networkPorts ?? []).map((p) => p.trim()).filter(Boolean)
+    if (ports.length > 0) {
+      matchArgs.push({ index: 0, operator: 'DPort', values: ports })
+    }
+    doc.spec.kprobes.push({
+      call: 'tcp_connect',
+      syscall: false,
+      args: [{ index: 0, type: 'sock' }],
+      selectors: [{ matchArgs, matchActions: [{ action }] }],
+    })
+  }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "old_string": "  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    doc.spec.kprobes.push({
+      call: 'tcp_connect',
+      syscall: false,
+      args: [{ index: 0, type: 'sock' }],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: netOperator, values: netAddresses }],
+        matchActions: [{ action }],
+      }],
+    })
+  }",
+    "new_string": "  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    const matchArgs: { index: number; operator: string; values: string[] }[] = [
+      { index: 0, operator: netOperator, values: netAddresses },
+    ]
+    const ports = (input.networkPorts ?? []).map((p) => p.trim()).filter(Boolean)
+    if (ports.length > 0) {
+      matchArgs.push({ index: 0, operator: 'DPort', values: ports })
+    }
+    doc.spec.kprobes.push({
+      call: 'tcp_connect',
+      syscall: false,
+      args: [{ index: 0, type: 'sock' }],
+      selectors: [{ matchArgs, matchActions: [{ action }] }],
+    })
+  }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/formToYaml.ts",
+    "oldString": "  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    doc.spec.kprobes.push({
+      call: 'tcp_connect',
+      syscall: false,
+      args: [{ index: 0, type: 'sock' }],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: netOperator, values: netAddresses }],
+        matchActions: [{ action }],
+      }],
+    })
+  }",
+    "newString": "  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    const matchArgs: { index: number; operator: string; values: string[] }[] = [
+      { index: 0, operator: netOperator, values: netAddresses },
+    ]
+    const ports = (input.networkPorts ?? []).map((p) => p.trim()).filter(Boolean)
+    if (ports.length > 0) {
+      matchArgs.push({ index: 0, operator: 'DPort', values: ports })
+    }
+    doc.spec.kprobes.push({
+      call: 'tcp_connect',
+      syscall: false,
+      args: [{ index: 0, type: 'sock' }],
+      selectors: [{ matchArgs, matchActions: [{ action }] }],
+    })
+  }",
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+interface KProbeSpec {
+  call: string
+  syscall: boolean
+  args?: { index: number; type: string }[]
+  selectors: {
+    matchArgs?: { index: number; operator: string; values: string[] }[]
+    matchActions: { action: string }[]
+  }[]
+}
+
+interface TracingPolicyDoc {
+  apiVersion: string
+  kind: string
+  metadata: { name: string; namespace?: string }
+  spec: {
+    podSelector?: { matchLabels: Record<string, string> }
+    kprobes: KProbeSpec[]
+  }
+}
+
+export function formToYaml(input: PolicyFormInput, action: string): string {
+  const kind = input.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'
+
+  const doc: TracingPolicyDoc = {
+    apiVersion: 'cilium.io/v1alpha1',
+    kind,
+    metadata: { name: input.name, ...(input.namespace ? { namespace: input.namespace } : {}) },
+    spec: { kprobes: [] },
+  }
+
+  if (input.podSelector && Object.keys(input.podSelector).length > 0) {
+    doc.spec.podSelector = { matchLabels: input.podSelector }
+  }
+
+  // Process rules: ONE sys_execve kprobe with all values combined.
+  // Uses matchArgs + Postfix: "/cat" matches /bin/cat, /usr/bin/cat, etc.
+  // Multiple kprobes for the same function cause BPF link pin conflicts.
+  const allBinaries = (input.process ?? []).flatMap((r) => r.binaries).filter(Boolean)
+  if (allBinaries.length > 0) {
+    doc.spec.kprobes.push({
+      call: 'sys_execve',
+      syscall: true,
+      args: [{ index: 0, type: 'string' }],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: 'Postfix', values: allBinaries }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  // File rules: ONE security_file_permission kprobe with all paths combined.
+  const allPaths = (input.file ?? []).flatMap((r) => r.paths).filter(Boolean)
+  if (allPaths.length > 0) {
+    doc.spec.kprobes.push({
+      call: 'security_file_permission',
+      syscall: false,
+      args: [
+        { index: 0, type: 'file' },
+        { index: 1, type: 'int' },
+      ],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: 'Prefix', values: allPaths }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  // Network rules: ONE tcp_connect kprobe.
+  // networkMode 'whitelist' → NotDAddr (block connections NOT in list)
+  // networkMode 'blacklist' → DAddr    (block connections IN list)
+  const netAddresses = (input.network ?? []).map((r) => r.address.trim()).filter(Boolean)
+  if (netAddresses.length > 0) {
+    const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    doc.spec.kprobes.push({
+      call: 'tcp_connect',
+      syscall: false,
+      args: [{ index: 0, type: 'sock' }],
+      selectors: [{
+        matchArgs: [{ index: 0, operator: netOperator, values: netAddresses }],
+        matchActions: [{ action }],
+      }],
+    })
+  }
+
+  return yaml.dump(doc, { lineWidth: -1 })
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 74,
+        "oldLines": 14,
+        "newStart": 74,
+        "newLines": 18,
+        "lines": [
+          "   const netAddresses = (input.network ?? []).map((r) => r.address.trim()).filter(Boolean)",
+          "   if (netAddresses.length > 0) {",
+          "     const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'",
+          "+    const matchArgs: { index: number; operator: string; values: string[] }[] = [",
+          "+      { index: 0, operator: netOperator, values: netAddresses },",
+          "+    ]",
+          "+    const ports = (input.networkPorts ?? []).map((p) => p.trim()).filter(Boolean)",
+          "+    if (ports.length > 0) {",
+          "+      matchArgs.push({ index: 0, operator: 'DPort', values: ports })",
+          "+    }",
+          "     doc.spec.kprobes.push({",
+          "       call: 'tcp_connect',",
+          "       syscall: false,",
+          "       args: [{ index: 0, type: 'sock' }],",
+          "-      selectors: [{",
+          "-        matchArgs: [{ index: 0, operator: netOperator, values: netAddresses }],",
+          "-        matchActions: [{ action }],",
+          "-      }],",
+          "+      selectors: [{ matchArgs, matchActions: [{ action }] }],",
+          "     })",
+          "   }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "old_string": "    networkMode: 'whitelist',
+  }",
+    "new_string": "    networkMode: 'whitelist',
+    networkPorts: [],
+  }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "old_string": "    networkMode: 'whitelist',
+  }",
+    "new_string": "    networkMode: 'whitelist',
+    networkPorts: [],
+  }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "oldString": "    networkMode: 'whitelist',
+  }",
+    "newString": "    networkMode: 'whitelist',
+    networkPorts: [],
+  }",
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const matchLabels = doc.spec?.podSelector?.matchLabels
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
+      ? matchLabels as Record<string, string>
+      : undefined,
+    process: [],
+    file: [],
+    network: [],
+    networkMode: 'whitelist',
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    // Match sys_execve and any arch-prefixed variant (__x64_sys_execve, __arm64_sys_execve…)
+    if (call === 'sys_execve' || call.includes('sys_execve')) {
+      for (const sel of selectors) {
+        // Track whether matchArgs index:0 was already parsed to avoid
+        // double-counting when both matchArgs and matchBinaries are present.
+        let parsedFromMatchArgs = false
+
+        // Current format: matchArgs index:0 with Postfix operator
+        const matchArgsIdx0 = (sel.matchArgs ?? []).filter((a: any) => a.index === 0)
+        for (const ma of matchArgsIdx0) {
+          for (const bin of ma.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+          parsedFromMatchArgs = true
+        }
+
+        // Legacy format: matchBinaries — only parse if matchArgs index:0 was absent
+        if (!parsedFromMatchArgs) {
+          for (const mb of sel.matchBinaries ?? []) {
+            for (const bin of mb.values ?? []) {
+              if (bin) result.process!.push({ binaries: [bin] })
+            }
+          }
+        }
+      }
+
+    } else if (call === 'tcp_connect') {
+      // Detect operator to set networkMode, then extract addresses
+      for (const sel of selectors) {
+        const args: any[] = sel.matchArgs ?? []
+        const notDAddr = args.find((a: any) => a.operator === 'NotDAddr')
+        const dAddr    = args.find((a: any) => a.operator === 'DAddr')
+        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }
+      }
+
+    } else if (
+      call === 'security_file_permission' ||
+      call === 'sys_read' ||
+      call === 'sys_write' ||
+      call === 'sys_openat'
+    ) {
+      // All file-related kprobes: extract path values from matchArgs index 0
+      for (const sel of selectors) {
+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path] })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 28,
+        "oldLines": 6,
+        "newStart": 28,
+        "newLines": 7,
+        "lines": [
+          "     file: [],",
+          "     network: [],",
+          "     networkMode: 'whitelist',",
+          "+    networkPorts: [],",
+          "   }",
+          " ",
+          "   const kprobes: any[] = doc.spec?.kprobes ?? []"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "old_string": "        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }",
+    "new_string": "        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }
+        // Parse DPort entries into networkPorts
+        const dPort = args.find((a: any) => a.operator === 'DPort')
+        if (dPort) {
+          for (const port of dPort.values ?? []) {
+            if (port) result.networkPorts!.push(String(port))
+          }
+        }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "old_string": "        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }",
+    "new_string": "        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }
+        // Parse DPort entries into networkPorts
+        const dPort = args.find((a: any) => a.operator === 'DPort')
+        if (dPort) {
+          for (const port of dPort.values ?? []) {
+            if (port) result.networkPorts!.push(String(port))
+          }
+        }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/utils/yamlToForm.ts",
+    "oldString": "        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }",
+    "newString": "        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }
+        // Parse DPort entries into networkPorts
+        const dPort = args.find((a: any) => a.operator === 'DPort')
+        if (dPort) {
+          for (const port of dPort.values ?? []) {
+            if (port) result.networkPorts!.push(String(port))
+          }
+        }",
+    "originalFile": "import yaml from 'js-yaml'
+import type { PolicyFormInput } from '../api/types'
+
+/**
+ * Parses a TracingPolicy YAML string back into PolicyFormInput.
+ * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
+ */
+export function yamlToForm(rawYaml: string): PolicyFormInput | null {
+  if (!rawYaml.trim()) return null
+
+  let doc: any
+  try {
+    doc = yaml.load(rawYaml)
+  } catch {
+    return null
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
+
+  const matchLabels = doc.spec?.podSelector?.matchLabels
+  const result: PolicyFormInput = {
+    name: doc.metadata.name ?? '',
+    namespace: doc.metadata.namespace || undefined,
+    podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
+      ? matchLabels as Record<string, string>
+      : undefined,
+    process: [],
+    file: [],
+    network: [],
+    networkMode: 'whitelist',
+    networkPorts: [],
+  }
+
+  const kprobes: any[] = doc.spec?.kprobes ?? []
+
+  for (const kp of kprobes) {
+    const call: string = kp.call ?? ''
+    const selectors: any[] = kp.selectors ?? []
+
+    // Match sys_execve and any arch-prefixed variant (__x64_sys_execve, __arm64_sys_execve…)
+    if (call === 'sys_execve' || call.includes('sys_execve')) {
+      for (const sel of selectors) {
+        // Track whether matchArgs index:0 was already parsed to avoid
+        // double-counting when both matchArgs and matchBinaries are present.
+        let parsedFromMatchArgs = false
+
+        // Current format: matchArgs index:0 with Postfix operator
+        const matchArgsIdx0 = (sel.matchArgs ?? []).filter((a: any) => a.index === 0)
+        for (const ma of matchArgsIdx0) {
+          for (const bin of ma.values ?? []) {
+            if (bin) result.process!.push({ binaries: [bin] })
+          }
+          parsedFromMatchArgs = true
+        }
+
+        // Legacy format: matchBinaries — only parse if matchArgs index:0 was absent
+        if (!parsedFromMatchArgs) {
+          for (const mb of sel.matchBinaries ?? []) {
+            for (const bin of mb.values ?? []) {
+              if (bin) result.process!.push({ binaries: [bin] })
+            }
+          }
+        }
+      }
+
+    } else if (call === 'tcp_connect') {
+      // Detect operator to set networkMode, then extract addresses
+      for (const sel of selectors) {
+        const args: any[] = sel.matchArgs ?? []
+        const notDAddr = args.find((a: any) => a.operator === 'NotDAddr')
+        const dAddr    = args.find((a: any) => a.operator === 'DAddr')
+        if (notDAddr) {
+          result.networkMode = 'whitelist'
+          for (const addr of notDAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        } else if (dAddr) {
+          result.networkMode = 'blacklist'
+          for (const addr of dAddr.values ?? []) {
+            if (addr) result.network!.push({ address: addr })
+          }
+        }
+      }
+
+    } else if (
+      call === 'security_file_permission' ||
+      call === 'sys_read' ||
+      call === 'sys_write' ||
+      call === 'sys_openat'
+    ) {
+      // All file-related kprobes: extract path values from matchArgs index 0
+      for (const sel of selectors) {
+        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          for (const path of ma.values ?? []) {
+            if (path) result.file!.push({ paths: [path] })
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 80,
+        "oldLines": 6,
+        "newStart": 80,
+        "newLines": 13,
+        "lines": [
+          "             if (addr) result.network!.push({ address: addr })",
+          "           }",
+          "         }",
+          "+        // Parse DPort entries into networkPorts",
+          "+        const dPort = args.find((a: any) => a.operator === 'DPort')",
+          "+        if (dPort) {",
+          "+          for (const port of dPort.values ?? []) {",
+          "+            if (port) result.networkPorts!.push(String(port))",
+          "+          }",
+          "+        }",
+          "       }",
+          " ",
+          "     } else if ("
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/types.go",
+    "old_string": "	Network     []NetworkRule     `json:"network,omitempty"`
+	NetworkMode string            `json:"networkMode,omitempty"` // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+    "new_string": "	Network      []NetworkRule `json:"network,omitempty"`
+	NetworkPorts []string      `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule
+	NetworkMode  string        `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/types.go",
+    "old_string": "	Network     []NetworkRule     `json:"network,omitempty"`
+	NetworkMode string            `json:"networkMode,omitempty"` // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+    "new_string": "	Network      []NetworkRule `json:"network,omitempty"`
+	NetworkPorts []string      `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule
+	NetworkMode  string        `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/policy/types.go",
+    "oldString": "	Network     []NetworkRule     `json:"network,omitempty"`
+	NetworkMode string            `json:"networkMode,omitempty"` // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+    "newString": "	Network      []NetworkRule `json:"network,omitempty"`
+	NetworkPorts []string      `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule
+	NetworkMode  string        `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+    "originalFile": "package policy
+
+const (
+	ActionPost    = "Post"
+	ActionSigkill = "Sigkill"
+)
+
+// PolicyFormInput is the data submitted from the frontend form.
+type PolicyFormInput struct {
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace,omitempty"`
+	PodSelector map[string]string `json:"podSelector,omitempty"`
+	Process     []ProcessRule     `json:"process,omitempty"`
+	File        []FileRule        `json:"file,omitempty"`
+	Network     []NetworkRule     `json:"network,omitempty"`
+	NetworkMode string            `json:"networkMode,omitempty"` // "whitelist" (NotDAddr) or "blacklist" (DAddr)
+}
+
+type ProcessRule struct {
+	Binaries []string `json:"binaries"`
+}
+
+type FileRule struct {
+	Paths []string `json:"paths"`
+}
+
+type NetworkRule struct {
+	Address string `json:"address"` // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
+}
+
+// TracingPolicy is the Tetragon CRD object used for YAML serialisation.
+type TracingPolicy struct {
+	APIVersion string            `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string            `yaml:"kind"       json:"kind"`
+	Metadata   ObjectMeta        `yaml:"metadata"   json:"metadata"`
+	Spec       TracingPolicySpec `yaml:"spec"       json:"spec"`
+}
+
+type ObjectMeta struct {
+	Name      string `yaml:"name"                json:"name"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+}
+
+type TracingPolicySpec struct {
+	PodSelector *LabelSelector `yaml:"podSelector,omitempty" json:"podSelector,omitempty"`
+	KProbes     []KProbeSpec   `yaml:"kprobes,omitempty"     json:"kprobes,omitempty"`
+}
+
+type LabelSelector struct {
+	MatchLabels map[string]string `yaml:"matchLabels,omitempty" json:"matchLabels,omitempty"`
+}
+
+type KProbeSpec struct {
+	Call      string           `yaml:"call"                json:"call"`
+	Syscall   bool             `yaml:"syscall"             json:"syscall"`
+	Args      []KProbeArg      `yaml:"args,omitempty"      json:"args,omitempty"`
+	Selectors []KProbeSelector `yaml:"selectors,omitempty" json:"selectors,omitempty"`
+}
+
+type KProbeArg struct {
+	Index int    `yaml:"index" json:"index"`
+	Type  string `yaml:"type"  json:"type"`
+}
+
+type KProbeSelector struct {
+	MatchBinaries []BinarySelector `yaml:"matchBinaries,omitempty" json:"matchBinaries,omitempty"`
+	MatchArgs     []ArgSelector    `yaml:"matchArgs,omitempty"     json:"matchArgs,omitempty"`
+	MatchActions  []ActionSelector `yaml:"matchActions"            json:"matchActions"`
+}
+
+type BinarySelector struct {
+	Operator string   `yaml:"operator" json:"operator"`
+	Values   []string `yaml:"values"   json:"values"`
+}
+
+type ArgSelector struct {
+	Index    int      `yaml:"index"    json:"index"`
+	Operator string   `yaml:"operator" json:"operator"`
+	Values   []string `yaml:"values"   json:"values"`
+}
+
+type ActionSelector struct {
+	Action string `yaml:"action" json:"action"`
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 12,
+        "oldLines": 8,
+        "newStart": 12,
+        "newLines": 9,
+        "lines": [
+          "   PodSelector map[string]string `json:"podSelector,omitempty"`",
+          "   Process     []ProcessRule     `json:"process,omitempty"`",
+          "   File        []FileRule        `json:"file,omitempty"`",
+          "-  Network     []NetworkRule     `json:"network,omitempty"`",
+          "-  NetworkMode string            `json:"networkMode,omitempty"` // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+          "+  Network      []NetworkRule `json:"network,omitempty"`",
+          "+  NetworkPorts []string      `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule",
+          "+  NetworkMode  string        `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)",
+          " }",
+          " ",
+          " type ProcessRule struct {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "netOperator\\|netAddresses\\|matchArgs" /home/bigred/Sentinel/internal/policy/builder.go",
+    "description": "找到 builder.go 中的相關行"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "netOperator\\|netAddresses\\|matchArgs" /home/bigred/Sentinel/internal/policy/builder.go",
+    "description": "找到 builder.go 中的相關行"
+  },
+  "tool_response": {
+    "stdout": "27:	// matchArgs + Postfix: "/cat" matches /bin/cat, /usr/bin/cat, etc.
+70:	var netAddresses []string
+73:			netAddresses = append(netAddresses, addr)
+76:	if len(netAddresses) > 0 {
+77:		netOperator := "NotDAddr"
+79:			netOperator = "DAddr"
+86:				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/builder.go",
+    "offset": 76,
+    "limit": 15
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/builder.go",
+    "offset": 76,
+    "limit": 15
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/policy/builder.go",
+      "content": "	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}",
+      "numLines": 15,
+      "startLine": 76,
+      "totalLines": 94
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/builder.go",
+    "old_string": "	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}",
+    "new_string": "	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		netMatchArgs := []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}}
+		var ports []string
+		for _, p := range input.NetworkPorts {
+			if t := strings.TrimSpace(p); t != "" {
+				ports = append(ports, t)
+			}
+		}
+		if len(ports) > 0 {
+			netMatchArgs = append(netMatchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    netMatchArgs,
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/policy/builder.go",
+    "old_string": "	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}",
+    "new_string": "	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		netMatchArgs := []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}}
+		var ports []string
+		for _, p := range input.NetworkPorts {
+			if t := strings.TrimSpace(p); t != "" {
+				ports = append(ports, t)
+			}
+		}
+		if len(ports) > 0 {
+			netMatchArgs = append(netMatchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    netMatchArgs,
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/policy/builder.go",
+    "oldString": "	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}",
+    "newString": "	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		netMatchArgs := []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}}
+		var ports []string
+		for _, p := range input.NetworkPorts {
+			if t := strings.TrimSpace(p); t != "" {
+				ports = append(ports, t)
+			}
+		}
+		if len(ports) > 0 {
+			netMatchArgs = append(netMatchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    netMatchArgs,
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}",
+    "originalFile": "package policy
+
+import "strings"
+
+// Build converts PolicyFormInput into a TracingPolicy CRD object.
+// action must be ActionPost ("Post") or ActionSigkill ("Sigkill").
+func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
+	kind := "TracingPolicy"
+	if input.Namespace != "" {
+		kind = "TracingPolicyNamespaced"
+	}
+
+	tp := TracingPolicy{
+		APIVersion: "cilium.io/v1alpha1",
+		Kind:       kind,
+		Metadata: ObjectMeta{
+			Name:      input.Name,
+			Namespace: input.Namespace,
+		},
+	}
+
+	if len(input.PodSelector) > 0 {
+		tp.Spec.PodSelector = &LabelSelector{MatchLabels: input.PodSelector}
+	}
+
+	// Process rules: ONE sys_execve kprobe with all values combined.
+	// matchArgs + Postfix: "/cat" matches /bin/cat, /usr/bin/cat, etc.
+	// Multiple kprobes for the same function cause BPF link pin conflicts.
+	var allBinaries []string
+	for _, r := range input.Process {
+		allBinaries = append(allBinaries, r.Binaries...)
+	}
+	if len(allBinaries) > 0 {
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "sys_execve",
+			Syscall: true,
+			Args:    []KProbeArg{{Index: 0, Type: "string"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Postfix", Values: allBinaries}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}
+
+	// File rules: ONE security_file_permission kprobe with all paths combined.
+	// sys_read/sys_write/sys_openat work on file descriptors and cannot filter
+	// by path. security_file_permission receives the file object directly.
+	var allPaths []string
+	for _, r := range input.File {
+		allPaths = append(allPaths, r.Paths...)
+	}
+	if len(allPaths) > 0 {
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "security_file_permission",
+			Syscall: false,
+			Args: []KProbeArg{
+				{Index: 0, Type: "file"},
+				{Index: 1, Type: "int"},
+			},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: allPaths}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}
+
+	// Network rules: ONE tcp_connect kprobe.
+	// NetworkMode "blacklist" → DAddr    (block connections IN list)
+	// NetworkMode "whitelist" → NotDAddr (block connections NOT in list) — default
+	var netAddresses []string
+	for _, r := range input.Network {
+		if addr := strings.TrimSpace(r.Address); addr != "" {
+			netAddresses = append(netAddresses, addr)
+		}
+	}
+	if len(netAddresses) > 0 {
+		netOperator := "NotDAddr"
+		if input.NetworkMode == "blacklist" {
+			netOperator = "DAddr"
+		}
+		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
+			Call:    "tcp_connect",
+			Syscall: false,
+			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
+			Selectors: []KProbeSelector{{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}},
+		})
+	}
+
+	return tp, nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 78,
+        "oldLines": 12,
+        "newStart": 78,
+        "newLines": 22,
+        "lines": [
+          "     if input.NetworkMode == "blacklist" {",
+          "       netOperator = "DAddr"",
+          "     }",
+          "+    netMatchArgs := []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}}",
+          "+    var ports []string",
+          "+    for _, p := range input.NetworkPorts {",
+          "+      if t := strings.TrimSpace(p); t != "" {",
+          "+        ports = append(ports, t)",
+          "+      }",
+          "+    }",
+          "+    if len(ports) > 0 {",
+          "+      netMatchArgs = append(netMatchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})",
+          "+    }",
+          "     tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{",
+          "       Call:    "tcp_connect",",
+          "       Syscall: false,",
+          "       Args:    []KProbeArg{{Index: 0, Type: "sock"}},",
+          "       Selectors: []KProbeSelector{{",
+          "-        MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},",
+          "+        MatchArgs:    netMatchArgs,",
+          "         MatchActions: []ActionSelector{{Action: action}},",
+          "       }},",
+          "     })"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && go test ./... 2>&1 | tail -4 && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "完整驗證"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... && go test ./... 2>&1 | tail -4 && npx tsc --noEmit --skipLibCheck 2>&1 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3",
+    "timeout": 120000,
+    "description": "完整驗證"
+  },
+  "tool_response": {
+    "stdout": "?   	github.com/cooloo9871/sentinel/web	[no test files]
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  15:42:53
+   Duration  487ms (transform 21ms, setup 36ms, import 17ms, tests 4ms, environment 356ms)
+
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "feat: add port restriction (DPort) to Network Rules, ANDed with address condition"",
+    "description": "提交"
+  }
+}
+
+----------------------------------------
+

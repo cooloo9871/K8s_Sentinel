@@ -12,8 +12,9 @@ type PolicyFormInput struct {
 	PodSelector map[string]string `json:"podSelector,omitempty"`
 	Process     []ProcessRule     `json:"process,omitempty"`
 	File        []FileRule        `json:"file,omitempty"`
-	Network     []NetworkRule     `json:"network,omitempty"`
-	NetworkMode string            `json:"networkMode,omitempty"` // "whitelist" (NotDAddr) or "blacklist" (DAddr)
+	Network      []NetworkRule `json:"network,omitempty"`
+	NetworkPorts []string      `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule
+	NetworkMode  string        `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)
 }
 
 type ProcessRule struct {

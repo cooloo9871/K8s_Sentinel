@@ -17,6 +17,7 @@ export interface PolicyFormInput {
   process?: ProcessRule[]
   file?: FileRule[]
   network?: NetworkRule[]
+  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
   networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr
 }
 

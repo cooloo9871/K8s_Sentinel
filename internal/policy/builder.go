@@ -78,12 +78,22 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		if input.NetworkMode == "blacklist" {
 			netOperator = "DAddr"
 		}
+		netMatchArgs := []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}}
+		var ports []string
+		for _, p := range input.NetworkPorts {
+			if t := strings.TrimSpace(p); t != "" {
+				ports = append(ports, t)
+			}
+		}
+		if len(ports) > 0 {
+			netMatchArgs = append(netMatchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
+		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:    "tcp_connect",
 			Syscall: false,
 			Args:    []KProbeArg{{Index: 0, Type: "sock"}},
 			Selectors: []KProbeSelector{{
-				MatchArgs:    []ArgSelector{{Index: 0, Operator: netOperator, Values: netAddresses}},
+				MatchArgs:    netMatchArgs,
 				MatchActions: []ActionSelector{{Action: action}},
 			}},
 		})

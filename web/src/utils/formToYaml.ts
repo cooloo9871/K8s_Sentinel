@@ -74,14 +74,18 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
   const netAddresses = (input.network ?? []).map((r) => r.address.trim()).filter(Boolean)
   if (netAddresses.length > 0) {
     const netOperator = input.networkMode === 'blacklist' ? 'DAddr' : 'NotDAddr'
+    const matchArgs: { index: number; operator: string; values: string[] }[] = [
+      { index: 0, operator: netOperator, values: netAddresses },
+    ]
+    const ports = (input.networkPorts ?? []).map((p) => p.trim()).filter(Boolean)
+    if (ports.length > 0) {
+      matchArgs.push({ index: 0, operator: 'DPort', values: ports })
+    }
     doc.spec.kprobes.push({
       call: 'tcp_connect',
       syscall: false,
       args: [{ index: 0, type: 'sock' }],
-      selectors: [{
-        matchArgs: [{ index: 0, operator: netOperator, values: netAddresses }],
-        matchActions: [{ action }],
-      }],
+      selectors: [{ matchArgs, matchActions: [{ action }] }],
     })
   }
 

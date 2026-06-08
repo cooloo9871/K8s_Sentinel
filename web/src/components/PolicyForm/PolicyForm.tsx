@@ -234,10 +234,69 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                   : '✅ NotDAddr (Whitelist): allow connections only to listed addresses, block everything else.'}
               </p>
             </div>
+            {/* Address list */}
+            <p className="mb-1 text-xs font-medium text-foreground">Addresses</p>
             <NetworkSection
               rules={value.network ?? []}
               onChange={setNetRules}
             />
+
+            {/* Port list */}
+            <div className="mt-4">
+              <p className="mb-1 text-xs font-medium text-foreground">
+                Ports
+                <span className="ml-1 font-normal text-muted-foreground">
+                  (optional — leave empty to match all ports)
+                </span>
+              </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                DPort: rule triggers only when destination port matches.
+                ANDed with the address condition above.
+              </p>
+              <div className="flex flex-col gap-2">
+                {(value.networkPorts ?? []).map((port, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="e.g. 6379"
+                      value={port}
+                      onChange={(e) => {
+                        const next = [...(value.networkPorts ?? [])]
+                        next[i] = e.target.value
+                        onChange({ ...value, networkPorts: next })
+                      }}
+                      className="h-8 w-36 text-sm"
+                      type="number"
+                      min={1}
+                      max={65535}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        onChange({
+                          ...value,
+                          networkPorts: (value.networkPorts ?? []).filter((_, j) => j !== i),
+                        })
+                      }
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      onChange({ ...value, networkPorts: [...(value.networkPorts ?? []), ''] })
+                    }
+                  >
+                    + Add Port
+                  </Button>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

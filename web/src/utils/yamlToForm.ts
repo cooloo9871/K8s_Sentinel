@@ -28,6 +28,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     file: [],
     network: [],
     networkMode: 'whitelist',
+    networkPorts: [],
   }
 
   const kprobes: any[] = doc.spec?.kprobes ?? []
@@ -77,6 +78,13 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
           result.networkMode = 'blacklist'
           for (const addr of dAddr.values ?? []) {
             if (addr) result.network!.push({ address: addr })
+          }
+        }
+        // Parse DPort entries into networkPorts
+        const dPort = args.find((a: any) => a.operator === 'DPort')
+        if (dPort) {
+          for (const port of dPort.values ?? []) {
+            if (port) result.networkPorts!.push(String(port))
           }
         }
       }
