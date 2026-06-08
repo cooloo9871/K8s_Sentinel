@@ -362,10 +362,13 @@ func detectMode(rawYAML string) string {
 	for _, kp := range tp.Spec.KProbes {
 		for _, sel := range kp.Selectors {
 			for _, act := range sel.MatchActions {
-				if act.Action == policy.ActionSigkill {
+				switch act.Action {
+				case policy.ActionSigkill:
 					kill++
-				} else {
+				case policy.ActionPost:
 					post++
+				// Unknown actions are intentionally ignored — they don't
+				// contribute to either counter, matching GetMode's behaviour.
 				}
 			}
 		}

@@ -15,7 +15,15 @@ export interface DisplayEvent extends TetragonEvent {
 function loadFromStorage(): DisplayEvent[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as DisplayEvent[]
+    if (raw) {
+      const data = JSON.parse(raw) as any[]
+      // Backfill fields added after initial storage schema (count, severity)
+      return data.map((e) => ({
+        ...e,
+        count: e.count ?? 1,
+        severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+      })) as DisplayEvent[]
+    }
   } catch {}
   return []
 }

@@ -52,7 +52,9 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
     setLocalLabels(
       Object.entries(value.podSelector ?? {}).map(([k, v]) => ({ key: k, value: v }))
     )
-  }, [JSON.stringify(value.podSelector)])
+  // Sort keys before stringifying so that {b:2,a:1} and {a:1,b:2} produce
+  // identical strings and don't trigger unnecessary resets mid-input.
+  }, [JSON.stringify(Object.fromEntries(Object.entries(value.podSelector ?? {}).sort(([a], [b]) => a.localeCompare(b))))])
 
   const setProcessBinaries = (binaries: string[]) =>
     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })

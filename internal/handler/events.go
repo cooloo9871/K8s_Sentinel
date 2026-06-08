@@ -55,7 +55,18 @@ func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
 
 			case evt, ok := <-events:
 				if !ok {
-					return // goroutine finished — clean exit
+					// Drain errCh before exiting: the goroutine sends the error
+					// then defers close(events), so both may be ready simultaneously.
+					// Go's select is non-deterministic — drain ensures the error
+					// is not silently dropped when events closes first.
+					select {
+					case msg := <-errCh:
+						data, _ := json.Marshal(map[string]string{"error": msg})
+						fmt.Fprintf(w, "event: stream-error\ndata: %s\n\n", data)
+						flusher.Flush()
+					default:
+					}
+					return
 				}
 				data, err := json.Marshal(evt)
 				if err != nil {

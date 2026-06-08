@@ -65,6 +65,7 @@ export function PolicyEditPage() {
 
   const handleTabChange = (tab: string) => {
     if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {
+      // Form → YAML: regenerate YAML from current form state
       try {
         const generated = formToYaml(formValues, action)
         setYamlContent(generated)
@@ -72,6 +73,18 @@ export function PolicyEditPage() {
         setYamlEditorKey((k) => k + 1)
       } catch {
         setYamlEditorKey((k) => k + 1)
+      }
+    } else if (tab === 'form' && activeTab === 'yaml' && yamlValid) {
+      // YAML → Form: back-parse current YAML into form so Form-tab saves
+      // reflect the user's YAML edits rather than the stale pre-YAML form state.
+      const parsed = yamlToForm(yamlContent)
+      if (parsed) {
+        setFormValues(parsed)
+        if (parsed.namespace !== undefined) {
+          setPolicyMode(
+            yamlContent.toLowerCase().includes('sigkill') ? 'Protect' : 'Monitoring'
+          )
+        }
       }
     }
     setActiveTab(tab)

@@ -34,18 +34,28 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     const call: string = kp.call ?? ''
     const selectors: any[] = kp.selectors ?? []
 
-    if (call === 'sys_execve') {
+    // Match sys_execve and any arch-prefixed variant (__x64_sys_execve, __arm64_sys_execve…)
+    if (call === 'sys_execve' || call.includes('sys_execve')) {
       for (const sel of selectors) {
-        // New format: matchArgs index:0 with Postfix operator
-        for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+        // Track whether matchArgs index:0 was already parsed to avoid
+        // double-counting when both matchArgs and matchBinaries are present.
+        let parsedFromMatchArgs = false
+
+        // Current format: matchArgs index:0 with Postfix operator
+        const matchArgsIdx0 = (sel.matchArgs ?? []).filter((a: any) => a.index === 0)
+        for (const ma of matchArgsIdx0) {
           for (const bin of ma.values ?? []) {
             if (bin) result.process!.push({ binaries: [bin] })
           }
+          parsedFromMatchArgs = true
         }
-        // Legacy format: matchBinaries (backward compat)
-        for (const mb of sel.matchBinaries ?? []) {
-          for (const bin of mb.values ?? []) {
-            if (bin) result.process!.push({ binaries: [bin] })
+
+        // Legacy format: matchBinaries — only parse if matchArgs index:0 was absent
+        if (!parsedFromMatchArgs) {
+          for (const mb of sel.matchBinaries ?? []) {
+            for (const bin of mb.values ?? []) {
+              if (bin) result.process!.push({ binaries: [bin] })
+            }
           }
         }
       }
