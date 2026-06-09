@@ -113,15 +113,17 @@ var podUIDRe = regexp.MustCompile(`pod([a-f0-9]{8}[-_][a-f0-9]{4}[-_][a-f0-9]{4}
 // scanNodeProcesses execs once into a Tetragon pod and reads the host /proc
 // to enumerate all container processes on that node.
 //
+// Uses /proc/<pid>/cmdline (argv[0]) instead of readlink exe — cmdline is
+// read directly from kernel memory and is unaffected by mount namespace
+// differences, so it works even when exe would return "(deleted)" paths.
 // The script outputs tab-separated lines: <binary>\t<cgroup-line>
-// A Tetragon pod has hostPID:true so /proc lists every process on the host.
 func (s *Store) scanNodeProcesses(ctx context.Context, tetragonPodName string, uidMap map[string][2]string) {
 	const script = `for pid in /proc/[0-9]*/; do
-  exe=$(readlink "${pid}exe" 2>/dev/null) || continue
-  [ -z "$exe" ] && continue
-  echo "$exe" | grep -q " (deleted)" && continue
-  cg=$(head -1 "${pid}cgroup" 2>/dev/null) || continue
-  printf '%s\t%s\n' "$exe" "$cg"
+  cmd=$(tr '\0' '\n' < "${pid}cmdline" 2>/dev/null | head -1) || continue
+  [ -z "$cmd" ] && continue
+  cg=$(grep pod "${pid}cgroup" 2>/dev/null | head -1) || continue
+  [ -z "$cg" ] && continue
+  printf '%s\t%s\n' "$cmd" "$cg"
 done`
 
 	req := s.typed.CoreV1().RESTClient().Post().
@@ -146,11 +148,16 @@ done`
 	scanCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	var buf bytes.Buffer
-	_ = executor.StreamWithContext(scanCtx, remotecommand.StreamOptions{Stdout: &buf})
+	var stdout, stderr bytes.Buffer
+	_ = executor.StreamWithContext(scanCtx, remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr})
+
+	if stderr.Len() > 0 {
+		fmt.Printf("[sentinel-discovery] scan %s stderr: %s\n", tetragonPodName, strings.TrimSpace(stderr.String()))
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	for _, line := range strings.Split(buf.String(), "\n") {
+	found := 0
+	for _, line := range strings.Split(stdout.String(), "\n") {
 		parts := strings.SplitN(line, "\t", 2)
 		if len(parts) != 2 {
 			continue
@@ -180,5 +187,7 @@ done`
 			Binary:    binary,
 			Time:      now,
 		})
+		found++
 	}
+	fmt.Printf("[sentinel-discovery] scan %s: found %d processes\n", tetragonPodName, found)
 }
