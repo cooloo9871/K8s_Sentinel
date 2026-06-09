@@ -23,7 +23,9 @@ import type { PolicyFormInput } from '../api/types'
 const EMPTY_FORM: PolicyFormInput = {
   name: '',
   namespace: 'default',
+  processMode: 'whitelist',
   process: [],
+  fileMode: 'whitelist',
   file: [],
   network: [],
   networkPorts: [],

@@ -24,19 +24,23 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 	}
 
 	// Process rules: ONE sys_execve kprobe with all values combined.
-	// matchArgs + Postfix: "/cat" matches /bin/cat, /usr/bin/cat, etc.
-	// Multiple kprobes for the same function cause BPF link pin conflicts.
+	// Whitelist (default): NotPostfix — kill anything whose path does NOT end with a listed suffix.
+	// Blacklist: Postfix — kill anything whose path ends with a listed suffix.
 	var allBinaries []string
 	for _, r := range input.Process {
 		allBinaries = append(allBinaries, r.Binaries...)
 	}
 	if len(allBinaries) > 0 {
+		processOp := "NotPostfix"
+		if input.ProcessMode == "blacklist" {
+			processOp = "Postfix"
+		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:    "sys_execve",
 			Syscall: true,
 			Args:    []KProbeArg{{Index: 0, Type: "string"}},
 			Selectors: []KProbeSelector{{
-				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Postfix", Values: allBinaries}},
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: processOp, Values: allBinaries}},
 				MatchActions: []ActionSelector{{Action: action}},
 			}},
 		})
@@ -48,12 +52,16 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		allPaths = append(allPaths, r.Paths...)
 	}
 	if len(allPaths) > 0 {
+		fileOp := "NotPrefix"
+		if input.FileMode == "blacklist" {
+			fileOp = "Prefix"
+		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:    "security_file_permission",
 			Syscall: false,
 			Args:    []KProbeArg{{Index: 0, Type: "file"}, {Index: 1, Type: "int"}},
 			Selectors: []KProbeSelector{{
-				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: allPaths}},
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: fileOp, Values: allPaths}},
 				MatchActions: []ActionSelector{{Action: action}},
 			}},
 		})

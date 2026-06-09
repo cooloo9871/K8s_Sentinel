@@ -183,6 +183,28 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <CardTitle className="text-sm font-medium">Process Rules</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
+            <div className="mb-4 flex flex-col gap-1.5">
+              <Label className="text-xs">Mode</Label>
+              <Select
+                value={value.processMode ?? 'whitelist'}
+                onValueChange={(v) => onChange({ ...value, processMode: v as 'whitelist' | 'blacklist' })}
+              >
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="whitelist">Whitelist — 只允許列出的 binary 執行</SelectItem>
+                    <SelectItem value="blacklist">Blacklist — 封鎖列出的 binary 執行</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {(value.processMode ?? 'whitelist') === 'whitelist'
+                  ? '✅ NotPostfix：沒有填入的 binary 一律封鎖（白名單）'
+                  : '🚫 Postfix：只封鎖列出的 binary（黑名單）'}
+              </p>
+            </div>
             <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
           </CardContent>
         </Card>
@@ -193,6 +215,28 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <CardTitle className="text-sm font-medium">File Rules</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
+            <div className="mb-4 flex flex-col gap-1.5">
+              <Label className="text-xs">Mode</Label>
+              <Select
+                value={value.fileMode ?? 'whitelist'}
+                onValueChange={(v) => onChange({ ...value, fileMode: v as 'whitelist' | 'blacklist' })}
+              >
+                <SelectTrigger className="h-8 w-64 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="whitelist">Whitelist — 只允許存取列出的路徑</SelectItem>
+                    <SelectItem value="blacklist">Blacklist — 封鎖列出的路徑</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {(value.fileMode ?? 'whitelist') === 'whitelist'
+                  ? '✅ NotPrefix：沒有填入的路徑一律封鎖（白名單）'
+                  : '🚫 Prefix：只封鎖列出的路徑（黑名單）'}
+              </p>
+            </div>
             <FileSection rules={fileRules} onChange={setFileRules} />
           </CardContent>
         </Card>

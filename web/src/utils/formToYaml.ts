@@ -38,30 +38,34 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
   }
 
   // Process rules: ONE sys_execve kprobe with all values combined.
-  // Uses matchArgs + Postfix: "/cat" matches /bin/cat, /usr/bin/cat, etc.
-  // Multiple kprobes for the same function cause BPF link pin conflicts.
+  // Whitelist (default): NotPostfix — kill anything NOT ending with a listed suffix.
+  // Blacklist: Postfix — kill anything ending with a listed suffix.
   const allBinaries = (input.process ?? []).flatMap((r) => r.binaries).filter(Boolean)
   if (allBinaries.length > 0) {
+    const processOp = input.processMode === 'blacklist' ? 'Postfix' : 'NotPostfix'
     doc.spec.kprobes.push({
       call: 'sys_execve',
       syscall: true,
       args: [{ index: 0, type: 'string' }],
       selectors: [{
-        matchArgs: [{ index: 0, operator: 'Postfix', values: allBinaries }],
+        matchArgs: [{ index: 0, operator: processOp, values: allBinaries }],
         matchActions: [{ action }],
       }],
     })
   }
 
   // File rules: ONE security_file_permission kprobe with all paths combined.
+  // Whitelist (default): NotPrefix — kill file accesses NOT matching a listed prefix.
+  // Blacklist: Prefix — kill file accesses matching a listed prefix.
   const allPaths = (input.file ?? []).flatMap(r => r.paths).filter(Boolean)
   if (allPaths.length > 0) {
+    const fileOp = input.fileMode === 'blacklist' ? 'Prefix' : 'NotPrefix'
     doc.spec.kprobes.push({
       call: 'security_file_permission',
       syscall: false,
       args: [{ index: 0, type: 'file' }, { index: 1, type: 'int' }],
       selectors: [{
-        matchArgs: [{ index: 0, operator: 'Prefix', values: allPaths }],
+        matchArgs: [{ index: 0, operator: fileOp, values: allPaths }],
         matchActions: [{ action }],
       }],
     })

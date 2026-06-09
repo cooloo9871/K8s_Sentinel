@@ -14,7 +14,9 @@ export interface PolicyFormInput {
   name: string
   namespace?: string
   podSelector?: Record<string, string>
+  processMode?: 'whitelist' | 'blacklist'  // whitelist = NotPostfix (default), blacklist = Postfix
   process?: ProcessRule[]
+  fileMode?: 'whitelist' | 'blacklist'     // whitelist = NotPrefix (default), blacklist = Prefix
   file?: FileRule[]
   network?: NetworkRule[]
   networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)

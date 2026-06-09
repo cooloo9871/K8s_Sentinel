@@ -24,7 +24,9 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
       ? matchLabels as Record<string, string>
       : undefined,
+    processMode: 'whitelist',
     process: [],
+    fileMode: 'whitelist',
     file: [],
     network: [],
     networkMode: 'whitelist',
@@ -44,9 +46,11 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
         // double-counting when both matchArgs and matchBinaries are present.
         let parsedFromMatchArgs = false
 
-        // Current format: matchArgs index:0 with Postfix operator
+        // Current format: matchArgs index:0 with Postfix or NotPostfix operator
         const matchArgsIdx0 = (sel.matchArgs ?? []).filter((a: any) => a.index === 0)
         for (const ma of matchArgsIdx0) {
+          if (ma.operator === 'NotPostfix') result.processMode = 'whitelist'
+          else if (ma.operator === 'Postfix') result.processMode = 'blacklist'
           for (const bin of ma.values ?? []) {
             if (bin) result.process!.push({ binaries: [bin] })
           }
@@ -99,6 +103,8 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     ) {
       for (const sel of selectors) {
         for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+          if (ma.operator === 'NotPrefix') result.fileMode = 'whitelist'
+          else if (ma.operator === 'Prefix') result.fileMode = 'blacklist'
           for (const path of ma.values ?? []) {
             if (path) result.file!.push({ paths: [path] })
           }

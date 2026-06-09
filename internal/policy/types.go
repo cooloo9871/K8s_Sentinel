@@ -7,14 +7,16 @@ const (
 
 // PolicyFormInput is the data submitted from the frontend form.
 type PolicyFormInput struct {
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace,omitempty"`
-	PodSelector map[string]string `json:"podSelector,omitempty"`
-	Process     []ProcessRule     `json:"process,omitempty"`
-	File        []FileRule        `json:"file,omitempty"`
-	Network      []NetworkRule `json:"network,omitempty"`
-	NetworkPorts []string      `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule
-	NetworkMode  string        `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace,omitempty"`
+	PodSelector  map[string]string `json:"podSelector,omitempty"`
+	ProcessMode  string            `json:"processMode,omitempty"`  // "whitelist" (NotPostfix) or "blacklist" (Postfix); default whitelist
+	Process      []ProcessRule     `json:"process,omitempty"`
+	FileMode     string            `json:"fileMode,omitempty"`     // "whitelist" (NotPrefix) or "blacklist" (Prefix); default whitelist
+	File         []FileRule        `json:"file,omitempty"`
+	Network      []NetworkRule     `json:"network,omitempty"`
+	NetworkPorts []string          `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule
+	NetworkMode  string            `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)
 }
 
 type ProcessRule struct {

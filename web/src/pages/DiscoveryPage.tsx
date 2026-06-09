@@ -63,6 +63,7 @@ export function DiscoveryPage() {
       name: `${profile.pod}-policy`,
       namespace: profile.namespace || 'default',
       podSelector,
+      processMode: 'whitelist',
       process: binaries.length > 0 ? binaries.map(b => ({ binaries: [b] })) : undefined,
     }
     navigate('/policies/tracing/new', { state: { prefill } })
