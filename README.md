@@ -4,18 +4,69 @@
   <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
 </p>
 
-Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管理 console**。透過網頁介面即可建立、編輯、刪除 TracingPolicy，並切換整體叢集的執行模式（Monitoring / Protect），不需要直接操作 `kubectl`。
+Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**。透過網頁介面即可建立、編輯、刪除 TracingPolicy，即時監控叢集內的安全事件，並自動學習 Pod 行為以輔助策略建立，不需要直接操作 `kubectl`。
 
 ---
 
 ## 功能
 
-- **Dashboard**：Policy 總數、執行模式、Namespace 數量一覽，並可直接切換模式
-- **TracingPolicy 管理**：列表搜尋、新增、編輯、刪除，支援 namespace 與 cluster 兩種範疇
-- **表單編輯器**：以欄位填寫 Process / File / Network 規則，即時預覽產生的 YAML
-- **YAML 編輯器**：直接貼上或編輯原始 YAML，內建語法驗證
-- **執行模式切換**：Monitoring（觀測，不攔截）↔ Protect（主動 Sigkill 違規行為），切換前需確認
-- **Namespace 檢視**：列出叢集所有 Namespace 與其套用的 Policy 數量
+### Policies
+
+**TracingPolicy 管理**
+- 列表搜尋、新增、編輯、刪除，支援 `TracingPolicy`（cluster-wide）與 `TracingPolicyNamespaced`（namespace-scoped）兩種範疇
+- 支援指定 Pod Selector（Label 篩選）
+
+**表單編輯器**
+- Process Rules：攔截指定 binary 的執行（`sys_execve`）
+- File Rules：監控指定路徑的檔案存取（`security_file_permission`）
+- Network Rules：管控對外連線，支援 Blacklist（DAddr）與 Whitelist（NotDAddr）兩種模式，可搭配 Port 限制
+- 即時 YAML Preview，切換 Tab 時自動同步
+
+**YAML 編輯器**
+- 直接貼上或編輯原始 YAML，內建語法驗證
+
+**執行模式（Mode）**
+- 每條 Policy 可獨立設定 Monitoring（Post，觀測不攔截）或 Protect（Sigkill，主動終止違規行為）
+- Global Enforcement Mode：一鍵將所有 Policy 切換為同一模式，僅在手動設定時變更，不隨 Policy 動作自動推導
+
+**Behavior Discovery（行為探索）**
+- 從 Tetragon base sensor（`process_exec`）自動學習叢集中各 Pod 執行過的 process binary
+- **不需要建立任何 TracingPolicy**，無額外叢集資源負擔
+- Sentinel pod 啟動後即持續在背景收集，資料存活於 Sentinel pod 生命週期內
+- Namespace 篩選 + Pod 名稱搜尋
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，自動帶入：
+  - Policy 名稱（`{pod}-policy`）
+  - 目標 Namespace
+  - Pod Selector（從 pod labels 自動取得，過濾 auto-generated labels）
+  - Process Rules（每個學習到的 binary 各為一條規則）
+
+---
+
+### Notifications
+
+**Security Events**
+- 即時串流叢集所有 Tetragon kprobe 事件，永久保存於瀏覽器 localStorage，重新整理不消失
+- 僅顯示有明確 policy 名稱的策略觸發事件，排除背景噪音
+- 嚴重程度分類：Warning（monitor，偵測未攔截）/ Critical（kill，已攔截終止）
+- 點擊展開詳情：違規檔案路徑（File Rule）、網路目標 IP:port（Network Rule）、binary 完整路徑與參數、觸發的 kprobe function、節點名稱、完整時間戳
+- Rule Type 標籤：自動識別 File Rule / Network Rule / Process Rule
+- 搜尋 Pod 名稱、依嚴重程度篩選
+- 每個 event 獨立展開，互不干擾
+- 自動解析 `runc exec` 事件的 container ID，反查 Kubernetes pod/namespace 填入正確的來源資訊
+
+---
+
+### Cluster
+
+**Namespaces**
+- 列出叢集所有 Namespace 與套用的 Policy 數量
+
+---
+
+### Dashboard
+
+- Policy 總數、執行模式、Namespace 數量一覽
+- 可直接切換 Global Enforcement Mode
 
 ---
 
@@ -23,7 +74,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium TracingPolicy 管�
 
 ### 前置需求
 
-- Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 TracingPolicy CRD
+- Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 Tetragon（TracingPolicy CRD）
 - `kubectl` 已設定好 kubeconfig
 - container registry 存取權限（若需自行 build image）
 
@@ -118,7 +169,7 @@ deployment.apps/sentinel    1/1     1            1
 
 ### 步驟四：存取 UI
 
-**方式 A — Port-forward（快速測試）**
+**Port-forward（快速測試）**
 
 ```bash
 kubectl port-forward -n sentinel-system svc/sentinel 8080:80
@@ -133,7 +184,7 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 |------|------|------|
 | Namespace | `sentinel-system` | 所有資源的 namespace |
 | ServiceAccount | `sentinel` | Pod 使用的服務帳號 |
-| ClusterRole | `sentinel` | TracingPolicy CRUD + Namespace 讀取權限 |
+| ClusterRole | `sentinel` | TracingPolicy CRUD + Namespace/Pod 讀取權限 |
 | ClusterRoleBinding | `sentinel` | 綁定 ServiceAccount 與 ClusterRole |
 | Deployment | `sentinel` | 應用程式 Pod，1 個 replica |
 | Service | `sentinel` | ClusterIP，port 80 → 8080 |
@@ -147,7 +198,7 @@ Sentinel 需要以下叢集層級權限才能正常運作：
 | API Group | 資源 | 操作 |
 |-----------|------|------|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | get, list, watch, create, update, patch, delete |
-| `""` (core) | `namespaces` | get, list |
+| `""` (core) | `namespaces`, `pods` | get, list |
 
 ---
 
