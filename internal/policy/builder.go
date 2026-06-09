@@ -52,16 +52,12 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		allPaths = append(allPaths, r.Paths...)
 	}
 	if len(allPaths) > 0 {
-		fileOp := "NotPrefix"
-		if input.FileMode == "blacklist" {
-			fileOp = "Prefix"
-		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:    "security_file_permission",
 			Syscall: false,
 			Args:    []KProbeArg{{Index: 0, Type: "file"}, {Index: 1, Type: "int"}},
 			Selectors: []KProbeSelector{{
-				MatchArgs:    []ArgSelector{{Index: 0, Operator: fileOp, Values: allPaths}},
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: allPaths}},
 				MatchActions: []ActionSelector{{Action: action}},
 			}},
 		})

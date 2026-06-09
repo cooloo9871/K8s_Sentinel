@@ -26,7 +26,6 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       : undefined,
     processMode: 'whitelist',
     process: [],
-    fileMode: 'whitelist',
     file: [],
     network: [],
     networkMode: 'whitelist',
@@ -103,8 +102,6 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     ) {
       for (const sel of selectors) {
         for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
-          if (ma.operator === 'NotPrefix') result.fileMode = 'whitelist'
-          else if (ma.operator === 'Prefix') result.fileMode = 'blacklist'
           for (const path of ma.values ?? []) {
             if (path) result.file!.push({ paths: [path] })
           }
