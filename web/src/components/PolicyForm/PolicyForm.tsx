@@ -194,15 +194,19 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="whitelist">Whitelist — only listed binaries are allowed</SelectItem>
-                    <SelectItem value="blacklist">Blacklist — only listed binaries are blocked</SelectItem>
+                    <SelectItem value="whitelist">
+                      NotPostfix — Whitelist
+                    </SelectItem>
+                    <SelectItem value="blacklist">
+                      Postfix — Blacklist
+                    </SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {(value.processMode ?? 'whitelist') === 'whitelist'
-                  ? '✅ NotPostfix: any binary not in the list is killed'
-                  : '🚫 Postfix: only binaries in the list are killed'}
+                  ? '✅ NotPostfix (Whitelist): kill any binary whose path does NOT end with a listed suffix — only allowed binaries may run.'
+                  : '🚫 Postfix (Blacklist): kill binaries whose path ends with a listed suffix.'}
               </p>
             </div>
             <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
