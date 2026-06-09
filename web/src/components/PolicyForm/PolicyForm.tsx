@@ -194,15 +194,15 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="whitelist">Whitelist — 只允許列出的 binary 執行</SelectItem>
-                    <SelectItem value="blacklist">Blacklist — 封鎖列出的 binary 執行</SelectItem>
+                    <SelectItem value="whitelist">Whitelist — only listed binaries are allowed</SelectItem>
+                    <SelectItem value="blacklist">Blacklist — only listed binaries are blocked</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {(value.processMode ?? 'whitelist') === 'whitelist'
-                  ? '✅ NotPostfix：沒有填入的 binary 一律封鎖（白名單）'
-                  : '🚫 Postfix：只封鎖列出的 binary（黑名單）'}
+                  ? '✅ NotPostfix: any binary not in the list is killed'
+                  : '🚫 Postfix: only binaries in the list are killed'}
               </p>
             </div>
             <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
@@ -226,15 +226,15 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="whitelist">Whitelist — 只允許存取列出的路徑</SelectItem>
-                    <SelectItem value="blacklist">Blacklist — 封鎖列出的路徑</SelectItem>
+                    <SelectItem value="whitelist">Whitelist — only listed paths are allowed</SelectItem>
+                    <SelectItem value="blacklist">Blacklist — only listed paths are blocked</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {(value.fileMode ?? 'whitelist') === 'whitelist'
-                  ? '✅ NotPrefix：沒有填入的路徑一律封鎖（白名單）'
-                  : '🚫 Prefix：只封鎖列出的路徑（黑名單）'}
+                  ? '✅ NotPrefix: any path not in the list is killed'
+                  : '🚫 Prefix: only paths in the list are killed'}
               </p>
             </div>
             <FileSection rules={fileRules} onChange={setFileRules} />
