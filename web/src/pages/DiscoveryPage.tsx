@@ -166,7 +166,6 @@ export function DiscoveryPage() {
                   )}
                   <div className="mt-3 flex items-center justify-between border-t pt-2">
                     <span className="text-muted-foreground">since <RelativeTime iso={profile.firstSeen} /></span>
-                    <RelativeTime iso={profile.lastSeen} />
                   </div>
                 </CardContent>
               </Card>
