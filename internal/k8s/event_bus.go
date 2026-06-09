@@ -118,12 +118,18 @@ var podUIDRe = regexp.MustCompile(`pod([a-f0-9]{8}[-_][a-f0-9]{4}[-_][a-f0-9]{4}
 // differences, so it works even when exe would return "(deleted)" paths.
 // The script outputs tab-separated lines: <binary>\t<cgroup-line>
 func (s *Store) scanNodeProcesses(ctx context.Context, tetragonPodName string, uidMap map[string][2]string) {
+	// Uses only shell built-ins and `cat` — no tr/grep/head needed.
+	// /proc/<pid>/comm has the basename (no null bytes, always readable).
+	// while-read iterates cgroup lines looking for pod UUID without grep.
 	const script = `for pid in /proc/[0-9]*/; do
-  cmd=$(tr '\0' '\n' < "${pid}cmdline" 2>/dev/null | head -1) || continue
-  [ -z "$cmd" ] && continue
-  cg=$(grep pod "${pid}cgroup" 2>/dev/null | head -1) || continue
+  read -r comm < "${pid}comm" 2>/dev/null || continue
+  [ -z "$comm" ] && continue
+  cg=
+  while IFS= read -r line; do
+    case "$line" in *pod*) cg=$line; break;; esac
+  done < "${pid}cgroup" 2>/dev/null
   [ -z "$cg" ] && continue
-  printf '%s\t%s\n' "$cmd" "$cg"
+  printf '%s\t%s\n' "$comm" "$cg"
 done`
 
 	req := s.typed.CoreV1().RESTClient().Post().
@@ -153,6 +159,9 @@ done`
 
 	if stderr.Len() > 0 {
 		fmt.Printf("[sentinel-discovery] scan %s stderr: %s\n", tetragonPodName, strings.TrimSpace(stderr.String()))
+	}
+	if stdout.Len() == 0 {
+		fmt.Printf("[sentinel-discovery] scan %s: no output from script (sh or /proc unavailable?)\n", tetragonPodName)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
