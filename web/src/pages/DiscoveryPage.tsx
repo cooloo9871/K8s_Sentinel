@@ -15,6 +15,7 @@ import {
 import { useDiscovery } from '../layout/DiscoveryProvider'
 import { useToast } from '../layout/AppToaster'
 import { podApi } from '../api/client'
+import { formatTWTime } from '../utils/time'
 import type { PolicyFormInput } from '../api/types'
 
 function RelativeTime({ iso }: { iso: string }) {
@@ -25,7 +26,7 @@ function RelativeTime({ iso }: { iso: string }) {
   const label = diff < 60 ? 'just now'
     : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
     : `${Math.floor(diff / 3600)}h ago`
-  return <span className="text-xs text-muted-foreground">{label}</span>
+  return <span className="text-xs text-muted-foreground" title={formatTWTime(iso)}>{label}</span>
 }
 
 export function DiscoveryPage() {

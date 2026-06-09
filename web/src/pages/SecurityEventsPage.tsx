@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select'
 import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
 import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
 
 type FilterType = 'all' | 'warning' | 'critical'
 
@@ -56,7 +57,7 @@ function RelativeTime({ iso }: { iso: string }) {
     : diff < 60 ? `${diff}s ago`
     : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
     : `${Math.floor(diff / 3600)}h ago`
-  return <span className="font-mono text-xs" title={d.toLocaleString()}>{label}</span>
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
 }
 
 function DetailRow({ e }: { e: DisplayEvent }) {
@@ -68,7 +69,7 @@ function DetailRow({ e }: { e: DisplayEvent }) {
   if (e.parentBin) items.push({ label: 'Parent', value: e.parentBin })
   if (e.function) items.push({ label: 'Function', value: e.function })
   if (e.nodeName) items.push({ label: 'Node', value: e.nodeName })
-  items.push({ label: 'Time', value: new Date(e.time).toLocaleString() })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
 
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/30">
