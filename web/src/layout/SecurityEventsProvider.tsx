@@ -8,6 +8,7 @@ const STORAGE_KEY = 'sentinel_security_events'
 export type Severity = 'warning' | 'critical'
 
 export interface DisplayEvent extends TetragonEvent {
+  id: string   // stable unique ID set on creation, never changed on dedup
   count: number
   severity: Severity
 }
@@ -21,6 +22,7 @@ function loadFromStorage(): DisplayEvent[] {
         .filter((e) => e.type === 'kprobe' && e.policyName)
         .map((e) => ({
           ...e,
+          id: e.id ?? `${e.time}-${e.pod}-${e.binary}-${Math.random()}`,
           count: e.count ?? 1,
           severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
         })) as DisplayEvent[]
@@ -89,9 +91,11 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
         const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
         setEvents((prev) => {
           if (prev.length > 0 && isSameEvent(prev[0], evt)) {
+            // Dedup: preserve the original id so the expanded row stays open.
             return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
           }
-          return [{ ...evt, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+          const id = `${evt.time}-${evt.pod}-${evt.binary}-${evt.policyName}-${Math.random().toString(36).slice(2)}`
+          return [{ ...evt, id, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
         })
       } catch {}
     }

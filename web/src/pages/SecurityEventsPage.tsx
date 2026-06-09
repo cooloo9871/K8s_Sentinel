@@ -93,10 +93,10 @@ export function SecurityEventsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   // Stable key derived from event content so expansions survive new events prepending.
-  // Do NOT include e.time — dedup updates time on every new occurrence,
-  // which would change the key and auto-collapse the detail row.
-  const eventKey = (e: DisplayEvent) =>
-    `${e.pod}|${e.binary}|${e.policyName}|${e.function}|${e.action}`
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
 
   const filtered = events.filter((e) => {
     if (filter === 'warning' && e.severity !== 'warning') return false
