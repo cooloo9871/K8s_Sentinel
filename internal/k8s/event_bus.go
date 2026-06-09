@@ -1,26 +1,18 @@
 package k8s
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"regexp"
-	"strings"
-	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/remotecommand"
 )
 
 // StartDiscoveryLoop runs a background goroutine that:
-//  1. Scans all currently running pods via the Tetragon host-PID namespace.
+//  1. Seeds Discovery with already-running pod processes from pod specs.
 //  2. Continuously streams new Tetragon process_exec events.
 func (s *Store) StartDiscoveryLoop(ctx context.Context) {
 	go func() {
-		// Seed Discovery with processes already running before Sentinel started.
 		s.scanRunningProcesses(ctx)
 
 		for {
@@ -54,149 +46,39 @@ func (s *Store) runDiscoveryOnce(ctx context.Context) {
 	}
 }
 
-// scanRunningProcesses reads /proc on each node via the privileged Tetragon
-// DaemonSet pod (hostPID:true). One exec per node covers ALL containers on
-// that node — no exec into target containers needed.
+// scanRunningProcesses seeds Discovery by reading each container's command
+// from the Kubernetes Pod spec — no exec needed, works for all container
+// types including distroless. Covers the entrypoint (command[0]); the
+// Tetragon process_exec stream fills in additional processes over time.
 func (s *Store) scanRunningProcesses(ctx context.Context) {
-	if s.typed == nil || s.restConfig == nil {
+	if s.typed == nil {
 		return
 	}
-
-	tetragonPods, err := s.findAllTetragonPods(ctx)
-	if err != nil || len(tetragonPods) == 0 {
-		return
-	}
-
-	// Build a UID→(namespace, name) map once for the whole scan.
-	uidMap, err := s.buildPodUIDMap(ctx)
-	if err != nil {
-		fmt.Printf("[sentinel-discovery] scan: list pods error: %v\n", err)
-		return
-	}
-
-	var wg sync.WaitGroup
-	for _, podName := range tetragonPods {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			s.scanNodeProcesses(ctx, name, uidMap)
-		}(podName)
-	}
-	wg.Wait()
-}
-
-// buildPodUIDMap returns a map from pod UID → {namespace, podName} for all
-// running pods in the cluster.
-func (s *Store) buildPodUIDMap(ctx context.Context) (map[string][2]string, error) {
 	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: "status.phase=Running",
 	})
 	if err != nil {
-		return nil, err
-	}
-	m := make(map[string][2]string, len(pods.Items))
-	for _, p := range pods.Items {
-		uid := string(p.UID)
-		// cgroupv2 encodes hyphens as underscores in slice names.
-		m[uid] = [2]string{p.Namespace, p.Name}
-		m[strings.ReplaceAll(uid, "-", "_")] = [2]string{p.Namespace, p.Name}
-	}
-	return m, nil
-}
-
-// podUIDRe matches the pod UID embedded in a cgroup path, e.g.
-//
-//	/kubepods/burstable/pod7e17d1a0-e83f-4e0b-bc8d-b7cc67deef86/…
-//	/kubepods-besteffort-pod7e17d1a0_e83f_4e0b_bc8d_b7cc67deef86.slice/…
-var podUIDRe = regexp.MustCompile(`pod([a-f0-9]{8}[-_][a-f0-9]{4}[-_][a-f0-9]{4}[-_][a-f0-9]{4}[-_][a-f0-9]{12})`)
-
-// scanNodeProcesses execs once into a Tetragon pod and reads the host /proc
-// to enumerate all container processes on that node.
-//
-// Uses /proc/<pid>/cmdline (argv[0]) instead of readlink exe — cmdline is
-// read directly from kernel memory and is unaffected by mount namespace
-// differences, so it works even when exe would return "(deleted)" paths.
-// The script outputs tab-separated lines: <binary>\t<cgroup-line>
-func (s *Store) scanNodeProcesses(ctx context.Context, tetragonPodName string, uidMap map[string][2]string) {
-	// Uses only shell built-ins and `cat` — no tr/grep/head needed.
-	// /proc/<pid>/comm has the basename (no null bytes, always readable).
-	// while-read iterates cgroup lines looking for pod UUID without grep.
-	const script = `for pid in /proc/[0-9]*/; do
-  read -r comm < "${pid}comm" 2>/dev/null || continue
-  [ -z "$comm" ] && continue
-  cg=
-  while IFS= read -r line; do
-    case "$line" in *pod*) cg=$line; break;; esac
-  done < "${pid}cgroup" 2>/dev/null
-  [ -z "$cg" ] && continue
-  printf '%s\t%s\n' "$comm" "$cg"
-done`
-
-	req := s.typed.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(tetragonPodName).
-		Namespace("kube-system").
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: "tetragon",
-			Command:   []string{"sh", "-c", script},
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    false,
-			TTY:       false,
-		}, scheme.ParameterCodec)
-
-	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
-	if err != nil {
+		fmt.Printf("[sentinel-discovery] seed: list pods error: %v\n", err)
 		return
 	}
 
-	scanCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	var stdout, stderr bytes.Buffer
-	_ = executor.StreamWithContext(scanCtx, remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr})
-
-	if stderr.Len() > 0 {
-		fmt.Printf("[sentinel-discovery] scan %s stderr: %s\n", tetragonPodName, strings.TrimSpace(stderr.String()))
-	}
-	if stdout.Len() == 0 {
-		fmt.Printf("[sentinel-discovery] scan %s: no output from script (sh or /proc unavailable?)\n", tetragonPodName)
-	}
-
 	now := time.Now().UTC().Format(time.RFC3339)
-	found := 0
-	for _, line := range strings.Split(stdout.String(), "\n") {
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		binary, cgroup := strings.TrimSpace(parts[0]), parts[1]
-		if binary == "" {
-			continue
-		}
-
-		// Extract pod UID from cgroup path and resolve to namespace/pod.
-		m := podUIDRe.FindStringSubmatch(cgroup)
-		if m == nil {
-			continue // kernel/host process with no pod cgroup
-		}
-		uid := m[1]
-		info, ok := uidMap[uid]
-		if !ok {
-			info, ok = uidMap[strings.ReplaceAll(uid, "-", "_")]
-			if !ok {
-				continue
+	count := 0
+	for _, pod := range pods.Items {
+		ns := pod.Namespace
+		podName := pod.Name
+		for _, c := range pod.Spec.Containers {
+			if len(c.Command) > 0 && c.Command[0] != "" {
+				s.Discovery.Update(TetragonEvent{
+					Type:      "exec",
+					Namespace: ns,
+					Pod:       podName,
+					Binary:    c.Command[0],
+					Time:      now,
+				})
+				count++
 			}
 		}
-		s.Discovery.Update(TetragonEvent{
-			Type:      "exec",
-			Namespace: info[0],
-			Pod:       info[1],
-			Binary:    binary,
-			Time:      now,
-		})
-		found++
 	}
-	fmt.Printf("[sentinel-discovery] scan %s: found %d processes\n", tetragonPodName, found)
+	fmt.Printf("[sentinel-discovery] seeded %d processes from %d running pods\n", count, len(pods.Items))
 }
