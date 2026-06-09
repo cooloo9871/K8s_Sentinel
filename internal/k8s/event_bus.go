@@ -1,44 +1,20 @@
 package k8s
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/encoding"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
-func init() {
-	// Register a raw-bytes codec so we can send/receive protobuf as []byte
-	// without importing the full Tetragon protobuf module.
-	encoding.RegisterCodec(rawBytesCodec{})
-}
-
-// rawBytesCodec passes []byte straight through the gRPC codec layer.
-type rawBytesCodec struct{}
-
-func (rawBytesCodec) Name() string { return "proto" }
-
-func (rawBytesCodec) Marshal(v interface{}) ([]byte, error) {
-	if b, ok := v.([]byte); ok {
-		return b, nil
-	}
-	return []byte{}, nil
-}
-
-func (rawBytesCodec) Unmarshal(data []byte, v interface{}) error {
-	if p, ok := v.(*[]byte); ok {
-		*p = append(*p, data...)
-	}
-	return nil
-}
-
-// StartDiscoveryLoop runs a background goroutine that:
-//  1. Seeds Discovery via Tetragon's DumpProcessCache gRPC (all tracked processes).
-//  2. Continuously streams new process_exec events.
+// StartDiscoveryLoop seeds Discovery with already-running processes, then
+// continuously streams new process_exec events from Tetragon.
 func (s *Store) StartDiscoveryLoop(ctx context.Context) {
 	go func() {
 		s.scanRunningProcesses(ctx)
@@ -74,15 +50,15 @@ func (s *Store) runDiscoveryOnce(ctx context.Context) {
 	}
 }
 
-// scanRunningProcesses calls Tetragon's DumpProcessCache gRPC on each node to
-// get ALL processes Tetragon is tracking — including those that started before
-// Sentinel was deployed. Falls back to pod-spec seeding if gRPC fails.
+// scanRunningProcesses execs "tetra dump process-cache" in each Tetragon pod.
+// tetra connects to the local Unix socket and dumps ALL processes Tetragon
+// has tracked (including those running before Sentinel started).
+// Falls back to pod-spec seeding if the command is unavailable.
 func (s *Store) scanRunningProcesses(ctx context.Context) {
-	if s.typed == nil {
+	if s.typed == nil || s.restConfig == nil {
 		return
 	}
-
-	pods, err := s.findTetragonPodsWithIPs(ctx)
+	pods, err := s.findAllTetragonPods(ctx)
 	if err != nil || len(pods) == 0 {
 		s.seedFromPodSpecs(ctx)
 		return
@@ -90,10 +66,10 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 
 	total := 0
 	anyOK := false
-	for _, info := range pods {
-		n, err := s.dumpProcessCacheFromNode(ctx, info[0], info[1])
+	for _, podName := range pods {
+		n, err := s.dumpProcessCacheViaTetra(ctx, podName)
 		if err != nil {
-			fmt.Printf("[sentinel-discovery] gRPC %s (%s): %v\n", info[0], info[1], err)
+			fmt.Printf("[sentinel-discovery] dump %s: %v\n", podName, err)
 		} else {
 			total += n
 			anyOK = true
@@ -103,64 +79,91 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 		s.seedFromPodSpecs(ctx)
 		return
 	}
-	fmt.Printf("[sentinel-discovery] seeded %d processes via Tetragon gRPC\n", total)
+	fmt.Printf("[sentinel-discovery] seeded %d processes via tetra dump\n", total)
 }
 
-func (s *Store) findTetragonPodsWithIPs(ctx context.Context) ([][2]string, error) {
-	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
-		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{LabelSelector: sel})
-		if err == nil && len(list.Items) > 0 {
-			var result [][2]string
-			for _, p := range list.Items {
-				if p.Status.PodIP != "" {
-					result = append(result, [2]string{p.Name, p.Status.PodIP})
-				}
-			}
-			return result, nil
-		}
-	}
-	return nil, fmt.Errorf("no Tetragon pods found")
-}
+// dumpProcessCacheViaTetra runs "tetra dump process-cache" inside the Tetragon
+// pod container. tetra talks to the local Unix socket at
+// /var/run/cilium/tetragon/tetragon.sock and outputs the full process cache
+// as JSON. This command was added in Tetragon v1.3.
+func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (int, error) {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").Name(podName).Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "dump", "process-cache"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
 
-func (s *Store) dumpProcessCacheFromNode(ctx context.Context, podName, podIP string) (int, error) {
-	addr := fmt.Sprintf("%s:54321", podIP)
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("exec setup: %w", err)
 	}
-	defer conn.Close()
 
-	rpcCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	req := []byte{} // DumpProcessCacheReqParams is an empty message
-	var resp []byte
-	if err := conn.Invoke(rpcCtx,
-		"/tetragon.FineGuidanceSensors/DumpProcessCache",
-		req, &resp,
-	); err != nil {
-		return 0, err
+	var buf bytes.Buffer
+	if err := executor.StreamWithContext(execCtx, remotecommand.StreamOptions{Stdout: &buf}); err != nil {
+		return 0, fmt.Errorf("exec: %w", err)
+	}
+	if buf.Len() == 0 {
+		return 0, fmt.Errorf("empty output (tetra dump process-cache may not be available)")
+	}
+
+	return s.parseAndSeedProcessCache(buf.Bytes())
+}
+
+// parseAndSeedProcessCache decodes JSON from "tetra dump process-cache" and
+// feeds each process into the Discovery store.
+//
+// Expected format:
+//
+//	{"processes":[{"process":{"binary":"...","pod":{"namespace":"...","name":"..."}}},...]}
+func (s *Store) parseAndSeedProcessCache(data []byte) (int, error) {
+	var doc struct {
+		Processes []struct {
+			Process struct {
+				Binary string `json:"binary"`
+				Pod    *struct {
+					Namespace string `json:"namespace"`
+					Name      string `json:"name"`
+				} `json:"pod"`
+			} `json:"process"`
+		} `json:"processes"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return 0, fmt.Errorf("parse: %w", err)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	entries := decodeProcessCacheList(resp)
 	count := 0
-	for _, e := range entries {
-		if e.namespace == "" || e.pod == "" || e.binary == "" {
+	for _, entry := range doc.Processes {
+		p := entry.Process
+		if p.Binary == "" || p.Pod == nil || p.Pod.Namespace == "" || p.Pod.Name == "" {
 			continue
 		}
 		s.Discovery.Update(TetragonEvent{
-			Type: "exec", Namespace: e.namespace, Pod: e.pod,
-			Binary: e.binary, Time: now,
+			Type:      "exec",
+			Namespace: p.Pod.Namespace,
+			Pod:       p.Pod.Name,
+			Binary:    p.Binary,
+			Time:      now,
 		})
 		count++
 	}
-	fmt.Printf("[sentinel-discovery] %s: %d processes from cache\n", podName, count)
 	return count, nil
 }
 
-// seedFromPodSpecs is a fallback when Tetragon gRPC is unavailable.
+// seedFromPodSpecs is the final fallback when tetra dump is unavailable.
 func (s *Store) seedFromPodSpecs(ctx context.Context) {
+	if s.typed == nil {
+		return
+	}
 	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: "status.phase=Running",
 	})

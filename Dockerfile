@@ -7,7 +7,7 @@ COPY web/ ./
 RUN npm run build
 
 # Stage 2: build Go binary
-FROM docker.io/library/golang:1.25-alpine AS backend
+FROM docker.io/library/golang:1.25.0-alpine AS backend
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
