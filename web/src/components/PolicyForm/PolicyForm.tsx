@@ -205,8 +205,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               </Select>
               <p className="text-xs text-muted-foreground">
                 {(value.processMode ?? 'whitelist') === 'whitelist'
-                  ? '✅ NotPostfix (Whitelist): kill any binary whose path does NOT end with a listed suffix — only allowed binaries may run.'
-                  : '🚫 Postfix (Blacklist): kill binaries whose path ends with a listed suffix.'}
+                  ? 'Whitelist: only the binaries you list are allowed to run. Everything else is blocked.'
+                  : 'Blacklist: only the binaries you list are blocked. Everything else is allowed.'}
               </p>
             </div>
             <ProcessSection binaries={processBinaries} onChange={setProcessBinaries} />
@@ -254,8 +254,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               </Select>
               <p className="text-xs text-muted-foreground">
                 {value.networkMode === 'blacklist'
-                  ? '🚫 DAddr (Blacklist): kill connections whose destination is IN the address list AND in the port list.'
-                  : '✅ NotDAddr (Whitelist): two separate selectors — kill if (dest NOT in address list) OR (port NOT in port list). Only connections matching BOTH address AND port are allowed.'}
+                  ? 'Blacklist: connections to the listed addresses (and ports, if set) are blocked. Everything else is allowed.'
+                  : 'Whitelist: only connections to the listed addresses (and ports, if set) are allowed. Everything else is blocked.'}
               </p>
             </div>
             {/* Address list */}
