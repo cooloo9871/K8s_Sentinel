@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
+import { IconFolder, IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -204,10 +204,11 @@ export function DiscoveryPage() {
         <Button
           variant={groupByNs ? 'default' : 'outline'}
           size="sm"
-          className="h-9"
+          className="h-9 w-9 p-0"
+          title={groupByNs ? 'Grouped by namespace' : 'Group by namespace'}
           onClick={() => setGroupByNs(v => !v)}
         >
-          Group by Namespace
+          <IconFolder size={16} />
         </Button>
         <span className="ml-auto text-sm text-muted-foreground">
           {workloadGroups.length} workload{workloadGroups.length !== 1 ? 's' : ''} · {profiles.length} pods total
