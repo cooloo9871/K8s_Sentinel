@@ -202,6 +202,11 @@ func (s *Store) populateWorkloadInfo(ctx context.Context) {
 			continue
 		}
 		ref := pod.OwnerReferences[0]
+		// Skip Node-owned static pods (kube-apiserver, etcd, etc.) —
+		// they appear as [Node] in Discovery which is confusing.
+		if ref.Kind == "Node" {
+			continue
+		}
 		kind, name := ref.Kind, ref.Name
 		if kind == "ReplicaSet" {
 			if depName, ok := rsOwner[pod.Namespace+"/"+ref.Name]; ok {
