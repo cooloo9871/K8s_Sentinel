@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -209,9 +209,8 @@ export function SecurityEventsPage() {
                 {filtered.map((e) => {
                   const key = eventKey(e)
                   return (
-                  <>
+                  <React.Fragment key={key}>
                     <TableRow
-                      key={`row-${key}`}
                       className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
                       onClick={() => toggle(key)}
                     >
@@ -256,7 +255,7 @@ export function SecurityEventsPage() {
                       </TableCell>
                     </TableRow>
                     {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
-                  </>
+                  </React.Fragment>
                   )
                 })}
               </TableBody>

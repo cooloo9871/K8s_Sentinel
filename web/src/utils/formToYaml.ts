@@ -46,6 +46,7 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     .flatMap((r) => r.binaries)
     .filter(Boolean)
     .map((b) => b.startsWith('/') ? b.slice(1) : b)
+    .filter(Boolean)
   if (allBinaries.length > 0) {
     const processOp = input.processMode === 'blacklist' ? 'Postfix' : 'NotPostfix'
     doc.spec.kprobes.push({

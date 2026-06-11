@@ -78,9 +78,10 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 	}
 	if !anyOK {
 		s.seedFromPodSpecs(ctx)
-		return
+	} else {
+		fmt.Printf("[sentinel-discovery] seeded %d processes via tetra dump\n", total)
 	}
-	fmt.Printf("[sentinel-discovery] seeded %d processes via tetra dump\n", total)
+	// Always populate workload info regardless of which seeding path was used.
 	s.populateWorkloadInfo(ctx)
 }
 
@@ -192,12 +193,14 @@ func (s *Store) populateWorkloadInfo(ctx context.Context) {
 
 	// 2. List all running pods and resolve each pod's owner.
 	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
-		FieldSelector: "status.phase=Running",
-	})
+		})
 	if err != nil {
 		return
 	}
 	for _, pod := range pods.Items {
+		if pod.Status.Phase != "Running" {
+			continue
+		}
 		if len(pod.OwnerReferences) == 0 {
 			continue
 		}
@@ -222,15 +225,16 @@ func (s *Store) seedFromPodSpecs(ctx context.Context) {
 	if s.typed == nil {
 		return
 	}
-	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
-		FieldSelector: "status.phase=Running",
-	})
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	count := 0
 	for _, pod := range pods.Items {
+		if pod.Status.Phase != "Running" {
+			continue
+		}
 		for _, c := range pod.Spec.Containers {
 			if len(c.Command) > 0 && c.Command[0] != "" {
 				s.Discovery.Update(TetragonEvent{

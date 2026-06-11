@@ -35,7 +35,7 @@ function WorkloadCard({ wl, creatingFor, onCreatePolicy }: {
   creatingFor: string | null
   onCreatePolicy: (wl: WorkloadProfile) => void
 }) {
-  const key = `${wl.namespace}/${wl.workloadName}`
+  const key = `${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`
   const binaries = wl.binaries ?? []
   return (
     <Card>
@@ -140,7 +140,7 @@ export function DiscoveryPage() {
   const workloadGroups = buildWorkloadGroups(filtered)
 
   const handleCreatePolicy = async (wl: WorkloadProfile) => {
-    const key = `${wl.namespace}/${wl.workloadName}`
+    const key = `${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`
     setCreatingFor(key)
     let podSelector: Record<string, string> | undefined
     // Try each pod until labels are found (some may have restarted)

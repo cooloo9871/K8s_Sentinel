@@ -53,6 +53,12 @@ func (r *containerResolver) resolve(ctx context.Context, s *Store, containerID s
 	if err != nil {
 		return
 	}
+	// Evict expired entries to prevent unbounded cache growth.
+	for id, c := range r.cache {
+		if time.Since(c.cachedAt) >= 30*time.Second {
+			delete(r.cache, id)
+		}
+	}
 	for _, p := range pods.Items {
 		for _, cs := range p.Status.ContainerStatuses {
 			id := stripCRIPrefix(cs.ContainerID)

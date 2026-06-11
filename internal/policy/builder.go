@@ -37,7 +37,9 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 			if len(b) > 0 && b[0] == '/' {
 				b = b[1:]
 			}
-			allBinaries = append(allBinaries, b)
+			if b != "" { // skip empty strings that would break Tetragon validation
+				allBinaries = append(allBinaries, b)
+			}
 		}
 	}
 	if len(allBinaries) > 0 {
