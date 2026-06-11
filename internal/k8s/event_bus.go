@@ -125,29 +125,31 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (i
 // Expected format:
 //
 //	{"processes":[{"process":{"binary":"...","pod":{"namespace":"...","name":"..."}}},...]}
+// parseAndSeedProcessCache decodes NDJSON from "tetra dump processcache".
+// Each line is one ProcessInternal object; lines without a pod field are
+// host/kernel processes and are skipped.
 func (s *Store) parseAndSeedProcessCache(data []byte) (int, error) {
-	// tetra may print a header line before the JSON — skip to the first '{'.
-	if idx := bytes.IndexByte(data, '{'); idx > 0 {
-		data = data[idx:]
-	}
-	var doc struct {
-		Processes []struct {
-			Process struct {
-				Binary string `json:"binary"`
-				Pod    *struct {
-					Namespace string `json:"namespace"`
-					Name      string `json:"name"`
-				} `json:"pod"`
-			} `json:"process"`
-		} `json:"processes"`
-	}
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return 0, fmt.Errorf("parse: %w", err)
+	type line struct {
+		Process struct {
+			Binary string `json:"binary"`
+			Pod    *struct {
+				Namespace string `json:"namespace"`
+				Name      string `json:"name"`
+			} `json:"pod"`
+		} `json:"process"`
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	count := 0
-	for _, entry := range doc.Processes {
+	for _, raw := range bytes.Split(data, []byte("\n")) {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || raw[0] != '{' {
+			continue
+		}
+		var entry line
+		if err := json.Unmarshal(raw, &entry); err != nil {
+			continue
+		}
 		p := entry.Process
 		if p.Binary == "" || p.Pod == nil || p.Pod.Namespace == "" || p.Pod.Name == "" {
 			continue
