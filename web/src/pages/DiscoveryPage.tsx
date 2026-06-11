@@ -30,6 +30,60 @@ function RelativeTime({ iso }: { iso: string }) {
   return <span className="text-xs text-muted-foreground" title={formatTWTime(iso)}>{label}</span>
 }
 
+function WorkloadCard({ wl, creatingFor, onCreatePolicy }: {
+  wl: WorkloadProfile
+  creatingFor: string | null
+  onCreatePolicy: (wl: WorkloadProfile) => void
+}) {
+  const key = `${wl.namespace}/${wl.workloadName}`
+  const binaries = wl.binaries ?? []
+  return (
+    <Card>
+      <CardHeader className="border-b pb-3">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary" className="text-[10px] font-mono">{wl.workloadKind}</Badge>
+            <CardTitle className="text-sm font-semibold">{wl.workloadName}</CardTitle>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {wl.namespace} · {wl.pods.length} pod{wl.pods.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <CardAction>
+          <Button
+            size="sm" variant="outline" className="h-7 text-xs"
+            disabled={binaries.length === 0 || creatingFor === key}
+            onClick={() => onCreatePolicy(wl)}
+          >
+            {creatingFor === key ? 'Loading...' : 'Create Policy'}
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="pt-3 text-xs">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="font-medium">Process</span>
+          <Badge variant="secondary" className="text-[10px]">{binaries.length}</Badge>
+        </div>
+        {binaries.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {binaries.slice(0, 8).map(b => (
+              <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
+                {b.split('/').pop()}
+              </span>
+            ))}
+            {binaries.length > 8 && (
+              <span className="text-muted-foreground">+{binaries.length - 8} more</span>
+            )}
+          </div>
+        ) : <span className="text-muted-foreground">—</span>}
+        <div className="mt-3 border-t pt-2 text-muted-foreground">
+          since <RelativeTime iso={wl.firstSeen} />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 /** Build WorkloadProfile list by merging pods with the same workload owner. */
 function buildWorkloadGroups(profiles: PodProfile[]): WorkloadProfile[] {
   const map = new Map<string, WorkloadProfile>()
@@ -71,6 +125,7 @@ export function DiscoveryPage() {
   const toast = useToast()
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
+  const [groupByNs, setGroupByNs] = useState(false)
   const [clearDialog, setClearDialog] = useState(false)
   const [creatingFor, setCreatingFor] = useState<string | null>(null)
 
@@ -146,6 +201,14 @@ export function DiscoveryPage() {
             className="h-9 w-44 pl-8"
           />
         </div>
+        <Button
+          variant={groupByNs ? 'default' : 'outline'}
+          size="sm"
+          className="h-9"
+          onClick={() => setGroupByNs(v => !v)}
+        >
+          Group by Namespace
+        </Button>
         <span className="ml-auto text-sm text-muted-foreground">
           {workloadGroups.length} workload{workloadGroups.length !== 1 ? 's' : ''} · {profiles.length} pods total
         </span>
@@ -159,57 +222,41 @@ export function DiscoveryPage() {
             Pod behaviors appear automatically as processes run across the cluster.
           </p>
         </div>
+      ) : groupByNs ? (
+        // ── Namespace-grouped view ──────────────────────────────────────────
+        (() => {
+          const byNs = workloadGroups.reduce<Record<string, typeof workloadGroups>>((acc, wl) => {
+            ;(acc[wl.namespace] ??= []).push(wl)
+            return acc
+          }, {})
+          return (
+            <div className="flex flex-col gap-6">
+              {Object.entries(byNs).sort(([a], [b]) => a.localeCompare(b)).map(([ns, items]) => (
+                <div key={ns}>
+                  {/* Namespace divider */}
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="text-sm font-semibold text-foreground">{ns}</span>
+                    <div className="flex-1 border-t" />
+                    <span className="text-xs text-muted-foreground">{items.length} workload{items.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} />)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {workloadGroups.map(wl => {
-            const key = `${wl.namespace}/${wl.workloadName}`
-            const binaries = wl.binaries ?? []
-            return (
-              <Card key={key}>
-                <CardHeader className="border-b pb-3">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="secondary" className="text-[10px] font-mono">{wl.workloadKind}</Badge>
-                      <CardTitle className="text-sm font-semibold">{wl.workloadName}</CardTitle>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {wl.namespace} · {wl.pods.length} pod{wl.pods.length !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  <CardAction>
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-xs"
-                      disabled={binaries.length === 0 || creatingFor === key}
-                      onClick={() => handleCreatePolicy(wl)}
-                    >
-                      {creatingFor === key ? 'Loading...' : 'Create Policy'}
-                    </Button>
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="pt-3 text-xs">
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="font-medium">Process</span>
-                    <Badge variant="secondary" className="text-[10px]">{binaries.length}</Badge>
-                  </div>
-                  {binaries.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {binaries.slice(0, 8).map(b => (
-                        <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
-                          {b.split('/').pop()}
-                        </span>
-                      ))}
-                      {binaries.length > 8 && (
-                        <span className="text-muted-foreground">+{binaries.length - 8} more</span>
-                      )}
-                    </div>
-                  ) : <span className="text-muted-foreground">—</span>}
-                  <div className="mt-3 border-t pt-2 text-muted-foreground">
-                    since <RelativeTime iso={wl.firstSeen} />
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+          {workloadGroups.map(wl => (
+            <WorkloadCard
+              key={`${wl.namespace}/${wl.workloadName}`}
+              wl={wl}
+              creatingFor={creatingFor}
+              onCreatePolicy={handleCreatePolicy}
+            />
+          ))}
         </div>
       )}
 
