@@ -64,24 +64,23 @@ function RelativeTime({ iso }: { iso: string }) {
 function DetailRow({ e }: { e: DisplayEvent }) {
   const items: { label: string; value: string }[] = []
 
-  if (e.filePath) items.push({ label: 'File', value: e.filePath })
-  if (e.netDest)  items.push({ label: 'Network', value: e.netDest })
-  if (e.binary)   items.push({ label: 'Binary', value: e.arguments ? `${e.binary} ${e.arguments}` : e.binary })
-  if (e.parentBin) items.push({ label: 'Parent', value: e.parentBin })
-  if (e.function) items.push({ label: 'Function', value: e.function })
-  if (e.nodeName) items.push({ label: 'Node', value: e.nodeName })
+  if (e.filePath)   items.push({ label: 'File',      value: e.filePath })
+  if (e.netDest)    items.push({ label: 'Network',   value: e.netDest })
+  if (e.binary)     items.push({ label: 'Binary',    value: e.binary })
+  if (e.arguments)  items.push({ label: 'Arguments', value: e.arguments })
+  if (e.parentBin)  items.push({ label: 'Parent',    value: e.parentBin })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
   items.push({ label: 'Time', value: formatTWTime(e.time) })
 
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/30">
-      {/* max-w-0 + w-full forces the cell to respect available width instead
-          of expanding to fit content — the standard table cell wrapping trick */}
-      <TableCell colSpan={7} className="max-w-0 w-full py-3 pl-10 pr-6">
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+      <TableCell colSpan={7} style={{ maxWidth: 0, width: '100%', overflow: 'hidden' }} className="py-3 pl-10 pr-6">
+        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs" style={{ overflow: 'hidden' }}>
           {items.map(({ label, value }) => (
             <React.Fragment key={label}>
               <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
-              <span className="min-w-0 break-all font-mono">{value}</span>
+              <span className="font-mono" style={{ wordBreak: 'break-all', overflowWrap: 'anywhere', minWidth: 0 }}>{value}</span>
             </React.Fragment>
           ))}
         </div>
@@ -169,7 +168,7 @@ export function SecurityEventsPage() {
         </div>
       )}
 
-      <Card>
+      <Card className="overflow-hidden">
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
           <span className="text-muted-foreground">
             {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
