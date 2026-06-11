@@ -232,13 +232,15 @@ func fillProcess(evt *TetragonEvent, proc map[string]any) {
 	}
 	evt.Binary = anyStr(proc, "binary")
 	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
 	if v, ok := proc["uid"]; ok {
-		switch n := v.(type) {
-		case float64:
-			uid := uint32(n)
-			evt.ProcessUID = &uid
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
 		}
 	}
+	evt.ProcessUID = &uid
 	pod := anyMap(proc, "pod")
 	if pod == nil {
 		return
