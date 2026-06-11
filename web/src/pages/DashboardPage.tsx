@@ -185,12 +185,8 @@ export function DashboardPage() {
                 {recent.map((p) => (
                   <TableRow
                     key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
-                    className="cursor-pointer"
-                    onClick={() =>
-                      navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
-                    }
                   >
-                    <TableCell className="font-medium text-primary">{p.name}</TableCell>
+                    <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>
                       <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
                         {p.scope}
