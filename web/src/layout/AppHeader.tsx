@@ -20,13 +20,34 @@ const ROUTE_LABELS: Record<string, string> = {
   tracing: 'TracingPolicy',
   new: 'New Policy',
   edit: 'Edit',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
   cluster: 'Cluster',
   mode: 'Mode Control',
   namespaces: 'Namespaces',
 }
 
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+}
+
 function useBreadcrumbs() {
   const { pathname } = useLocation()
+
+  if (PATH_OVERRIDES[pathname]) {
+    return [{ label: 'Home', to: '/dashboard' }, ...PATH_OVERRIDES[pathname]]
+  }
+
   const segments = pathname.split('/').filter(Boolean)
   const crumbs: { label: string; to?: string }[] = [{ label: 'Home', to: '/dashboard' }]
   let path = ''
