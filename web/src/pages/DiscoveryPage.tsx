@@ -233,14 +233,16 @@ export function DiscoveryPage() {
           return (
             <div className="flex flex-col gap-6">
               {Object.entries(byNs).sort(([a], [b]) => a.localeCompare(b)).map(([ns, items]) => (
-                <div key={ns}>
-                  {/* Namespace section header */}
-                  <div className="mb-3 flex items-center justify-between rounded-md border-l-4 border-primary bg-muted/50 px-4 py-2">
-                    <span className="font-semibold">{ns}</span>
+                <div key={ns} className="rounded-lg border bg-card shadow-sm">
+                  {/* Namespace header */}
+                  <div className="flex items-center justify-between border-b px-4 py-2.5">
+                    <span className="text-sm font-semibold text-muted-foreground">
+                      Namespace: <span className="text-foreground">{ns}</span>
+                    </span>
                     <span className="text-xs text-muted-foreground">{items.length} workload{items.length !== 1 ? 's' : ''}</span>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} />)}
+                  <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+                    {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} />)}
                   </div>
                 </div>
               ))}
