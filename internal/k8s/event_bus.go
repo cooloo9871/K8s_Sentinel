@@ -93,7 +93,7 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (i
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "tetragon",
-			Command:   []string{"tetra", "dump", "process-cache"},
+			Command:   []string{"tetra", "dump", "processcache"},
 			Stdin:     false,
 			Stdout:    true,
 			Stderr:    false,
