@@ -234,10 +234,9 @@ export function DiscoveryPage() {
             <div className="flex flex-col gap-6">
               {Object.entries(byNs).sort(([a], [b]) => a.localeCompare(b)).map(([ns, items]) => (
                 <div key={ns}>
-                  {/* Namespace divider */}
-                  <div className="mb-3 flex items-center gap-3">
-                    <span className="text-sm font-semibold text-foreground">{ns}</span>
-                    <div className="flex-1 border-t" />
+                  {/* Namespace section header */}
+                  <div className="mb-3 flex items-center justify-between rounded-md border-l-4 border-primary bg-muted/50 px-4 py-2">
+                    <span className="font-semibold">{ns}</span>
                     <span className="text-xs text-muted-foreground">{items.length} workload{items.length !== 1 ? 's' : ''}</span>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
