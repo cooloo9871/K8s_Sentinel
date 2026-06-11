@@ -9,11 +9,13 @@ import (
 // Data lives in memory for the lifetime of the Sentinel process and is
 // intentionally lost on pod restart — no file persistence.
 type PodProfile struct {
-	Namespace string   `json:"namespace"`
-	Pod       string   `json:"pod"`
-	Binaries  []string `json:"binaries"`
-	FirstSeen string   `json:"firstSeen"`
-	LastSeen  string   `json:"lastSeen"`
+	Namespace    string   `json:"namespace"`
+	Pod          string   `json:"pod"`
+	WorkloadKind string   `json:"workloadKind,omitempty"` // "Deployment", "DaemonSet", "StatefulSet", etc.
+	WorkloadName string   `json:"workloadName,omitempty"` // controller name
+	Binaries     []string `json:"binaries"`
+	FirstSeen    string   `json:"firstSeen"`
+	LastSeen     string   `json:"lastSeen"`
 }
 
 // DiscoveryProfileStore is a pure in-memory store.
@@ -71,6 +73,17 @@ func (s *DiscoveryProfileStore) All() []*PodProfile {
 		return ki < kj
 	})
 	return result
+}
+
+// SetWorkload updates the workload owner for an existing profile.
+func (s *DiscoveryProfileStore) SetWorkload(namespace, pod, kind, name string) {
+	key := namespace + "/" + pod
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p, ok := s.profiles[key]; ok {
+		p.WorkloadKind = kind
+		p.WorkloadName = name
+	}
 }
 
 func (s *DiscoveryProfileStore) Clear() {

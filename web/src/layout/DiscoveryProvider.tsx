@@ -3,7 +3,20 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 export interface PodProfile {
   namespace: string
   pod: string
+  workloadKind?: string  // "Deployment", "DaemonSet", "StatefulSet", etc.
+  workloadName?: string  // controller name
   binaries: string[]
+  firstSeen: string
+  lastSeen: string
+}
+
+/** Aggregated view of multiple pods that share the same workload. */
+export interface WorkloadProfile {
+  namespace: string
+  workloadKind: string   // e.g. "Deployment"
+  workloadName: string   // e.g. "my-app"
+  pods: string[]         // pod names in this group
+  binaries: string[]     // union of all pod binaries
   firstSeen: string
   lastSeen: string
 }

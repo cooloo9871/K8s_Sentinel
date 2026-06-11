@@ -81,6 +81,7 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 		return
 	}
 	fmt.Printf("[sentinel-discovery] seeded %d processes via tetra dump\n", total)
+	s.populateWorkloadInfo(ctx)
 }
 
 // dumpProcessCacheViaTetra runs "tetra dump process-cache" inside the Tetragon
@@ -164,6 +165,50 @@ func (s *Store) parseAndSeedProcessCache(data []byte) (int, error) {
 		count++
 	}
 	return count, nil
+}
+
+// populateWorkloadInfo resolves pod owner references (ReplicaSet → Deployment,
+// DaemonSet, StatefulSet, etc.) and stores them in each PodProfile.
+// Uses only 2 batch K8s API calls regardless of pod count.
+func (s *Store) populateWorkloadInfo(ctx context.Context) {
+	if s.typed == nil {
+		return
+	}
+	// 1. List all ReplicaSets to build RS → Deployment mapping.
+	rsList, err := s.typed.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	// rs "namespace/name" → {deploymentName}
+	rsOwner := make(map[string]string, len(rsList.Items))
+	for _, rs := range rsList.Items {
+		for _, ref := range rs.OwnerReferences {
+			if ref.Kind == "Deployment" {
+				rsOwner[rs.Namespace+"/"+rs.Name] = ref.Name
+			}
+		}
+	}
+
+	// 2. List all running pods and resolve each pod's owner.
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		FieldSelector: "status.phase=Running",
+	})
+	if err != nil {
+		return
+	}
+	for _, pod := range pods.Items {
+		if len(pod.OwnerReferences) == 0 {
+			continue
+		}
+		ref := pod.OwnerReferences[0]
+		kind, name := ref.Kind, ref.Name
+		if kind == "ReplicaSet" {
+			if depName, ok := rsOwner[pod.Namespace+"/"+ref.Name]; ok {
+				kind, name = "Deployment", depName
+			}
+		}
+		s.Discovery.SetWorkload(pod.Namespace, pod.Name, kind, name)
+	}
 }
 
 // seedFromPodSpecs is the final fallback when tetra dump is unavailable.
