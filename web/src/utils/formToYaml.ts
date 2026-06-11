@@ -40,7 +40,12 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
   // Process rules: ONE sys_execve kprobe with all values combined.
   // Whitelist (default): NotPostfix — kill anything NOT ending with a listed suffix.
   // Blacklist: Postfix — kill anything ending with a listed suffix.
-  const allBinaries = (input.process ?? []).flatMap((r) => r.binaries).filter(Boolean)
+  // Strip leading '/' so the suffix matches both absolute (/cgichild.sh) and
+  // relative-path calls (cgichild.sh). e.g. "/usr/bin/cat" → "usr/bin/cat"
+  const allBinaries = (input.process ?? [])
+    .flatMap((r) => r.binaries)
+    .filter(Boolean)
+    .map((b) => b.startsWith('/') ? b.slice(1) : b)
   if (allBinaries.length > 0) {
     const processOp = input.processMode === 'blacklist' ? 'Postfix' : 'NotPostfix'
     doc.spec.kprobes.push({

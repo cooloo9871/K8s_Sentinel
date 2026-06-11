@@ -26,9 +26,19 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 	// Process rules: ONE sys_execve kprobe with all values combined.
 	// Whitelist (default): NotPostfix — kill anything whose path does NOT end with a listed suffix.
 	// Blacklist: Postfix — kill anything whose path ends with a listed suffix.
+	//
+	// Strip the leading '/' from each binary value so the suffix matches both
+	// absolute paths (/cgichild.sh) and relative-path calls (cgichild.sh).
+	// e.g. "/cgichild.sh" → "cgichild.sh" matches both "cgichild.sh" and "/cgichild.sh"
+	//      "/usr/bin/cat" → "usr/bin/cat" matches "/usr/bin/cat" only (path-specific)
 	var allBinaries []string
 	for _, r := range input.Process {
-		allBinaries = append(allBinaries, r.Binaries...)
+		for _, b := range r.Binaries {
+			if len(b) > 0 && b[0] == '/' {
+				b = b[1:]
+			}
+			allBinaries = append(allBinaries, b)
+		}
 	}
 	if len(allBinaries) > 0 {
 		processOp := "NotPostfix"
