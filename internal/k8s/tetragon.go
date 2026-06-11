@@ -99,8 +99,15 @@ func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- Te
 			continue
 		}
 		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
 		if evt.Pod == "" && evt.Type == "kprobe" {
-			if cid := extractContainerIDFromRunc(evt.Binary, evt.Arguments); cid != "" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
 				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
 				if pod != "" {
 					evt.Pod = pod
