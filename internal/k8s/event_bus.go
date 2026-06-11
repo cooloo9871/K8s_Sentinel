@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+
 // StartDiscoveryLoop seeds Discovery with already-running processes, then
 // continuously streams new process_exec events from Tetragon.
 func (s *Store) StartDiscoveryLoop(ctx context.Context) {
@@ -125,6 +126,10 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (i
 //
 //	{"processes":[{"process":{"binary":"...","pod":{"namespace":"...","name":"..."}}},...]}
 func (s *Store) parseAndSeedProcessCache(data []byte) (int, error) {
+	// tetra may print a header line before the JSON — skip to the first '{'.
+	if idx := bytes.IndexByte(data, '{'); idx > 0 {
+		data = data[idx:]
+	}
 	var doc struct {
 		Processes []struct {
 			Process struct {
