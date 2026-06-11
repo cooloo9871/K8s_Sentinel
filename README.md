@@ -18,7 +18,9 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 
 **表單編輯器**
 - Process Rules：攔截指定 binary 的執行（`sys_execve`）
-- File Rules：監控指定路徑的檔案存取（`security_file_permission`）
+  - 支援 **Whitelist** 模式（NotPostfix，只允許列出的 binary 執行，其他全封鎖）
+  - 支援 **Blacklist** 模式（Postfix，封鎖列出的 binary，其他允許）
+- File Rules：監控指定路徑的檔案存取（`security_file_permission`，Blacklist）
 - Network Rules：管控對外連線，支援 Blacklist（DAddr）與 Whitelist（NotDAddr）兩種模式，可搭配 Port 限制
 - 即時 YAML Preview，切換 Tab 時自動同步
 
@@ -30,15 +32,17 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 - Global Enforcement Mode：一鍵將所有 Policy 切換為同一模式，僅在手動設定時變更，不隨 Policy 動作自動推導
 
 **Behavior Discovery（行為探索）**
-- 從 Tetragon base sensor（`process_exec`）自動學習叢集中各 Pod 執行過的 process binary
+- 從 Tetragon base sensor 與 process cache 自動學習叢集中各 Pod 的 process 行為
 - **不需要建立任何 TracingPolicy**，無額外叢集資源負擔
-- Sentinel pod 啟動後即持續在背景收集，資料存活於 Sentinel pod 生命週期內
+- Sentinel 啟動時透過 `tetra dump processcache` 取得所有節點已在執行的進程（含 Sentinel 啟動前），後續持續透過事件流收集新進程
+- 自動依 Controller 分組顯示（Deployment / DaemonSet / StatefulSet / Pod），同一個 Deployment 的所有副本合併為一張卡片
+- 資料夾圖示按鈕：依 Namespace 分組顯示，相同 namespace 的 workload 集中在一起，附上 namespace 分割線
 - Namespace 篩選 + Pod 名稱搜尋
 - **Create Policy**：一鍵從學習到的資料預填 Policy 表單，自動帶入：
-  - Policy 名稱（`{pod}-policy`）
+  - Policy 名稱（`{workload}-policy`）
   - 目標 Namespace
   - Pod Selector（從 pod labels 自動取得，過濾 auto-generated labels）
-  - Process Rules（每個學習到的 binary 各為一條規則）
+  - Process Rules（Whitelist 模式，每個學習到的 binary 各為一條規則）
 
 ---
 
@@ -48,11 +52,11 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 - 即時串流叢集所有 Tetragon kprobe 事件，永久保存於瀏覽器 localStorage，重新整理不消失
 - 僅顯示有明確 policy 名稱的策略觸發事件，排除背景噪音
 - 嚴重程度分類：Warning（monitor，偵測未攔截）/ Critical（kill，已攔截終止）
-- 點擊展開詳情：違規檔案路徑（File Rule）、網路目標 IP:port（Network Rule）、binary 完整路徑與參數、觸發的 kprobe function、節點名稱、完整時間戳
+- 點擊展開詳情：違規檔案路徑（File Rule）、網路目標 IP:port（Network Rule）、binary 完整路徑與參數、觸發的 kprobe function、節點名稱、完整時間戳（台灣時區）
 - Rule Type 標籤：自動識別 File Rule / Network Rule / Process Rule
 - 搜尋 Pod 名稱、依嚴重程度篩選
 - 每個 event 獨立展開，互不干擾
-- 自動解析 `runc exec` 事件的 container ID，反查 Kubernetes pod/namespace 填入正確的來源資訊
+- 自動解析 `runc exec` 與 `kubectl exec` 觸發的事件：從 container ID 或 parent 進程反查 Kubernetes pod/namespace
 
 ---
 
@@ -66,6 +70,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 ### Dashboard
 
 - Policy 總數、執行模式、Namespace 數量一覽
+- Recent Policies 唯讀顯示（不可直接點擊進入編輯）
 - 可直接切換 Global Enforcement Mode
 
 ---
@@ -74,7 +79,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 
 ### 前置需求
 
-- Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 Tetragon（TracingPolicy CRD）
+- Kubernetes 1.26+ 叢集，已安裝 Cilium 並啟用 Tetragon（TracingPolicy CRD）v1.3+
 - `kubectl` 已設定好 kubeconfig
 - container registry 存取權限（若需自行 build image）
 
@@ -154,17 +159,6 @@ bash deploy/install.sh
 kubectl get all -n sentinel-system
 ```
 
-```
-NAME                             READY   STATUS    RESTARTS   AGE
-pod/sentinel-xxxxxxxxx-xxxxx     1/1     Running   0          30s
-
-NAME               TYPE        CLUSTER-IP      PORT(S)   AGE
-service/sentinel   ClusterIP   10.96.xxx.xxx   80/TCP    30s
-
-NAME                        READY   UP-TO-DATE   AVAILABLE
-deployment.apps/sentinel    1/1     1            1
-```
-
 ---
 
 ### 步驟四：存取 UI
@@ -184,7 +178,7 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 |------|------|------|
 | Namespace | `sentinel-system` | 所有資源的 namespace |
 | ServiceAccount | `sentinel` | Pod 使用的服務帳號 |
-| ClusterRole | `sentinel` | TracingPolicy CRUD + Namespace/Pod 讀取權限 |
+| ClusterRole | `sentinel` | TracingPolicy CRUD + Namespace/Pod/Apps 讀取權限 |
 | ClusterRoleBinding | `sentinel` | 綁定 ServiceAccount 與 ClusterRole |
 | Deployment | `sentinel` | 應用程式 Pod，1 個 replica |
 | Service | `sentinel` | ClusterIP，port 80 → 8080 |
@@ -198,7 +192,8 @@ Sentinel 需要以下叢集層級權限才能正常運作：
 | API Group | 資源 | 操作 |
 |-----------|------|------|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | get, list, watch, create, update, patch, delete |
-| `""` (core) | `namespaces`, `pods` | get, list |
+| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 
 ---
 
