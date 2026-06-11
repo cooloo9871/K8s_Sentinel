@@ -52,7 +52,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 - 即時串流叢集所有 Tetragon kprobe 事件，永久保存於瀏覽器 localStorage，重新整理不消失
 - 僅顯示有明確 policy 名稱的策略觸發事件，排除背景噪音
 - 嚴重程度分類：Warning（monitor，偵測未攔截）/ Critical（kill，已攔截終止）
-- 點擊展開詳情：違規檔案路徑（File Rule）、網路目標 IP:port（Network Rule）、binary 完整路徑與參數、觸發的 kprobe function、節點名稱、完整時間戳（台灣時區）
+- 點擊展開詳情：違規檔案路徑（File Rule）、網路目標 IP:port（Network Rule）、binary 完整路徑、arguments、執行的 effective user（root 或 uid=N）、parent binary、觸發的 kprobe function、節點名稱、完整時間戳（台灣時區）；所有超長內容自動換行，不需橫向捲動
 - Rule Type 標籤：自動識別 File Rule / Network Rule / Process Rule
 - 搜尋 Pod 名稱、依嚴重程度篩選
 - 每個 event 獨立展開，互不干擾
