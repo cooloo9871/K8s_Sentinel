@@ -75,12 +75,12 @@ function DetailRow({ e }: { e: DisplayEvent }) {
 
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/30">
-      <TableCell colSpan={7} style={{ maxWidth: 0, width: '100%', overflow: 'hidden' }} className="py-3 pl-10 pr-6">
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs" style={{ overflow: 'hidden' }}>
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           {items.map(({ label, value }) => (
             <React.Fragment key={label}>
               <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
-              <span className="font-mono" style={{ wordBreak: 'break-all', overflowWrap: 'anywhere', minWidth: 0 }}>{value}</span>
+              <span className="font-mono" style={{ overflowWrap: 'anywhere' }}>{value}</span>
             </React.Fragment>
           ))}
         </div>
@@ -168,7 +168,7 @@ export function SecurityEventsPage() {
         </div>
       )}
 
-      <Card className="overflow-hidden">
+      <Card>
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
           <span className="text-muted-foreground">
             {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
@@ -195,7 +195,7 @@ export function SecurityEventsPage() {
               <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
             </div>
           ) : (
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
