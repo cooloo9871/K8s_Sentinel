@@ -177,6 +177,7 @@ func (s *Store) populateWorkloadInfo(ctx context.Context) {
 	// 1. List all ReplicaSets to build RS → Deployment mapping.
 	rsList, err := s.typed.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{})
 	if err != nil {
+		fmt.Printf("[sentinel-discovery] workload info: list replicasets: %v (check RBAC for apps/replicasets)\n", err)
 		return
 	}
 	// rs "namespace/name" → {deploymentName}
