@@ -230,22 +230,41 @@ export function DiscoveryPage() {
             ;(acc[wl.namespace] ??= []).push(wl)
             return acc
           }, {})
+          // Soft color palette — derived from namespace name so the same ns
+          // always gets the same color across renders.
+          const PALETTES = [
+            { box: 'bg-blue-50/60 border-blue-200',    header: 'bg-blue-100 border-blue-200 text-blue-900' },
+            { box: 'bg-emerald-50/60 border-emerald-200', header: 'bg-emerald-100 border-emerald-200 text-emerald-900' },
+            { box: 'bg-violet-50/60 border-violet-200', header: 'bg-violet-100 border-violet-200 text-violet-900' },
+            { box: 'bg-amber-50/60 border-amber-200',  header: 'bg-amber-100 border-amber-200 text-amber-900' },
+            { box: 'bg-rose-50/60 border-rose-200',    header: 'bg-rose-100 border-rose-200 text-rose-900' },
+            { box: 'bg-cyan-50/60 border-cyan-200',    header: 'bg-cyan-100 border-cyan-200 text-cyan-900' },
+            { box: 'bg-orange-50/60 border-orange-200',header: 'bg-orange-100 border-orange-200 text-orange-900' },
+            { box: 'bg-teal-50/60 border-teal-200',    header: 'bg-teal-100 border-teal-200 text-teal-900' },
+          ]
+          const pickColor = (ns: string) => {
+            let h = 0
+            for (let i = 0; i < ns.length; i++) h = (h * 31 + ns.charCodeAt(i)) & 0xffff
+            return PALETTES[h % PALETTES.length]
+          }
           return (
             <div className="flex flex-col gap-6">
-              {Object.entries(byNs).sort(([a], [b]) => a.localeCompare(b)).map(([ns, items]) => (
-                <div key={ns} className="rounded-lg border bg-card shadow-sm">
-                  {/* Namespace header */}
-                  <div className="flex items-center justify-between border-b px-4 py-2.5">
-                    <span className="text-sm font-semibold text-muted-foreground">
-                      Namespace: <span className="text-foreground">{ns}</span>
-                    </span>
-                    <span className="text-xs text-muted-foreground">{items.length} workload{items.length !== 1 ? 's' : ''}</span>
+              {Object.entries(byNs).sort(([a], [b]) => a.localeCompare(b)).map(([ns, items]) => {
+                const c = pickColor(ns)
+                return (
+                  <div key={ns} className={`rounded-lg border shadow-sm ${c.box}`}>
+                    <div className={`flex items-center justify-between rounded-t-lg border-b px-4 py-2.5 ${c.header}`}>
+                      <span className="text-sm font-semibold">
+                        Namespace: <span className="font-bold">{ns}</span>
+                      </span>
+                      <span className="text-xs opacity-70">{items.length} workload{items.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+                      {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} />)}
+                    </div>
                   </div>
-                  <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-                    {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} />)}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )
         })()
