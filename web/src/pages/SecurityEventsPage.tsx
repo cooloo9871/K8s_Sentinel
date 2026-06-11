@@ -74,13 +74,13 @@ function DetailRow({ e }: { e: DisplayEvent }) {
 
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/30">
-      <TableCell colSpan={7} className="py-3 pl-10">
-        <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           {items.map(({ label, value }) => (
-            <div key={label} className="flex items-baseline gap-1.5 text-xs">
-              <span className="text-muted-foreground">{label}:</span>
-              <span className="font-mono">{value}</span>
-            </div>
+            <React.Fragment key={label}>
+              <span className="shrink-0 text-muted-foreground">{label}:</span>
+              <span className="break-all font-mono">{value}</span>
+            </React.Fragment>
           ))}
         </div>
       </TableCell>
