@@ -29,6 +29,7 @@ type TetragonEvent struct {
 	Action     string `json:"action"` // "monitor" or "kill"
 	PolicyName string `json:"policyName"`
 	Function   string `json:"function"`
+	ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
@@ -231,6 +232,13 @@ func fillProcess(evt *TetragonEvent, proc map[string]any) {
 	}
 	evt.Binary = anyStr(proc, "binary")
 	evt.Arguments = anyStr(proc, "arguments")
+	if v, ok := proc["uid"]; ok {
+		switch n := v.(type) {
+		case float64:
+			uid := uint32(n)
+			evt.ProcessUID = &uid
+		}
+	}
 	pod := anyMap(proc, "pod")
 	if pod == nil {
 		return

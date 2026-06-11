@@ -69,6 +69,10 @@ function DetailRow({ e }: { e: DisplayEvent }) {
   if (e.binary)     items.push({ label: 'Binary',    value: e.binary })
   if (e.arguments)  items.push({ label: 'Arguments', value: e.arguments })
   if (e.parentBin)  items.push({ label: 'Parent',    value: e.parentBin })
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
   if (e.function)   items.push({ label: 'Function',  value: e.function })
   if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
   items.push({ label: 'Time', value: formatTWTime(e.time) })
