@@ -76,12 +76,12 @@ function DetailRow({ e }: { e: DisplayEvent }) {
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/30">
       <TableCell colSpan={7} className="py-3 pl-10 pr-6">
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        <div className="flex flex-col gap-1 text-xs">
           {items.map(({ label, value }) => (
-            <React.Fragment key={label}>
+            <div key={label} className="flex min-w-0 gap-1.5">
               <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
-              <span className="font-mono" style={{ overflowWrap: 'anywhere' }}>{value}</span>
-            </React.Fragment>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
           ))}
         </div>
       </TableCell>
@@ -168,7 +168,7 @@ export function SecurityEventsPage() {
         </div>
       )}
 
-      <Card>
+      <Card className="overflow-x-hidden">
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
           <span className="text-muted-foreground">
             {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
