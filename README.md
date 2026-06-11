@@ -18,8 +18,8 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 
 **表單編輯器**
 - Process Rules：攔截指定 binary 的執行（`sys_execve`）
-  - 支援 **Whitelist** 模式（NotPostfix，只允許列出的 binary 執行，其他全封鎖）
-  - 支援 **Blacklist** 模式（Postfix，封鎖列出的 binary，其他允許）
+  - **Whitelist** 模式（NotPostfix，預設）：只允許列出的 binary 執行，其他全封鎖
+  - **Blacklist** 模式（Postfix）：封鎖列出的 binary，其他允許
 - File Rules：監控指定路徑的檔案存取（`security_file_permission`，Blacklist）
 - Network Rules：管控對外連線，支援 Blacklist（DAddr）與 Whitelist（NotDAddr）兩種模式，可搭配 Port 限制
 - 即時 YAML Preview，切換 Tab 時自動同步
@@ -29,19 +29,19 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 
 **執行模式（Mode）**
 - 每條 Policy 可獨立設定 Monitoring（Post，觀測不攔截）或 Protect（Sigkill，主動終止違規行為）
-- Global Enforcement Mode：一鍵將所有 Policy 切換為同一模式，僅在手動設定時變更，不隨 Policy 動作自動推導
+- Global Enforcement Mode：一鍵將所有 Policy 切換為同一模式，僅在手動設定時變更
 
 **Behavior Discovery（行為探索）**
-- 從 Tetragon base sensor 與 process cache 自動學習叢集中各 Pod 的 process 行為
+- 從 Tetragon base sensor 與 process cache 自動學習叢集中各 Pod 執行過的 process binary
 - **不需要建立任何 TracingPolicy**，無額外叢集資源負擔
 - Sentinel 啟動時透過 `tetra dump processcache` 取得所有節點已在執行的進程（含 Sentinel 啟動前），後續持續透過事件流收集新進程
-- 自動依 Controller 分組顯示（Deployment / DaemonSet / StatefulSet / Pod），同一個 Deployment 的所有副本合併為一張卡片
-- 資料夾圖示按鈕：依 Namespace 分組顯示，相同 namespace 的 workload 集中在一起，附上 namespace 分割線
+- 自動依 Controller 分組顯示（Deployment / DaemonSet / StatefulSet / Pod），同一個 Deployment 的多個副本合併為一張卡片，顯示聯集 binary 列表
+- **資料夾圖示按鈕**：切換至 Namespace 分組視圖，每個 Namespace 以獨立色塊框包覆，框內顯示該 namespace 下所有 workload 卡片
 - Namespace 篩選 + Pod 名稱搜尋
 - **Create Policy**：一鍵從學習到的資料預填 Policy 表單，自動帶入：
   - Policy 名稱（`{workload}-policy`）
   - 目標 Namespace
-  - Pod Selector（從 pod labels 自動取得，過濾 auto-generated labels）
+  - Pod Selector（從 pod labels 自動取得，過濾 auto-generated labels，pod 重啟後仍有效）
   - Process Rules（Whitelist 模式，每個學習到的 binary 各為一條規則）
 
 ---
@@ -56,6 +56,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 - Rule Type 標籤：自動識別 File Rule / Network Rule / Process Rule
 - 搜尋 Pod 名稱、依嚴重程度篩選
 - 每個 event 獨立展開，互不干擾
+- 時間顯示：秒 → 分 → 時 → 天（超過 24 小時以天為單位）
 - 自動解析 `runc exec` 與 `kubectl exec` 觸發的事件：從 container ID 或 parent 進程反查 Kubernetes pod/namespace
 
 ---
@@ -70,7 +71,7 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 ### Dashboard
 
 - Policy 總數、執行模式、Namespace 數量一覽
-- Recent Policies 唯讀顯示（不可直接點擊進入編輯）
+- Recent Policies 唯讀顯示（不可點擊進入編輯）
 - 可直接切換 Global Enforcement Mode
 
 ---
@@ -119,51 +120,27 @@ podman push your-registry/sentinel:latest
 
 **方式 A — Kubernetes Job（推薦，不需要本機 helm）**
 
-透過 Job 在叢集內部執行安裝，pod 負責 helm 安裝 Tetragon 以及 Sentinel 部署：
-
 ```bash
 kubectl apply -f deploy/install-job.yaml
-```
-
-查看安裝進度：
-
-```bash
 kubectl logs -n kube-system job/sentinel-installer -f
 ```
 
 Job 執行流程：
-1. 偵測是否已有 Tetragon DaemonSet，沒有則在 pod 內透過 Helm 安裝最新版
+1. 偵測是否已有 Tetragon DaemonSet，沒有則透過 Helm 安裝最新版
 2. Clone Sentinel 原始碼
 3. 建立 `sentinel-system` namespace（已存在則跳過）
 4. 套用 Sentinel K8s 資源並等待 Deployment 就緒
 
-Job 完成 10 分鐘後自動清除 pod（`ttlSecondsAfterFinished: 600`）。手動清除：
-
-```bash
-kubectl delete -f deploy/install-job.yaml
-```
-
----
-
 **方式 B — 本機安裝腳本**
-
-需要本機有 `kubectl`，helm 不存在時會自動下載到暫存目錄：
 
 ```bash
 bash deploy/install.sh
-```
-
-確認所有資源正常建立：
-
-```bash
 kubectl get all -n sentinel-system
 ```
 
 ---
 
 ### 步驟四：存取 UI
-
-**Port-forward（快速測試）**
 
 ```bash
 kubectl port-forward -n sentinel-system svc/sentinel 8080:80
@@ -187,8 +164,6 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 
 ### RBAC 權限說明
 
-Sentinel 需要以下叢集層級權限才能正常運作：
-
 | API Group | 資源 | 操作 |
 |-----------|------|------|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | get, list, watch, create, update, patch, delete |
@@ -200,12 +175,8 @@ Sentinel 需要以下叢集層級權限才能正常運作：
 ### 解除安裝
 
 ```bash
-# 移除 Sentinel
 kubectl delete -k deploy/base/
 kubectl delete namespace sentinel-system
-
-# 移除 Tetragon（若是由本腳本安裝）
-kubectl delete -f deploy/tetragon.yaml
 ```
 
 ---
