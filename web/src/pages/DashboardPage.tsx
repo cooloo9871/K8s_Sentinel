@@ -137,9 +137,9 @@ export function DashboardPage() {
         />
         <StatCard
           icon={<IconAlertTriangle size={26} />}
-          label="Global Mode"
-          value={mode}
-          sub={mode === 'Protect' ? 'Blocking violations' : 'Monitoring only'}
+          label="Global Protect Mode"
+          value={mode === 'Protect' ? 'ON' : mode === 'Mixed' ? 'MIXED' : 'OFF'}
+          sub={mode === 'Protect' ? 'Actively blocking violations' : mode === 'Mixed' ? 'Policies have mixed modes' : 'Monitoring only'}
           accent={modeAccent}
         />
       </div>

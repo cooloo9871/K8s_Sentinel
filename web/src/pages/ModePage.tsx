@@ -61,20 +61,20 @@ export function ModePage() {
 
   return (
     <>
-      <h4 className="mb-6 text-lg font-semibold">Mode Control</h4>
+      <h4 className="mb-6 text-lg font-semibold">Global Protect Mode</h4>
 
       <Card className="max-w-sm">
         <CardHeader className="border-b pb-3">
-          <CardTitle className="text-sm font-medium">Enforcement Mode</CardTitle>
+          <CardTitle className="text-sm font-medium">Global Protect Mode</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pt-4">
           <div
             className="rounded-lg p-5 text-center"
             style={{ border: `2px solid ${modeColor}` }}
           >
-            <p className="mb-1 text-xs text-muted-foreground">Current mode</p>
+            <p className="mb-1 text-xs text-muted-foreground">Current status</p>
             <p className="text-3xl font-bold" style={{ color: modeColor }}>
-              {mode.toUpperCase()}
+              {mode === 'Protect' ? 'ON' : mode === 'Mixed' ? 'MIXED' : 'OFF'}
             </p>
           </div>
 
@@ -93,7 +93,7 @@ export function ModePage() {
             className="w-full"
             onClick={() => setSwitchModal(true)}
           >
-            Switch to {nextMode.toUpperCase()}
+            {nextMode === 'Protect' ? 'Turn On' : 'Turn Off'}
           </Button>
         </CardContent>
       </Card>
@@ -101,15 +101,17 @@ export function ModePage() {
       <AlertDialog open={switchModal} onOpenChange={setSwitchModal}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Switch Enforcement Mode</AlertDialogTitle>
+            <AlertDialogTitle>
+              {nextMode === 'Protect' ? 'Turn On Global Protect Mode' : 'Turn Off Global Protect Mode'}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
-                Switch mode from <strong>{mode.toUpperCase()}</strong> to{' '}
-                <strong>{nextMode.toUpperCase()}</strong>?
+                {nextMode === 'Protect'
+                  ? 'Apply Protect mode to all TracingPolicies? Violations will be actively blocked (Sigkill).'
+                  : 'Apply Monitoring mode to all TracingPolicies? Violations will be logged but not blocked.'}
                 {nextMode === 'Protect' && (
                   <p className="mt-2 text-destructive">
-                    ⚠ Warning: Protect mode will actively kill (Sigkill) violating processes.
-                    Ensure all policies are correct before switching.
+                    ⚠ Warning: This will actively kill violating processes. Ensure all policies are correct before turning on.
                   </p>
                 )}
               </div>
@@ -121,7 +123,7 @@ export function ModePage() {
               variant={nextMode === 'Protect' ? 'destructive' : 'default'}
               onClick={handleSwitch}
             >
-              Switch to {nextMode}
+              {nextMode === 'Protect' ? 'Turn On' : 'Turn Off'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

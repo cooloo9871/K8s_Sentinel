@@ -110,25 +110,25 @@ export function PolicyListPage() {
 
   return (
     <>
-      {/* Global mode control banner */}
+      {/* Global Protect Mode banner */}
       <div className="mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4">
         <div className="flex items-center gap-4">
           <div>
-            <p className="text-sm font-medium text-muted-foreground">Global Enforcement Mode</p>
-            <p className="text-xs text-muted-foreground/70">Switch all policies to Monitoring / Protect at once</p>
+            <p className="text-sm font-medium text-muted-foreground">Global Protect Mode</p>
+            <p className="text-xs text-muted-foreground/70">Turn on to enforce all policies; turn off to monitor only</p>
             <div className="mt-1 flex items-center gap-2">
               <Badge
                 variant={globalMode === 'Protect' ? 'destructive' : globalMode === 'Mixed' ? 'outline' : 'secondary'}
                 className="text-sm px-3 py-0.5"
               >
-                {globalMode.toUpperCase()}
+                {globalMode === 'Protect' ? 'ON' : globalMode === 'Mixed' ? 'MIXED' : 'OFF'}
               </Badge>
               <span className="text-sm text-muted-foreground">
                 {globalMode === 'Protect'
-                  ? 'Actively blocking violations on all policies'
+                  ? 'Protect mode is on — actively blocking violations on all policies'
                   : globalMode === 'Mixed'
-                  ? 'Policies have mixed enforcement modes'
-                  : 'Monitoring only — no blocking on all policies'}
+                  ? 'Policies have mixed modes'
+                  : 'Protect mode is off — monitoring only, no blocking'}
               </span>
             </div>
           </div>
@@ -137,7 +137,7 @@ export function PolicyListPage() {
           variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}
           onClick={() => setModeModal(true)}
         >
-          Switch to {nextGlobalMode}
+          {nextGlobalMode === 'Protect' ? 'Turn On' : 'Turn Off'}
         </Button>
       </div>
 
@@ -282,13 +282,17 @@ export function PolicyListPage() {
       <AlertDialog open={modeModal} onOpenChange={setModeModal}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Switch Global Mode</AlertDialogTitle>
+            <AlertDialogTitle>
+              {nextGlobalMode === 'Protect' ? 'Turn On Global Protect Mode' : 'Turn Off Global Protect Mode'}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
-                Apply <strong>{nextGlobalMode.toUpperCase()}</strong> to all TracingPolicies?
+                {nextGlobalMode === 'Protect'
+                  ? 'Apply Protect mode to all TracingPolicies? Violations will be actively blocked (Sigkill).'
+                  : 'Apply Monitoring mode to all TracingPolicies? Violations will be logged but not blocked.'}
                 {nextGlobalMode === 'Protect' && (
                   <p className="mt-2 text-destructive">
-                    ⚠ Warning: Protect mode will actively kill violating processes on all policies.
+                    ⚠ Warning: This will actively kill violating processes on all policies.
                   </p>
                 )}
               </div>
@@ -300,7 +304,7 @@ export function PolicyListPage() {
               variant={nextGlobalMode === 'Protect' ? 'destructive' : 'default'}
               onClick={handleGlobalModeSwitch}
             >
-              Switch to {nextGlobalMode}
+              {nextGlobalMode === 'Protect' ? 'Turn On' : 'Turn Off'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
