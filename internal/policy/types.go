@@ -5,13 +5,6 @@ const (
 	ActionSigkill = "Sigkill"
 )
 
-// LSMRule uses lsmhooks: file_open to block file access at open time,
-// before any data is read or written.
-type LSMRule struct {
-	Paths          []string `json:"paths"`
-	ExceptBinaries []string `json:"exceptBinaries,omitempty"`
-}
-
 // PolicyFormInput is the data submitted from the frontend form.
 type PolicyFormInput struct {
 	Name         string            `json:"name"`
@@ -21,7 +14,6 @@ type PolicyFormInput struct {
 	Process      []ProcessRule     `json:"process,omitempty"`
 	FileMode     string            `json:"fileMode,omitempty"`     // "whitelist" (NotPrefix) or "blacklist" (Prefix); default blacklist
 	File         []FileRule        `json:"file,omitempty"`
-	LSMRules     []LSMRule         `json:"lsmRules,omitempty"`     // lsmhooks: file_open — blocks access before data is read
 	Network      []NetworkRule     `json:"network,omitempty"`
 	NetworkPorts []string          `json:"networkPorts,omitempty"` // destination ports (DPort), ANDed with address rule
 	NetworkMode  string            `json:"networkMode,omitempty"`  // "whitelist" (NotDAddr) or "blacklist" (DAddr)
@@ -54,17 +46,9 @@ type ObjectMeta struct {
 	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 }
 
-// LSMHookSpec mirrors KProbeSpec but is placed under spec.lsmhooks.
-type LSMHookSpec struct {
-	Hook      string           `yaml:"hook"                  json:"hook"`
-	Args      []KProbeArg      `yaml:"args,omitempty"        json:"args,omitempty"`
-	Selectors []KProbeSelector `yaml:"selectors,omitempty"   json:"selectors,omitempty"`
-}
-
 type TracingPolicySpec struct {
 	PodSelector *LabelSelector `yaml:"podSelector,omitempty" json:"podSelector,omitempty"`
 	KProbes     []KProbeSpec   `yaml:"kprobes,omitempty"     json:"kprobes,omitempty"`
-	LSMHooks    []LSMHookSpec  `yaml:"lsmhooks,omitempty"    json:"lsmhooks,omitempty"`
 }
 
 type LabelSelector struct {
