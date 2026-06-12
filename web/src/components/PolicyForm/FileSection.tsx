@@ -11,52 +11,61 @@ interface Props {
 }
 
 export function FileSection({ rules, onChange }: Props) {
-  const update = (i: number, patch: Partial<FileRule>) => {
+  const updateRule = (i: number, patch: Partial<FileRule>) => {
     const next = [...rules]
     next[i] = { ...next[i], ...patch }
     onChange(next)
   }
 
-  const add = () => onChange([...rules, { paths: [''], exceptBinaries: [], permission: 'all' }])
-  const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
+  const addRule = () => onChange([...rules, { paths: [''], exceptBinaries: [], permission: 'all' }])
+  const removeRule = (i: number) => onChange(rules.filter((_, j) => j !== i))
 
-  const parseBinaries = (raw: string): string[] =>
-    raw.split(',').map(s => s.trim()).filter(Boolean)
-
-  const binariesString = (r: FileRule) => (r.exceptBinaries ?? []).join(', ')
+  // Exceptions — individual entries
+  const updateException = (ruleIdx: number, excIdx: number, val: string) => {
+    const exc = [...(rules[ruleIdx].exceptBinaries ?? [])]
+    exc[excIdx] = val
+    updateRule(ruleIdx, { exceptBinaries: exc })
+  }
+  const addException = (ruleIdx: number) =>
+    updateRule(ruleIdx, { exceptBinaries: [...(rules[ruleIdx].exceptBinaries ?? []), ''] })
+  const removeException = (ruleIdx: number, excIdx: number) =>
+    updateRule(ruleIdx, {
+      exceptBinaries: (rules[ruleIdx].exceptBinaries ?? []).filter((_, j) => j !== excIdx),
+    })
 
   return (
     <div className="flex flex-col gap-3">
       {rules.map((r, i) => (
-        <div key={i} className="flex flex-col gap-1.5 rounded-md border p-3">
+        <div key={i} className="flex flex-col gap-2 rounded-md border p-3">
+          {/* Path */}
           <div className="flex items-center gap-2">
             <div className="flex flex-1 flex-col gap-1">
               <span className="text-xs text-muted-foreground">Path</span>
               <Input
                 placeholder="/etc/passwd"
                 value={r.paths[0] ?? ''}
-                onChange={e => update(i, { paths: [e.target.value] })}
+                onChange={e => updateRule(i, { paths: [e.target.value] })}
                 className="h-8 text-sm"
               />
             </div>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => remove(i)}
+              onClick={() => removeRule(i)}
               className="mt-5 shrink-0 text-muted-foreground hover:text-destructive"
             >
               ✕
             </Button>
           </div>
 
-          {/* Permission selector */}
+          {/* Permission */}
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Permission</span>
             <Select
               value={r.permission ?? 'all'}
-              onValueChange={(v) => update(i, { permission: v as FileRule['permission'] })}
+              onValueChange={(v) => updateRule(i, { permission: v as FileRule['permission'] })}
             >
-              <SelectTrigger className="h-8 w-48 text-sm">
+              <SelectTrigger className="h-8 w-52 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -70,27 +79,44 @@ export function FileSection({ rules, onChange }: Props) {
           </div>
 
           {/* Exceptions */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             <span className="text-xs text-muted-foreground">
               Exceptions{' '}
               <span className="text-muted-foreground/60">
-                (optional — these binaries bypass this rule, full path, comma-separated)
+                (optional — these processes bypass this rule)
               </span>
             </span>
-            <Input
-              placeholder="/bin/bash, /usr/bin/cat"
-              value={binariesString(r)}
-              onChange={e => update(i, { exceptBinaries: parseBinaries(e.target.value) })}
-              className="h-8 text-sm"
-            />
-            {(r.exceptBinaries ?? []).some(b => b && !b.startsWith('/')) && (
-              <p className="text-xs text-amber-600">⚠ Binary paths must start with /</p>
-            )}
+            {(r.exceptBinaries ?? []).map((bin, ei) => (
+              <div key={ei} className="flex items-center gap-2">
+                <Input
+                  placeholder="/bin/bash"
+                  value={bin}
+                  onChange={e => updateException(i, ei, e.target.value)}
+                  className="h-8 text-sm"
+                />
+                {bin && !bin.startsWith('/') && (
+                  <span className="shrink-0 text-xs text-amber-600">full path required</span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeException(i, ei)}
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  ✕
+                </Button>
+              </div>
+            ))}
+            <div>
+              <Button variant="outline" size="sm" onClick={() => addException(i)}>
+                + Add Exception
+              </Button>
+            </div>
           </div>
         </div>
       ))}
       <div>
-        <Button variant="outline" size="sm" onClick={add}>+ Add</Button>
+        <Button variant="outline" size="sm" onClick={addRule}>+ Add</Button>
       </div>
     </div>
   )

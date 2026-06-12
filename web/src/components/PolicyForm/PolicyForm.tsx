@@ -219,6 +219,9 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <CardTitle className="text-sm font-medium">File Rules</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Blacklist: only the paths you list are blocked. Everything else is allowed.
+            </p>
             <FileSection rules={fileRules} onChange={setFileRules} />
           </CardContent>
         </Card>
