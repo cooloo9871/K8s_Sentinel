@@ -43,8 +43,7 @@ export function PolicyEditPage() {
   // Pre-fill from Behavior Discovery "Create Policy" navigation.
   // Read prefill once from location.state, then immediately clear the history
   // entry so that navigating back to /new again doesn't re-apply stale data.
-  const prefill = (location.state as { prefill?: PolicyFormInput; yamlContent?: string } | null)?.prefill
-  const yamlFromTemplate = (location.state as { yamlContent?: string } | null)?.yamlContent
+  const prefill = (location.state as { prefill?: PolicyFormInput } | null)?.prefill
 
   const [namespaces, setNamespaces] = useState<string[]>([])
   const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
@@ -59,10 +58,10 @@ export function PolicyEditPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const [yamlContent, setYamlContent] = useState(yamlFromTemplate ?? '')
+  const [yamlContent, setYamlContent] = useState('')
   const [yamlEditorKey, setYamlEditorKey] = useState(0)
   const [yamlValid, setYamlValid] = useState(true)
-  const [activeTab, setActiveTab] = useState(yamlFromTemplate ? 'yaml' : 'form')
+  const [activeTab, setActiveTab] = useState('form')
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(!isNew)
 
