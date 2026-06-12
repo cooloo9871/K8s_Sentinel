@@ -106,8 +106,8 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
           .filter((mb: any) => mb.operator === 'NotIn')
           .flatMap((mb: any) => mb.values ?? [])
           .filter(Boolean)
-        // Detect permission from index-1 Bitmask args
-        const permArg = (sel.matchArgs ?? []).find((a: any) => a.index === 1 && a.operator === 'Bitmask')
+        // Detect permission from index-1 Equal args (MAY_READ=4, MAY_WRITE=2)
+        const permArg = (sel.matchArgs ?? []).find((a: any) => a.index === 1 && a.operator === 'Equal')
         let permission: 'all' | 'read' | 'write' = 'all'
         if (permArg) {
           if ((permArg.values ?? []).includes('4')) permission = 'read'
