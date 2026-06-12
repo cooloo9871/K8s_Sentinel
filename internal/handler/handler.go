@@ -35,6 +35,7 @@ func New(cfg Config) http.Handler {
 	r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
 	r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
 	r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
+	r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
 
 	return r
 }
