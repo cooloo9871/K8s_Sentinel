@@ -46,7 +46,7 @@ type Store struct {
 func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
 	templatesFile := os.Getenv("SENTINEL_TEMPLATES_FILE")
 	if templatesFile == "" {
-		templatesFile = "/data/sentinel/templates.json"
+		templatesFile = "/tmp/sentinel-templates.json"
 	}
 	return &Store{
 		client:     client,

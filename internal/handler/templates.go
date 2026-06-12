@@ -25,10 +25,7 @@ func createTemplate(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id, name and yaml are required"})
 			return
 		}
-		if err := store.Templates.Add(t); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
+		store.Templates.Add(t)
 		writeJSON(w, http.StatusCreated, t)
 	}
 }
@@ -36,10 +33,7 @@ func createTemplate(store *k8s.Store) http.HandlerFunc {
 func deleteTemplate(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		if err := store.Templates.Delete(id); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
+		store.Templates.Delete(id)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

@@ -58,6 +58,8 @@ export function PolicyTemplatesPage() {
   const [editorYaml, setEditorYaml] = useState('')
   const [editorValid, setEditorValid] = useState(true)
   const [editorKey, setEditorKey] = useState(0)
+  const [saveAsName, setSaveAsName] = useState('')
+  const [showSaveAsInput, setShowSaveAsInput] = useState(false)
 
   // New template form
   const [showNewForm, setShowNewForm] = useState(false)
@@ -89,9 +91,10 @@ export function PolicyTemplatesPage() {
   const openEditor = (t: PolicyTemplate) => {
     setEditingTemplate(t); setEditorYaml(t.yaml)
     setEditorValid(true); setEditorKey(k => k + 1)
+    setShowSaveAsInput(false); setSaveAsName('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  const closeEditor = () => setEditingTemplate(null)
+  const closeEditor = () => { setEditingTemplate(null); setShowSaveAsInput(false) }
 
   const handleCreateFromEditor = async () => {
     if (!editorValid || !editorYaml.trim()) return
@@ -106,11 +109,10 @@ export function PolicyTemplatesPage() {
   }
 
   const handleSaveAsTemplate = async () => {
-    const name = prompt('Template name:')
-    if (!name?.trim()) return
+    if (!saveAsName.trim()) return
     const payload: CustomTemplatePayload = {
       id: `custom-${Date.now()}`,
-      name: name.trim(), description: '', tags: ['custom'], yaml: editorYaml,
+      name: saveAsName.trim(), description: '', tags: ['custom'], yaml: editorYaml,
     }
     try {
       await templateApi.create(payload)
@@ -159,9 +161,26 @@ export function PolicyTemplatesPage() {
             <h4 className="text-xl font-semibold">Edit Template</h4>
             <p className="text-sm text-muted-foreground">{editingTemplate.name}</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={closeEditor}>← Back to Templates</Button>
-            <Button variant="outline" onClick={handleSaveAsTemplate} disabled={!editorValid}>Save as New Template</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={closeEditor}>← Back</Button>
+            {showSaveAsInput ? (
+              <>
+                <Input
+                  className="h-9 w-48"
+                  placeholder="Template name"
+                  value={saveAsName}
+                  onChange={e => setSaveAsName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveAsTemplate()}
+                  autoFocus
+                />
+                <Button variant="outline" onClick={handleSaveAsTemplate} disabled={!saveAsName.trim()}>Save</Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowSaveAsInput(false)}>✕</Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => setShowSaveAsInput(true)} disabled={!editorValid}>
+                Save as New Template
+              </Button>
+            )}
             <Button onClick={handleCreateFromEditor} disabled={!editorValid || creating}>
               {creating ? 'Creating...' : 'Create Policy'}
             </Button>

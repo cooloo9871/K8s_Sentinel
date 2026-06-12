@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 )
@@ -36,24 +37,28 @@ func (ts *TemplateStore) List() []CustomTemplate {
 	return out
 }
 
-func (ts *TemplateStore) Add(t CustomTemplate) error {
+func (ts *TemplateStore) Add(t CustomTemplate) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.items = append(ts.items, t)
-	return ts.flush()
+	if err := ts.flush(); err != nil {
+		fmt.Printf("[sentinel-templates] flush error: %v\n", err)
+	}
 }
 
-func (ts *TemplateStore) Delete(id string) error {
+func (ts *TemplateStore) Delete(id string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	filtered := ts.items[:0]
+	filtered := make([]CustomTemplate, 0, len(ts.items))
 	for _, t := range ts.items {
 		if t.ID != id {
 			filtered = append(filtered, t)
 		}
 	}
 	ts.items = filtered
-	return ts.flush()
+	if err := ts.flush(); err != nil {
+		fmt.Printf("[sentinel-templates] flush error: %v\n", err)
+	}
 }
 
 func (ts *TemplateStore) flush() error {
