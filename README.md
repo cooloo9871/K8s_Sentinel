@@ -40,6 +40,7 @@
 ### Cluster — 叢集資訊
 
 - Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
 
 ### Dashboard — 總覽
 
