@@ -108,8 +108,11 @@ function DetailRow({ e }: { e: DisplayEvent }) {
 export function SecurityEventsPage() {
   const { events, connected, error, reconnect } = useSecurityEvents()
   const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
 
   // Stable key derived from event content so expansions survive new events prepending.
   // Use the stable unique ID assigned on event creation.
@@ -120,6 +123,7 @@ export function SecurityEventsPage() {
   const filtered = events.filter((e) => {
     if (filter === 'warning' && e.severity !== 'warning') return false
     if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
     return true
   })
@@ -153,11 +157,25 @@ export function SecurityEventsPage() {
             )}
           </div>
 
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
           <Input
             placeholder="Search pod name..."
             value={podSearch}
             onChange={(e) => setPodSearch(e.target.value)}
-            className="h-9 w-48"
+            className="h-9 w-44"
           />
 
           <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
