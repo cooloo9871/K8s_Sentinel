@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { authApi, type AuthUser } from '../api/client'
+import logoUrl from '../assets/sentinel-lockup-light.svg'
 
 interface Props {
   onLogin: (user: AuthUser) => void
@@ -32,9 +33,8 @@ export function LoginPage({ onLogin }: Props) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="w-full max-w-sm">
-        <CardHeader className="text-center pb-2">
-          <CardTitle className="text-2xl">Sentinel</CardTitle>
-          <p className="text-sm text-muted-foreground">Sign in to continue</p>
+        <CardHeader className="flex items-center pb-2">
+          <img src={logoUrl} alt="Sentinel" className="h-10" />
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
