@@ -302,9 +302,9 @@ export function SecurityEventsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="max-w-[180px]">
                         {e.policyName
-                          ? <Badge variant="outline" className="font-mono text-xs">{e.policyName}</Badge>
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
                           : '—'}
                       </TableCell>
                       <TableCell>
