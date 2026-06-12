@@ -90,6 +90,7 @@ function DetailRow({ e }: { e: DisplayEvent }) {
     const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
     items.push({ label: 'Pod / Container', value: podValue })
   }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
   if (e.function)   items.push({ label: 'Function',  value: e.function })
   if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
   items.push({ label: 'Time', value: formatTWTime(e.time) })
