@@ -1,8 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { TetragonEvent } from '../api/types'
 
-const MAX_EVENTS = 500
+const MAX_WARNINGS  = 300
+const MAX_CRITICALS = 200
 const DEDUP_WINDOW_MS = 5000
+
+/** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */
+function capBySeverity(events: DisplayEvent[]): DisplayEvent[] {
+  // events is sorted newest-first; slicing keeps the newest within each severity.
+  const warnIds = new Set(
+    events.filter(e => e.severity === 'warning').slice(0, MAX_WARNINGS).map(e => e.id)
+  )
+  const critIds = new Set(
+    events.filter(e => e.severity === 'critical').slice(0, MAX_CRITICALS).map(e => e.id)
+  )
+  return events.filter(e =>
+    (e.severity === 'warning' && warnIds.has(e.id)) ||
+    (e.severity === 'critical' && critIds.has(e.id))
+  )
+}
 const STORAGE_KEY = 'sentinel_security_events'
 
 export type Severity = 'warning' | 'critical'
@@ -22,7 +38,7 @@ function loadFromStorage(): DisplayEvent[] {
     if (raw) {
       const cutoff = Date.now() - TTL_MS
       const data = JSON.parse(raw) as any[]
-      return data
+      const mapped = data
         .filter((e) => e.type === 'kprobe' && e.policyName)
         .filter((e) => !e.time || new Date(e.time).getTime() >= cutoff)
         .map((e) => ({
@@ -31,6 +47,7 @@ function loadFromStorage(): DisplayEvent[] {
           count: e.count ?? 1,
           severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
         })) as DisplayEvent[]
+      return capBySeverity(mapped)
     }
   } catch {}
   return []
@@ -109,7 +126,7 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
 
         if (pausedRef.current) {
           // While paused, buffer new events without updating the display.
-          pendingRef.current = [newEvt, ...pendingRef.current].slice(0, MAX_EVENTS)
+          pendingRef.current = [newEvt, ...pendingRef.current].slice(0, MAX_WARNINGS + MAX_CRITICALS)
           setPendingCount(pendingRef.current.length)
           return
         }
@@ -119,7 +136,7 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
             // Dedup: preserve the original id so the expanded row stays open.
             return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
           }
-          return [newEvt, ...prev].slice(0, MAX_EVENTS)
+          return capBySeverity([newEvt, ...prev])
         })
       } catch {}
     }
@@ -152,7 +169,7 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
         const pending = pendingRef.current
         pendingRef.current = []
         setPendingCount(0)
-        setEvents(prev => [...pending, ...prev].slice(0, MAX_EVENTS))
+        setEvents(prev => capBySeverity([...pending, ...prev]))
       }
       return nowPaused
     })
