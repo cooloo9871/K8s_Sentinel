@@ -46,6 +46,21 @@ func (ts *TemplateStore) Add(t CustomTemplate) {
 	}
 }
 
+func (ts *TemplateStore) Update(t CustomTemplate) bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	for i, item := range ts.items {
+		if item.ID == t.ID {
+			ts.items[i] = t
+			if err := ts.flush(); err != nil {
+				fmt.Printf("[sentinel-templates] flush error: %v\n", err)
+			}
+			return true
+		}
+	}
+	return false
+}
+
 func (ts *TemplateStore) Delete(id string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()

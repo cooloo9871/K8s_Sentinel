@@ -38,6 +38,7 @@ func New(cfg Config) http.Handler {
 	r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
 	r.Get("/api/templates", listTemplates(cfg.Store))
 	r.Post("/api/templates", createTemplate(cfg.Store))
+	r.Put("/api/templates/{id}", updateTemplate(cfg.Store))
 	r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
 
 	return r

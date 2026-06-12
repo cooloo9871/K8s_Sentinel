@@ -13,21 +13,7 @@ import { policyApi, templateApi, type CustomTemplatePayload } from '../api/clien
 import { useToast } from '../layout/AppToaster'
 import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
 
-const DEFAULT_YAML = `apiVersion: cilium.io/v1alpha1
-kind: TracingPolicy
-metadata:
-  name: my-template
-spec:
-  kprobes:
-    - call: sys_execve
-      syscall: true
-      args:
-        - index: 0
-          type: string
-      selectors:
-        - matchActions:
-            - action: Post
-`
+const DEFAULT_YAML = ''
 
 function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
   return { ...t, tags: t.tags ?? [], description: t.description ?? '', custom: true }
@@ -108,6 +94,21 @@ export function PolicyTemplatesPage() {
     } finally { setCreating(false) }
   }
 
+  // Save: update existing custom template
+  const handleSave = async () => {
+    if (!editingTemplate || !editingTemplate.custom) return
+    try {
+      await templateApi.update(editingTemplate.id, {
+        id: editingTemplate.id, name: editingTemplate.name,
+        description: editingTemplate.description, tags: editingTemplate.tags, yaml: editorYaml,
+      })
+      await loadCustom()
+      toast.success('Template saved.')
+      closeEditor()
+    } catch { toast.error('Failed to save template') }
+  }
+
+  // Save as new template (for built-in templates)
   const handleSaveAsTemplate = async () => {
     if (!saveAsName.trim()) return
     const payload: CustomTemplatePayload = {
@@ -117,7 +118,7 @@ export function PolicyTemplatesPage() {
     try {
       await templateApi.create(payload)
       await loadCustom()
-      toast.success('Saved as template.')
+      toast.success('Saved as new template.')
       closeEditor()
     } catch { toast.error('Failed to save template') }
   }
@@ -163,7 +164,13 @@ export function PolicyTemplatesPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={closeEditor}>← Back</Button>
-            {showSaveAsInput ? (
+            {editingTemplate?.custom ? (
+              // Custom template: save directly
+              <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
+                Save
+              </Button>
+            ) : showSaveAsInput ? (
+              // Built-in template: save as new
               <>
                 <Input
                   className="h-9 w-48"

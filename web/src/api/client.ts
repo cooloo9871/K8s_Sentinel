@@ -59,6 +59,8 @@ export const templateApi = {
     api.get('/templates').then((r) => r.data),
   create: (t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
     api.post('/templates', t).then((r) => r.data),
+  update: (id: string, t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.put(`/templates/${id}`, t).then((r) => r.data),
   delete: (id: string): Promise<void> =>
     api.delete(`/templates/${id}`),
 }

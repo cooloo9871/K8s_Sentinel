@@ -30,6 +30,23 @@ func createTemplate(store *k8s.Store) http.HandlerFunc {
 	}
 }
 
+func updateTemplate(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var t k8s.CustomTemplate
+		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+			return
+		}
+		t.ID = id
+		if !store.Templates.Update(t) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "template not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, t)
+	}
+}
+
 func deleteTemplate(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
