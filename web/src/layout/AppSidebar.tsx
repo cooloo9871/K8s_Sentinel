@@ -1,5 +1,6 @@
 import { useLocation, NavLink } from 'react-router-dom'
 import faviconUrl from '../assets/favicon.svg'
+import { useAuth } from './AuthContext'
 import {
   Sidebar,
   SidebarHeader,
@@ -14,6 +15,7 @@ import {
 
 export function AppSidebar() {
   const { pathname } = useLocation()
+  const { user } = useAuth()
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + '/')
@@ -93,6 +95,20 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
     </Sidebar>
   )

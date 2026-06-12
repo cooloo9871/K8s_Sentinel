@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/handler"
 	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
 	sentinelweb "github.com/cooloo9871/sentinel/web"
@@ -21,8 +22,16 @@ func main() {
 	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
 	store.StartDiscoveryLoop(context.Background())
 
+	users := auth.NewUserStore("/data/sentinel/users.json")
+	secret, err := auth.LoadOrCreateSecret("/data/sentinel/.jwt-secret")
+	if err != nil {
+		log.Fatalf("jwt secret: %v", err)
+	}
+
 	cfg := handler.Config{
-		Store: store,
+		Store:  store,
+		Users:  users,
+		Secret: secret,
 	}
 
 	mux := http.NewServeMux()

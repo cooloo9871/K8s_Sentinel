@@ -3,12 +3,16 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from './AppSidebar'
 import { AppHeader } from './AppHeader'
 
-export function AppLayout() {
+interface Props {
+  onLogout: () => Promise<void>
+}
+
+export function AppLayout({ onLogout }: Props) {
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <AppHeader />
+        <AppHeader onLogout={onLogout} />
         <main className="flex-1 px-8 py-6">
           <Outlet />
         </main>

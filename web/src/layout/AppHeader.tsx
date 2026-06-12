@@ -9,9 +9,11 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import { modeApi } from '../api/client'
+import { useAuth } from './AuthContext'
 import type { Mode } from '../api/types'
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -62,7 +64,12 @@ function useBreadcrumbs() {
   return crumbs
 }
 
-export function AppHeader() {
+interface Props {
+  onLogout: () => Promise<void>
+}
+
+export function AppHeader({ onLogout }: Props) {
+  const { user } = useAuth()
   const [mode, setMode] = useState<Mode>('Monitoring')
   const breadcrumbs = useBreadcrumbs()
 
@@ -97,9 +104,14 @@ export function AppHeader() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <Badge variant={modeVariant} className="ml-auto">
-        {mode.toUpperCase()}
-      </Badge>
+      <div className="ml-auto flex items-center gap-2">
+        <Badge variant={modeVariant}>{mode.toUpperCase()}</Badge>
+        <Separator orientation="vertical" className="h-4" />
+        <span className="text-xs text-muted-foreground">{user?.username}</span>
+        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={onLogout}>
+          Sign out
+        </Button>
+      </div>
     </header>
   )
 }
