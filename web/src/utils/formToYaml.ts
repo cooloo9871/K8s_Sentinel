@@ -60,15 +60,18 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     })
   }
 
-  // File rules: ONE security_file_permission kprobe with all paths combined (blacklist only).
+  // File rules: ONE security_file_permission kprobe.
+  // Blacklist (default): Prefix — block paths in list.
+  // Whitelist: NotPrefix — block paths NOT in list.
   const allPaths = (input.file ?? []).flatMap(r => r.paths).filter(Boolean)
   if (allPaths.length > 0) {
+    const fileOp = input.fileMode === 'whitelist' ? 'NotPrefix' : 'Prefix'
     doc.spec.kprobes.push({
       call: 'security_file_permission',
       syscall: false,
       args: [{ index: 0, type: 'file' }, { index: 1, type: 'int' }],
       selectors: [{
-        matchArgs: [{ index: 0, operator: 'Prefix', values: allPaths }],
+        matchArgs: [{ index: 0, operator: fileOp, values: allPaths }],
         matchActions: [{ action }],
       }],
     })
