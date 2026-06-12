@@ -46,3 +46,20 @@ export const podApi = {
     api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
 }
 
+export interface CustomTemplatePayload {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  yaml: string
+}
+
+export const templateApi = {
+  list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
+    api.get('/templates').then((r) => r.data),
+  create: (t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.post('/templates', t).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/templates/${id}`),
+}
+

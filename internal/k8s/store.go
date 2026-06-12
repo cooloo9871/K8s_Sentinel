@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -37,17 +38,23 @@ type Store struct {
 	modeMu     sync.RWMutex
 	globalMode string // explicitly set by user; never auto-derived from policies
 	Discovery  *DiscoveryProfileStore
+	Templates  *TemplateStore
 	containers *containerResolver
 }
 
 // NewStore creates a Store wrapping the given clients.
 func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
+	templatesFile := os.Getenv("SENTINEL_TEMPLATES_FILE")
+	if templatesFile == "" {
+		templatesFile = "/data/sentinel/templates.json"
+	}
 	return &Store{
 		client:     client,
 		typed:      typed,
 		restConfig: cfg,
 		globalMode: "Monitoring",
 		Discovery:  NewDiscoveryProfileStore(),
+		Templates:  NewTemplateStore(templatesFile),
 		containers: newContainerResolver(),
 	}
 }

@@ -36,6 +36,9 @@ func New(cfg Config) http.Handler {
 	r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
 	r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
 	r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
+	r.Get("/api/templates", listTemplates(cfg.Store))
+	r.Post("/api/templates", createTemplate(cfg.Store))
+	r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
 
 	return r
 }

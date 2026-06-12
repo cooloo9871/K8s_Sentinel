@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,11 +9,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { YamlEditor } from '../components/YamlEditor'
-import { policyApi } from '../api/client'
+import { policyApi, templateApi, type CustomTemplatePayload } from '../api/client'
 import { useToast } from '../layout/AppToaster'
-import {
-  POLICY_TEMPLATES, loadCustomTemplates, saveCustomTemplates, type PolicyTemplate,
-} from '../data/policyTemplates'
+import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
 
 const DEFAULT_YAML = `apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
@@ -31,9 +29,24 @@ spec:
             - action: Post
 `
 
+function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
+  return { ...t, tags: t.tags ?? [], description: t.description ?? '', custom: true }
+}
+
 export function PolicyTemplatesPage() {
   const toast = useToast()
-  const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>(() => loadCustomTemplates())
+  const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>([])
+
+  const loadCustom = useCallback(async () => {
+    try {
+      const { templates } = await templateApi.list()
+      setCustomTemplates(templates.map(apiToTemplate))
+    } catch { /* ignore — server might not have any */ }
+  }, [])
+
+  useEffect(() => { loadCustom() }, [loadCustom])
+
+  const allTemplates = [...POLICY_TEMPLATES, ...customTemplates]
 
   // Use-template dialog
   const [selected, setSelected] = useState<PolicyTemplate | null>(null)
@@ -56,9 +69,7 @@ export function PolicyTemplatesPage() {
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
 
-  const allTemplates = [...POLICY_TEMPLATES, ...customTemplates]
-
-  /* ── use template dialog ── */
+  /* ── use template ── */
   const openDialog = (t: PolicyTemplate) => { setSelected(t); setPolicyName(t.id) }
 
   const handleCreate = async () => {
@@ -71,20 +82,15 @@ export function PolicyTemplatesPage() {
       setSelected(null)
     } catch {
       toast.error('Failed to create policy')
-    } finally {
-      setCreating(false)
-    }
+    } finally { setCreating(false) }
   }
 
   /* ── inline editor ── */
   const openEditor = (t: PolicyTemplate) => {
-    setEditingTemplate(t)
-    setEditorYaml(t.yaml)
-    setEditorValid(true)
-    setEditorKey(k => k + 1)
+    setEditingTemplate(t); setEditorYaml(t.yaml)
+    setEditorValid(true); setEditorKey(k => k + 1)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-
   const closeEditor = () => setEditingTemplate(null)
 
   const handleCreateFromEditor = async () => {
@@ -96,60 +102,52 @@ export function PolicyTemplatesPage() {
       closeEditor()
     } catch {
       toast.error('Failed to create policy')
-    } finally {
-      setCreating(false)
-    }
+    } finally { setCreating(false) }
   }
 
-  const handleSaveAsTemplate = () => {
+  const handleSaveAsTemplate = async () => {
     const name = prompt('Template name:')
     if (!name?.trim()) return
-    const tpl: PolicyTemplate = {
+    const payload: CustomTemplatePayload = {
       id: `custom-${Date.now()}`,
-      name: name.trim(),
-      description: '',
-      tags: ['custom'],
-      yaml: editorYaml,
-      custom: true,
+      name: name.trim(), description: '', tags: ['custom'], yaml: editorYaml,
     }
-    const updated = [...customTemplates, tpl]
-    setCustomTemplates(updated)
-    saveCustomTemplates(updated)
-    toast.success('Saved as template.')
-    closeEditor()
+    try {
+      await templateApi.create(payload)
+      await loadCustom()
+      toast.success('Saved as template.')
+      closeEditor()
+    } catch { toast.error('Failed to save template') }
   }
 
   /* ── new template form ── */
-  const resetNewForm = () => {
-    setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML)
-    setShowNewForm(false)
-  }
+  const resetNewForm = () => { setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML); setShowNewForm(false) }
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
     if (!newName.trim() || !newYaml.trim()) return
-    const tpl: PolicyTemplate = {
+    const payload: CustomTemplatePayload = {
       id: `custom-${Date.now()}`,
-      name: newName.trim(),
-      description: newDesc.trim(),
+      name: newName.trim(), description: newDesc.trim(),
       tags: newTags.split(',').map(t => t.trim()).filter(Boolean),
       yaml: newYaml,
-      custom: true,
     }
-    const updated = [...customTemplates, tpl]
-    setCustomTemplates(updated)
-    saveCustomTemplates(updated)
-    toast.success('Template saved.')
-    resetNewForm()
+    try {
+      await templateApi.create(payload)
+      await loadCustom()
+      toast.success('Template saved.')
+      resetNewForm()
+    } catch { toast.error('Failed to save template') }
   }
 
   /* ── delete ── */
-  const handleDelete = () => {
-    if (!deleteTarget) return
-    const updated = customTemplates.filter(t => t.id !== deleteTarget.id)
-    setCustomTemplates(updated)
-    saveCustomTemplates(updated)
-    toast.success('Template deleted.')
-    setDeleteTarget(null)
+  const handleDelete = async () => {
+    if (!deleteTarget?.id) return
+    try {
+      await templateApi.delete(deleteTarget.id)
+      await loadCustom()
+      toast.success('Template deleted.')
+      setDeleteTarget(null)
+    } catch { toast.error('Failed to delete template') }
   }
 
   /* ── inline editor view ── */
@@ -163,19 +161,14 @@ export function PolicyTemplatesPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={closeEditor}>← Back to Templates</Button>
-            <Button variant="outline" onClick={handleSaveAsTemplate} disabled={!editorValid}>
-              Save as New Template
-            </Button>
+            <Button variant="outline" onClick={handleSaveAsTemplate} disabled={!editorValid}>Save as New Template</Button>
             <Button onClick={handleCreateFromEditor} disabled={!editorValid || creating}>
               {creating ? 'Creating...' : 'Create Policy'}
             </Button>
           </div>
         </div>
-        <YamlEditor
-          key={editorKey}
-          initialValue={editorYaml}
-          onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }}
-        />
+        <YamlEditor key={editorKey} initialValue={editorYaml}
+          onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }} />
       </>
     )
   }
@@ -186,16 +179,11 @@ export function PolicyTemplatesPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Policy Templates</h4>
-          <p className="text-sm text-muted-foreground">
-            Pre-built and custom TracingPolicy templates.
-          </p>
+          <p className="text-sm text-muted-foreground">Pre-built and custom TracingPolicy templates.</p>
         </div>
-        <Button onClick={() => setShowNewForm(v => !v)}>
-          {showNewForm ? 'Cancel' : '+ New Template'}
-        </Button>
+        <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>
       </div>
 
-      {/* New template form */}
       {showNewForm && (
         <Card className="mb-6 border-primary/40">
           <CardHeader className="border-b pb-3">
@@ -218,11 +206,8 @@ export function PolicyTemplatesPage() {
             </div>
             <div className="flex flex-col gap-1">
               <Label className="text-xs">YAML <span className="text-destructive">*</span></Label>
-              <textarea
-                className="min-h-[200px] w-full rounded-md border bg-muted px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={newYaml}
-                onChange={e => setNewYaml(e.target.value)}
-              />
+              <textarea className="min-h-[200px] w-full rounded-md border bg-muted px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={newYaml} onChange={e => setNewYaml(e.target.value)} />
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={resetNewForm}>Cancel</Button>
@@ -232,7 +217,6 @@ export function PolicyTemplatesPage() {
         </Card>
       )}
 
-      {/* Template cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {allTemplates.map(t => (
           <Card key={t.id}>
@@ -241,28 +225,18 @@ export function PolicyTemplatesPage() {
                 <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {t.custom && <Badge className="text-[10px] bg-violet-500/15 text-violet-700">Custom</Badge>}
-                  {t.tags.map(tag => (
-                    <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                  ))}
+                  {t.tags.map(tag => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}
                 </div>
               </div>
-              <CardAction>
-                <Button size="sm" onClick={() => openDialog(t)}>Use Template</Button>
-              </CardAction>
+              <CardAction><Button size="sm" onClick={() => openDialog(t)}>Use Template</Button></CardAction>
             </CardHeader>
             <CardContent className="pt-3">
               {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}
-              <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">
-                {t.yaml.trim()}
-              </pre>
+              <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">{t.yaml.trim()}</pre>
               <div className="mt-2 flex gap-2">
-                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>
-                  Open in Editor
-                </Button>
+                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>Open in Editor</Button>
                 {t.custom && (
-                  <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>
-                    Delete
-                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>Delete</Button>
                 )}
               </div>
             </CardContent>
@@ -270,7 +244,6 @@ export function PolicyTemplatesPage() {
         ))}
       </div>
 
-      {/* Use template dialog */}
       <AlertDialog open={!!selected} onOpenChange={(open: boolean) => !open && setSelected(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -291,7 +264,6 @@ export function PolicyTemplatesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
