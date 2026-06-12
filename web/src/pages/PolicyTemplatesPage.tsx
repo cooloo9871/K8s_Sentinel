@@ -167,7 +167,7 @@ export function PolicyTemplatesPage() {
             )}
           </div>
         </div>
-        <YamlEditor key={editorKey} initialValue={editorYaml}
+        <YamlEditor key={editorKey} initialValue={editorYaml} readOnly={!isAdmin}
           onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }} />
       </>
     )
@@ -234,7 +234,7 @@ export function PolicyTemplatesPage() {
               {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}
               <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">{t.yaml.trim()}</pre>
               <div className="mt-2 flex gap-2">
-                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>Open in Editor</Button>
+                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>{isAdmin ? 'Open in Editor' : 'View YAML'}</Button>
                 {isAdmin && t.custom && (
                   <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>Delete</Button>
                 )}
