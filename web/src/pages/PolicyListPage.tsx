@@ -209,7 +209,7 @@ export function PolicyListPage() {
                   <TableHead>Mode</TableHead>
                   <TableHead>Namespace</TableHead>
                   <TableHead>Created By</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead>Created Time</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
