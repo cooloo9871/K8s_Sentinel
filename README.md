@@ -124,15 +124,6 @@ volumes:
 
 ---
 
-## 本機開發
-
-```bash
-go run ./cmd/server/          # 後端（需 kubeconfig）
-cd web && npm install && npm run dev  # 前端 dev server
-```
-
----
-
 ## 授權
 
 [Apache License 2.0](LICENSE)
