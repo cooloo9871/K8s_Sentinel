@@ -81,9 +81,9 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		// MAY_READ=4, MAY_WRITE=2 — use Bitmask to check specific permission bits.
 		switch r.Permission {
 		case "read":
-			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Mask", Values: []string{"4"}})
+			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Equal", Values: []string{"4"}})
 		case "write":
-			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Mask", Values: []string{"2"}})
+			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Equal", Values: []string{"2"}})
 		}
 		sel := KProbeSelector{
 			MatchArgs:    matchArgs,
