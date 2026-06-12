@@ -2,6 +2,7 @@ import yaml from 'js-yaml'
 import type { PolicyFormInput } from '../api/types'
 
 interface Selector {
+  matchBinaries?: { operator: string; values: string[] }[]
   matchArgs?: { index: number; operator: string; values: string[] }[]
   matchActions: { action: string }[]
 }
@@ -69,12 +70,14 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     .map(r => {
       const paths = r.paths.filter(Boolean)
       const except = (r.exceptBinaries ?? []).filter(Boolean)
-      const matchArgs: Selector['matchArgs'] = [{ index: 0, operator: fileOp, values: paths }]
-      if (r.permission === 'read')  matchArgs.push({ index: 1, operator: 'Bitmask', values: ['4'] })
-      if (r.permission === 'write') matchArgs.push({ index: 1, operator: 'Bitmask', values: ['2'] })
-      const sel: Selector = { matchArgs, matchActions: [{ action }] }
-      if (except.length > 0) {
-        ;(sel as any).matchBinaries = [{ operator: 'NotIn', values: except }]
+      const matchArgs: NonNullable<Selector['matchArgs']> = [{ index: 0, operator: fileOp, values: paths }]
+      if (r.permission === 'read')  matchArgs.push({ index: 1, operator: 'Equal', values: ['4'] })
+      if (r.permission === 'write') matchArgs.push({ index: 1, operator: 'Equal', values: ['2'] })
+      // Build selector with matchBinaries FIRST to match Go struct field order.
+      const sel: Selector = {
+        ...(except.length > 0 ? { matchBinaries: [{ operator: 'NotIn', values: except }] } : {}),
+        matchArgs,
+        matchActions: [{ action }],
       }
       return sel
     })
