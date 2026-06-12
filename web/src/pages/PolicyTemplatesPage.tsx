@@ -87,17 +87,6 @@ export function PolicyTemplatesPage() {
   }
   const closeEditor = () => setEditingTemplate(null)
 
-  const handleCreateFromEditor = async () => {
-    if (!editorValid || !editorYaml.trim()) return
-    setCreating(true)
-    try {
-      await policyApi.create({ source: 'yaml', rawYaml: editorYaml })
-      toast.success('Policy created.')
-      closeEditor()
-    } catch {
-      toast.error('Failed to create policy')
-    } finally { setCreating(false) }
-  }
 
   // Save: update existing custom template
   const handleSave = async () => {
@@ -158,11 +147,6 @@ export function PolicyTemplatesPage() {
             {isAdmin && editingTemplate?.custom && (
               <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
                 Save
-              </Button>
-            )}
-            {isAdmin && (
-              <Button onClick={handleCreateFromEditor} disabled={!editorValid || creating}>
-                {creating ? 'Creating...' : 'Create Policy'}
               </Button>
             )}
           </div>
