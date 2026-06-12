@@ -43,30 +43,17 @@ export function PolicyEditPage() {
   const isNew = !name
   const isAdmin = user?.role === 'admin'
 
-  // Viewers cannot create new policies
-  if (!isAdmin && isNew) {
-    navigate('/policies/tracing', { replace: true })
-    return null
-  }
-
   // Pre-fill from Behavior Discovery "Create Policy" navigation.
   // Read prefill once from location.state, then immediately clear the history
   // entry so that navigating back to /new again doesn't re-apply stale data.
   const prefill = (location.state as { prefill?: PolicyFormInput } | null)?.prefill
 
+  // All hooks must be declared before any conditional return (React Rules of Hooks).
   const [namespaces, setNamespaces] = useState<string[]>([])
   const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
   const [formValues, setFormValues] = useState<PolicyFormInput>(
     isNew && prefill ? { ...EMPTY_FORM, ...prefill } : EMPTY_FORM
   )
-
-  // Clear the prefill from browser history after consuming it once.
-  useEffect(() => {
-    if (isNew && prefill) {
-      window.history.replaceState(null, '')
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   const [yamlContent, setYamlContent] = useState('')
   const [yamlEditorKey, setYamlEditorKey] = useState(0)
   const [yamlValid, setYamlValid] = useState(true)
@@ -75,6 +62,21 @@ export function PolicyEditPage() {
   const [pageLoading, setPageLoading] = useState(!isNew)
 
   const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
+
+  // Clear the prefill from browser history after consuming it once.
+  useEffect(() => {
+    if (isNew && prefill) {
+      window.history.replaceState(null, '')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Viewers cannot create new policies — redirect via effect to preserve hook order.
+  useEffect(() => {
+    if (!isAdmin && isNew) {
+      navigate('/policies/tracing', { replace: true })
+    }
+  }, [isAdmin, isNew, navigate])
 
   useEffect(() => {
     const work: Promise<void>[] = [namespaceApi.list().then(setNamespaces)]
@@ -91,6 +93,8 @@ export function PolicyEditPage() {
     }
     Promise.all(work).finally(() => setPageLoading(false))
   }, [name, namespace, isNew])
+
+  if (!isAdmin && isNew) return null
 
   const handleTabChange = (tab: string) => {
     if (tab === 'yaml' && activeTab === 'form' && formValues.name.trim()) {

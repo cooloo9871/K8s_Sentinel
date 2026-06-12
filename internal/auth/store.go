@@ -63,7 +63,11 @@ func (s *UserStore) flush() {
 	for _, u := range s.users {
 		users = append(users, u)
 	}
-	data, _ := json.Marshal(userFile{Users: users})
+	data, err := json.Marshal(userFile{Users: users})
+	if err != nil {
+		log.Printf("auth: flush marshal error: %v", err)
+		return
+	}
 	tmp := s.path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		log.Printf("auth: flush write error: %v", err)
@@ -87,11 +91,17 @@ func (s *UserStore) bootstrap() {
 	log.Println("WARNING: no users found — created default admin/admin. Change the password immediately.")
 }
 
+// dummyHash is used to perform a constant-time bcrypt comparison for unknown
+// usernames, preventing timing-based username enumeration.
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy"), bcrypt.MinCost)
+
 func (s *UserStore) Authenticate(username, password string) (User, bool) {
 	s.mu.RLock()
 	u, ok := s.users[username]
 	s.mu.RUnlock()
 	if !ok {
+		// Always run bcrypt to prevent timing-based username enumeration.
+		bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return User{}, false
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PassHash), []byte(password)) != nil {
