@@ -234,10 +234,10 @@ export function SecurityEventsPage() {
                 <TableRow>
                   <TableHead className="w-8" />
                   <TableHead className="w-24">Severity</TableHead>
-                  <TableHead>Rule / Detail</TableHead>
-                  <TableHead>Namespace</TableHead>
-                  <TableHead>Pod / Container</TableHead>
-                  <TableHead>Policy</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
                   <TableHead className="w-24">Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -274,12 +274,14 @@ export function SecurityEventsPage() {
                           <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
                       <TableCell className="text-sm">
-                        {e.pod || '—'}
-                        {e.container && (
-                          <span className="text-xs text-muted-foreground"> / {e.container}</span>
-                        )}
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {e.policyName
