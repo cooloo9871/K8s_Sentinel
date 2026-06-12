@@ -216,6 +216,14 @@ func (s *Store) populateWorkloadInfo(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	// Build the set of currently running pod keys for pruning.
+	runningKeys := make(map[string]bool, len(pods.Items))
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == "Running" {
+			runningKeys[pod.Namespace+"/"+pod.Name] = true
+		}
+	}
+
 	for _, pod := range pods.Items {
 		if pod.Status.Phase != "Running" {
 			continue
@@ -237,6 +245,9 @@ func (s *Store) populateWorkloadInfo(ctx context.Context) {
 		}
 		s.Discovery.SetWorkload(pod.Namespace, pod.Name, kind, name)
 	}
+
+	// Remove profiles for pods that are no longer running.
+	s.Discovery.PruneTerminated(runningKeys)
 }
 
 // seedFromPodSpecs is the final fallback when tetra dump is unavailable.

@@ -92,6 +92,18 @@ func (s *DiscoveryProfileStore) Clear() {
 	s.mu.Unlock()
 }
 
+// PruneTerminated removes profiles for pods no longer in the running set.
+// Called periodically so scaled-down or deleted pods don't linger.
+func (s *DiscoveryProfileStore) PruneTerminated(runningKeys map[string]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key := range s.profiles {
+		if !runningKeys[key] {
+			delete(s.profiles, key)
+		}
+	}
+}
+
 func sliceContains(s []string, v string) bool {
 	for _, x := range s {
 		if x == v {
