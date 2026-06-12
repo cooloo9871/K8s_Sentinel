@@ -20,7 +20,7 @@
 - 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
 - **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
 - 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
-- **Policy Templates**：內建常用範本，可直接套用或在頁面內 YAML 編輯器修改；支援建立、儲存自訂範本
+- **Policy Templates**：內建常用範本，可直接套用或在頁面內 YAML 編輯器自由修改後建立 Policy；支援建立自訂範本，儲存在 Sentinel pod 檔案系統（可掛 PV 永存，預設 `/tmp/sentinel-templates.json`，可透過 `SENTINEL_TEMPLATES_FILE` 環境變數設定路徑）
 
 ### Behavior Discovery — 行為探索
 
