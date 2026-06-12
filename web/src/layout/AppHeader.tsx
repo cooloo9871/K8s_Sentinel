@@ -20,6 +20,7 @@ const ROUTE_LABELS: Record<string, string> = {
   tracing: 'TracingPolicy',
   new: 'New Policy',
   edit: 'Edit',
+  templates: 'Templates',
   discovery: 'Behavior Discovery',
   security: 'Notifications',
   events: 'Security Events',

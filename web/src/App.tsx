@@ -11,6 +11,7 @@ import { NamespacesPage } from './pages/NamespacesPage'
 import { SecurityEventsPage } from './pages/SecurityEventsPage'
 import { DiscoveryPage } from './pages/DiscoveryPage'
 import { TetragonStatusPage } from './pages/TetragonStatusPage'
+import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
             <Route path="/policies/tracing" element={<PolicyListPage />} />
             <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+            <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
             <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
             <Route path="/cluster/mode" element={<ModePage />} />
             <Route path="/cluster/namespaces" element={<NamespacesPage />} />

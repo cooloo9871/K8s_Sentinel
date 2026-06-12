@@ -54,6 +54,11 @@ export function AppSidebar() {
                   <NavLink to="/security/discovery">Behavior Discovery</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/templates')}>
+                  <NavLink to="/policies/templates">Templates</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
