@@ -18,8 +18,9 @@
 - **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
 - **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
 - 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
-- **Global Enforcement Mode**：一鍵切換所有 Policy 為同一模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
 - 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Policy Templates**：內建常用範本，可直接套用或在頁面內 YAML 編輯器修改；支援建立、儲存自訂範本
 
 ### Behavior Discovery — 行為探索
 
@@ -31,10 +32,11 @@
 
 ### Notifications — 安全通知
 
-- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失
-- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
 - 依 Namespace、Pod 名稱、嚴重程度篩選
-- 點擊展開事件詳情：違規路徑、網路目標、執行 user（UID）、parent process 等
+- 點擊展開事件詳情：違規路徑、網路目標、執行 user（UID）、Pod / Container、parent process 等
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
 - 時間顯示支援秒、分、時、天
 
 ### Cluster — 叢集資訊
@@ -44,8 +46,8 @@
 
 ### Dashboard — 總覽
 
-- Policy 數量、Namespace 數量、Global Enforcement Mode 一覽
-- 快速切換全域執行模式
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
 
 ---
 
