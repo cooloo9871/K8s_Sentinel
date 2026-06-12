@@ -44,8 +44,6 @@ export function PolicyTemplatesPage() {
   const [editorYaml, setEditorYaml] = useState('')
   const [editorValid, setEditorValid] = useState(true)
   const [editorKey, setEditorKey] = useState(0)
-  const [saveAsName, setSaveAsName] = useState('')
-  const [showSaveAsInput, setShowSaveAsInput] = useState(false)
 
   // New template form
   const [showNewForm, setShowNewForm] = useState(false)
@@ -77,10 +75,9 @@ export function PolicyTemplatesPage() {
   const openEditor = (t: PolicyTemplate) => {
     setEditingTemplate(t); setEditorYaml(t.yaml)
     setEditorValid(true); setEditorKey(k => k + 1)
-    setShowSaveAsInput(false); setSaveAsName('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  const closeEditor = () => { setEditingTemplate(null); setShowSaveAsInput(false) }
+  const closeEditor = () => setEditingTemplate(null)
 
   const handleCreateFromEditor = async () => {
     if (!editorValid || !editorYaml.trim()) return
@@ -108,20 +105,6 @@ export function PolicyTemplatesPage() {
     } catch { toast.error('Failed to save template') }
   }
 
-  // Save as new template (for built-in templates)
-  const handleSaveAsTemplate = async () => {
-    if (!saveAsName.trim()) return
-    const payload: CustomTemplatePayload = {
-      id: `custom-${Date.now()}`,
-      name: saveAsName.trim(), description: '', tags: ['custom'], yaml: editorYaml,
-    }
-    try {
-      await templateApi.create(payload)
-      await loadCustom()
-      toast.success('Saved as new template.')
-      closeEditor()
-    } catch { toast.error('Failed to save template') }
-  }
 
   /* ── new template form ── */
   const resetNewForm = () => { setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML); setShowNewForm(false) }
@@ -164,28 +147,9 @@ export function PolicyTemplatesPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={closeEditor}>← Back</Button>
-            {editingTemplate?.custom ? (
-              // Custom template: save directly
+            {editingTemplate?.custom && (
               <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
                 Save
-              </Button>
-            ) : showSaveAsInput ? (
-              // Built-in template: save as new
-              <>
-                <Input
-                  className="h-9 w-48"
-                  placeholder="Template name"
-                  value={saveAsName}
-                  onChange={e => setSaveAsName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSaveAsTemplate()}
-                  autoFocus
-                />
-                <Button variant="outline" onClick={handleSaveAsTemplate} disabled={!saveAsName.trim()}>Save</Button>
-                <Button variant="ghost" size="sm" onClick={() => setShowSaveAsInput(false)}>✕</Button>
-              </>
-            ) : (
-              <Button variant="outline" onClick={() => setShowSaveAsInput(true)} disabled={!editorValid}>
-                Save as New Template
               </Button>
             )}
             <Button onClick={handleCreateFromEditor} disabled={!editorValid || creating}>
