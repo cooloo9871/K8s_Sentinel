@@ -20,7 +20,8 @@
 - 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
 - **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
 - 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
-- **Policy Templates**：內建常用範本，可直接套用或在頁面內 YAML 編輯器自由修改後建立 Policy；支援建立自訂範本，儲存在 Sentinel pod 檔案系統（可掛 PV 永存，預設 `/tmp/sentinel-templates.json`，可透過 `SENTINEL_TEMPLATES_FILE` 環境變數設定路徑）
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：內建常用範本，可直接套用或在頁面內 YAML 編輯器自由修改後建立 Policy；支援建立自訂範本，儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
 
 ### Behavior Discovery — 行為探索
 
@@ -35,7 +36,7 @@
 - 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
 - Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
 - 依 Namespace、Pod 名稱、嚴重程度篩選
-- 點擊展開事件詳情：違規路徑、網路目標、執行 user（UID）、Pod / Container、parent process 等
+- 點擊展開事件詳情：違規路徑、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
 - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
 - 時間顯示支援秒、分、時、天
 
@@ -48,6 +49,14 @@
 
 - Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
 - 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- 使用者資料儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
 
 ---
 
@@ -86,6 +95,22 @@ bash deploy/install.sh
 kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 # 開啟 http://localhost:8080
 ```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
 
 ---
 
