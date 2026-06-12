@@ -26,6 +26,7 @@ const EMPTY_FORM: PolicyFormInput = {
   processMode: 'whitelist',
   process: [],
   file: [],
+  lsmRules: [],
   network: [],
   networkPorts: [],
   networkMode: 'whitelist',

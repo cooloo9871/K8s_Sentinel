@@ -12,6 +12,11 @@ export interface NetworkRule {
   address: string  // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
 }
 
+export interface LSMRule {
+  paths: string[]
+  exceptBinaries?: string[]  // binaries that can still open the file
+}
+
 export interface PolicyFormInput {
   name: string
   namespace?: string
@@ -20,6 +25,7 @@ export interface PolicyFormInput {
   process?: ProcessRule[]
   fileMode?: 'whitelist' | 'blacklist'     // whitelist = NotPrefix, blacklist = Prefix (default)
   file?: FileRule[]
+  lsmRules?: LSMRule[]                     // lsmhooks: file_open — blocks access before data is read
   network?: NetworkRule[]
   networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
   networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr

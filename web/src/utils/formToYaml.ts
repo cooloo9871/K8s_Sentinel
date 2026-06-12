@@ -14,6 +14,12 @@ interface KProbeSpec {
   selectors: Selector[]
 }
 
+interface LSMHookSpec {
+  hook: string
+  args: { index: number; type: string }[]
+  selectors: Selector[]
+}
+
 interface TracingPolicyDoc {
   apiVersion: string
   kind: string
@@ -21,6 +27,7 @@ interface TracingPolicyDoc {
   spec: {
     podSelector?: { matchLabels: Record<string, string> }
     kprobes: KProbeSpec[]
+    lsmhooks?: LSMHookSpec[]
   }
 }
 
@@ -118,6 +125,25 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
       args: [{ index: 0, type: 'sock' }],
       selectors,
     })
+  }
+
+  // LSM rules: lsmhooks file_open — blocks access at open time, before data is read/written.
+  const lsmSelectors: Selector[] = (input.lsmRules ?? [])
+    .flatMap(r => r.paths.filter(Boolean).map(p => {
+      const except = (r.exceptBinaries ?? []).filter(Boolean)
+      const sel: Selector = {
+        ...(except.length > 0 ? { matchBinaries: [{ operator: 'NotIn', values: except }] } : {}),
+        matchArgs: [{ index: 0, operator: 'Prefix', values: [p] }],
+        matchActions: [{ action }],
+      }
+      return sel
+    }))
+  if (lsmSelectors.length > 0) {
+    doc.spec.lsmhooks = [{
+      hook: 'file_open',
+      args: [{ index: 0, type: 'file' }],
+      selectors: lsmSelectors,
+    }]
   }
 
   return yaml.dump(doc, { lineWidth: -1 })

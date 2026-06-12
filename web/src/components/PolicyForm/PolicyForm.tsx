@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { ProcessSection } from './ProcessSection'
 import { FileSection } from './FileSection'
+import { LSMSection } from './LSMSection'
 import { NetworkSection } from './NetworkSection'
 import { formToYaml } from '../../utils/formToYaml'
 import type { PolicyFormInput, NetworkRule } from '../../api/types'
@@ -60,6 +61,10 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
 
   const setFileRules = (rules: typeof fileRules) =>
     onChange({ ...value, file: rules })
+
+  const lsmRules = value.lsmRules ?? []
+  const setLSMRules = (rules: typeof lsmRules) =>
+    onChange({ ...value, lsmRules: rules })
 
   const setNetRules = (rules: NetworkRule[]) =>
     onChange({ ...value, network: rules })
@@ -223,6 +228,19 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               Blacklist: only the paths you list are blocked. Everything else is allowed.
             </p>
             <FileSection rules={fileRules} onChange={setFileRules} />
+          </CardContent>
+        </Card>
+
+        {/* File Access Rules (LSM) */}
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">File Access Rules (LSM)</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Uses <span className="font-mono">lsmhooks: file_open</span> to block file access at open time, before any data is read or written. More reliable than File Rules for preventing reads.
+            </p>
+            <LSMSection rules={lsmRules} onChange={setLSMRules} />
           </CardContent>
         </Card>
 

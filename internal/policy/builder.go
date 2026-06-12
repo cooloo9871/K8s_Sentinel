@@ -109,6 +109,39 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		})
 	}
 
+	// LSM rules: file_open hook — blocks file access at open time, before any
+	// data is read or written.  More reliable than security_file_permission
+	// because the block happens before the VFS layer reads/writes data.
+	var lsmSelectors []KProbeSelector
+	for _, r := range input.LSMRules {
+		for _, p := range r.Paths {
+			if p == "" {
+				continue
+			}
+			sel := KProbeSelector{
+				MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: []string{p}}},
+				MatchActions: []ActionSelector{{Action: action}},
+			}
+			bins := make([]string, 0, len(r.ExceptBinaries))
+			for _, b := range r.ExceptBinaries {
+				if b != "" {
+					bins = append(bins, b)
+				}
+			}
+			if len(bins) > 0 {
+				sel.MatchBinaries = []BinarySelector{{Operator: "NotIn", Values: bins}}
+			}
+			lsmSelectors = append(lsmSelectors, sel)
+		}
+	}
+	if len(lsmSelectors) > 0 {
+		tp.Spec.LSMHooks = append(tp.Spec.LSMHooks, LSMHookSpec{
+			Hook:      "file_open",
+			Args:      []KProbeArg{{Index: 0, Type: "file"}},
+			Selectors: lsmSelectors,
+		})
+	}
+
 	// Network rules: ONE tcp_connect kprobe.
 	// NetworkMode "blacklist" → DAddr    (block connections IN list)
 	// NetworkMode "whitelist" → NotDAddr (block connections NOT in list) — default

@@ -27,6 +27,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     processMode: 'whitelist',
     process: [],
     file: [],
+    lsmRules: [],
     network: [],
     networkMode: 'whitelist',
     networkPorts: [],
@@ -122,6 +123,26 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
               ...(permission !== 'all' ? { permission } : {}),
             })
           }
+        }
+      }
+    }
+  }
+
+  // Parse lsmhooks (file_open) → lsmRules
+  const lsmhooks: any[] = doc.spec?.lsmhooks ?? []
+  for (const hook of lsmhooks) {
+    if (hook.hook !== 'file_open') continue
+    for (const sel of (hook.selectors ?? [])) {
+      const exceptBins: string[] = (sel.matchBinaries ?? [])
+        .filter((mb: any) => mb.operator === 'NotIn')
+        .flatMap((mb: any) => mb.values ?? [])
+        .filter(Boolean)
+      for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
+        for (const path of ma.values ?? []) {
+          if (path) result.lsmRules!.push({
+            paths: [path],
+            ...(exceptBins.length > 0 ? { exceptBinaries: exceptBins } : {}),
+          })
         }
       }
     }
