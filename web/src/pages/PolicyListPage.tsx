@@ -33,6 +33,7 @@ export function PolicyListPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [scopeFilter, setScopeFilter] = useState('all')
+  const [nsFilter, setNsFilter] = useState('all')
   const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
   const [pendingModeChange, setPendingModeChange] = useState<{
     policy: PolicyRecord
@@ -98,10 +99,13 @@ export function PolicyListPage() {
     }
   }
 
+  const namespaces = [...new Set(policies.map(p => p.namespace).filter(Boolean))].sort() as string[]
+
   const filtered = policies.filter((p) => {
     const matchName = p.name.toLowerCase().includes(search.toLowerCase())
     const matchScope = scopeFilter === 'all' || p.scope === scopeFilter
-    return matchName && matchScope
+    const matchNs = nsFilter === 'all' || (p.namespace ?? '') === nsFilter
+    return matchName && matchScope && matchNs
   })
 
   return (
@@ -164,6 +168,19 @@ export function PolicyListPage() {
                   <SelectItem value="all">All Scopes</SelectItem>
                   <SelectItem value="namespaced">namespace</SelectItem>
                   <SelectItem value="cluster">cluster</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Select value={nsFilter} onValueChange={setNsFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Namespaces</SelectItem>
+                  {namespaces.map(ns => (
+                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
