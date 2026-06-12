@@ -21,7 +21,7 @@
 - **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
 - 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
 - **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
-- **Policy Templates**：內建常用範本，可直接套用或在頁面內 YAML 編輯器自由修改後建立 Policy；支援建立自訂範本，儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+- **Policy Templates**：內建常用範本與自訂範本；點擊 **Use Template** 可設定名稱後直接建立 Policy；點擊 **Open in Editor** 可檢視或修改自訂範本 YAML（僅限儲存，不可從 editor 建立 Policy）；範本資料儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
 
 ### Behavior Discovery — 行為探索
 
