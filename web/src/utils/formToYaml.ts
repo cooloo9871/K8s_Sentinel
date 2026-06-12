@@ -61,19 +61,29 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
   }
 
   // File rules: ONE security_file_permission kprobe.
-  // Blacklist (default): Prefix — block paths in list.
-  // Whitelist: NotPrefix — block paths NOT in list.
-  const allPaths = (input.file ?? []).flatMap(r => r.paths).filter(Boolean)
-  if (allPaths.length > 0) {
-    const fileOp = input.fileMode === 'whitelist' ? 'NotPrefix' : 'Prefix'
+  // Blacklist (default): Prefix. Whitelist: NotPrefix.
+  // ExceptBinaries: matchBinaries NotIn so those binaries bypass this rule.
+  const fileOp = input.fileMode === 'whitelist' ? 'NotPrefix' : 'Prefix'
+  const fileSelectors = (input.file ?? [])
+    .filter(r => r.paths.some(Boolean))
+    .map(r => {
+      const paths = r.paths.filter(Boolean)
+      const except = (r.exceptBinaries ?? []).filter(Boolean)
+      const sel: Selector = {
+        matchArgs: [{ index: 0, operator: fileOp, values: paths }],
+        matchActions: [{ action }],
+      }
+      if (except.length > 0) {
+        ;(sel as any).matchBinaries = [{ operator: 'NotIn', values: except }]
+      }
+      return sel
+    })
+  if (fileSelectors.length > 0) {
     doc.spec.kprobes.push({
       call: 'security_file_permission',
       syscall: false,
       args: [{ index: 0, type: 'file' }, { index: 1, type: 'int' }],
-      selectors: [{
-        matchArgs: [{ index: 0, operator: fileOp, values: allPaths }],
-        matchActions: [{ action }],
-      }],
+      selectors: fileSelectors,
     })
   }
 

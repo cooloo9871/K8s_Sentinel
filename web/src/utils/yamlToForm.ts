@@ -102,11 +102,18 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       call === 'sys_openat'
     ) {
       for (const sel of selectors) {
+        const exceptBins: string[] = (sel.matchBinaries ?? [])
+          .filter((mb: any) => mb.operator === 'NotIn')
+          .flatMap((mb: any) => mb.values ?? [])
+          .filter(Boolean)
         for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
           if (ma.operator === 'NotPrefix') result.fileMode = 'whitelist'
           else if (ma.operator === 'Prefix') result.fileMode = 'blacklist'
           for (const path of ma.values ?? []) {
-            if (path) result.file!.push({ paths: [path] })
+            if (path) result.file!.push({
+              paths: [path],
+              ...(exceptBins.length > 0 ? { exceptBinaries: exceptBins } : {}),
+            })
           }
         }
       }

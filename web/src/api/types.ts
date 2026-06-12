@@ -4,6 +4,7 @@ export interface ProcessRule {
 
 export interface FileRule {
   paths: string[]
+  exceptBinaries?: string[]  // binaries exempted from this rule (matchBinaries: NotIn)
 }
 
 export interface NetworkRule {

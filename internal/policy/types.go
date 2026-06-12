@@ -24,7 +24,8 @@ type ProcessRule struct {
 }
 
 type FileRule struct {
-	Paths []string `json:"paths"`
+	Paths          []string `json:"paths"`
+	ExceptBinaries []string `json:"exceptBinaries,omitempty"` // binaries exempted from this rule
 }
 
 type NetworkRule struct {
