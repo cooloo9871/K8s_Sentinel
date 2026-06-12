@@ -1,5 +1,8 @@
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import type { FileRule } from '../../api/types'
 
 interface Props {
@@ -14,7 +17,7 @@ export function FileSection({ rules, onChange }: Props) {
     onChange(next)
   }
 
-  const add = () => onChange([...rules, { paths: [''], exceptBinaries: [] }])
+  const add = () => onChange([...rules, { paths: [''], exceptBinaries: [], permission: 'all' }])
   const remove = (i: number) => onChange(rules.filter((_, j) => j !== i))
 
   const parseBinaries = (raw: string): string[] =>
@@ -45,11 +48,33 @@ export function FileSection({ rules, onChange }: Props) {
               ✕
             </Button>
           </div>
+
+          {/* Permission selector */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Permission</span>
+            <Select
+              value={r.permission ?? 'all'}
+              onValueChange={(v) => update(i, { permission: v as FileRule['permission'] })}
+            >
+              <SelectTrigger className="h-8 w-48 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">Read &amp; Write</SelectItem>
+                  <SelectItem value="read">Read only</SelectItem>
+                  <SelectItem value="write">Write only</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Exceptions */}
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">
               Exceptions{' '}
               <span className="text-muted-foreground/60">
-                (optional — these binaries are allowed to bypass this rule, full path, comma-separated)
+                (optional — these binaries bypass this rule, full path, comma-separated)
               </span>
             </span>
             <Input
@@ -59,7 +84,7 @@ export function FileSection({ rules, onChange }: Props) {
               className="h-8 text-sm"
             />
             {(r.exceptBinaries ?? []).some(b => b && !b.startsWith('/')) && (
-              <p className="text-xs text-amber-600">⚠ Binary paths must start with / (e.g. /bin/bash)</p>
+              <p className="text-xs text-amber-600">⚠ Binary paths must start with /</p>
             )}
           </div>
         </div>

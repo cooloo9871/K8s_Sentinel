@@ -4,7 +4,8 @@ export interface ProcessRule {
 
 export interface FileRule {
   paths: string[]
-  exceptBinaries?: string[]  // binaries exempted from this rule (matchBinaries: NotIn)
+  exceptBinaries?: string[]              // binaries exempted from this rule (matchBinaries: NotIn)
+  permission?: 'all' | 'read' | 'write' // default 'all'; 'read'=MAY_READ=4, 'write'=MAY_WRITE=2
 }
 
 export interface NetworkRule {

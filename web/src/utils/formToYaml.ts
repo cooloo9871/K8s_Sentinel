@@ -69,10 +69,10 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     .map(r => {
       const paths = r.paths.filter(Boolean)
       const except = (r.exceptBinaries ?? []).filter(Boolean)
-      const sel: Selector = {
-        matchArgs: [{ index: 0, operator: fileOp, values: paths }],
-        matchActions: [{ action }],
-      }
+      const matchArgs: Selector['matchArgs'] = [{ index: 0, operator: fileOp, values: paths }]
+      if (r.permission === 'read')  matchArgs.push({ index: 1, operator: 'Bitmask', values: ['4'] })
+      if (r.permission === 'write') matchArgs.push({ index: 1, operator: 'Bitmask', values: ['2'] })
+      const sel: Selector = { matchArgs, matchActions: [{ action }] }
       if (except.length > 0) {
         ;(sel as any).matchBinaries = [{ operator: 'NotIn', values: except }]
       }

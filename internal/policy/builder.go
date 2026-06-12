@@ -77,8 +77,16 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		if len(paths) == 0 {
 			continue
 		}
+		matchArgs := []ArgSelector{{Index: 0, Operator: fileOp, Values: paths}}
+		// MAY_READ=4, MAY_WRITE=2 — use Bitmask to check specific permission bits.
+		switch r.Permission {
+		case "read":
+			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Bitmask", Values: []string{"4"}})
+		case "write":
+			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Bitmask", Values: []string{"2"}})
+		}
 		sel := KProbeSelector{
-			MatchArgs:    []ArgSelector{{Index: 0, Operator: fileOp, Values: paths}},
+			MatchArgs:    matchArgs,
 			MatchActions: []ActionSelector{{Action: action}},
 		}
 		bins := make([]string, 0, len(r.ExceptBinaries))

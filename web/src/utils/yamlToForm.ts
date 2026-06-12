@@ -106,6 +106,13 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
           .filter((mb: any) => mb.operator === 'NotIn')
           .flatMap((mb: any) => mb.values ?? [])
           .filter(Boolean)
+        // Detect permission from index-1 Bitmask args
+        const permArg = (sel.matchArgs ?? []).find((a: any) => a.index === 1 && a.operator === 'Bitmask')
+        let permission: 'all' | 'read' | 'write' = 'all'
+        if (permArg) {
+          if ((permArg.values ?? []).includes('4')) permission = 'read'
+          else if ((permArg.values ?? []).includes('2')) permission = 'write'
+        }
         for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
           if (ma.operator === 'NotPrefix') result.fileMode = 'whitelist'
           else if (ma.operator === 'Prefix') result.fileMode = 'blacklist'
@@ -113,6 +120,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
             if (path) result.file!.push({
               paths: [path],
               ...(exceptBins.length > 0 ? { exceptBinaries: exceptBins } : {}),
+              ...(permission !== 'all' ? { permission } : {}),
             })
           }
         }
