@@ -64,11 +64,23 @@ function RelativeTime({ iso }: { iso: string }) {
 function DetailRow({ e }: { e: DisplayEvent }) {
   const items: { label: string; value: string }[] = []
 
-  if (e.filePath)   items.push({ label: 'File',      value: e.filePath })
-  if (e.netDest)    items.push({ label: 'Network',   value: e.netDest })
-  if (e.binary)     items.push({ label: 'Binary',    value: e.binary })
-  if (e.arguments)  items.push({ label: 'Arguments', value: e.arguments })
-  if (e.parentBin)  items.push({ label: 'Parent',    value: e.parentBin })
+  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })
+  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
   if (e.processUid !== undefined) {
     const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
     items.push({ label: 'User', value: user })
