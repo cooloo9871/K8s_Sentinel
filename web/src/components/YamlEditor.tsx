@@ -5,13 +5,15 @@ import yaml from 'js-yaml'
 
 interface Props {
   initialValue?: string
-  onValueChange: (value: string, valid: boolean) => void
+  onValueChange?: (value: string, valid: boolean) => void
+  readOnly?: boolean
 }
 
-export function YamlEditor({ initialValue = '', onValueChange }: Props) {
+export function YamlEditor({ initialValue = '', onValueChange, readOnly = false }: Props) {
   const [error, setError] = useState('')
 
   const handleChange = (v: string | undefined) => {
+    if (readOnly || !onValueChange) return
     const text = v ?? ''
     let valid = true
     let errMsg = ''
@@ -38,7 +40,7 @@ export function YamlEditor({ initialValue = '', onValueChange }: Props) {
         theme="vs-dark"
         defaultValue={initialValue}
         onChange={handleChange}
-        options={{ minimap: { enabled: false }, fontSize: 13 }}
+        options={{ minimap: { enabled: false }, fontSize: 13, readOnly }}
       />
     </div>
   )

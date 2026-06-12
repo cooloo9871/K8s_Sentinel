@@ -259,7 +259,7 @@ export function PolicyListPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatTWTime(p.createdAt)}</TableCell>
                       <TableCell className="text-right">
-                        {isAdmin && (
+                        {isAdmin ? (
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="outline"
@@ -278,6 +278,16 @@ export function PolicyListPage() {
                               Delete
                             </Button>
                           </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                            }
+                          >
+                            View YAML
+                          </Button>
                         )}
                       </TableCell>
                     </TableRow>

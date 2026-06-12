@@ -41,9 +41,10 @@ export function PolicyEditPage() {
   const toast = useToast()
   const namespace = searchParams.get('namespace') || undefined
   const isNew = !name
+  const isAdmin = user?.role === 'admin'
 
-  // Redirect viewers — they have no write access
-  if (user?.role !== 'admin') {
+  // Viewers cannot create new policies
+  if (!isAdmin && isNew) {
     navigate('/policies/tracing', { replace: true })
     return null
   }
@@ -162,6 +163,24 @@ export function PolicyEditPage() {
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-[600px] w-full rounded-xl" />
       </div>
+    )
+  }
+
+  // Viewer: read-only YAML view
+  if (!isAdmin) {
+    return (
+      <>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h4 className="text-lg font-semibold">View Policy</h4>
+            <p className="text-sm text-muted-foreground">{name}</p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
+            ← Back
+          </Button>
+        </div>
+        <YamlEditor initialValue={yamlContent} readOnly />
+      </>
     )
   }
 
