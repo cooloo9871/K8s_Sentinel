@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -44,10 +43,7 @@ type Store struct {
 
 // NewStore creates a Store wrapping the given clients.
 func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
-	templatesFile := os.Getenv("SENTINEL_TEMPLATES_FILE")
-	if templatesFile == "" {
-		templatesFile = "/tmp/sentinel-templates.json"
-	}
+	templatesFile := "/data/sentinel/templates.json"
 	return &Store{
 		client:     client,
 		typed:      typed,
