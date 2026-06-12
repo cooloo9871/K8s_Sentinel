@@ -32,11 +32,11 @@ export function LoginPage({ onLogin }: Props) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="flex items-center pb-2">
-          <img src={logoUrl} alt="Sentinel" className="h-10" />
+      <Card className="w-full max-w-md">
+        <CardHeader className="flex items-center px-8 pt-8 pb-4">
+          <img src={logoUrl} alt="Sentinel" className="w-full" />
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-8 pb-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="username">Username</Label>
