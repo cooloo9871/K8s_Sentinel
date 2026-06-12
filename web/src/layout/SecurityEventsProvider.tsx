@@ -13,13 +13,18 @@ export interface DisplayEvent extends TetragonEvent {
   severity: Severity
 }
 
+const TTL_DAYS = 7
+const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000
+
 function loadFromStorage(): DisplayEvent[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
+      const cutoff = Date.now() - TTL_MS
       const data = JSON.parse(raw) as any[]
       return data
         .filter((e) => e.type === 'kprobe' && e.policyName)
+        .filter((e) => !e.time || new Date(e.time).getTime() >= cutoff)
         .map((e) => ({
           ...e,
           id: e.id ?? `${e.time}-${e.pod}-${e.binary}-${Math.random()}`,
