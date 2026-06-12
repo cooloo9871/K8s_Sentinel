@@ -3,12 +3,9 @@
 <p align="center">
   <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
 </p>
-
-以 CNCF 專案 **eBPF Tetragon** 為核心，補上 Kubernetes 執行期的防護空白。
-
-從認識 eBPF 為什麼能在 Linux kernel 層即時看見每個 Pod 的一舉一動開始，到 Tetragon 如何辨識出哪些行為是異常的，並在惡意行為造成傷害之前就直接攔截、終止。Sentinel 讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、即時監控安全事件、自動學習 Pod 行為——完整掌握為 K8s workload 實現零信任的關鍵技術。
-
 **Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為。
+
+Sentinel 讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、即時監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
 
 ---
 
