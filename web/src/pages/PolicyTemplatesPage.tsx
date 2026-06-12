@@ -56,7 +56,12 @@ export function PolicyTemplatesPage() {
   const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
 
   /* ── use template ── */
-  const openDialog = (t: PolicyTemplate) => { setSelected(t); setPolicyName(t.id) }
+  const openDialog = (t: PolicyTemplate) => {
+    setSelected(t)
+    const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const suffix = Math.random().toString(36).slice(2, 6)
+    setPolicyName(`${slug}-${suffix}`)
+  }
 
   const handleCreate = async () => {
     if (!selected || !policyName.trim()) return
