@@ -150,7 +150,7 @@ export function PolicyTemplatesPage() {
       <>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h4 className="text-xl font-semibold">Edit Template</h4>
+            <h4 className="text-xl font-semibold">{isAdmin ? 'Edit Template' : 'View Template'}</h4>
             <p className="text-sm text-muted-foreground">{editingTemplate.name}</p>
           </div>
           <div className="flex items-center gap-2">
