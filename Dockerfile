@@ -16,14 +16,16 @@ COPY --from=frontend /app/web/dist ./web/dist
 RUN addgroup -S -g 10001 sentinel && \
     adduser -S -u 10001 -G sentinel -H -s /sbin/nologin sentinel && \
     CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/ && \
-    mkdir -p /data/sentinel && chown sentinel:sentinel /data/sentinel
+    mkdir -p /data/sentinel && \
+    touch /data/sentinel/.keep && \
+    chown -R sentinel:sentinel /data/sentinel
 
 # Stage 3: minimal runtime image
 FROM gcr.io/distroless/static
 COPY --from=backend /etc/passwd /etc/passwd
 COPY --from=backend /etc/group /etc/group
 COPY --from=backend /app/sentinel /sentinel
-COPY --from=backend /data/sentinel /data/sentinel
+COPY --from=backend --chown=10001:10001 /data/sentinel /data/sentinel
 USER sentinel
 EXPOSE 8080
 ENTRYPOINT ["/sentinel"]
