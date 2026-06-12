@@ -58,6 +58,9 @@ interface SecurityEventsContextValue {
   connected: boolean
   error: string
   reconnect: () => void
+  paused: boolean
+  pendingCount: number
+  togglePause: () => void
 }
 
 const SecurityEventsContext = createContext<SecurityEventsContextValue>({
@@ -65,6 +68,9 @@ const SecurityEventsContext = createContext<SecurityEventsContextValue>({
   connected: false,
   error: '',
   reconnect: () => {},
+  paused: false,
+  pendingCount: 0,
+  togglePause: () => {},
 })
 
 export function useSecurityEvents() {
@@ -75,6 +81,10 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
+  const [paused, setPaused] = useState(false)
+  const pausedRef = useRef(false)
+  const pendingRef = useRef<DisplayEvent[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
   const esRef = useRef<EventSource | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const eventsRef = useRef<DisplayEvent[]>(events)
@@ -94,13 +104,22 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
         // Only store kprobe events that belong to a named user-defined TracingPolicy.
         if (evt.type !== 'kprobe' || !evt.policyName) return
         const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        const id = `${evt.time}-${evt.pod}-${evt.binary}-${evt.policyName}-${Math.random().toString(36).slice(2)}`
+        const newEvt: DisplayEvent = { ...evt, id, count: 1, severity }
+
+        if (pausedRef.current) {
+          // While paused, buffer new events without updating the display.
+          pendingRef.current = [newEvt, ...pendingRef.current].slice(0, MAX_EVENTS)
+          setPendingCount(pendingRef.current.length)
+          return
+        }
+
         setEvents((prev) => {
           if (prev.length > 0 && isSameEvent(prev[0], evt)) {
             // Dedup: preserve the original id so the expanded row stays open.
             return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
           }
-          const id = `${evt.time}-${evt.pod}-${evt.binary}-${evt.policyName}-${Math.random().toString(36).slice(2)}`
-          return [{ ...evt, id, count: 1, severity }, ...prev].slice(0, MAX_EVENTS)
+          return [newEvt, ...prev].slice(0, MAX_EVENTS)
         })
       } catch {}
     }
@@ -124,13 +143,28 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
 
   useEffect(() => { return () => { saveToStorage(eventsRef.current) } }, [])
 
+  const togglePause = useCallback(() => {
+    setPaused(prev => {
+      const nowPaused = !prev
+      pausedRef.current = nowPaused
+      if (!nowPaused && pendingRef.current.length > 0) {
+        // Resume: flush buffered events into the main list.
+        const pending = pendingRef.current
+        pendingRef.current = []
+        setPendingCount(0)
+        setEvents(prev => [...pending, ...prev].slice(0, MAX_EVENTS))
+      }
+      return nowPaused
+    })
+  }, [])
+
   useEffect(() => {
     connect()
     return () => esRef.current?.close()
   }, [])
 
   return (
-    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, paused, pendingCount, togglePause }}>
       {children}
     </SecurityEventsContext.Provider>
   )
