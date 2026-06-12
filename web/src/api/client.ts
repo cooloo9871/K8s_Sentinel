@@ -56,7 +56,7 @@ export interface CustomTemplatePayload {
 
 export interface AuthUser {
   username: string
-  role: 'admin' | 'user'
+  role: 'admin' | 'viewer'
 }
 
 export const authApi = {
@@ -70,14 +70,14 @@ export const authApi = {
 
 export interface UserRecord {
   username: string
-  role: 'admin' | 'user'
+  role: 'admin' | 'viewer'
   createdAt: string
 }
 
 export const userApi = {
   list: (): Promise<UserRecord[]> =>
     api.get('/users').then((r) => r.data),
-  create: (username: string, password: string, role: 'admin' | 'user'): Promise<void> =>
+  create: (username: string, password: string, role: 'admin' | 'viewer'): Promise<void> =>
     api.post('/users', { username, password, role }),
   delete: (username: string): Promise<void> =>
     api.delete(`/users/${username}`),

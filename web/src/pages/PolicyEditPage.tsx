@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { policyApi, namespaceApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
 import { PolicyForm } from '../components/PolicyForm/PolicyForm'
 import { YamlEditor } from '../components/YamlEditor'
 import { formToYaml } from '../utils/formToYaml'
@@ -32,6 +33,7 @@ const EMPTY_FORM: PolicyFormInput = {
 }
 
 export function PolicyEditPage() {
+  const { user } = useAuth()
   const { name } = useParams<{ name: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -39,6 +41,12 @@ export function PolicyEditPage() {
   const toast = useToast()
   const namespace = searchParams.get('namespace') || undefined
   const isNew = !name
+
+  // Redirect viewers — they have no write access
+  if (user?.role !== 'admin') {
+    navigate('/policies/tracing', { replace: true })
+    return null
+  }
 
   // Pre-fill from Behavior Discovery "Create Policy" navigation.
   // Read prefill once from location.state, then immediately clear the history

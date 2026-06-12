@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { modeApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
 import type { Mode } from '../api/types'
 
 const MODE_DESCRIPTIONS: Record<Mode, string> = {
@@ -24,6 +25,8 @@ const MODE_DESCRIPTIONS: Record<Mode, string> = {
 }
 
 export function ModePage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [loading, setLoading] = useState(true)
@@ -88,13 +91,15 @@ export function ModePage() {
             </Alert>
           )}
 
-          <Button
-            variant={nextMode === 'Protect' ? 'destructive' : 'outline'}
-            className="w-full"
-            onClick={() => setSwitchModal(true)}
-          >
-            {nextMode === 'Protect' ? 'Turn On' : 'Turn Off'}
-          </Button>
+          {isAdmin && (
+            <Button
+              variant={nextMode === 'Protect' ? 'destructive' : 'outline'}
+              className="w-full"
+              onClick={() => setSwitchModal(true)}
+            >
+              {nextMode === 'Protect' ? 'Turn On' : 'Turn Off'}
+            </Button>
+          )}
         </CardContent>
       </Card>
 

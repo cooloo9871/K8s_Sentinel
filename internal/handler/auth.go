@@ -38,6 +38,16 @@ func authMiddleware(secret []byte) func(http.Handler) http.Handler {
 	}
 }
 
+func adminOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if claimsFromCtx(r).Role != auth.RoleAdmin {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -99,10 +109,6 @@ func meHandler() http.HandlerFunc {
 
 func listUsersHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if claimsFromCtx(r).Role != auth.RoleAdmin {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		all := users.List()
 		type userResp struct {
 			Username  string    `json:"username"`
@@ -119,10 +125,6 @@ func listUsersHandler(users *auth.UserStore) http.HandlerFunc {
 
 func createUserHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if claimsFromCtx(r).Role != auth.RoleAdmin {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		var body struct {
 			Username string    `json:"username"`
 			Password string    `json:"password"`
@@ -136,8 +138,8 @@ func createUserHandler(users *auth.UserStore) http.HandlerFunc {
 			http.Error(w, "username and password required", http.StatusBadRequest)
 			return
 		}
-		if body.Role != auth.RoleAdmin && body.Role != auth.RoleUser {
-			body.Role = auth.RoleUser
+		if body.Role != auth.RoleAdmin && body.Role != auth.RoleViewer {
+			body.Role = auth.RoleViewer
 		}
 		if err := users.Create(body.Username, body.Password, body.Role); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
@@ -149,10 +151,6 @@ func createUserHandler(users *auth.UserStore) http.HandlerFunc {
 
 func deleteUserHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if claimsFromCtx(r).Role != auth.RoleAdmin {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
 		username := chi.URLParam(r, "username")
 		if claimsFromCtx(r).Username == username {
 			http.Error(w, "cannot delete yourself", http.StatusBadRequest)
@@ -170,7 +168,6 @@ func changePasswordHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := claimsFromCtx(r)
 		username := chi.URLParam(r, "username")
-		// Only admin can change others' passwords; users can only change their own
 		if claims.Role != auth.RoleAdmin && claims.Username != username {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

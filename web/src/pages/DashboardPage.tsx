@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { policyApi, modeApi, namespaceApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
 import type { PolicyRecord, Mode } from '../api/types'
 
 interface StatProps {
@@ -63,6 +64,8 @@ function RelativeTime({ iso }: { iso: string }) {
 export function DashboardPage() {
   const navigate = useNavigate()
   const toast = useToast()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [namespaceCount, setNamespaceCount] = useState(0)
@@ -166,9 +169,11 @@ export function DashboardPage() {
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
               <IconShieldCheck size={40} strokeWidth={1.5} />
               <p className="text-base">No policies yet</p>
-              <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>
-                Create your first policy
-              </Button>
+              {isAdmin && (
+                <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>
+                  Create your first policy
+                </Button>
+              )}
             </div>
           ) : (
             <Table>

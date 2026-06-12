@@ -19,7 +19,7 @@ export function UsersPage() {
   const [showForm, setShowForm] = useState(false)
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
-  const [newRole, setNewRole] = useState<'admin' | 'user'>('user')
+  const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   // Change password dialog
@@ -37,7 +37,7 @@ export function UsersPage() {
     try {
       await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
       toast.success(`User "${newUsername.trim()}" created.`)
-      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('user')
+      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
       load()
     } catch { toast.error('Failed to create user') }
   }
@@ -91,7 +91,7 @@ export function UsersPage() {
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Role</Label>
               <div className="flex gap-2">
-                {(['user', 'admin'] as const).map(r => (
+                {(['viewer', 'admin'] as const).map(r => (
                   <Button key={r} size="sm" variant={newRole === r ? 'default' : 'outline'}
                     onClick={() => setNewRole(r)} className="capitalize">{r}</Button>
                 ))}

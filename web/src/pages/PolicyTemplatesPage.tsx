@@ -11,6 +11,7 @@ import {
 import { YamlEditor } from '../components/YamlEditor'
 import { policyApi, templateApi, type CustomTemplatePayload } from '../api/client'
 import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
 import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
 
 const DEFAULT_YAML = ''
@@ -20,6 +21,8 @@ function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
 }
 
 export function PolicyTemplatesPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>([])
 
@@ -152,14 +155,16 @@ export function PolicyTemplatesPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={closeEditor}>← Back</Button>
-            {editingTemplate?.custom && (
+            {isAdmin && editingTemplate?.custom && (
               <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
                 Save
               </Button>
             )}
-            <Button onClick={handleCreateFromEditor} disabled={!editorValid || creating}>
-              {creating ? 'Creating...' : 'Create Policy'}
-            </Button>
+            {isAdmin && (
+              <Button onClick={handleCreateFromEditor} disabled={!editorValid || creating}>
+                {creating ? 'Creating...' : 'Create Policy'}
+              </Button>
+            )}
           </div>
         </div>
         <YamlEditor key={editorKey} initialValue={editorYaml}
@@ -176,7 +181,7 @@ export function PolicyTemplatesPage() {
           <h4 className="text-xl font-semibold">Policy Templates</h4>
           <p className="text-sm text-muted-foreground">Pre-built and custom TracingPolicy templates.</p>
         </div>
-        <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>
+        {isAdmin && <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>}
       </div>
 
       {showNewForm && (
@@ -223,14 +228,14 @@ export function PolicyTemplatesPage() {
                   {t.tags.map(tag => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}
                 </div>
               </div>
-              <CardAction><Button size="sm" onClick={() => openDialog(t)}>Use Template</Button></CardAction>
+              {isAdmin && <CardAction><Button size="sm" onClick={() => openDialog(t)}>Use Template</Button></CardAction>}
             </CardHeader>
             <CardContent className="pt-3">
               {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}
               <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">{t.yaml.trim()}</pre>
               <div className="mt-2 flex gap-2">
                 <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>Open in Editor</Button>
-                {t.custom && (
+                {isAdmin && t.custom && (
                   <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>Delete</Button>
                 )}
               </div>

@@ -15,6 +15,7 @@ import {
 import { useDiscovery } from '../layout/DiscoveryProvider'
 import type { PodProfile, WorkloadProfile } from '../layout/DiscoveryProvider'
 import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
 import { podApi } from '../api/client'
 import { formatTWTime } from '../utils/time'
 import type { PolicyFormInput } from '../api/types'
@@ -30,10 +31,11 @@ function RelativeTime({ iso }: { iso: string }) {
   return <span className="text-xs text-muted-foreground" title={formatTWTime(iso)}>{label}</span>
 }
 
-function WorkloadCard({ wl, creatingFor, onCreatePolicy }: {
+function WorkloadCard({ wl, creatingFor, onCreatePolicy, isAdmin }: {
   wl: WorkloadProfile
   creatingFor: string | null
   onCreatePolicy: (wl: WorkloadProfile) => void
+  isAdmin: boolean
 }) {
   const key = `${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`
   const binaries = wl.binaries ?? []
@@ -49,15 +51,17 @@ function WorkloadCard({ wl, creatingFor, onCreatePolicy }: {
             {wl.namespace} · {wl.pods.length} pod{wl.pods.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <CardAction>
-          <Button
-            size="sm" variant="outline" className="h-7 text-xs"
-            disabled={binaries.length === 0 || creatingFor === key}
-            onClick={() => onCreatePolicy(wl)}
-          >
-            {creatingFor === key ? 'Loading...' : 'Create Policy'}
-          </Button>
-        </CardAction>
+        {isAdmin && (
+          <CardAction>
+            <Button
+              size="sm" variant="outline" className="h-7 text-xs"
+              disabled={binaries.length === 0 || creatingFor === key}
+              onClick={() => onCreatePolicy(wl)}
+            >
+              {creatingFor === key ? 'Loading...' : 'Create Policy'}
+            </Button>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="pt-3 text-xs">
         <div className="mb-1 flex items-center justify-between">
@@ -123,6 +127,8 @@ export function DiscoveryPage() {
   const { profiles, clearProfiles } = useDiscovery()
   const navigate = useNavigate()
   const toast = useToast()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
   const [groupByNs, setGroupByNs] = useState(false)
@@ -172,10 +178,12 @@ export function DiscoveryPage() {
             Process behaviors learned from the Tetragon base sensor. No policy required.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
-          <IconTrash size={14} className="mr-1.5" />
-          Clear All
-        </Button>
+        {isAdmin && (
+          <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>
+            <IconTrash size={14} className="mr-1.5" />
+            Clear All
+          </Button>
+        )}
       </div>
 
       <div className="mb-4 flex items-center gap-2">
@@ -241,7 +249,7 @@ export function DiscoveryPage() {
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">{items.length} workload{items.length !== 1 ? 's' : ''}</span>
                   </div>
                   <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-                    {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} />)}
+                    {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} isAdmin={isAdmin} />)}
                   </div>
                 </div>
               ))}
@@ -256,6 +264,7 @@ export function DiscoveryPage() {
               wl={wl}
               creatingFor={creatingFor}
               onCreatePolicy={handleCreatePolicy}
+              isAdmin={isAdmin}
             />
           ))}
         </div>

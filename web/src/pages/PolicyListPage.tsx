@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { policyApi, modeApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
 import type { PolicyRecord, Mode } from '../api/types'
 
 const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
@@ -28,6 +29,8 @@ const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
 
 export function PolicyListPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -133,12 +136,14 @@ export function PolicyListPage() {
             </div>
           </div>
         </div>
-        <Button
-          variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}
-          onClick={() => setModeModal(true)}
-        >
-          {nextGlobalMode === 'Protect' ? 'Turn On' : 'Turn Off'}
-        </Button>
+        {isAdmin && (
+          <Button
+            variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}
+            onClick={() => setModeModal(true)}
+          >
+            {nextGlobalMode === 'Protect' ? 'Turn On' : 'Turn Off'}
+          </Button>
+        )}
       </div>
 
       {/* Page header */}
@@ -147,7 +152,7 @@ export function PolicyListPage() {
           <h4 className="text-xl font-semibold">TracingPolicy</h4>
           <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>
         </div>
-        <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
+        {isAdmin && <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>}
       </div>
 
       <Card>
@@ -224,50 +229,56 @@ export function PolicyListPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Select
-                          value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
-                          onValueChange={(v) =>
-                            setPendingModeChange({ policy: p, mode: v as 'Monitoring' | 'Protect' })
-                          }
-                        >
-                          <SelectTrigger className="h-7 w-32 text-xs">
-                            <SelectValue>
-                              <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>
-                                {p.mode}
-                              </Badge>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectItem value="Monitoring">Monitoring</SelectItem>
-                              <SelectItem value="Protect">Protect</SelectItem>
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
+                        {isAdmin ? (
+                          <Select
+                            value={p.mode === 'Mixed' ? 'Mixed' : p.mode}
+                            onValueChange={(v) =>
+                              setPendingModeChange({ policy: p, mode: v as 'Monitoring' | 'Protect' })
+                            }
+                          >
+                            <SelectTrigger className="h-7 w-32 text-xs">
+                              <SelectValue>
+                                <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>
+                                  {p.mode}
+                                </Badge>
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                <SelectItem value="Monitoring">Monitoring</SelectItem>
+                                <SelectItem value="Protect">Protect</SelectItem>
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge variant={MODE_VARIANT[p.mode] ?? 'outline'}>{p.mode}</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {p.namespace ?? '-'}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatTWTime(p.createdAt)}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
-                            }
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setDeleteTarget(p)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
+                        {isAdmin && (
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
+                              }
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => setDeleteTarget(p)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
