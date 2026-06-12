@@ -61,9 +61,9 @@ export function FileSection({ rules, onChange }: Props) {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="all">Read &amp; Write</SelectItem>
-                  <SelectItem value="read">Read only</SelectItem>
-                  <SelectItem value="write">Write only</SelectItem>
+                  <SelectItem value="all">Deny Read &amp; Write</SelectItem>
+                  <SelectItem value="read">Only Deny Read</SelectItem>
+                  <SelectItem value="write">Only Deny Write</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
