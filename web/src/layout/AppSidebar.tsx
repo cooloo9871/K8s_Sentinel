@@ -47,7 +47,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/policies')}>
+                <SidebarMenuButton asChild isActive={isActive('/policies/tracing')}>
                   <NavLink to="/policies/tracing">TracingPolicy</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
