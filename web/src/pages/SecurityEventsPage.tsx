@@ -88,7 +88,7 @@ function DetailRow({ e }: { e: DisplayEvent }) {
   if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
   if (e.pod) {
     const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
-    items.push({ label: 'Pod', value: podValue })
+    items.push({ label: 'Pod / Container', value: podValue })
   }
   if (e.function)   items.push({ label: 'Function',  value: e.function })
   if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
