@@ -11,26 +11,55 @@ import {
 } from '@/components/ui/alert-dialog'
 import { policyApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
-import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
+import {
+  POLICY_TEMPLATES, loadCustomTemplates, saveCustomTemplates, type PolicyTemplate,
+} from '../data/policyTemplates'
+
+const DEFAULT_YAML = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: my-template
+spec:
+  kprobes:
+    - call: sys_execve
+      syscall: true
+      args:
+        - index: 0
+          type: string
+      selectors:
+        - matchActions:
+            - action: Post
+`
 
 export function PolicyTemplatesPage() {
   const navigate = useNavigate()
   const toast = useToast()
+
+  const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>(() => loadCustomTemplates())
+
+  // Use-template dialog
   const [selected, setSelected] = useState<PolicyTemplate | null>(null)
   const [policyName, setPolicyName] = useState('')
   const [creating, setCreating] = useState(false)
 
-  const openDialog = (t: PolicyTemplate) => {
-    setSelected(t)
-    setPolicyName(t.id)
-  }
+  // New template form
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [newTags, setNewTags] = useState('')
+  const [newYaml, setNewYaml] = useState(DEFAULT_YAML)
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
+
+  const allTemplates = [...POLICY_TEMPLATES, ...customTemplates]
+
+  /* ── use template ── */
+  const openDialog = (t: PolicyTemplate) => { setSelected(t); setPolicyName(t.id) }
 
   const handleCreate = async () => {
     if (!selected || !policyName.trim()) return
-    const yaml = selected.yaml.replace(
-      /^(\s*name:\s*).+$/m,
-      `$1${policyName.trim()}`
-    )
+    const yaml = selected.yaml.replace(/^(\s*name:\s*).+$/m, `$1${policyName.trim()}`)
     setCreating(true)
     try {
       await policyApi.create({ source: 'yaml', rawYaml: yaml })
@@ -44,26 +73,104 @@ export function PolicyTemplatesPage() {
     }
   }
 
-  const openInEditor = (t: PolicyTemplate) => {
+  const openInEditor = (t: PolicyTemplate) =>
     navigate('/policies/tracing/new', { state: { yamlContent: t.yaml } })
+
+  /* ── new template ── */
+  const resetNewForm = () => {
+    setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML)
+    setShowNewForm(false)
+  }
+
+  const handleSaveTemplate = () => {
+    if (!newName.trim() || !newYaml.trim()) return
+    const tpl: PolicyTemplate = {
+      id: `custom-${Date.now()}`,
+      name: newName.trim(),
+      description: newDesc.trim(),
+      tags: newTags.split(',').map(t => t.trim()).filter(Boolean),
+      yaml: newYaml,
+      custom: true,
+    }
+    const updated = [...customTemplates, tpl]
+    setCustomTemplates(updated)
+    saveCustomTemplates(updated)
+    toast.success('Template saved.')
+    resetNewForm()
+  }
+
+  /* ── delete template ── */
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    const updated = customTemplates.filter(t => t.id !== deleteTarget.id)
+    setCustomTemplates(updated)
+    saveCustomTemplates(updated)
+    toast.success('Template deleted.')
+    setDeleteTarget(null)
   }
 
   return (
     <>
-      <div className="mb-6">
-        <h4 className="text-xl font-semibold">Policy Templates</h4>
-        <p className="text-sm text-muted-foreground">
-          Pre-built TracingPolicy templates. Use directly or open in the editor to customise.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Policy Templates</h4>
+          <p className="text-sm text-muted-foreground">
+            Pre-built and custom TracingPolicy templates.
+          </p>
+        </div>
+        <Button onClick={() => setShowNewForm(v => !v)}>
+          {showNewForm ? 'Cancel' : '+ New Template'}
+        </Button>
       </div>
 
+      {/* ── New template form ── */}
+      {showNewForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New Custom Template</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+                <Input placeholder="My Template" value={newName} onChange={e => setNewName(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Tags <span className="text-muted-foreground font-normal">(comma-separated)</span></Label>
+                <Input placeholder="namespace, process" value={newTags} onChange={e => setNewTags(e.target.value)} className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Description</Label>
+              <Input placeholder="What does this template do?" value={newDesc} onChange={e => setNewDesc(e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">YAML <span className="text-destructive">*</span></Label>
+              <textarea
+                className="min-h-[200px] w-full rounded-md border bg-muted px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={newYaml}
+                onChange={e => setNewYaml(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={resetNewForm}>Cancel</Button>
+              <Button size="sm" onClick={handleSaveTemplate} disabled={!newName.trim() || !newYaml.trim()}>
+                Save Template
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Template cards ── */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {POLICY_TEMPLATES.map(t => (
+        {allTemplates.map(t => (
           <Card key={t.id}>
             <CardHeader className="border-b pb-3">
               <div>
                 <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
                 <div className="mt-1 flex flex-wrap gap-1">
+                  {t.custom && <Badge className="text-[10px] bg-violet-500/15 text-violet-700">Custom</Badge>}
                   {t.tags.map(tag => (
                     <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
                   ))}
@@ -74,31 +181,33 @@ export function PolicyTemplatesPage() {
               </CardAction>
             </CardHeader>
             <CardContent className="pt-3">
-              <p className="text-xs text-muted-foreground mb-3">{t.description}</p>
+              {t.description && (
+                <p className="text-xs text-muted-foreground mb-3">{t.description}</p>
+              )}
               <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">
                 {t.yaml.trim()}
               </pre>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2 w-full text-xs"
-                onClick={() => openInEditor(t)}
-              >
-                Open in Editor
-              </Button>
+              <div className="mt-2 flex gap-2">
+                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openInEditor(t)}>
+                  Open in Editor
+                </Button>
+                {t.custom && (
+                  <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>
+                    Delete
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Name input dialog */}
+      {/* ── Use template dialog ── */}
       <AlertDialog open={!!selected} onOpenChange={(open: boolean) => !open && setSelected(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Create from Template</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selected?.name} — set a name for the new policy.
-            </AlertDialogDescription>
+            <AlertDialogDescription>{selected?.name} — set a name for the new policy.</AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex flex-col gap-1.5 py-2">
             <Label htmlFor="tpl-policy-name">Policy Name</Label>
@@ -112,12 +221,25 @@ export function PolicyTemplatesPage() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setSelected(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleCreate}
-              disabled={creating || !policyName.trim()}
-            >
+            <AlertDialogAction onClick={handleCreate} disabled={creating || !policyName.trim()}>
               {creating ? 'Creating...' : 'Create'}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Delete confirmation ── */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete "{deleteTarget?.name}"? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

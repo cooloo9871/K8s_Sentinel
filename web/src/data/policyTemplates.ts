@@ -4,6 +4,23 @@ export interface PolicyTemplate {
   description: string
   tags: string[]
   yaml: string
+  custom?: boolean  // user-created templates
+}
+
+const CUSTOM_TEMPLATES_KEY = 'sentinel_custom_templates'
+
+export function loadCustomTemplates(): PolicyTemplate[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY)
+    if (raw) return JSON.parse(raw) as PolicyTemplate[]
+  } catch {}
+  return []
+}
+
+export function saveCustomTemplates(templates: PolicyTemplate[]): void {
+  try {
+    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(templates))
+  } catch {}
 }
 
 export const POLICY_TEMPLATES: PolicyTemplate[] = [
