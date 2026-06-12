@@ -16,7 +16,11 @@ import (
 
 // StartDiscoveryLoop seeds Discovery with already-running processes, then
 // continuously streams new process_exec events from Tetragon.
+// A secondary goroutine refreshes workload info periodically so newly
+// created pods (e.g. scaled-up replicas) get their Deployment/DaemonSet
+// label assigned without waiting for a Sentinel restart.
 func (s *Store) StartDiscoveryLoop(ctx context.Context) {
+	// Primary: seed + stream events.
 	go func() {
 		s.scanRunningProcesses(ctx)
 
@@ -33,6 +37,21 @@ func (s *Store) StartDiscoveryLoop(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-time.After(10 * time.Second):
+			}
+		}
+	}()
+
+	// Secondary: refresh workload owner info every 60s so new pods created
+	// after startup (scale-out, rollouts) are grouped under their Deployment.
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.populateWorkloadInfo(ctx)
 			}
 		}
 	}()
