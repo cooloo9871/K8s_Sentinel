@@ -57,6 +57,13 @@ Sentinel 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策�
 
 ### 步驟
 
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
 **方式 A — Kubernetes Job（不需本機 helm）**
 
 ```bash
