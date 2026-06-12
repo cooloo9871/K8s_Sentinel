@@ -219,32 +219,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <CardTitle className="text-sm font-medium">File Rules</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="mb-4 flex flex-col gap-1.5">
-              <Label className="text-xs">Mode</Label>
-              <Select
-                value={value.fileMode ?? 'blacklist'}
-                onValueChange={(v) => onChange({ ...value, fileMode: v as 'whitelist' | 'blacklist' })}
-              >
-                <SelectTrigger className="h-8 w-64 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="blacklist">
-                      Prefix — Blacklist
-                    </SelectItem>
-                    <SelectItem value="whitelist">
-                      NotPrefix — Whitelist
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {(value.fileMode ?? 'blacklist') === 'blacklist'
-                  ? 'Blacklist: only the listed paths are blocked. Everything else is allowed.'
-                  : 'Whitelist: only the listed paths are allowed. Everything else is blocked.'}
-              </p>
-            </div>
             <FileSection rules={fileRules} onChange={setFileRules} />
           </CardContent>
         </Card>

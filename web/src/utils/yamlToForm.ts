@@ -26,7 +26,6 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       : undefined,
     processMode: 'whitelist',
     process: [],
-    fileMode: 'blacklist',
     file: [],
     network: [],
     networkMode: 'whitelist',

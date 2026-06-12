@@ -25,7 +25,6 @@ const EMPTY_FORM: PolicyFormInput = {
   namespace: 'default',
   processMode: 'whitelist',
   process: [],
-  fileMode: 'blacklist',
   file: [],
   network: [],
   networkPorts: [],
