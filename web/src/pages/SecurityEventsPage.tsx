@@ -85,6 +85,11 @@ function DetailRow({ e }: { e: DisplayEvent }) {
     const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
     items.push({ label: 'User', value: user })
   }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod', value: podValue })
+  }
   if (e.function)   items.push({ label: 'Function',  value: e.function })
   if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
   items.push({ label: 'Time', value: formatTWTime(e.time) })
