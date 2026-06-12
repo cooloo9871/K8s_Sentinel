@@ -51,7 +51,9 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
           if (ma.operator === 'NotPostfix') result.processMode = 'whitelist'
           else if (ma.operator === 'Postfix') result.processMode = 'blacklist'
           for (const bin of ma.values ?? []) {
-            if (bin) result.process!.push({ binaries: [bin] })
+            // Restore leading '/' stripped by formToYaml so the form shows
+            // absolute paths (e.g. 'bin/bash' → '/bin/bash').
+            if (bin) result.process!.push({ binaries: [bin.startsWith('/') ? bin : '/' + bin] })
           }
           parsedFromMatchArgs = true
         }
@@ -60,7 +62,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
         if (!parsedFromMatchArgs) {
           for (const mb of sel.matchBinaries ?? []) {
             for (const bin of mb.values ?? []) {
-              if (bin) result.process!.push({ binaries: [bin] })
+              if (bin) result.process!.push({ binaries: [bin.startsWith('/') ? bin : '/' + bin] })
             }
           }
         }
