@@ -13,13 +13,17 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
-RUN CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/ && \
-    mkdir -p /data/sentinel && chown 65532:65532 /data/sentinel
+RUN addgroup -S -g 10001 sentinel && \
+    adduser -S -u 10001 -G sentinel -H -s /sbin/nologin sentinel && \
+    CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/ && \
+    mkdir -p /data/sentinel && chown sentinel:sentinel /data/sentinel
 
 # Stage 3: minimal runtime image
-# nonroot user (65532) owns /data/sentinel so the process can write templates.json
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static
+COPY --from=backend /etc/passwd /etc/passwd
+COPY --from=backend /etc/group /etc/group
 COPY --from=backend /app/sentinel /sentinel
-COPY --from=backend --chown=65532:65532 /data/sentinel /data/sentinel
+COPY --from=backend /data/sentinel /data/sentinel
+USER sentinel
 EXPOSE 8080
 ENTRYPOINT ["/sentinel"]
