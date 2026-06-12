@@ -54,8 +54,9 @@ func createPolicy(store *k8s.Store) http.HandlerFunc {
 			return
 		}
 
+		createdBy := claimsFromCtx(r).Username
 		if req.Source == "yaml" {
-			if err := store.ApplyRaw(r.Context(), req.RawYAML); err != nil {
+			if err := store.ApplyRaw(r.Context(), req.RawYAML, createdBy); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
 			}
@@ -76,7 +77,7 @@ func createPolicy(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := store.Apply(r.Context(), tp); err != nil {
+		if err := store.Apply(r.Context(), tp, createdBy); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to apply policy"})
 			return
 		}
@@ -93,7 +94,7 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 		}
 
 		if req.Source == "yaml" {
-			if err := store.ApplyRaw(r.Context(), req.RawYAML); err != nil {
+			if err := store.ApplyRaw(r.Context(), req.RawYAML, ""); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
 			}
@@ -114,7 +115,7 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := store.Apply(r.Context(), tp); err != nil {
+		if err := store.Apply(r.Context(), tp, ""); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to apply policy"})
 			return
 		}

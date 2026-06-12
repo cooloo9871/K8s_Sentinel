@@ -208,6 +208,7 @@ export function PolicyListPage() {
                   <TableHead>Scope</TableHead>
                   <TableHead>Mode</TableHead>
                   <TableHead>Namespace</TableHead>
+                  <TableHead>Created By</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -257,6 +258,7 @@ export function PolicyListPage() {
                       <TableCell className="text-muted-foreground">
                         {p.namespace ?? '-'}
                       </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">{p.createdBy}</TableCell>
                       <TableCell className="text-muted-foreground">{formatTWTime(p.createdAt)}</TableCell>
                       <TableCell className="text-right">
                         {isAdmin ? (

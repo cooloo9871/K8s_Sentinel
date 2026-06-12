@@ -19,12 +19,15 @@ import (
 	"github.com/cooloo9871/sentinel/internal/policy"
 )
 
+const annotationCreatedBy = "sentinel.io/created-by"
+
 // PolicyRecord is a policy as returned by the list/get API.
 type PolicyRecord struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"`
-	Scope     string `json:"scope"`  // "cluster" or "namespaced"
-	Mode      string `json:"mode"`   // "Monitoring", "Protect", or "Mixed"
+	Scope     string `json:"scope"`      // "cluster" or "namespaced"
+	Mode      string `json:"mode"`       // "Monitoring", "Protect", or "Mixed"
+	CreatedBy string `json:"createdBy"`  // sentinel username or "k8s-apply"
 	CreatedAt string `json:"createdAt"`
 	RawYAML   string `json:"rawYaml"`
 }
@@ -105,7 +108,7 @@ func (s *Store) Get(ctx context.Context, name, namespace string) (PolicyRecord, 
 }
 
 // Apply creates or updates a policy from a TracingPolicy struct.
-func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
+func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy, createdBy string) error {
 	data, err := json.Marshal(tp)
 	if err != nil {
 		return fmt.Errorf("marshal policy: %w", err)
@@ -119,13 +122,13 @@ func (s *Store) Apply(ctx context.Context, tp policy.TracingPolicy) error {
 	ns := tp.Metadata.Namespace
 
 	if ns != "" {
-		return s.applyNamespaced(ctx, ns, name, obj)
+		return s.applyNamespaced(ctx, ns, name, obj, createdBy)
 	}
-	return s.applyCluster(ctx, name, obj)
+	return s.applyCluster(ctx, name, obj, createdBy)
 }
 
 // ApplyRaw applies a raw YAML string to the cluster, detecting scope from the namespace field.
-func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
+func (s *Store) ApplyRaw(ctx context.Context, rawYAML string, createdBy string) error {
 	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
 	if err != nil {
 		return fmt.Errorf("invalid YAML: %w", err)
@@ -139,9 +142,9 @@ func (s *Store) ApplyRaw(ctx context.Context, rawYAML string) error {
 	ns := obj.GetNamespace()
 
 	if ns != "" {
-		return s.applyNamespaced(ctx, ns, name, obj)
+		return s.applyNamespaced(ctx, ns, name, obj, createdBy)
 	}
-	return s.applyCluster(ctx, name, obj)
+	return s.applyCluster(ctx, name, obj, createdBy)
 }
 
 // Delete removes a policy by name and optional namespace.
@@ -300,7 +303,7 @@ func (s *Store) SetMode(ctx context.Context, mode string) error {
 				}
 			}
 		}
-		if err := s.Apply(ctx, tp); err != nil {
+		if err := s.Apply(ctx, tp, ""); err != nil {
 			return fmt.Errorf("apply policy %q: %w", r.Name, err)
 		}
 	}
@@ -312,7 +315,31 @@ func (s *Store) SetMode(ctx context.Context, mode string) error {
 	return nil
 }
 
-func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured) error {
+func setCreatedByAnnotation(obj *unstructured.Unstructured, createdBy string) {
+	if createdBy == "" {
+		return
+	}
+	ann := obj.GetAnnotations()
+	if ann == nil {
+		ann = map[string]string{}
+	}
+	ann[annotationCreatedBy] = createdBy
+	obj.SetAnnotations(ann)
+}
+
+func preserveCreatedBy(obj, existing *unstructured.Unstructured) {
+	if v := existing.GetAnnotations()[annotationCreatedBy]; v != "" {
+		ann := obj.GetAnnotations()
+		if ann == nil {
+			ann = map[string]string{}
+		}
+		ann[annotationCreatedBy] = v
+		obj.SetAnnotations(ann)
+	}
+}
+
+func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured.Unstructured, createdBy string) error {
+	setCreatedByAnnotation(obj, createdBy)
 	_, err := s.client.Resource(tracingPolicyGVR).Create(ctx, obj, metav1.CreateOptions{})
 	if err == nil {
 		return nil
@@ -325,11 +352,13 @@ func (s *Store) applyCluster(ctx context.Context, name string, obj *unstructured
 		return err
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
+	preserveCreatedBy(obj, existing)
 	_, err = s.client.Resource(tracingPolicyGVR).Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
 
-func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured) error {
+func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstructured.Unstructured, createdBy string) error {
+	setCreatedByAnnotation(obj, createdBy)
 	_, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
 	if err == nil {
 		return nil
@@ -342,6 +371,7 @@ func (s *Store) applyNamespaced(ctx context.Context, ns, name string, obj *unstr
 		return err
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
+	preserveCreatedBy(obj, existing)
 	_, err = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(ns).Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
@@ -359,11 +389,16 @@ func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
 		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
 	}
+	createdBy := "k8s-apply"
+	if v := item.GetAnnotations()[annotationCreatedBy]; v != "" {
+		createdBy = v
+	}
 	return PolicyRecord{
 		Name:      item.GetName(),
 		Namespace: item.GetNamespace(),
 		Scope:     scope,
 		Mode:      detectMode(string(rawYAML)),
+		CreatedBy: createdBy,
 		CreatedAt: createdAt,
 		RawYAML:   string(rawYAML),
 	}, nil
@@ -422,5 +457,5 @@ func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string)
 			}
 		}
 	}
-	return s.Apply(ctx, tp)
+	return s.Apply(ctx, tp, "")
 }

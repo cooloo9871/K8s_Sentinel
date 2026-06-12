@@ -30,6 +30,7 @@ export interface PolicyRecord {
   namespace?: string
   scope: 'cluster' | 'namespaced'
   mode: 'Monitoring' | 'Protect' | 'Mixed'
+  createdBy: string
   createdAt: string
   rawYaml: string
 }
