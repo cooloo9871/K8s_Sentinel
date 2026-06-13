@@ -13,6 +13,8 @@ spec:
       labels:
         app: sentinel
     spec:
+      securityContext:
+        fsGroup: 10001
       serviceAccountName: sentinel
       containers:
         - name: sentinel
