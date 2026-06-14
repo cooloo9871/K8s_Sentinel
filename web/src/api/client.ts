@@ -85,6 +85,13 @@ export const userApi = {
     api.put(`/users/${username}/password`, { password }),
 }
 
+export const settingsApi = {
+  getSessionTTL: (): Promise<{ sessionTTL: number }> =>
+    api.get('/settings/session-ttl').then((r) => r.data),
+  setSessionTTL: (seconds: number): Promise<void> =>
+    api.put('/settings/session-ttl', { sessionTTL: seconds }),
+}
+
 export const templateApi = {
   list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
     api.get('/templates').then((r) => r.data),

@@ -9,8 +9,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const tokenExpiry = 24 * time.Hour
-
 type Claims struct {
 	Username string `json:"username"`
 	Role     Role   `json:"role"`
@@ -36,12 +34,12 @@ func LoadOrCreateSecret(path string) ([]byte, error) {
 	return secret, nil
 }
 
-func SignToken(secret []byte, u User) (string, error) {
+func SignToken(secret []byte, u User, expiry time.Duration) (string, error) {
 	claims := Claims{
 		Username: u.Username,
 		Role:     u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExpiry)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

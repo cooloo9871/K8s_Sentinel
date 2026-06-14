@@ -126,4 +126,4 @@ volumes:
 
 ## 授權
 
-[Apache License 2.0](LICENSE)
+[MIT License](LICENSE)

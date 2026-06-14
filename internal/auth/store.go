@@ -25,18 +25,22 @@ type User struct {
 	CreatedAt string `json:"createdAt"`
 }
 
+const DefaultSessionTTL = 3600 // seconds
+
 type userFile struct {
-	Users []User `json:"users"`
+	SessionTTL int    `json:"sessionTTL,omitempty"`
+	Users      []User `json:"users"`
 }
 
 type UserStore struct {
-	mu    sync.RWMutex
-	users map[string]User
-	path  string
+	mu         sync.RWMutex
+	users      map[string]User
+	sessionTTL int
+	path       string
 }
 
 func NewUserStore(path string) *UserStore {
-	s := &UserStore{path: path, users: make(map[string]User)}
+	s := &UserStore{path: path, users: make(map[string]User), sessionTTL: DefaultSessionTTL}
 	s.load()
 	if len(s.users) == 0 {
 		s.bootstrap()
@@ -53,9 +57,25 @@ func (s *UserStore) load() {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return
 	}
+	if f.SessionTTL > 0 {
+		s.sessionTTL = f.SessionTTL
+	}
 	for _, u := range f.Users {
 		s.users[u.Username] = u
 	}
+}
+
+func (s *UserStore) GetSessionTTL() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sessionTTL
+}
+
+func (s *UserStore) SetSessionTTL(seconds int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessionTTL = seconds
+	s.flush()
 }
 
 func (s *UserStore) flush() {
@@ -63,7 +83,7 @@ func (s *UserStore) flush() {
 	for _, u := range s.users {
 		users = append(users, u)
 	}
-	data, err := json.Marshal(userFile{Users: users})
+	data, err := json.Marshal(userFile{SessionTTL: s.sessionTTL, Users: users})
 	if err != nil {
 		log.Printf("auth: flush marshal error: %v", err)
 		return

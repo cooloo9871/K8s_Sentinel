@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -63,7 +64,8 @@ func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
-		token, err := auth.SignToken(secret, u)
+		ttl := time.Duration(users.GetSessionTTL()) * time.Second
+		token, err := auth.SignToken(secret, u, ttl)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -74,12 +76,32 @@ func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 			Path:     "/",
 			HttpOnly: true,
 			SameSite: http.SameSiteStrictMode,
-			MaxAge:   86400,
+			MaxAge:   users.GetSessionTTL(),
 		})
 		writeJSON(w, http.StatusOK, map[string]any{
 			"username": u.Username,
 			"role":     u.Role,
 		})
+	}
+}
+
+func getSessionTTLHandler(users *auth.UserStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"sessionTTL": users.GetSessionTTL()})
+	}
+}
+
+func setSessionTTLHandler(users *auth.UserStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			SessionTTL int `json:"sessionTTL"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.SessionTTL <= 0 {
+			http.Error(w, "sessionTTL must be a positive integer (seconds)", http.StatusBadRequest)
+			return
+		}
+		users.SetSessionTTL(body.SessionTTL)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

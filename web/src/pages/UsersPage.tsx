@@ -8,7 +8,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { userApi, type UserRecord } from '../api/client'
+import { userApi, settingsApi, type UserRecord } from '../api/client'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 
@@ -26,11 +26,31 @@ export function UsersPage() {
   const [pwTarget, setPwTarget] = useState<string | null>(null)
   const [newPw, setNewPw] = useState('')
 
+  // Session TTL
+  const [sessionTTL, setSessionTTL] = useState<number>(3600)
+  const [ttlInput, setTtlInput] = useState<string>('3600')
+
   const load = useCallback(async () => {
     try { setUsers(await userApi.list()) } catch { /* ignore */ }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
+      setSessionTTL(ttl)
+      setTtlInput(String(ttl))
+    }).catch(() => {})
+  }, [load])
+
+  const handleSaveTTL = async () => {
+    const val = parseInt(ttlInput, 10)
+    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }
+    try {
+      await settingsApi.setSessionTTL(val)
+      setSessionTTL(val)
+      toast.success('Session timeout 已更新，下次登入生效')
+    } catch { toast.error('Failed to update session timeout') }
+  }
 
   const handleCreate = async () => {
     if (!newUsername.trim() || !newPassword.trim()) return
@@ -133,6 +153,38 @@ export function UsersPage() {
           </Card>
         ))}
       </div>
+
+      {/* Session Timeout */}
+      <Card className="mt-6">
+        <CardHeader className="border-b pb-3">
+          <CardTitle className="text-sm font-medium">Session Timeout</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Timeout (seconds)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+                <span className="text-xs text-muted-foreground">
+                  = {sessionTTL >= 3600
+                    ? `${(sessionTTL / 3600).toFixed(1)} hr`
+                    : `${Math.round(sessionTTL / 60)} min`}
+                </span>
+              </div>
+            </div>
+            {me?.role === 'admin' && (
+              <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>
+        </CardContent>
+      </Card>
 
       {/* Delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
