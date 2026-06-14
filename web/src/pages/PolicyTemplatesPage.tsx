@@ -14,6 +14,10 @@ import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
 
+function templateScope(yaml: string): 'cluster' | 'namespace' {
+  return /^metadata:\s*\n(?:\s+\S.*\n)*\s+namespace:\s*\S/m.test(yaml) ? 'namespace' : 'cluster'
+}
+
 const DEFAULT_YAML = ''
 
 function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
@@ -36,6 +40,16 @@ export function PolicyTemplatesPage() {
   useEffect(() => { loadCustom() }, [loadCustom])
 
   const allTemplates = [...POLICY_TEMPLATES, ...customTemplates]
+
+  // Search & filter
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'cluster' | 'namespace'>('all')
+
+  const filteredTemplates = allTemplates.filter(t => {
+    if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (scopeFilter !== 'all' && templateScope(t.yaml) !== scopeFilter) return false
+    return true
+  })
 
   // Use-template dialog
   const [selected, setSelected] = useState<PolicyTemplate | null>(null)
@@ -160,12 +174,34 @@ export function PolicyTemplatesPage() {
   /* ── template list ── */
   return (
     <>
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Policy Templates</h4>
           <p className="text-sm text-muted-foreground">Pre-built and custom TracingPolicy templates.</p>
         </div>
         {isAdmin && <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>}
+      </div>
+
+      <div className="mb-6 flex items-center gap-2">
+        <Input
+          placeholder="Search templates..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="h-8 w-56 text-sm"
+        />
+        <div className="flex items-center gap-1">
+          {(['all', 'cluster', 'namespace'] as const).map(s => (
+            <Button
+              key={s}
+              size="sm"
+              variant={scopeFilter === s ? 'default' : 'outline'}
+              className="h-8 text-xs capitalize"
+              onClick={() => setScopeFilter(s)}
+            >
+              {s === 'all' ? 'All' : s === 'cluster' ? 'Cluster-wide' : 'Namespace'}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {showNewForm && (
@@ -202,7 +238,10 @@ export function PolicyTemplatesPage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {allTemplates.map(t => (
+        {filteredTemplates.length === 0 && (
+          <p className="col-span-full py-10 text-center text-sm text-muted-foreground">No templates found</p>
+        )}
+        {filteredTemplates.map(t => (
           <Card key={t.id}>
             <CardHeader className="border-b pb-3">
               <div>
