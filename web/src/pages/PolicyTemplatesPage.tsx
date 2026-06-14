@@ -18,16 +18,14 @@ function templateScope(yaml: string): 'cluster' | 'namespace' {
   return /^metadata:\s*\n(?:\s+\S.*\n)*\s+namespace:\s*\S/m.test(yaml) ? 'namespace' : 'cluster'
 }
 
-function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {
+function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
   let result = yaml
   result = result.replace(/^(\s*)- "\$\{PODCIDR\}"$/gm, (_, indent) =>
-    podCIDRs.length > 0
-      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\n')
-      : `${indent}- "# PODCIDR not detected"`)
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\n') : `${indent}- "# PODCIDR not detected"`)
   result = result.replace(/^(\s*)- "\$\{SVCCIDR\}"$/gm, (_, indent) =>
-    serviceCIDRs.length > 0
-      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\n')
-      : `${indent}- "# SVCCIDR not detected"`)
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\n') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\s*)- "\$\{NODEIPS\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\n') : `${indent}- "# Node IPs not detected"`)
   return result
 }
 
@@ -93,8 +91,8 @@ export function PolicyTemplatesPage() {
 
     if (t.yaml.includes('${PODCIDR}') || t.yaml.includes('${SVCCIDR}')) {
       try {
-        const { podCIDRs, serviceCIDRs } = await clusterApi.cidr()
-        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs)
+        const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)
         setSelected({ ...t, yaml: substituted })
       } catch {
         setSelected(t)

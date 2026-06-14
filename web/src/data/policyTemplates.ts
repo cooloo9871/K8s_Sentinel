@@ -56,6 +56,7 @@ spec:
         - "127.0.0.1"
         - "\${PODCIDR}"
         - "\${SVCCIDR}"
+        - "\${NODEIPS}"
 `,
   },
   {

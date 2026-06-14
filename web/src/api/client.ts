@@ -86,7 +86,7 @@ export const userApi = {
 }
 
 export const clusterApi = {
-  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[] }> =>
+  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
     api.get('/cluster/cidr').then((r) => r.data),
 }
 

@@ -457023,3 +457023,3698 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "$(cat <<'EOF'
+fix: expand cluster CIDR detection to cover non-kubernetes IPAM
+
+Detection order for pod CIDR:
+1. kube-controller-manager args (--cluster-cidr) — k8s IPAM
+2. cilium-config ConfigMap (cluster-pool-ipv4-cidr,
+   ipv4-native-routing-cidr, ipv4-cluster-cidr) — Cilium IPAM
+3. kube-proxy ConfigMap (clusterCIDR field)
+4. Node spec.podCIDRs fallback — any CNI that sets node podCIDR
+
+Also add RBAC rules for nodes (get/list) and specific ConfigMaps
+(cilium-config, kube-proxy) to support the new detection paths.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit expanded CIDR detection"
+  },
+  "tool_response": {
+    "stdout": "[main 6564018] fix: expand cluster CIDR detection to cover non-kubernetes IPAM
+ 3 files changed, 1134 insertions(+), 8 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "6564018",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Security Events 如果是 network rule 的 event，點開查看 detail 後要有個欄位可以看到它連接到的目的地destination是哪裡"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}",
+    "new_string": "		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case strings.Contains(evt.Function, "tcp_connect"):
+			evt.NetDest = sockArgDest(args, 0)
+		}
+	}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}",
+    "new_string": "		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case strings.Contains(evt.Function, "tcp_connect"):
+			evt.NetDest = sockArgDest(args, 0)
+		}
+	}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}",
+    "newString": "		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case strings.Contains(evt.Function, "tcp_connect"):
+			evt.NetDest = sockArgDest(args, 0)
+		}
+	}",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch {
+		case strings.Contains(evt.Function, "security_file_permission"):
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case strings.Contains(evt.Function, "security_mmap_file"):
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 225,
+        "oldLines": 6,
+        "newStart": 225,
+        "newLines": 8,
+        "lines": [
+          "     case strings.Contains(evt.Function, "security_path_truncate"):",
+          "       evt.FilePath = pathArgPath(args, 0)",
+          "       evt.FileOp = "truncate"",
+          "+    case strings.Contains(evt.Function, "tcp_connect"):",
+          "+      evt.NetDest = sockArgDest(args, 0)",
+          "     }",
+          "   }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "func fileArgPath(args []any, idx int) string {",
+    "new_string": "func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}
+
+func fileArgPath(args []any, idx int) string {",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "func fileArgPath(args []any, idx int) string {",
+    "new_string": "func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}
+
+func fileArgPath(args []any, idx int) string {",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "func fileArgPath(args []any, idx int) string {",
+    "newString": "func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}
+
+func fileArgPath(args []any, idx int) string {",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch {
+		case strings.Contains(evt.Function, "security_file_permission"):
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case strings.Contains(evt.Function, "security_mmap_file"):
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case strings.Contains(evt.Function, "tcp_connect"):
+			evt.NetDest = sockArgDest(args, 0)
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 291,
+        "oldLines": 6,
+        "newStart": 291,
+        "newLines": 28,
+        "lines": [
+          "   return """,
+          " }",
+          " ",
+          "+func sockArgDest(args []any, idx int) string {",
+          "+  if idx >= len(args) {",
+          "+    return """,
+          "+  }",
+          "+  arg, ok := args[idx].(map[string]any)",
+          "+  if !ok {",
+          "+    return """,
+          "+  }",
+          "+  sock, ok := arg["sock_arg"].(map[string]any)",
+          "+  if !ok {",
+          "+    return """,
+          "+  }",
+          "+  daddr := anyStr(sock, "daddr")",
+          "+  if daddr == "" {",
+          "+    return """,
+          "+  }",
+          "+  if dport, ok := sock["dport"].(float64); ok && dport > 0 {",
+          "+    return fmt.Sprintf("%s:%d", daddr, int(dport))",
+          "+  }",
+          "+  return daddr",
+          "+}",
+          "+",
+          " func fileArgPath(args []any, idx int) string {",
+          "   if idx >= len(args) {",
+          "     return """
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "netDest\\|Network" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "Confirm frontend already handles netDest"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "netDest\\|Network" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -10",
+    "description": "Confirm frontend already handles netDest"
+  },
+  "tool_response": {
+    "stdout": "19:function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+22:  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+32:    Network: 'bg-blue-500/15 text-blue-700',
+71:  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+296:                        {e.netDest && (
+297:                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/k8s/tetragon.go && git commit -m "$(cat <<'EOF'
+fix: parse tcp_connect sock_arg to populate NetDest in Security Events
+
+sockArgDest() reads sock_arg.daddr and sock_arg.dport from the kprobe
+args and formats them as "addr:port". The frontend detail row already
+shows this field with label "Network".
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit network dest parsing"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/k8s/tetragon.go && git commit -m "$(cat <<'EOF'
+fix: parse tcp_connect sock_arg to populate NetDest in Security Events
+
+sockArgDest() reads sock_arg.daddr and sock_arg.dport from the kprobe
+args and formats them as "addr:port". The frontend detail row already
+shows this field with label "Network".
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit network dest parsing"
+  },
+  "tool_response": {
+    "stdout": "[main 60573d1] fix: parse tcp_connect sock_arg to populate NetDest in Security Events
+ 1 file changed, 24 insertions(+)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "60573d1",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "monitor-all-network 這個 template 我還要排除所有的 k8s node ip"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/cluster_info.go",
+    "old_string": "// ClusterCIDR holds detected pod and service CIDRs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+}",
+    "new_string": "// ClusterCIDR holds detected pod and service CIDRs and node IPs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+	NodeIPs      []string `json:"nodeIPs"`
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/cluster_info.go",
+    "old_string": "// ClusterCIDR holds detected pod and service CIDRs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+}",
+    "new_string": "// ClusterCIDR holds detected pod and service CIDRs and node IPs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+	NodeIPs      []string `json:"nodeIPs"`
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/cluster_info.go",
+    "oldString": "// ClusterCIDR holds detected pod and service CIDRs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+}",
+    "newString": "// ClusterCIDR holds detected pod and service CIDRs and node IPs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+	NodeIPs      []string `json:"nodeIPs"`
+}",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"regexp"
+	"strings"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// ClusterCIDR holds detected pod and service CIDRs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+}
+
+// GetClusterCIDR detects pod and service CIDRs from multiple sources.
+//
+// Pod CIDR detection order:
+//  1. kube-controller-manager pod args (--cluster-cidr)          — Kubernetes IPAM
+//  2. cilium-config ConfigMap (cluster-pool-ipv4-cidr,            — Cilium cluster-pool IPAM
+//     ipv4-native-routing-cidr, ipv4-cluster-cidr)
+//  3. kube-proxy ConfigMap (clusterCIDR in config body)           — kube-proxy config
+//  4. Node spec.podCIDRs fallback                                 — any CNI that sets node podCIDR
+//
+// Service CIDR detection order:
+//  1. kube-apiserver pod args (--service-cluster-ip-range)
+//  2. kube-proxy ConfigMap (clusterCIDR comment / service config)
+func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
+	result := ClusterCIDR{}
+
+	// ── 1. Control-plane pod args ────────────────────────────────────────────
+	for _, component := range []string{"kube-controller-manager", "kube-apiserver"} {
+		pods, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: "component=" + component,
+		})
+		if err != nil || len(pods.Items) == 0 {
+			continue
+		}
+		for _, pod := range pods.Items {
+			for _, container := range pod.Spec.Containers {
+				all := append(container.Command, container.Args...)
+				for _, arg := range all {
+					if v, ok := trimFlag(arg, "--cluster-cidr"); ok && component == "kube-controller-manager" {
+						result.PodCIDRs = appendUniq(result.PodCIDRs, splitCIDRs(v)...)
+					}
+					if v, ok := trimFlag(arg, "--service-cluster-ip-range"); ok && component == "kube-apiserver" {
+						result.ServiceCIDRs = appendUniq(result.ServiceCIDRs, splitCIDRs(v)...)
+					}
+				}
+			}
+		}
+	}
+
+	// ── 2. cilium-config ConfigMap ────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "cilium-config", metav1.GetOptions{})
+		if err == nil {
+			for _, key := range []string{"cluster-pool-ipv4-cidr", "ipv4-native-routing-cidr", "ipv4-cluster-cidr"} {
+				if v := strings.TrimSpace(cm.Data[key]); v != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, splitCIDRs(v)...)
+					break
+				}
+			}
+		}
+	}
+
+	// ── 3. kube-proxy ConfigMap ───────────────────────────────────────────────
+	// kube-proxy stores its config as a YAML blob inside the ConfigMap data.
+	// The clusterCIDR field covers pod CIDR for kube-proxy's own use.
+	if len(result.PodCIDRs) == 0 || len(result.ServiceCIDRs) == 0 {
+		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "kube-proxy", metav1.GetOptions{})
+		if err == nil {
+			for _, v := range cm.Data {
+				if cidrs := extractKubeProxyCIDR(v); len(cidrs) > 0 && len(result.PodCIDRs) == 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, cidrs...)
+				}
+			}
+		}
+	}
+
+	// ── 4. Node podCIDRs fallback ─────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for _, node := range nodes.Items {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// extractKubeProxyCIDR parses the clusterCIDR value from a kube-proxy config blob.
+var reCIDR = regexp.MustCompile(`clusterCIDR:\\s*"?([0-9./,\\s]+)"?`)
+
+func extractKubeProxyCIDR(configBlob string) []string {
+	m := reCIDR.FindStringSubmatch(configBlob)
+	if len(m) < 2 {
+		return nil
+	}
+	return splitCIDRs(m[1])
+}
+
+func trimFlag(arg, flag string) (string, bool) {
+	prefix := flag + "="
+	if strings.HasPrefix(arg, prefix) {
+		return strings.TrimPrefix(arg, prefix), true
+	}
+	return "", false
+}
+
+func splitCIDRs(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func appendUniq(dst []string, items ...string) []string {
+	seen := make(map[string]bool, len(dst))
+	for _, v := range dst {
+		seen[v] = true
+	}
+	for _, v := range items {
+		if !seen[v] {
+			seen[v] = true
+			dst = append(dst, v)
+		}
+	}
+	return dst
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 8,
+        "oldLines": 10,
+        "newStart": 8,
+        "newLines": 11,
+        "lines": [
+          "   metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"",
+          " )",
+          " ",
+          "-// ClusterCIDR holds detected pod and service CIDRs for the cluster.",
+          "+// ClusterCIDR holds detected pod and service CIDRs and node IPs for the cluster.",
+          " type ClusterCIDR struct {",
+          "   PodCIDRs     []string `json:"podCIDRs"`",
+          "   ServiceCIDRs []string `json:"serviceCIDRs"`",
+          "+  NodeIPs      []string `json:"nodeIPs"`",
+          " }",
+          " ",
+          " // GetClusterCIDR detects pod and service CIDRs from multiple sources."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/cluster_info.go",
+    "old_string": "	// ── 4. Node podCIDRs fallback ─────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for _, node := range nodes.Items {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}",
+    "new_string": "	// ── 4. Node IPs + pod CIDR fallback ──────────────────────────────────────
+	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, node := range nodes.Items {
+			// Collect InternalIP (and ExternalIP) for every node
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == "InternalIP" || addr.Type == "ExternalIP" {
+					result.NodeIPs = appendUniq(result.NodeIPs, addr.Address)
+				}
+			}
+			// Pod CIDR fallback
+			if len(result.PodCIDRs) == 0 {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/cluster_info.go",
+    "old_string": "	// ── 4. Node podCIDRs fallback ─────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for _, node := range nodes.Items {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}",
+    "new_string": "	// ── 4. Node IPs + pod CIDR fallback ──────────────────────────────────────
+	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, node := range nodes.Items {
+			// Collect InternalIP (and ExternalIP) for every node
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == "InternalIP" || addr.Type == "ExternalIP" {
+					result.NodeIPs = appendUniq(result.NodeIPs, addr.Address)
+				}
+			}
+			// Pod CIDR fallback
+			if len(result.PodCIDRs) == 0 {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/cluster_info.go",
+    "oldString": "	// ── 4. Node podCIDRs fallback ─────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for _, node := range nodes.Items {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}",
+    "newString": "	// ── 4. Node IPs + pod CIDR fallback ──────────────────────────────────────
+	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, node := range nodes.Items {
+			// Collect InternalIP (and ExternalIP) for every node
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == "InternalIP" || addr.Type == "ExternalIP" {
+					result.NodeIPs = appendUniq(result.NodeIPs, addr.Address)
+				}
+			}
+			// Pod CIDR fallback
+			if len(result.PodCIDRs) == 0 {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"regexp"
+	"strings"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// ClusterCIDR holds detected pod and service CIDRs and node IPs for the cluster.
+type ClusterCIDR struct {
+	PodCIDRs     []string `json:"podCIDRs"`
+	ServiceCIDRs []string `json:"serviceCIDRs"`
+	NodeIPs      []string `json:"nodeIPs"`
+}
+
+// GetClusterCIDR detects pod and service CIDRs from multiple sources.
+//
+// Pod CIDR detection order:
+//  1. kube-controller-manager pod args (--cluster-cidr)          — Kubernetes IPAM
+//  2. cilium-config ConfigMap (cluster-pool-ipv4-cidr,            — Cilium cluster-pool IPAM
+//     ipv4-native-routing-cidr, ipv4-cluster-cidr)
+//  3. kube-proxy ConfigMap (clusterCIDR in config body)           — kube-proxy config
+//  4. Node spec.podCIDRs fallback                                 — any CNI that sets node podCIDR
+//
+// Service CIDR detection order:
+//  1. kube-apiserver pod args (--service-cluster-ip-range)
+//  2. kube-proxy ConfigMap (clusterCIDR comment / service config)
+func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
+	result := ClusterCIDR{}
+
+	// ── 1. Control-plane pod args ────────────────────────────────────────────
+	for _, component := range []string{"kube-controller-manager", "kube-apiserver"} {
+		pods, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: "component=" + component,
+		})
+		if err != nil || len(pods.Items) == 0 {
+			continue
+		}
+		for _, pod := range pods.Items {
+			for _, container := range pod.Spec.Containers {
+				all := append(container.Command, container.Args...)
+				for _, arg := range all {
+					if v, ok := trimFlag(arg, "--cluster-cidr"); ok && component == "kube-controller-manager" {
+						result.PodCIDRs = appendUniq(result.PodCIDRs, splitCIDRs(v)...)
+					}
+					if v, ok := trimFlag(arg, "--service-cluster-ip-range"); ok && component == "kube-apiserver" {
+						result.ServiceCIDRs = appendUniq(result.ServiceCIDRs, splitCIDRs(v)...)
+					}
+				}
+			}
+		}
+	}
+
+	// ── 2. cilium-config ConfigMap ────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "cilium-config", metav1.GetOptions{})
+		if err == nil {
+			for _, key := range []string{"cluster-pool-ipv4-cidr", "ipv4-native-routing-cidr", "ipv4-cluster-cidr"} {
+				if v := strings.TrimSpace(cm.Data[key]); v != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, splitCIDRs(v)...)
+					break
+				}
+			}
+		}
+	}
+
+	// ── 3. kube-proxy ConfigMap ───────────────────────────────────────────────
+	// kube-proxy stores its config as a YAML blob inside the ConfigMap data.
+	// The clusterCIDR field covers pod CIDR for kube-proxy's own use.
+	if len(result.PodCIDRs) == 0 || len(result.ServiceCIDRs) == 0 {
+		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "kube-proxy", metav1.GetOptions{})
+		if err == nil {
+			for _, v := range cm.Data {
+				if cidrs := extractKubeProxyCIDR(v); len(cidrs) > 0 && len(result.PodCIDRs) == 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, cidrs...)
+				}
+			}
+		}
+	}
+
+	// ── 4. Node podCIDRs fallback ─────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for _, node := range nodes.Items {
+				if len(node.Spec.PodCIDRs) > 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
+				} else if node.Spec.PodCIDR != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDR)
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// extractKubeProxyCIDR parses the clusterCIDR value from a kube-proxy config blob.
+var reCIDR = regexp.MustCompile(`clusterCIDR:\\s*"?([0-9./,\\s]+)"?`)
+
+func extractKubeProxyCIDR(configBlob string) []string {
+	m := reCIDR.FindStringSubmatch(configBlob)
+	if len(m) < 2 {
+		return nil
+	}
+	return splitCIDRs(m[1])
+}
+
+func trimFlag(arg, flag string) (string, bool) {
+	prefix := flag + "="
+	if strings.HasPrefix(arg, prefix) {
+		return strings.TrimPrefix(arg, prefix), true
+	}
+	return "", false
+}
+
+func splitCIDRs(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func appendUniq(dst []string, items ...string) []string {
+	seen := make(map[string]bool, len(dst))
+	for _, v := range dst {
+		seen[v] = true
+	}
+	for _, v := range items {
+		if !seen[v] {
+			seen[v] = true
+			dst = append(dst, v)
+		}
+	}
+	return dst
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 80,
+        "oldLines": 11,
+        "newStart": 80,
+        "newLines": 18,
+        "lines": [
+          "     }",
+          "   }",
+          " ",
+          "-  // ── 4. Node podCIDRs fallback ─────────────────────────────────────────────",
+          "-  if len(result.PodCIDRs) == 0 {",
+          "-    nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})",
+          "-    if err == nil {",
+          "-      for _, node := range nodes.Items {",
+          "+  // ── 4. Node IPs + pod CIDR fallback ──────────────────────────────────────",
+          "+  nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})",
+          "+  if err == nil {",
+          "+    for _, node := range nodes.Items {",
+          "+      // Collect InternalIP (and ExternalIP) for every node",
+          "+      for _, addr := range node.Status.Addresses {",
+          "+        if addr.Type == "InternalIP" || addr.Type == "ExternalIP" {",
+          "+          result.NodeIPs = appendUniq(result.NodeIPs, addr.Address)",
+          "+        }",
+          "+      }",
+          "+      // Pod CIDR fallback",
+          "+      if len(result.PodCIDRs) == 0 {",
+          "         if len(node.Spec.PodCIDRs) > 0 {",
+          "           result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)",
+          "         } else if node.Spec.PodCIDR != "" {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/data/policyTemplates.ts",
+    "old_string": "        - "127.0.0.1"
+        - "\\${PODCIDR}"
+        - "\\${SVCCIDR}"
+",
+    "new_string": "        - "127.0.0.1"
+        - "\\${PODCIDR}"
+        - "\\${SVCCIDR}"
+        - "\\${NODEIPS}"
+",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/data/policyTemplates.ts",
+    "old_string": "        - "127.0.0.1"
+        - "\\${PODCIDR}"
+        - "\\${SVCCIDR}"
+",
+    "new_string": "        - "127.0.0.1"
+        - "\\${PODCIDR}"
+        - "\\${SVCCIDR}"
+        - "\\${NODEIPS}"
+",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/data/policyTemplates.ts",
+    "oldString": "        - "127.0.0.1"
+        - "\\${PODCIDR}"
+        - "\\${SVCCIDR}"
+",
+    "newString": "        - "127.0.0.1"
+        - "\\${PODCIDR}"
+        - "\\${SVCCIDR}"
+        - "\\${NODEIPS}"
+",
+    "originalFile": "export interface PolicyTemplate {
+  id: string
+  name: string
+  description: string
+  tags: string[]
+  yaml: string
+  custom?: boolean  // user-created templates
+}
+
+
+export const POLICY_TEMPLATES: PolicyTemplate[] = [
+  {
+    id: 'monitor-all-exec',
+    name: 'Monitor All Process Executions',
+    description: 'Record every command executed inside any pod across the cluster.',
+    tags: ['cluster-wide', 'process', 'monitoring'],
+    yaml: `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: monitor-all-exec
+spec:
+  podSelector: {}
+  kprobes:
+    - call: sys_execve
+      syscall: true
+      args:
+        - index: 0
+          type: string
+      selectors:
+        - matchActions:
+            - action: Post
+`,
+  },
+  {
+    id: 'monitor-all-network',
+    name: 'Monitor All Network (Outside Cluster)',
+    description: 'Alert when any pod connects to an address outside the cluster CIDR ranges. Pod and Service CIDRs are auto-detected from the cluster.',
+    tags: ['cluster-wide', 'network', 'monitoring'],
+    yaml: `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: monitor-all-network
+spec:
+  podSelector: {}
+  kprobes:
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "NotDAddr"
+        values:
+        - "127.0.0.1"
+        - "\\${PODCIDR}"
+        - "\\${SVCCIDR}"
+`,
+  },
+  {
+    id: 'monitor-all-file',
+    name: 'Monitor All File Access',
+    description: 'Monitor sensitive file and directory reads/writes across all pods in the cluster.',
+    tags: ['cluster-wide', 'file', 'monitoring'],
+    yaml: `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: monitor-all-file
+spec:
+  podSelector: {}
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/boot"
+        - "/root/.ssh"
+        - "/etc/shadow"
+        - "/etc/profile"
+        - "/etc/sudoers"
+        - "/etc/pam.conf"
+        - "/etc/bashrc"
+        - "/etc/csh.cshrc"
+        - "/etc/csh.login"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "4"
+    - matchArgs:
+      - index: 0
+        operator: "Postfix"
+        values:
+        - ".bashrc"
+        - ".bash_profile"
+        - ".bash_login"
+        - ".bash_logout"
+        - ".cshrc"
+        - ".cshdirs"
+        - ".profile"
+        - ".login"
+        - ".logout"
+        - ".history"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "4"
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc"
+        - "/boot"
+        - "/lib"
+        - "/lib64"
+        - "/bin"
+        - "/usr/lib"
+        - "/usr/local/lib"
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/bin"
+        - "/usr/sbin"
+        - "/var/log"
+        - "/dev/log"
+        - "/root/.ssh"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "2"
+  - call: "security_mmap_file"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "uint32"
+    - index: 2
+      type: "uint32"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/boot"
+        - "/root/.ssh"
+        - "/etc/shadow"
+        - "/etc/sudoers"
+        - "/etc/pam.conf"
+        - "/etc/profile"
+        - "/etc/bashrc"
+        - "/etc/csh.cshrc"
+        - "/etc/csh.login"
+        - ".bashrc"
+        - ".bash_profile"
+        - ".bash_login"
+        - ".bash_logout"
+        - ".cshrc"
+        - ".cshdirs"
+        - ".profile"
+        - ".login"
+        - ".logout"
+        - ".history"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "1"
+      - index: 2
+        operator: "Mask"
+        values:
+        - "1"
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc"
+        - "/boot"
+        - "/lib"
+        - "/lib64"
+        - "/bin"
+        - "/usr/lib"
+        - "/usr/local/lib"
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/bin"
+        - "/usr/sbin"
+        - "/var/log"
+        - "/dev/log"
+        - "/root/.ssh"
+      - index: 1
+        operator: "Mask"
+        values:
+        - "2"
+      - index: 2
+        operator: "Mask"
+        values:
+        - "1"
+  - call: "security_path_truncate"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "path"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc"
+        - "/boot"
+        - "/lib"
+        - "/lib64"
+        - "/usr/lib"
+        - "/usr/local/lib"
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/bin"
+        - "/usr/sbin"
+        - "/var/log"
+        - "/dev/log"
+        - "/root/.ssh"
+`,
+  },
+]
+",
+    "structuredPatch": [
+      {
+        "oldStart": 56,
+        "oldLines": 6,
+        "newStart": 56,
+        "newLines": 7,
+        "lines": [
+          "         - "127.0.0.1"",
+          "         - "\\${PODCIDR}"",
+          "         - "\\${SVCCIDR}"",
+          "+        - "\\${NODEIPS}"",
+          " `,",
+          "   },",
+          "   {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),",
+    "new_string": "  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),",
+    "new_string": "  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),",
+    "newString": "  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}
+
+export interface CustomTemplatePayload {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  yaml: string
+}
+
+export interface AuthUser {
+  username: string
+  role: 'admin' | 'viewer'
+}
+
+export const authApi = {
+  login: (username: string, password: string): Promise<AuthUser> =>
+    api.post('/auth/login', { username, password }).then((r) => r.data),
+  logout: (): Promise<void> =>
+    api.post('/auth/logout'),
+  me: (): Promise<AuthUser> =>
+    api.get('/auth/me').then((r) => r.data),
+}
+
+export interface UserRecord {
+  username: string
+  role: 'admin' | 'viewer'
+  createdAt: string
+}
+
+export const userApi = {
+  list: (): Promise<UserRecord[]> =>
+    api.get('/users').then((r) => r.data),
+  create: (username: string, password: string, role: 'admin' | 'viewer'): Promise<void> =>
+    api.post('/users', { username, password, role }),
+  delete: (username: string): Promise<void> =>
+    api.delete(`/users/${username}`),
+  changePassword: (username: string, password: string): Promise<void> =>
+    api.put(`/users/${username}/password`, { password }),
+}
+
+export const clusterApi = {
+  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),
+}
+
+export const settingsApi = {
+  getSessionTTL: (): Promise<{ sessionTTL: number }> =>
+    api.get('/settings/session-ttl').then((r) => r.data),
+  setSessionTTL: (seconds: number): Promise<void> =>
+    api.put('/settings/session-ttl', { sessionTTL: seconds }),
+}
+
+export const templateApi = {
+  list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
+    api.get('/templates').then((r) => r.data),
+  create: (t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.post('/templates', t).then((r) => r.data),
+  update: (id: string, t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.put(`/templates/${id}`, t).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/templates/${id}`),
+}
+
+",
+    "structuredPatch": [
+      {
+        "oldStart": 86,
+        "oldLines": 7,
+        "newStart": 86,
+        "newLines": 7,
+        "lines": [
+          " }",
+          " ",
+          " export const clusterApi = {",
+          "-  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[] }> =>",
+          "+  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>",
+          "     api.get('/cluster/cidr').then((r) => r.data),",
+          " }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "old_string": "      const { podCIDRs, serviceCIDRs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs)",
+    "new_string": "      const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "old_string": "      const { podCIDRs, serviceCIDRs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs)",
+    "new_string": "      const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "oldString": "      const { podCIDRs, serviceCIDRs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs)",
+    "newString": "      const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { YamlEditor } from '../components/YamlEditor'
+import { policyApi, templateApi, clusterApi, type CustomTemplatePayload } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
+import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
+
+function templateScope(yaml: string): 'cluster' | 'namespace' {
+  return /^metadata:\\s*\
+(?:\\s+\\S.*\
+)*\\s+namespace:\\s*\\S/m.test(yaml) ? 'namespace' : 'cluster'
+}
+
+function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0
+      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0
+      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# SVCCIDR not detected"`)
+  return result
+}
+
+const DEFAULT_YAML = ''
+
+function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
+  return { ...t, tags: t.tags ?? [], description: t.description ?? '', custom: true }
+}
+
+export function PolicyTemplatesPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+  const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>([])
+
+  const loadCustom = useCallback(async () => {
+    try {
+      const { templates } = await templateApi.list()
+      setCustomTemplates(templates.map(apiToTemplate))
+    } catch { /* ignore — server might not have any */ }
+  }, [])
+
+  useEffect(() => { loadCustom() }, [loadCustom])
+
+  const allTemplates = [...POLICY_TEMPLATES, ...customTemplates]
+
+  // Search & filter
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'cluster' | 'namespace'>('all')
+
+  const filteredTemplates = allTemplates.filter(t => {
+    if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (scopeFilter !== 'all' && templateScope(t.yaml) !== scopeFilter) return false
+    return true
+  })
+
+  // Use-template dialog
+  const [selected, setSelected] = useState<PolicyTemplate | null>(null)
+  const [policyName, setPolicyName] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  // Inline YAML editor
+  const [editingTemplate, setEditingTemplate] = useState<PolicyTemplate | null>(null)
+  const [editorYaml, setEditorYaml] = useState('')
+  const [editorValid, setEditorValid] = useState(true)
+  const [editorKey, setEditorKey] = useState(0)
+
+  // New template form
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [newTags, setNewTags] = useState('')
+  const [newYaml, setNewYaml] = useState(DEFAULT_YAML)
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
+
+  /* ── use template ── */
+  const openDialog = async (t: PolicyTemplate) => {
+    const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const suffix = Math.random().toString(36).slice(2, 6)
+    setPolicyName(`${slug}-${suffix}`)
+
+    if (t.yaml.includes('${PODCIDR}') || t.yaml.includes('${SVCCIDR}')) {
+      try {
+        const { podCIDRs, serviceCIDRs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs)
+        setSelected({ ...t, yaml: substituted })
+      } catch {
+        setSelected(t)
+        toast.error('Could not detect cluster CIDRs — edit the YAML manually before creating.')
+      }
+    } else {
+      setSelected(t)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!selected || !policyName.trim()) return
+    const yaml = selected.yaml.replace(/^(\\s*name:\\s*).+$/m, `$1${policyName.trim()}`)
+    setCreating(true)
+    try {
+      await policyApi.create({ source: 'yaml', rawYaml: yaml })
+      toast.success(`Policy "${policyName.trim()}" created.`)
+      setSelected(null)
+    } catch {
+      toast.error('Failed to create policy')
+    } finally { setCreating(false) }
+  }
+
+  /* ── inline editor ── */
+  const openEditor = (t: PolicyTemplate) => {
+    setEditingTemplate(t); setEditorYaml(t.yaml)
+    setEditorValid(true); setEditorKey(k => k + 1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const closeEditor = () => setEditingTemplate(null)
+
+
+  // Save: update existing custom template
+  const handleSave = async () => {
+    if (!editingTemplate || !editingTemplate.custom) return
+    try {
+      await templateApi.update(editingTemplate.id, {
+        id: editingTemplate.id, name: editingTemplate.name,
+        description: editingTemplate.description, tags: editingTemplate.tags, yaml: editorYaml,
+      })
+      await loadCustom()
+      toast.success('Template saved.')
+      closeEditor()
+    } catch { toast.error('Failed to save template') }
+  }
+
+
+  /* ── new template form ── */
+  const resetNewForm = () => { setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML); setShowNewForm(false) }
+
+  const handleSaveTemplate = async () => {
+    if (!newName.trim() || !newYaml.trim()) return
+    const payload: CustomTemplatePayload = {
+      id: `custom-${Date.now()}`,
+      name: newName.trim(), description: newDesc.trim(),
+      tags: newTags.split(',').map(t => t.trim()).filter(Boolean),
+      yaml: newYaml,
+    }
+    try {
+      await templateApi.create(payload)
+      await loadCustom()
+      toast.success('Template saved.')
+      resetNewForm()
+    } catch { toast.error('Failed to save template') }
+  }
+
+  /* ── delete ── */
+  const handleDelete = async () => {
+    if (!deleteTarget?.id) return
+    try {
+      await templateApi.delete(deleteTarget.id)
+      await loadCustom()
+      toast.success('Template deleted.')
+      setDeleteTarget(null)
+    } catch { toast.error('Failed to delete template') }
+  }
+
+  /* ── inline editor view ── */
+  if (editingTemplate) {
+    return (
+      <>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h4 className="text-xl font-semibold">{isAdmin && editingTemplate?.custom ? 'Edit Template' : 'View Template'}</h4>
+            <p className="text-sm text-muted-foreground">{editingTemplate.name}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={closeEditor}>← Back</Button>
+            {isAdmin && editingTemplate?.custom && (
+              <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
+                Save
+              </Button>
+            )}
+          </div>
+        </div>
+        <YamlEditor key={editorKey} initialValue={editorYaml} readOnly={!isAdmin || !editingTemplate?.custom}
+          onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }} />
+      </>
+    )
+  }
+
+  /* ── template list ── */
+  return (
+    <>
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Policy Templates</h4>
+          <p className="text-sm text-muted-foreground">Pre-built and custom TracingPolicy templates.</p>
+        </div>
+        {isAdmin && <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>}
+      </div>
+
+      <div className="mb-6 flex items-center gap-2">
+        <Input
+          placeholder="Search templates..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="h-8 w-56 text-sm"
+        />
+        <div className="flex items-center gap-1">
+          {(['all', 'cluster', 'namespace'] as const).map(s => (
+            <Button
+              key={s}
+              size="sm"
+              variant={scopeFilter === s ? 'default' : 'outline'}
+              className="h-8 text-xs capitalize"
+              onClick={() => setScopeFilter(s)}
+            >
+              {s === 'all' ? 'All' : s === 'cluster' ? 'Cluster-wide' : 'Namespace'}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {showNewForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New Custom Template</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+                <Input placeholder="My Template" value={newName} onChange={e => setNewName(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Tags <span className="text-muted-foreground font-normal">(comma-separated)</span></Label>
+                <Input placeholder="namespace, process" value={newTags} onChange={e => setNewTags(e.target.value)} className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Description</Label>
+              <Input placeholder="What does this template do?" value={newDesc} onChange={e => setNewDesc(e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">YAML <span className="text-destructive">*</span></Label>
+              <textarea className="min-h-[200px] w-full rounded-md border bg-muted px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={newYaml} onChange={e => setNewYaml(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={resetNewForm}>Cancel</Button>
+              <Button size="sm" onClick={handleSaveTemplate} disabled={!newName.trim() || !newYaml.trim()}>Save Template</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filteredTemplates.length === 0 && (
+          <p className="col-span-full py-10 text-center text-sm text-muted-foreground">No templates found</p>
+        )}
+        {filteredTemplates.map(t => (
+          <Card key={t.id}>
+            <CardHeader className="border-b pb-3">
+              <div>
+                <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {t.custom && <Badge className="text-[10px] bg-violet-500/15 text-violet-700">Custom</Badge>}
+                  {t.tags.map(tag => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}
+                </div>
+              </div>
+              {isAdmin && <CardAction><Button size="sm" onClick={() => openDialog(t)}>Use Template</Button></CardAction>}
+            </CardHeader>
+            <CardContent className="pt-3">
+              {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}
+              <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">{t.yaml.trim()}</pre>
+              <div className="mt-2 flex gap-2">
+                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>{isAdmin && t.custom ? 'Open in Editor' : 'View YAML'}</Button>
+                {isAdmin && t.custom && (
+                  <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>Delete</Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!selected} onOpenChange={(open: boolean) => !open && setSelected(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Create from Template</AlertDialogTitle>
+            <AlertDialogDescription>{selected?.name} — set a name for the new policy.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label htmlFor="tpl-policy-name">Policy Name</Label>
+            <Input id="tpl-policy-name" value={policyName} onChange={e => setPolicyName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()} placeholder="my-policy" />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelected(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCreate} disabled={creating || !policyName.trim()}>
+              {creating ? 'Creating...' : 'Create'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 93,
+        "oldLines": 8,
+        "newStart": 93,
+        "newLines": 8,
+        "lines": [
+          " ",
+          "     if (t.yaml.includes('${PODCIDR}') || t.yaml.includes('${SVCCIDR}')) {",
+          "       try {",
+          "-        const { podCIDRs, serviceCIDRs } = await clusterApi.cidr()",
+          "-        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs)",
+          "+        const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()",
+          "+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)",
+          "         setSelected({ ...t, yaml: substituted })",
+          "       } catch {",
+          "         setSelected(t)"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "old_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0
+      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0
+      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# SVCCIDR not detected"`)
+  return result
+}",
+    "new_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  const sub = (placeholder: string, values: string[], fallback: string) =>
+    yaml.includes(placeholder)
+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>
+          values.length > 0
+            ? values.map(v => `${indent}- "${v}"`).join('\
+')
+            : `${indent}- "# ${fallback}"`)
+      : yaml
+
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  void sub // suppress unused warning
+  return result
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "old_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0
+      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0
+      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# SVCCIDR not detected"`)
+  return result
+}",
+    "new_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  const sub = (placeholder: string, values: string[], fallback: string) =>
+    yaml.includes(placeholder)
+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>
+          values.length > 0
+            ? values.map(v => `${indent}- "${v}"`).join('\
+')
+            : `${indent}- "# ${fallback}"`)
+      : yaml
+
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  void sub // suppress unused warning
+  return result
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "oldString": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0
+      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0
+      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# SVCCIDR not detected"`)
+  return result
+}",
+    "newString": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  const sub = (placeholder: string, values: string[], fallback: string) =>
+    yaml.includes(placeholder)
+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>
+          values.length > 0
+            ? values.map(v => `${indent}- "${v}"`).join('\
+')
+            : `${indent}- "# ${fallback}"`)
+      : yaml
+
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  void sub // suppress unused warning
+  return result
+}",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { YamlEditor } from '../components/YamlEditor'
+import { policyApi, templateApi, clusterApi, type CustomTemplatePayload } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
+import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
+
+function templateScope(yaml: string): 'cluster' | 'namespace' {
+  return /^metadata:\\s*\
+(?:\\s+\\S.*\
+)*\\s+namespace:\\s*\\S/m.test(yaml) ? 'namespace' : 'cluster'
+}
+
+function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0
+      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0
+      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+')
+      : `${indent}- "# SVCCIDR not detected"`)
+  return result
+}
+
+const DEFAULT_YAML = ''
+
+function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
+  return { ...t, tags: t.tags ?? [], description: t.description ?? '', custom: true }
+}
+
+export function PolicyTemplatesPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+  const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>([])
+
+  const loadCustom = useCallback(async () => {
+    try {
+      const { templates } = await templateApi.list()
+      setCustomTemplates(templates.map(apiToTemplate))
+    } catch { /* ignore — server might not have any */ }
+  }, [])
+
+  useEffect(() => { loadCustom() }, [loadCustom])
+
+  const allTemplates = [...POLICY_TEMPLATES, ...customTemplates]
+
+  // Search & filter
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'cluster' | 'namespace'>('all')
+
+  const filteredTemplates = allTemplates.filter(t => {
+    if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (scopeFilter !== 'all' && templateScope(t.yaml) !== scopeFilter) return false
+    return true
+  })
+
+  // Use-template dialog
+  const [selected, setSelected] = useState<PolicyTemplate | null>(null)
+  const [policyName, setPolicyName] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  // Inline YAML editor
+  const [editingTemplate, setEditingTemplate] = useState<PolicyTemplate | null>(null)
+  const [editorYaml, setEditorYaml] = useState('')
+  const [editorValid, setEditorValid] = useState(true)
+  const [editorKey, setEditorKey] = useState(0)
+
+  // New template form
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [newTags, setNewTags] = useState('')
+  const [newYaml, setNewYaml] = useState(DEFAULT_YAML)
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
+
+  /* ── use template ── */
+  const openDialog = async (t: PolicyTemplate) => {
+    const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const suffix = Math.random().toString(36).slice(2, 6)
+    setPolicyName(`${slug}-${suffix}`)
+
+    if (t.yaml.includes('${PODCIDR}') || t.yaml.includes('${SVCCIDR}')) {
+      try {
+        const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)
+        setSelected({ ...t, yaml: substituted })
+      } catch {
+        setSelected(t)
+        toast.error('Could not detect cluster CIDRs — edit the YAML manually before creating.')
+      }
+    } else {
+      setSelected(t)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!selected || !policyName.trim()) return
+    const yaml = selected.yaml.replace(/^(\\s*name:\\s*).+$/m, `$1${policyName.trim()}`)
+    setCreating(true)
+    try {
+      await policyApi.create({ source: 'yaml', rawYaml: yaml })
+      toast.success(`Policy "${policyName.trim()}" created.`)
+      setSelected(null)
+    } catch {
+      toast.error('Failed to create policy')
+    } finally { setCreating(false) }
+  }
+
+  /* ── inline editor ── */
+  const openEditor = (t: PolicyTemplate) => {
+    setEditingTemplate(t); setEditorYaml(t.yaml)
+    setEditorValid(true); setEditorKey(k => k + 1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const closeEditor = () => setEditingTemplate(null)
+
+
+  // Save: update existing custom template
+  const handleSave = async () => {
+    if (!editingTemplate || !editingTemplate.custom) return
+    try {
+      await templateApi.update(editingTemplate.id, {
+        id: editingTemplate.id, name: editingTemplate.name,
+        description: editingTemplate.description, tags: editingTemplate.tags, yaml: editorYaml,
+      })
+      await loadCustom()
+      toast.success('Template saved.')
+      closeEditor()
+    } catch { toast.error('Failed to save template') }
+  }
+
+
+  /* ── new template form ── */
+  const resetNewForm = () => { setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML); setShowNewForm(false) }
+
+  const handleSaveTemplate = async () => {
+    if (!newName.trim() || !newYaml.trim()) return
+    const payload: CustomTemplatePayload = {
+      id: `custom-${Date.now()}`,
+      name: newName.trim(), description: newDesc.trim(),
+      tags: newTags.split(',').map(t => t.trim()).filter(Boolean),
+      yaml: newYaml,
+    }
+    try {
+      await templateApi.create(payload)
+      await loadCustom()
+      toast.success('Template saved.')
+      resetNewForm()
+    } catch { toast.error('Failed to save template') }
+  }
+
+  /* ── delete ── */
+  const handleDelete = async () => {
+    if (!deleteTarget?.id) return
+    try {
+      await templateApi.delete(deleteTarget.id)
+      await loadCustom()
+      toast.success('Template deleted.')
+      setDeleteTarget(null)
+    } catch { toast.error('Failed to delete template') }
+  }
+
+  /* ── inline editor view ── */
+  if (editingTemplate) {
+    return (
+      <>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h4 className="text-xl font-semibold">{isAdmin && editingTemplate?.custom ? 'Edit Template' : 'View Template'}</h4>
+            <p className="text-sm text-muted-foreground">{editingTemplate.name}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={closeEditor}>← Back</Button>
+            {isAdmin && editingTemplate?.custom && (
+              <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
+                Save
+              </Button>
+            )}
+          </div>
+        </div>
+        <YamlEditor key={editorKey} initialValue={editorYaml} readOnly={!isAdmin || !editingTemplate?.custom}
+          onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }} />
+      </>
+    )
+  }
+
+  /* ── template list ── */
+  return (
+    <>
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Policy Templates</h4>
+          <p className="text-sm text-muted-foreground">Pre-built and custom TracingPolicy templates.</p>
+        </div>
+        {isAdmin && <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>}
+      </div>
+
+      <div className="mb-6 flex items-center gap-2">
+        <Input
+          placeholder="Search templates..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="h-8 w-56 text-sm"
+        />
+        <div className="flex items-center gap-1">
+          {(['all', 'cluster', 'namespace'] as const).map(s => (
+            <Button
+              key={s}
+              size="sm"
+              variant={scopeFilter === s ? 'default' : 'outline'}
+              className="h-8 text-xs capitalize"
+              onClick={() => setScopeFilter(s)}
+            >
+              {s === 'all' ? 'All' : s === 'cluster' ? 'Cluster-wide' : 'Namespace'}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {showNewForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New Custom Template</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+                <Input placeholder="My Template" value={newName} onChange={e => setNewName(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Tags <span className="text-muted-foreground font-normal">(comma-separated)</span></Label>
+                <Input placeholder="namespace, process" value={newTags} onChange={e => setNewTags(e.target.value)} className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Description</Label>
+              <Input placeholder="What does this template do?" value={newDesc} onChange={e => setNewDesc(e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">YAML <span className="text-destructive">*</span></Label>
+              <textarea className="min-h-[200px] w-full rounded-md border bg-muted px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={newYaml} onChange={e => setNewYaml(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={resetNewForm}>Cancel</Button>
+              <Button size="sm" onClick={handleSaveTemplate} disabled={!newName.trim() || !newYaml.trim()}>Save Template</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filteredTemplates.length === 0 && (
+          <p className="col-span-full py-10 text-center text-sm text-muted-foreground">No templates found</p>
+        )}
+        {filteredTemplates.map(t => (
+          <Card key={t.id}>
+            <CardHeader className="border-b pb-3">
+              <div>
+                <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {t.custom && <Badge className="text-[10px] bg-violet-500/15 text-violet-700">Custom</Badge>}
+                  {t.tags.map(tag => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}
+                </div>
+              </div>
+              {isAdmin && <CardAction><Button size="sm" onClick={() => openDialog(t)}>Use Template</Button></CardAction>}
+            </CardHeader>
+            <CardContent className="pt-3">
+              {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}
+              <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">{t.yaml.trim()}</pre>
+              <div className="mt-2 flex gap-2">
+                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>{isAdmin && t.custom ? 'Open in Editor' : 'View YAML'}</Button>
+                {isAdmin && t.custom && (
+                  <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>Delete</Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!selected} onOpenChange={(open: boolean) => !open && setSelected(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Create from Template</AlertDialogTitle>
+            <AlertDialogDescription>{selected?.name} — set a name for the new policy.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label htmlFor="tpl-policy-name">Policy Name</Label>
+            <Input id="tpl-policy-name" value={policyName} onChange={e => setPolicyName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()} placeholder="my-policy" />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelected(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCreate} disabled={creating || !policyName.trim()}>
+              {creating ? 'Creating...' : 'Create'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 18,
+        "oldLines": 16,
+        "newStart": 18,
+        "newLines": 23,
+        "lines": [
+          "   return /^metadata:\\s*\
+(?:\\s+\\S.*\
+)*\\s+namespace:\\s*\\S/m.test(yaml) ? 'namespace' : 'cluster'",
+          " }",
+          " ",
+          "-function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {",
+          "+function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {",
+          "+  const sub = (placeholder: string, values: string[], fallback: string) =>",
+          "+    yaml.includes(placeholder)",
+          "+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>",
+          "+          values.length > 0",
+          "+            ? values.map(v => `${indent}- "${v}"`).join('\
+')",
+          "+            : `${indent}- "# ${fallback}"`)",
+          "+      : yaml",
+          "+",
+          "   let result = yaml",
+          "   result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>",
+          "-    podCIDRs.length > 0",
+          "-      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+')",
+          "-      : `${indent}- "# PODCIDR not detected"`)",
+          "+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)",
+          "   result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>",
+          "-    serviceCIDRs.length > 0",
+          "-      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+')",
+          "-      : `${indent}- "# SVCCIDR not detected"`)",
+          "+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)",
+          "+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>",
+          "+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)",
+          "+  void sub // suppress unused warning",
+          "   return result",
+          " }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 353ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "old_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  const sub = (placeholder: string, values: string[], fallback: string) =>
+    yaml.includes(placeholder)
+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>
+          values.length > 0
+            ? values.map(v => `${indent}- "${v}"`).join('\
+')
+            : `${indent}- "# ${fallback}"`)
+      : yaml
+
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  void sub // suppress unused warning
+  return result
+}",
+    "new_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  return result
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "old_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  const sub = (placeholder: string, values: string[], fallback: string) =>
+    yaml.includes(placeholder)
+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>
+          values.length > 0
+            ? values.map(v => `${indent}- "${v}"`).join('\
+')
+            : `${indent}- "# ${fallback}"`)
+      : yaml
+
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  void sub // suppress unused warning
+  return result
+}",
+    "new_string": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  return result
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/PolicyTemplatesPage.tsx",
+    "oldString": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  const sub = (placeholder: string, values: string[], fallback: string) =>
+    yaml.includes(placeholder)
+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>
+          values.length > 0
+            ? values.map(v => `${indent}- "${v}"`).join('\
+')
+            : `${indent}- "# ${fallback}"`)
+      : yaml
+
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  void sub // suppress unused warning
+  return result
+}",
+    "newString": "function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  return result
+}",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { YamlEditor } from '../components/YamlEditor'
+import { policyApi, templateApi, clusterApi, type CustomTemplatePayload } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
+import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
+
+function templateScope(yaml: string): 'cluster' | 'namespace' {
+  return /^metadata:\\s*\
+(?:\\s+\\S.*\
+)*\\s+namespace:\\s*\\S/m.test(yaml) ? 'namespace' : 'cluster'
+}
+
+function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {
+  const sub = (placeholder: string, values: string[], fallback: string) =>
+    yaml.includes(placeholder)
+      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>
+          values.length > 0
+            ? values.map(v => `${indent}- "${v}"`).join('\
+')
+            : `${indent}- "# ${fallback}"`)
+      : yaml
+
+  let result = yaml
+  result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{SVCCIDR\\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)
+  result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>
+    nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)
+  void sub // suppress unused warning
+  return result
+}
+
+const DEFAULT_YAML = ''
+
+function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
+  return { ...t, tags: t.tags ?? [], description: t.description ?? '', custom: true }
+}
+
+export function PolicyTemplatesPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+  const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>([])
+
+  const loadCustom = useCallback(async () => {
+    try {
+      const { templates } = await templateApi.list()
+      setCustomTemplates(templates.map(apiToTemplate))
+    } catch { /* ignore — server might not have any */ }
+  }, [])
+
+  useEffect(() => { loadCustom() }, [loadCustom])
+
+  const allTemplates = [...POLICY_TEMPLATES, ...customTemplates]
+
+  // Search & filter
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'cluster' | 'namespace'>('all')
+
+  const filteredTemplates = allTemplates.filter(t => {
+    if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (scopeFilter !== 'all' && templateScope(t.yaml) !== scopeFilter) return false
+    return true
+  })
+
+  // Use-template dialog
+  const [selected, setSelected] = useState<PolicyTemplate | null>(null)
+  const [policyName, setPolicyName] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  // Inline YAML editor
+  const [editingTemplate, setEditingTemplate] = useState<PolicyTemplate | null>(null)
+  const [editorYaml, setEditorYaml] = useState('')
+  const [editorValid, setEditorValid] = useState(true)
+  const [editorKey, setEditorKey] = useState(0)
+
+  // New template form
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [newTags, setNewTags] = useState('')
+  const [newYaml, setNewYaml] = useState(DEFAULT_YAML)
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
+
+  /* ── use template ── */
+  const openDialog = async (t: PolicyTemplate) => {
+    const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const suffix = Math.random().toString(36).slice(2, 6)
+    setPolicyName(`${slug}-${suffix}`)
+
+    if (t.yaml.includes('${PODCIDR}') || t.yaml.includes('${SVCCIDR}')) {
+      try {
+        const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)
+        setSelected({ ...t, yaml: substituted })
+      } catch {
+        setSelected(t)
+        toast.error('Could not detect cluster CIDRs — edit the YAML manually before creating.')
+      }
+    } else {
+      setSelected(t)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!selected || !policyName.trim()) return
+    const yaml = selected.yaml.replace(/^(\\s*name:\\s*).+$/m, `$1${policyName.trim()}`)
+    setCreating(true)
+    try {
+      await policyApi.create({ source: 'yaml', rawYaml: yaml })
+      toast.success(`Policy "${policyName.trim()}" created.`)
+      setSelected(null)
+    } catch {
+      toast.error('Failed to create policy')
+    } finally { setCreating(false) }
+  }
+
+  /* ── inline editor ── */
+  const openEditor = (t: PolicyTemplate) => {
+    setEditingTemplate(t); setEditorYaml(t.yaml)
+    setEditorValid(true); setEditorKey(k => k + 1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const closeEditor = () => setEditingTemplate(null)
+
+
+  // Save: update existing custom template
+  const handleSave = async () => {
+    if (!editingTemplate || !editingTemplate.custom) return
+    try {
+      await templateApi.update(editingTemplate.id, {
+        id: editingTemplate.id, name: editingTemplate.name,
+        description: editingTemplate.description, tags: editingTemplate.tags, yaml: editorYaml,
+      })
+      await loadCustom()
+      toast.success('Template saved.')
+      closeEditor()
+    } catch { toast.error('Failed to save template') }
+  }
+
+
+  /* ── new template form ── */
+  const resetNewForm = () => { setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML); setShowNewForm(false) }
+
+  const handleSaveTemplate = async () => {
+    if (!newName.trim() || !newYaml.trim()) return
+    const payload: CustomTemplatePayload = {
+      id: `custom-${Date.now()}`,
+      name: newName.trim(), description: newDesc.trim(),
+      tags: newTags.split(',').map(t => t.trim()).filter(Boolean),
+      yaml: newYaml,
+    }
+    try {
+      await templateApi.create(payload)
+      await loadCustom()
+      toast.success('Template saved.')
+      resetNewForm()
+    } catch { toast.error('Failed to save template') }
+  }
+
+  /* ── delete ── */
+  const handleDelete = async () => {
+    if (!deleteTarget?.id) return
+    try {
+      await templateApi.delete(deleteTarget.id)
+      await loadCustom()
+      toast.success('Template deleted.')
+      setDeleteTarget(null)
+    } catch { toast.error('Failed to delete template') }
+  }
+
+  /* ── inline editor view ── */
+  if (editingTemplate) {
+    return (
+      <>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h4 className="text-xl font-semibold">{isAdmin && editingTemplate?.custom ? 'Edit Template' : 'View Template'}</h4>
+            <p className="text-sm text-muted-foreground">{editingTemplate.name}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={closeEditor}>← Back</Button>
+            {isAdmin && editingTemplate?.custom && (
+              <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
+                Save
+              </Button>
+            )}
+          </div>
+        </div>
+        <YamlEditor key={editorKey} initialValue={editorYaml} readOnly={!isAdmin || !editingTemplate?.custom}
+          onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }} />
+      </>
+    )
+  }
+
+  /* ── template list ── */
+  return (
+    <>
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Policy Templates</h4>
+          <p className="text-sm text-muted-foreground">Pre-built and custom TracingPolicy templates.</p>
+        </div>
+        {isAdmin && <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>}
+      </div>
+
+      <div className="mb-6 flex items-center gap-2">
+        <Input
+          placeholder="Search templates..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="h-8 w-56 text-sm"
+        />
+        <div className="flex items-center gap-1">
+          {(['all', 'cluster', 'namespace'] as const).map(s => (
+            <Button
+              key={s}
+              size="sm"
+              variant={scopeFilter === s ? 'default' : 'outline'}
+              className="h-8 text-xs capitalize"
+              onClick={() => setScopeFilter(s)}
+            >
+              {s === 'all' ? 'All' : s === 'cluster' ? 'Cluster-wide' : 'Namespace'}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {showNewForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New Custom Template</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+                <Input placeholder="My Template" value={newName} onChange={e => setNewName(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Tags <span className="text-muted-foreground font-normal">(comma-separated)</span></Label>
+                <Input placeholder="namespace, process" value={newTags} onChange={e => setNewTags(e.target.value)} className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Description</Label>
+              <Input placeholder="What does this template do?" value={newDesc} onChange={e => setNewDesc(e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">YAML <span className="text-destructive">*</span></Label>
+              <textarea className="min-h-[200px] w-full rounded-md border bg-muted px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={newYaml} onChange={e => setNewYaml(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={resetNewForm}>Cancel</Button>
+              <Button size="sm" onClick={handleSaveTemplate} disabled={!newName.trim() || !newYaml.trim()}>Save Template</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filteredTemplates.length === 0 && (
+          <p className="col-span-full py-10 text-center text-sm text-muted-foreground">No templates found</p>
+        )}
+        {filteredTemplates.map(t => (
+          <Card key={t.id}>
+            <CardHeader className="border-b pb-3">
+              <div>
+                <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {t.custom && <Badge className="text-[10px] bg-violet-500/15 text-violet-700">Custom</Badge>}
+                  {t.tags.map(tag => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}
+                </div>
+              </div>
+              {isAdmin && <CardAction><Button size="sm" onClick={() => openDialog(t)}>Use Template</Button></CardAction>}
+            </CardHeader>
+            <CardContent className="pt-3">
+              {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}
+              <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">{t.yaml.trim()}</pre>
+              <div className="mt-2 flex gap-2">
+                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>{isAdmin && t.custom ? 'Open in Editor' : 'View YAML'}</Button>
+                {isAdmin && t.custom && (
+                  <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>Delete</Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!selected} onOpenChange={(open: boolean) => !open && setSelected(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Create from Template</AlertDialogTitle>
+            <AlertDialogDescription>{selected?.name} — set a name for the new policy.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label htmlFor="tpl-policy-name">Policy Name</Label>
+            <Input id="tpl-policy-name" value={policyName} onChange={e => setPolicyName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()} placeholder="my-policy" />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelected(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCreate} disabled={creating || !policyName.trim()}>
+              {creating ? 'Creating...' : 'Create'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 19,
+        "oldLines": 14,
+        "newStart": 19,
+        "newLines": 6,
+        "lines": [
+          " }",
+          " ",
+          " function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[], nodeIPs: string[] = []): string {",
+          "-  const sub = (placeholder: string, values: string[], fallback: string) =>",
+          "-    yaml.includes(placeholder)",
+          "-      ? yaml.replace(new RegExp(`^(\\\\s*)- "\\\\$\\\\{${placeholder.slice(2, -1)}\\\\}"$`, 'gm'), (_, indent) =>",
+          "-          values.length > 0",
+          "-            ? values.map(v => `${indent}- "${v}"`).join('\
+')",
+          "-            : `${indent}- "# ${fallback}"`)",
+          "-      : yaml",
+          "-",
+          "   let result = yaml",
+          "   result = result.replace(/^(\\s*)- "\\$\\{PODCIDR\\}"$/gm, (_, indent) =>",
+          "     podCIDRs.length > 0 ? podCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# PODCIDR not detected"`)"
+        ]
+      },
+      {
+        "oldStart": 34,
+        "oldLines": 7,
+        "newStart": 26,
+        "newLines": 6,
+        "lines": [
+          "     serviceCIDRs.length > 0 ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\
+') : `${indent}- "# SVCCIDR not detected"`)",
+          "   result = result.replace(/^(\\s*)- "\\$\\{NODEIPS\\}"$/gm, (_, indent) =>",
+          "     nodeIPs.length > 0 ? nodeIPs.map(ip => `${indent}- "${ip}"`).join('\
+') : `${indent}- "# Node IPs not detected"`)",
+          "-  void sub // suppress unused warning",
+          "   return result",
+          " }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 378ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: exclude node IPs in monitor-all-network template
+
+Backend: ClusterCIDR adds NodeIPs field (InternalIP + ExternalIP from
+node.Status.Addresses). Node list reused for both pod CIDR fallback
+and IP collection.
+
+Frontend: template has ${NODEIPS} placeholder; substituteCIDRs()
+expands it to one entry per node IP. clusterApi.cidr() type updated.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit node IPs exclusion"
+  }
+}
+
+----------------------------------------
+

@@ -8,10 +8,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ClusterCIDR holds detected pod and service CIDRs for the cluster.
+// ClusterCIDR holds detected pod and service CIDRs and node IPs for the cluster.
 type ClusterCIDR struct {
 	PodCIDRs     []string `json:"podCIDRs"`
 	ServiceCIDRs []string `json:"serviceCIDRs"`
+	NodeIPs      []string `json:"nodeIPs"`
 }
 
 // GetClusterCIDR detects pod and service CIDRs from multiple sources.
@@ -79,11 +80,18 @@ func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
 		}
 	}
 
-	// ── 4. Node podCIDRs fallback ─────────────────────────────────────────────
-	if len(result.PodCIDRs) == 0 {
-		nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-		if err == nil {
-			for _, node := range nodes.Items {
+	// ── 4. Node IPs + pod CIDR fallback ──────────────────────────────────────
+	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, node := range nodes.Items {
+			// Collect InternalIP (and ExternalIP) for every node
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == "InternalIP" || addr.Type == "ExternalIP" {
+					result.NodeIPs = appendUniq(result.NodeIPs, addr.Address)
+				}
+			}
+			// Pod CIDR fallback
+			if len(result.PodCIDRs) == 0 {
 				if len(node.Spec.PodCIDRs) > 0 {
 					result.PodCIDRs = appendUniq(result.PodCIDRs, node.Spec.PodCIDRs...)
 				} else if node.Spec.PodCIDR != "" {
