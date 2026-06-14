@@ -41,6 +41,7 @@ kind: TracingPolicy
 metadata:
   name: monitor-all-file
 spec:
+  podSelector: {}
   kprobes:
   - call: "security_file_permission"
     syscall: false
