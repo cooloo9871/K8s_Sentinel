@@ -44,6 +44,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
 		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
 		r.Get("/api/templates", listTemplates(cfg.Store))
+		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
 		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
 		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
 

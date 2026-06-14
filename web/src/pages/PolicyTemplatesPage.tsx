@@ -9,13 +9,26 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { YamlEditor } from '../components/YamlEditor'
-import { policyApi, templateApi, type CustomTemplatePayload } from '../api/client'
+import { policyApi, templateApi, clusterApi, type CustomTemplatePayload } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import { POLICY_TEMPLATES, type PolicyTemplate } from '../data/policyTemplates'
 
 function templateScope(yaml: string): 'cluster' | 'namespace' {
   return /^metadata:\s*\n(?:\s+\S.*\n)*\s+namespace:\s*\S/m.test(yaml) ? 'namespace' : 'cluster'
+}
+
+function substituteCIDRs(yaml: string, podCIDRs: string[], serviceCIDRs: string[]): string {
+  let result = yaml
+  result = result.replace(/^(\s*)- "\$\{PODCIDR\}"$/gm, (_, indent) =>
+    podCIDRs.length > 0
+      ? podCIDRs.map(c => `${indent}- "${c}"`).join('\n')
+      : `${indent}- "# PODCIDR not detected"`)
+  result = result.replace(/^(\s*)- "\$\{SVCCIDR\}"$/gm, (_, indent) =>
+    serviceCIDRs.length > 0
+      ? serviceCIDRs.map(c => `${indent}- "${c}"`).join('\n')
+      : `${indent}- "# SVCCIDR not detected"`)
+  return result
 }
 
 const DEFAULT_YAML = ''
@@ -73,11 +86,23 @@ export function PolicyTemplatesPage() {
   const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
 
   /* ── use template ── */
-  const openDialog = (t: PolicyTemplate) => {
-    setSelected(t)
+  const openDialog = async (t: PolicyTemplate) => {
     const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const suffix = Math.random().toString(36).slice(2, 6)
     setPolicyName(`${slug}-${suffix}`)
+
+    if (t.yaml.includes('${PODCIDR}') || t.yaml.includes('${SVCCIDR}')) {
+      try {
+        const { podCIDRs, serviceCIDRs } = await clusterApi.cidr()
+        const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs)
+        setSelected({ ...t, yaml: substituted })
+      } catch {
+        setSelected(t)
+        toast.error('Could not detect cluster CIDRs — edit the YAML manually before creating.')
+      }
+    } else {
+      setSelected(t)
+    }
   }
 
   const handleCreate = async () => {

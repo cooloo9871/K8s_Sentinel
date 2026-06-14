@@ -32,6 +32,33 @@ spec:
 `,
   },
   {
+    id: 'monitor-all-network',
+    name: 'Monitor All Network (Outside Cluster)',
+    description: 'Alert when any pod connects to an address outside the cluster CIDR ranges. Pod and Service CIDRs are auto-detected from the cluster.',
+    tags: ['cluster-wide', 'network', 'monitoring'],
+    yaml: `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: monitor-all-network
+spec:
+  podSelector: {}
+  kprobes:
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "NotDAddr"
+        values:
+        - "127.0.0.1"
+        - "\${PODCIDR}"
+        - "\${SVCCIDR}"
+`,
+  },
+  {
     id: 'monitor-all-file',
     name: 'Monitor All File Access',
     description: 'Monitor sensitive file and directory reads/writes across all pods in the cluster.',

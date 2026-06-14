@@ -185,3 +185,9 @@ func previewPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"yaml": string(b)})
 }
+
+func getClusterCIDR(store *k8s.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.GetClusterCIDR(r.Context()))
+	}
+}

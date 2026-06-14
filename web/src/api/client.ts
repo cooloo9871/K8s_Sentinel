@@ -85,6 +85,11 @@ export const userApi = {
     api.put(`/users/${username}/password`, { password }),
 }
 
+export const clusterApi = {
+  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),
+}
+
 export const settingsApi = {
   getSessionTTL: (): Promise<{ sessionTTL: number }> =>
     api.get('/settings/session-ttl').then((r) => r.data),
