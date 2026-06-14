@@ -44,11 +44,11 @@ export function UsersPage() {
 
   const handleSaveTTL = async () => {
     const val = parseInt(ttlInput, 10)
-    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }
+    if (isNaN(val) || val <= 0) { toast.error('Please enter a valid number of seconds'); return }
     try {
       await settingsApi.setSessionTTL(val)
       setSessionTTL(val)
-      toast.success('Session timeout 已更新，下次登入生效')
+      toast.success('Session timeout updated. Takes effect on next login.')
     } catch { toast.error('Failed to update session timeout') }
   }
 
