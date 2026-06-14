@@ -66,6 +66,7 @@ export function PolicyTemplatesPage() {
   const [selected, setSelected] = useState<PolicyTemplate | null>(null)
   const [policyName, setPolicyName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [dialogLoading, setDialogLoading] = useState(false)
 
   // Inline YAML editor
   const [editingTemplate, setEditingTemplate] = useState<PolicyTemplate | null>(null)
@@ -85,11 +86,13 @@ export function PolicyTemplatesPage() {
 
   /* ── use template ── */
   const openDialog = async (t: PolicyTemplate) => {
+    if (dialogLoading) return
     const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const suffix = Math.random().toString(36).slice(2, 6)
     setPolicyName(`${slug}-${suffix}`)
 
     if (t.yaml.includes('${PODCIDR}') || t.yaml.includes('${SVCCIDR}')) {
+      setDialogLoading(true)
       try {
         const { podCIDRs, serviceCIDRs, nodeIPs } = await clusterApi.cidr()
         const substituted = substituteCIDRs(t.yaml, podCIDRs, serviceCIDRs, nodeIPs)
@@ -97,6 +100,8 @@ export function PolicyTemplatesPage() {
       } catch {
         setSelected(t)
         toast.error('Could not detect cluster CIDRs — edit the YAML manually before creating.')
+      } finally {
+        setDialogLoading(false)
       }
     } else {
       setSelected(t)
@@ -278,7 +283,7 @@ export function PolicyTemplatesPage() {
                   {t.tags.map(tag => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}
                 </div>
               </div>
-              {isAdmin && <CardAction><Button size="sm" onClick={() => openDialog(t)}>Use Template</Button></CardAction>}
+              {isAdmin && <CardAction><Button size="sm" onClick={() => openDialog(t)} disabled={dialogLoading}>{dialogLoading ? 'Loading...' : 'Use Template'}</Button></CardAction>}
             </CardHeader>
             <CardContent className="pt-3">
               {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}

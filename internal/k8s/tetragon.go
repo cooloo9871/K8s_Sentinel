@@ -207,25 +207,25 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 
 	// Parse file path and operation for file-monitoring kprobes.
 	if args, ok := kp["args"].([]any); ok {
-		switch {
-		case strings.Contains(evt.Function, "security_file_permission"):
+		switch evt.Function {
+		case "security_file_permission":
 			evt.FilePath = fileArgPath(args, 0)
 			if v := intArg(args, 1); v == 4 {
 				evt.FileOp = "read"
 			} else if v == 2 {
 				evt.FileOp = "write"
 			}
-		case strings.Contains(evt.Function, "security_mmap_file"):
+		case "security_mmap_file":
 			evt.FilePath = fileArgPath(args, 0)
 			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
 				evt.FileOp = "mmap-write"
 			} else if prot&0x01 != 0 {
 				evt.FileOp = "mmap-read"
 			}
-		case strings.Contains(evt.Function, "security_path_truncate"):
+		case "security_path_truncate":
 			evt.FilePath = pathArgPath(args, 0)
 			evt.FileOp = "truncate"
-		case strings.Contains(evt.Function, "tcp_connect"):
+		case "tcp_connect":
 			evt.NetDest = sockArgDest(args, 0)
 		}
 	}
