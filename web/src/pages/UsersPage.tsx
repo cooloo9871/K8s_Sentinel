@@ -27,7 +27,7 @@ export function UsersPage() {
   const [newPw, setNewPw] = useState('')
 
   // Session TTL
-  const [sessionTTL, setSessionTTL] = useState<number>(3600)
+  const [, setSessionTTL] = useState<number>(3600)
   const [ttlInput, setTtlInput] = useState<string>('3600')
 
   const load = useCallback(async () => {
@@ -171,18 +171,13 @@ export function UsersPage() {
                   disabled={me?.role !== 'admin'}
                   onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
                 />
-                <span className="text-xs text-muted-foreground">
-                  = {sessionTTL >= 3600
-                    ? `${(sessionTTL / 3600).toFixed(1)} hr`
-                    : `${Math.round(sessionTTL / 60)} min`}
-                </span>
               </div>
             </div>
             {me?.role === 'admin' && (
               <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
             )}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>
+          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>
         </CardContent>
       </Card>
 
