@@ -106,6 +106,10 @@ export function PolicyTemplatesPage() {
   const handleCreate = async () => {
     if (!selected || !policyName.trim()) return
     const yaml = selected.yaml.replace(/^(\s*name:\s*).+$/m, `$1${policyName.trim()}`)
+    if (yaml.includes('${')) {
+      toast.error('YAML contains unresolved placeholders. Edit the values manually before creating.')
+      return
+    }
     setCreating(true)
     try {
       await policyApi.create({ source: 'yaml', rawYaml: yaml })
@@ -296,6 +300,11 @@ export function PolicyTemplatesPage() {
             <AlertDialogTitle>Create from Template</AlertDialogTitle>
             <AlertDialogDescription>{selected?.name} — set a name for the new policy.</AlertDialogDescription>
           </AlertDialogHeader>
+          {selected?.yaml.includes('${') && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Cluster CIDRs could not be detected. Replace all <code className="font-mono">{'${...}'}</code> placeholders in the YAML manually before creating, or update the ClusterRole and retry.
+            </div>
+          )}
           <div className="flex flex-col gap-1.5 py-2">
             <Label htmlFor="tpl-policy-name">Policy Name</Label>
             <Input id="tpl-policy-name" value={policyName} onChange={e => setPolicyName(e.target.value)}
@@ -303,7 +312,7 @@ export function PolicyTemplatesPage() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setSelected(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCreate} disabled={creating || !policyName.trim()}>
+            <AlertDialogAction onClick={handleCreate} disabled={creating || !policyName.trim() || !!selected?.yaml.includes('${')}>
               {creating ? 'Creating...' : 'Create'}
             </AlertDialogAction>
           </AlertDialogFooter>
