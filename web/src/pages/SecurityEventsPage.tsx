@@ -281,7 +281,7 @@ export function SecurityEventsPage() {
                       <TableCell>
                         <SeverityBadge severity={e.severity} />
                       </TableCell>
-                      <TableCell className="max-w-[240px]">
+                      <TableCell className="overflow-hidden">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <RuleTypeBadge fn={e.function} />
                           <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
