@@ -225,6 +225,8 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		case strings.Contains(evt.Function, "security_path_truncate"):
 			evt.FilePath = pathArgPath(args, 0)
 			evt.FileOp = "truncate"
+		case strings.Contains(evt.Function, "tcp_connect"):
+			evt.NetDest = sockArgDest(args, 0)
 		}
 	}
 
@@ -287,6 +289,28 @@ func anyStr(m map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
 }
 
 func fileArgPath(args []any, idx int) string {
