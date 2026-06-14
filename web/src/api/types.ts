@@ -50,7 +50,8 @@ export interface TetragonEvent {
   action: 'monitor' | 'kill' | ''
   policyName: string
   function: string
-  filePath: string     // file path from security_file_permission kprobe
+  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
   netDest: string      // network destination "addr:port" from tcp_connect kprobe
   processUid?: number  // effective UID of the process (undefined = unknown)
 }

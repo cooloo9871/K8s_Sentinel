@@ -17,19 +17,22 @@ import (
 
 // TetragonEvent is a normalised Tetragon runtime event for the frontend.
 type TetragonEvent struct {
-	Type       string `json:"type"`
-	Time       string `json:"time"`
-	NodeName   string `json:"nodeName"`
-	Namespace  string `json:"namespace"`
-	Pod        string `json:"pod"`
-	Container  string `json:"container"`
-	Binary     string `json:"binary"`
-	Arguments  string `json:"arguments"`
-	ParentBin  string `json:"parentBin"`
-	Action     string `json:"action"` // "monitor" or "kill"
-	PolicyName string `json:"policyName"`
-	Function   string `json:"function"`
-	ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
@@ -202,6 +205,29 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	evt.Function = anyStr(kp, "function_name", "functionName")
 	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
 
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch {
+		case strings.Contains(evt.Function, "security_file_permission"):
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case strings.Contains(evt.Function, "security_mmap_file"):
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}
+
 	action := anyStr(kp, "action")
 	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
 		evt.Action = "kill"
@@ -261,6 +287,62 @@ func anyStr(m map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
 }
 
 func anyMap(m map[string]any, keys ...string) map[string]any {

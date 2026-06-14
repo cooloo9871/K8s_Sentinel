@@ -64,7 +64,10 @@ function RelativeTime({ iso }: { iso: string }) {
 function DetailRow({ e }: { e: DisplayEvent }) {
   const items: { label: string; value: string }[] = []
 
-  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })
+  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }
   if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
   if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
   // When the parent is runc, the "arguments" belong to runc (not to the

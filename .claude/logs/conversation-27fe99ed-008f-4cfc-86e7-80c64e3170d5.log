@@ -444607,3 +444607,4617 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: configurable session timeout (TTL)
+
+Backend:
+- Default TTL: 3600s (was hardcoded 24h)
+- TTL stored in users.json (sessionTTL field)
+- SignToken accepts expiry duration parameter
+- GET /api/settings/session-ttl (all authenticated users)
+- PUT /api/settings/session-ttl (admin only)
+- Cookie MaxAge synced with TTL
+
+Frontend:
+- settingsApi in client.ts
+- UsersPage: Session Timeout card showing current value,
+  input to change (admin only), human-readable hr/min display
+- Note: new TTL applies to next login only
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit session TTL feature"
+  },
+  "tool_response": {
+    "stdout": "[main 9f084a7] feat: configurable session timeout (TTL)
+ 8 files changed, 9729 insertions(+), 15 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "9f084a7",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "monitor-all-file 這個 template 我只要針對 k8s 叢集的 pod 坐監控叫好，像是可以加這個 podSelector: {}"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/data/policyTemplates.ts",
+    "old_string": "spec:
+  kprobes:
+  - call: "security_file_permission"",
+    "new_string": "spec:
+  podSelector: {}
+  kprobes:
+  - call: "security_file_permission"",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/data/policyTemplates.ts",
+    "old_string": "spec:
+  kprobes:
+  - call: "security_file_permission"",
+    "new_string": "spec:
+  podSelector: {}
+  kprobes:
+  - call: "security_file_permission"",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/data/policyTemplates.ts",
+    "oldString": "spec:
+  kprobes:
+  - call: "security_file_permission"",
+    "newString": "spec:
+  podSelector: {}
+  kprobes:
+  - call: "security_file_permission"",
+    "originalFile": "export interface PolicyTemplate {
+  id: string
+  name: string
+  description: string
+  tags: string[]
+  yaml: string
+  custom?: boolean  // user-created templates
+}
+
+
+export const POLICY_TEMPLATES: PolicyTemplate[] = [
+  {
+    id: 'monitor-all-exec',
+    name: 'Monitor All Process Executions',
+    description: 'Record every command executed inside any pod across the cluster.',
+    tags: ['cluster-wide', 'process', 'monitoring'],
+    yaml: `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: monitor-all-exec
+spec:
+  podSelector: {}
+  kprobes:
+    - call: sys_execve
+      syscall: true
+      args:
+        - index: 0
+          type: string
+      selectors:
+        - matchActions:
+            - action: Post
+`,
+  },
+  {
+    id: 'monitor-all-file',
+    name: 'Monitor All File Access',
+    description: 'Monitor sensitive file and directory reads/writes across all pods in the cluster.',
+    tags: ['cluster-wide', 'file', 'monitoring'],
+    yaml: `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: monitor-all-file
+spec:
+  kprobes:
+  - call: "security_file_permission"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "int"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/boot"
+        - "/root/.ssh"
+        - "/etc/shadow"
+        - "/etc/profile"
+        - "/etc/sudoers"
+        - "/etc/pam.conf"
+        - "/etc/bashrc"
+        - "/etc/csh.cshrc"
+        - "/etc/csh.login"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "4"
+    - matchArgs:
+      - index: 0
+        operator: "Postfix"
+        values:
+        - ".bashrc"
+        - ".bash_profile"
+        - ".bash_login"
+        - ".bash_logout"
+        - ".cshrc"
+        - ".cshdirs"
+        - ".profile"
+        - ".login"
+        - ".logout"
+        - ".history"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "4"
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc"
+        - "/boot"
+        - "/lib"
+        - "/lib64"
+        - "/bin"
+        - "/usr/lib"
+        - "/usr/local/lib"
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/bin"
+        - "/usr/sbin"
+        - "/var/log"
+        - "/dev/log"
+        - "/root/.ssh"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "2"
+  - call: "security_mmap_file"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "file"
+    - index: 1
+      type: "uint32"
+    - index: 2
+      type: "uint32"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/boot"
+        - "/root/.ssh"
+        - "/etc/shadow"
+        - "/etc/sudoers"
+        - "/etc/pam.conf"
+        - "/etc/profile"
+        - "/etc/bashrc"
+        - "/etc/csh.cshrc"
+        - "/etc/csh.login"
+        - ".bashrc"
+        - ".bash_profile"
+        - ".bash_login"
+        - ".bash_logout"
+        - ".cshrc"
+        - ".cshdirs"
+        - ".profile"
+        - ".login"
+        - ".logout"
+        - ".history"
+      - index: 1
+        operator: "Equal"
+        values:
+        - "1"
+      - index: 2
+        operator: "Mask"
+        values:
+        - "1"
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc"
+        - "/boot"
+        - "/lib"
+        - "/lib64"
+        - "/bin"
+        - "/usr/lib"
+        - "/usr/local/lib"
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/bin"
+        - "/usr/sbin"
+        - "/var/log"
+        - "/dev/log"
+        - "/root/.ssh"
+      - index: 1
+        operator: "Mask"
+        values:
+        - "2"
+      - index: 2
+        operator: "Mask"
+        values:
+        - "1"
+  - call: "security_path_truncate"
+    syscall: false
+    return: true
+    args:
+    - index: 0
+      type: "path"
+    returnArg:
+      index: 0
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/etc"
+        - "/boot"
+        - "/lib"
+        - "/lib64"
+        - "/usr/lib"
+        - "/usr/local/lib"
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/bin"
+        - "/usr/sbin"
+        - "/var/log"
+        - "/dev/log"
+        - "/root/.ssh"
+`,
+  },
+]
+",
+    "structuredPatch": [
+      {
+        "oldStart": 41,
+        "oldLines": 6,
+        "newStart": 41,
+        "newLines": 7,
+        "lines": [
+          " metadata:",
+          "   name: monitor-all-file",
+          " spec:",
+          "+  podSelector: {}",
+          "   kprobes:",
+          "   - call: "security_file_permission"",
+          "     syscall: false"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 345ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/data/policyTemplates.ts && git commit -m "$(cat <<'EOF'
+fix: add podSelector: {} to monitor-all-file template
+
+Scopes the policy to all pods in the cluster.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit fix"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/data/policyTemplates.ts && git commit -m "$(cat <<'EOF'
+fix: add podSelector: {} to monitor-all-file template
+
+Scopes the policy to all pods in the cluster.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit fix"
+  },
+  "tool_response": {
+    "stdout": "[main 4a9139a] fix: add podSelector: {} to monitor-all-file template
+ 1 file changed, 1 insertion(+)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "4a9139a",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "user 的 Session Timeout 的 新設定於下次登入時生效。目前已登入的 session 不受影響。 描述換成英文，然後 = 1.0 hr 拿掉"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+                <span className="text-xs text-muted-foreground">
+                  = {sessionTTL >= 3600
+                    ? `${(sessionTTL / 3600).toFixed(1)} hr`
+                    : `${Math.round(sessionTTL / 60)} min`}
+                </span>
+              </div>",
+    "new_string": "              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+              </div>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+                <span className="text-xs text-muted-foreground">
+                  = {sessionTTL >= 3600
+                    ? `${(sessionTTL / 3600).toFixed(1)} hr`
+                    : `${Math.round(sessionTTL / 60)} min`}
+                </span>
+              </div>",
+    "new_string": "              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+              </div>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "oldString": "              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+                <span className="text-xs text-muted-foreground">
+                  = {sessionTTL >= 3600
+                    ? `${(sessionTTL / 3600).toFixed(1)} hr`
+                    : `${Math.round(sessionTTL / 60)} min`}
+                </span>
+              </div>",
+    "newString": "              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+              </div>",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { userApi, settingsApi, type UserRecord } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+export function UsersPage() {
+  const { user: me } = useAuth()
+  const toast = useToast()
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Change password dialog
+  const [pwTarget, setPwTarget] = useState<string | null>(null)
+  const [newPw, setNewPw] = useState('')
+
+  // Session TTL
+  const [sessionTTL, setSessionTTL] = useState<number>(3600)
+  const [ttlInput, setTtlInput] = useState<string>('3600')
+
+  const load = useCallback(async () => {
+    try { setUsers(await userApi.list()) } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    load()
+    settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
+      setSessionTTL(ttl)
+      setTtlInput(String(ttl))
+    }).catch(() => {})
+  }, [load])
+
+  const handleSaveTTL = async () => {
+    const val = parseInt(ttlInput, 10)
+    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }
+    try {
+      await settingsApi.setSessionTTL(val)
+      setSessionTTL(val)
+      toast.success('Session timeout 已更新，下次登入生效')
+    } catch { toast.error('Failed to update session timeout') }
+  }
+
+  const handleCreate = async () => {
+    if (!newUsername.trim() || !newPassword.trim()) return
+    try {
+      await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
+      toast.success(`User "${newUsername.trim()}" created.`)
+      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+      load()
+    } catch { toast.error('Failed to create user') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await userApi.delete(deleteTarget)
+      toast.success(`User "${deleteTarget}" deleted.`)
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete user') }
+  }
+
+  const handleChangePassword = async () => {
+    if (!pwTarget || !newPw.trim()) return
+    try {
+      await userApi.changePassword(pwTarget, newPw.trim())
+      toast.success('Password updated.')
+      setPwTarget(null); setNewPw('')
+    } catch { toast.error('Failed to update password') }
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Users</h4>
+          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
+        </div>
+        {me?.role === 'admin' && (
+          <Button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ New User'}</Button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New User</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Username <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Password <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Role</Label>
+              <div className="flex gap-2">
+                {(['viewer', 'admin'] as const).map(r => (
+                  <Button key={r} size="sm" variant={newRole === r ? 'default' : 'outline'}
+                    onClick={() => setNewRole(r)} className="capitalize">{r}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleCreate} disabled={!newUsername.trim() || !newPassword.trim()}>Create</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {users.map(u => (
+          <Card key={u.username}>
+            <CardContent className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-sm">{u.username}</span>
+                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="text-[10px] capitalize">{u.role}</Badge>
+                {u.username === me?.username && (
+                  <Badge variant="outline" className="text-[10px]">You</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                <Button variant="ghost" size="sm" className="text-xs h-7"
+                  onClick={() => { setPwTarget(u.username); setNewPw('') }}>
+                  Change Password
+                </Button>
+                {me?.role === 'admin' && u.username !== me?.username && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(u.username)}>
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Session Timeout */}
+      <Card className="mt-6">
+        <CardHeader className="border-b pb-3">
+          <CardTitle className="text-sm font-medium">Session Timeout</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Timeout (seconds)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+                <span className="text-xs text-muted-foreground">
+                  = {sessionTTL >= 3600
+                    ? `${(sessionTTL / 3600).toFixed(1)} hr`
+                    : `${Math.round(sessionTTL / 60)} min`}
+                </span>
+              </div>
+            </div>
+            {me?.role === 'admin' && (
+              <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>
+        </CardContent>
+      </Card>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Change password dialog */}
+      <AlertDialog open={!!pwTarget} onOpenChange={(open) => !open && setPwTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Password</AlertDialogTitle>
+            <AlertDialogDescription>Set a new password for "{pwTarget}".</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label>New Password</Label>
+            <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleChangePassword()} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleChangePassword} disabled={!newPw.trim()}>Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 171,
+        "oldLines": 11,
+        "newStart": 171,
+        "newLines": 6,
+        "lines": [
+          "                   disabled={me?.role !== 'admin'}",
+          "                   onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}",
+          "                 />",
+          "-                <span className="text-xs text-muted-foreground">",
+          "-                  = {sessionTTL >= 3600",
+          "-                    ? `${(sessionTTL / 3600).toFixed(1)} hr`",
+          "-                    : `${Math.round(sessionTTL / 60)} min`}",
+          "-                </span>",
+          "               </div>",
+          "             </div>",
+          "             {me?.role === 'admin' && ("
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>",
+    "new_string": "          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>",
+    "new_string": "          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "oldString": "          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>",
+    "newString": "          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { userApi, settingsApi, type UserRecord } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+export function UsersPage() {
+  const { user: me } = useAuth()
+  const toast = useToast()
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Change password dialog
+  const [pwTarget, setPwTarget] = useState<string | null>(null)
+  const [newPw, setNewPw] = useState('')
+
+  // Session TTL
+  const [sessionTTL, setSessionTTL] = useState<number>(3600)
+  const [ttlInput, setTtlInput] = useState<string>('3600')
+
+  const load = useCallback(async () => {
+    try { setUsers(await userApi.list()) } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    load()
+    settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
+      setSessionTTL(ttl)
+      setTtlInput(String(ttl))
+    }).catch(() => {})
+  }, [load])
+
+  const handleSaveTTL = async () => {
+    const val = parseInt(ttlInput, 10)
+    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }
+    try {
+      await settingsApi.setSessionTTL(val)
+      setSessionTTL(val)
+      toast.success('Session timeout 已更新，下次登入生效')
+    } catch { toast.error('Failed to update session timeout') }
+  }
+
+  const handleCreate = async () => {
+    if (!newUsername.trim() || !newPassword.trim()) return
+    try {
+      await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
+      toast.success(`User "${newUsername.trim()}" created.`)
+      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+      load()
+    } catch { toast.error('Failed to create user') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await userApi.delete(deleteTarget)
+      toast.success(`User "${deleteTarget}" deleted.`)
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete user') }
+  }
+
+  const handleChangePassword = async () => {
+    if (!pwTarget || !newPw.trim()) return
+    try {
+      await userApi.changePassword(pwTarget, newPw.trim())
+      toast.success('Password updated.')
+      setPwTarget(null); setNewPw('')
+    } catch { toast.error('Failed to update password') }
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Users</h4>
+          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
+        </div>
+        {me?.role === 'admin' && (
+          <Button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ New User'}</Button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New User</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Username <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Password <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Role</Label>
+              <div className="flex gap-2">
+                {(['viewer', 'admin'] as const).map(r => (
+                  <Button key={r} size="sm" variant={newRole === r ? 'default' : 'outline'}
+                    onClick={() => setNewRole(r)} className="capitalize">{r}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleCreate} disabled={!newUsername.trim() || !newPassword.trim()}>Create</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {users.map(u => (
+          <Card key={u.username}>
+            <CardContent className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-sm">{u.username}</span>
+                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="text-[10px] capitalize">{u.role}</Badge>
+                {u.username === me?.username && (
+                  <Badge variant="outline" className="text-[10px]">You</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                <Button variant="ghost" size="sm" className="text-xs h-7"
+                  onClick={() => { setPwTarget(u.username); setNewPw('') }}>
+                  Change Password
+                </Button>
+                {me?.role === 'admin' && u.username !== me?.username && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(u.username)}>
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Session Timeout */}
+      <Card className="mt-6">
+        <CardHeader className="border-b pb-3">
+          <CardTitle className="text-sm font-medium">Session Timeout</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Timeout (seconds)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+              </div>
+            </div>
+            {me?.role === 'admin' && (
+              <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>
+        </CardContent>
+      </Card>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Change password dialog */}
+      <AlertDialog open={!!pwTarget} onOpenChange={(open) => !open && setPwTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Password</AlertDialogTitle>
+            <AlertDialogDescription>Set a new password for "{pwTarget}".</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label>New Password</Label>
+            <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleChangePassword()} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleChangePassword} disabled={!newPw.trim()}>Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 177,
+        "oldLines": 7,
+        "newStart": 177,
+        "newLines": 7,
+        "lines": [
+          "               <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>",
+          "             )}",
+          "           </div>",
+          "-          <p className="mt-2 text-xs text-muted-foreground">新設定於下次登入時生效。目前已登入的 session 不受影響。</p>",
+          "+          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>",
+          "         </CardContent>",
+          "       </Card>",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "src/pages/UsersPage.tsx(30,10): error TS6133: 'sessionTTL' is declared but its value is never read.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "  const [sessionTTL, setSessionTTL] = useState<number>(3600)",
+    "new_string": "  const [, setSessionTTL] = useState<number>(3600)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "  const [sessionTTL, setSessionTTL] = useState<number>(3600)",
+    "new_string": "  const [, setSessionTTL] = useState<number>(3600)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "oldString": "  const [sessionTTL, setSessionTTL] = useState<number>(3600)",
+    "newString": "  const [, setSessionTTL] = useState<number>(3600)",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { userApi, settingsApi, type UserRecord } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+export function UsersPage() {
+  const { user: me } = useAuth()
+  const toast = useToast()
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Change password dialog
+  const [pwTarget, setPwTarget] = useState<string | null>(null)
+  const [newPw, setNewPw] = useState('')
+
+  // Session TTL
+  const [sessionTTL, setSessionTTL] = useState<number>(3600)
+  const [ttlInput, setTtlInput] = useState<string>('3600')
+
+  const load = useCallback(async () => {
+    try { setUsers(await userApi.list()) } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    load()
+    settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
+      setSessionTTL(ttl)
+      setTtlInput(String(ttl))
+    }).catch(() => {})
+  }, [load])
+
+  const handleSaveTTL = async () => {
+    const val = parseInt(ttlInput, 10)
+    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }
+    try {
+      await settingsApi.setSessionTTL(val)
+      setSessionTTL(val)
+      toast.success('Session timeout 已更新，下次登入生效')
+    } catch { toast.error('Failed to update session timeout') }
+  }
+
+  const handleCreate = async () => {
+    if (!newUsername.trim() || !newPassword.trim()) return
+    try {
+      await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
+      toast.success(`User "${newUsername.trim()}" created.`)
+      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+      load()
+    } catch { toast.error('Failed to create user') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await userApi.delete(deleteTarget)
+      toast.success(`User "${deleteTarget}" deleted.`)
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete user') }
+  }
+
+  const handleChangePassword = async () => {
+    if (!pwTarget || !newPw.trim()) return
+    try {
+      await userApi.changePassword(pwTarget, newPw.trim())
+      toast.success('Password updated.')
+      setPwTarget(null); setNewPw('')
+    } catch { toast.error('Failed to update password') }
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Users</h4>
+          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
+        </div>
+        {me?.role === 'admin' && (
+          <Button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ New User'}</Button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New User</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Username <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Password <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Role</Label>
+              <div className="flex gap-2">
+                {(['viewer', 'admin'] as const).map(r => (
+                  <Button key={r} size="sm" variant={newRole === r ? 'default' : 'outline'}
+                    onClick={() => setNewRole(r)} className="capitalize">{r}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleCreate} disabled={!newUsername.trim() || !newPassword.trim()}>Create</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {users.map(u => (
+          <Card key={u.username}>
+            <CardContent className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-sm">{u.username}</span>
+                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="text-[10px] capitalize">{u.role}</Badge>
+                {u.username === me?.username && (
+                  <Badge variant="outline" className="text-[10px]">You</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                <Button variant="ghost" size="sm" className="text-xs h-7"
+                  onClick={() => { setPwTarget(u.username); setNewPw('') }}>
+                  Change Password
+                </Button>
+                {me?.role === 'admin' && u.username !== me?.username && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(u.username)}>
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Session Timeout */}
+      <Card className="mt-6">
+        <CardHeader className="border-b pb-3">
+          <CardTitle className="text-sm font-medium">Session Timeout</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Timeout (seconds)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+              </div>
+            </div>
+            {me?.role === 'admin' && (
+              <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>
+        </CardContent>
+      </Card>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Change password dialog */}
+      <AlertDialog open={!!pwTarget} onOpenChange={(open) => !open && setPwTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Password</AlertDialogTitle>
+            <AlertDialogDescription>Set a new password for "{pwTarget}".</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label>New Password</Label>
+            <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleChangePassword()} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleChangePassword} disabled={!newPw.trim()}>Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 27,
+        "oldLines": 7,
+        "newStart": 27,
+        "newLines": 7,
+        "lines": [
+          "   const [newPw, setNewPw] = useState('')",
+          " ",
+          "   // Session TTL",
+          "-  const [sessionTTL, setSessionTTL] = useState<number>(3600)",
+          "+  const [, setSessionTTL] = useState<number>(3600)",
+          "   const [ttlInput, setTtlInput] = useState<string>('3600')",
+          " ",
+          "   const load = useCallback(async () => {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 364ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/UsersPage.tsx && git commit -m "$(cat <<'EOF'
+style: update session timeout UI — English description, remove hr display
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit style update"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/UsersPage.tsx && git commit -m "$(cat <<'EOF'
+style: update session timeout UI — English description, remove hr display
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit style update"
+  },
+  "tool_response": {
+    "stdout": "[main 4570e5c] style: update session timeout UI — English description, remove hr display
+ 1 file changed, 2 insertions(+), 7 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "4570e5c",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Session timeout 已更新，下次登入生效 這個提示也都改英文"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "      toast.success('Session timeout 已更新，下次登入生效')",
+    "new_string": "      toast.success('Session timeout updated. Takes effect on next login.')",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "      toast.success('Session timeout 已更新，下次登入生效')",
+    "new_string": "      toast.success('Session timeout updated. Takes effect on next login.')",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "oldString": "      toast.success('Session timeout 已更新，下次登入生效')",
+    "newString": "      toast.success('Session timeout updated. Takes effect on next login.')",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { userApi, settingsApi, type UserRecord } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+export function UsersPage() {
+  const { user: me } = useAuth()
+  const toast = useToast()
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Change password dialog
+  const [pwTarget, setPwTarget] = useState<string | null>(null)
+  const [newPw, setNewPw] = useState('')
+
+  // Session TTL
+  const [, setSessionTTL] = useState<number>(3600)
+  const [ttlInput, setTtlInput] = useState<string>('3600')
+
+  const load = useCallback(async () => {
+    try { setUsers(await userApi.list()) } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    load()
+    settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
+      setSessionTTL(ttl)
+      setTtlInput(String(ttl))
+    }).catch(() => {})
+  }, [load])
+
+  const handleSaveTTL = async () => {
+    const val = parseInt(ttlInput, 10)
+    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }
+    try {
+      await settingsApi.setSessionTTL(val)
+      setSessionTTL(val)
+      toast.success('Session timeout 已更新，下次登入生效')
+    } catch { toast.error('Failed to update session timeout') }
+  }
+
+  const handleCreate = async () => {
+    if (!newUsername.trim() || !newPassword.trim()) return
+    try {
+      await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
+      toast.success(`User "${newUsername.trim()}" created.`)
+      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+      load()
+    } catch { toast.error('Failed to create user') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await userApi.delete(deleteTarget)
+      toast.success(`User "${deleteTarget}" deleted.`)
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete user') }
+  }
+
+  const handleChangePassword = async () => {
+    if (!pwTarget || !newPw.trim()) return
+    try {
+      await userApi.changePassword(pwTarget, newPw.trim())
+      toast.success('Password updated.')
+      setPwTarget(null); setNewPw('')
+    } catch { toast.error('Failed to update password') }
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Users</h4>
+          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
+        </div>
+        {me?.role === 'admin' && (
+          <Button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ New User'}</Button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New User</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Username <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Password <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Role</Label>
+              <div className="flex gap-2">
+                {(['viewer', 'admin'] as const).map(r => (
+                  <Button key={r} size="sm" variant={newRole === r ? 'default' : 'outline'}
+                    onClick={() => setNewRole(r)} className="capitalize">{r}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleCreate} disabled={!newUsername.trim() || !newPassword.trim()}>Create</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {users.map(u => (
+          <Card key={u.username}>
+            <CardContent className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-sm">{u.username}</span>
+                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="text-[10px] capitalize">{u.role}</Badge>
+                {u.username === me?.username && (
+                  <Badge variant="outline" className="text-[10px]">You</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                <Button variant="ghost" size="sm" className="text-xs h-7"
+                  onClick={() => { setPwTarget(u.username); setNewPw('') }}>
+                  Change Password
+                </Button>
+                {me?.role === 'admin' && u.username !== me?.username && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(u.username)}>
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Session Timeout */}
+      <Card className="mt-6">
+        <CardHeader className="border-b pb-3">
+          <CardTitle className="text-sm font-medium">Session Timeout</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Timeout (seconds)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+              </div>
+            </div>
+            {me?.role === 'admin' && (
+              <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>
+        </CardContent>
+      </Card>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Change password dialog */}
+      <AlertDialog open={!!pwTarget} onOpenChange={(open) => !open && setPwTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Password</AlertDialogTitle>
+            <AlertDialogDescription>Set a new password for "{pwTarget}".</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label>New Password</Label>
+            <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleChangePassword()} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleChangePassword} disabled={!newPw.trim()}>Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 48,
+        "oldLines": 7,
+        "newStart": 48,
+        "newLines": 7,
+        "lines": [
+          "     try {",
+          "       await settingsApi.setSessionTTL(val)",
+          "       setSessionTTL(val)",
+          "-      toast.success('Session timeout 已更新，下次登入生效')",
+          "+      toast.success('Session timeout updated. Takes effect on next login.')",
+          "     } catch { toast.error('Failed to update session timeout') }",
+          "   }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "請輸入" /home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "description": "Check for other Chinese strings"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "請輸入" /home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "description": "Check for other Chinese strings"
+  },
+  "tool_response": {
+    "stdout": "47:    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "toast.error('請輸入有效的秒數')",
+    "new_string": "toast.error('Please enter a valid number of seconds')",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "old_string": "toast.error('請輸入有效的秒數')",
+    "new_string": "toast.error('Please enter a valid number of seconds')",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/UsersPage.tsx",
+    "oldString": "toast.error('請輸入有效的秒數')",
+    "newString": "toast.error('Please enter a valid number of seconds')",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { userApi, settingsApi, type UserRecord } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+export function UsersPage() {
+  const { user: me } = useAuth()
+  const toast = useToast()
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Change password dialog
+  const [pwTarget, setPwTarget] = useState<string | null>(null)
+  const [newPw, setNewPw] = useState('')
+
+  // Session TTL
+  const [, setSessionTTL] = useState<number>(3600)
+  const [ttlInput, setTtlInput] = useState<string>('3600')
+
+  const load = useCallback(async () => {
+    try { setUsers(await userApi.list()) } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    load()
+    settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
+      setSessionTTL(ttl)
+      setTtlInput(String(ttl))
+    }).catch(() => {})
+  }, [load])
+
+  const handleSaveTTL = async () => {
+    const val = parseInt(ttlInput, 10)
+    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }
+    try {
+      await settingsApi.setSessionTTL(val)
+      setSessionTTL(val)
+      toast.success('Session timeout updated. Takes effect on next login.')
+    } catch { toast.error('Failed to update session timeout') }
+  }
+
+  const handleCreate = async () => {
+    if (!newUsername.trim() || !newPassword.trim()) return
+    try {
+      await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
+      toast.success(`User "${newUsername.trim()}" created.`)
+      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+      load()
+    } catch { toast.error('Failed to create user') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await userApi.delete(deleteTarget)
+      toast.success(`User "${deleteTarget}" deleted.`)
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete user') }
+  }
+
+  const handleChangePassword = async () => {
+    if (!pwTarget || !newPw.trim()) return
+    try {
+      await userApi.changePassword(pwTarget, newPw.trim())
+      toast.success('Password updated.')
+      setPwTarget(null); setNewPw('')
+    } catch { toast.error('Failed to update password') }
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Users</h4>
+          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
+        </div>
+        {me?.role === 'admin' && (
+          <Button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ New User'}</Button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New User</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Username <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Password <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-sm" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Role</Label>
+              <div className="flex gap-2">
+                {(['viewer', 'admin'] as const).map(r => (
+                  <Button key={r} size="sm" variant={newRole === r ? 'default' : 'outline'}
+                    onClick={() => setNewRole(r)} className="capitalize">{r}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleCreate} disabled={!newUsername.trim() || !newPassword.trim()}>Create</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {users.map(u => (
+          <Card key={u.username}>
+            <CardContent className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-sm">{u.username}</span>
+                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="text-[10px] capitalize">{u.role}</Badge>
+                {u.username === me?.username && (
+                  <Badge variant="outline" className="text-[10px]">You</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                <Button variant="ghost" size="sm" className="text-xs h-7"
+                  onClick={() => { setPwTarget(u.username); setNewPw('') }}>
+                  Change Password
+                </Button>
+                {me?.role === 'admin' && u.username !== me?.username && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(u.username)}>
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Session Timeout */}
+      <Card className="mt-6">
+        <CardHeader className="border-b pb-3">
+          <CardTitle className="text-sm font-medium">Session Timeout</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Timeout (seconds)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  className="h-8 text-sm w-32"
+                  value={ttlInput}
+                  onChange={e => setTtlInput(e.target.value)}
+                  disabled={me?.role !== 'admin'}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
+                />
+              </div>
+            </div>
+            {me?.role === 'admin' && (
+              <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>
+        </CardContent>
+      </Card>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Change password dialog */}
+      <AlertDialog open={!!pwTarget} onOpenChange={(open) => !open && setPwTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Password</AlertDialogTitle>
+            <AlertDialogDescription>Set a new password for "{pwTarget}".</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <Label>New Password</Label>
+            <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleChangePassword()} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleChangePassword} disabled={!newPw.trim()}>Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 44,
+        "oldLines": 7,
+        "newStart": 44,
+        "newLines": 7,
+        "lines": [
+          " ",
+          "   const handleSaveTTL = async () => {",
+          "     const val = parseInt(ttlInput, 10)",
+          "-    if (isNaN(val) || val <= 0) { toast.error('請輸入有效的秒數'); return }",
+          "+    if (isNaN(val) || val <= 0) { toast.error('Please enter a valid number of seconds'); return }",
+          "     try {",
+          "       await settingsApi.setSessionTTL(val)",
+          "       setSessionTTL(val)"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 333ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/UsersPage.tsx && git commit -m "$(cat <<'EOF'
+style: translate remaining Chinese toast messages to English in UsersPage
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit translation"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/UsersPage.tsx && git commit -m "$(cat <<'EOF'
+style: translate remaining Chinese toast messages to English in UsersPage
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit translation"
+  },
+  "tool_response": {
+    "stdout": "[main dac0173] style: translate remaining Chinese toast messages to English in UsersPage
+ 1 file changed, 2 insertions(+), 2 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "dac0173",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "
+在 Security Events 如果是 file rule 點開 detail 後要可以看到是什麼檔案還是目錄被讀取還是寫入"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "filePath\\|fileOp\\|MAY_READ\\|MAY_WRITE\\|permission\\|file" /home/bigred/Sentinel/internal/handler/events.go 2>/dev/null | head -40 || find /home/bigred/Sentinel/internal -name "*.go" | xargs grep -l "filePath\\|fileOp\\|MAY_READ" 2>/dev/null",
+    "description": "Find file event handling in backend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "filePath\\|fileOp\\|MAY_READ\\|MAY_WRITE\\|permission\\|file" /home/bigred/Sentinel/internal/handler/events.go 2>/dev/null | head -40 || find /home/bigred/Sentinel/internal -name "*.go" | xargs grep -l "filePath\\|fileOp\\|MAY_READ" 2>/dev/null",
+    "description": "Find file event handling in backend"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "find /home/bigred/Sentinel/internal -name "*.go" | xargs grep -l "stream\\|event\\|tetragon" 2>/dev/null",
+    "description": "Find event streaming files"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "find /home/bigred/Sentinel/internal -name "*.go" | xargs grep -l "stream\\|event\\|tetragon" 2>/dev/null",
+    "description": "Find event streaming files"
+  },
+  "tool_response": {
+    "stdout": "/home/bigred/Sentinel/internal/auth/store.go
+/home/bigred/Sentinel/internal/k8s/discovery_store.go
+/home/bigred/Sentinel/internal/k8s/tetragon_health.go
+/home/bigred/Sentinel/internal/k8s/runc_resolver.go
+/home/bigred/Sentinel/internal/k8s/store.go
+/home/bigred/Sentinel/internal/k8s/client.go
+/home/bigred/Sentinel/internal/k8s/tetragon.go
+/home/bigred/Sentinel/internal/k8s/event_bus.go
+/home/bigred/Sentinel/internal/handler/handler.go
+/home/bigred/Sentinel/internal/handler/events.go",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+      "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+      "numLines": 276,
+      "startLine": 1,
+      "totalLines": 276
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 60,
+    "limit": 50
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 60,
+    "limit": 50
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+      "content": "    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })
+  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>",
+      "numLines": 50,
+      "startLine": 60,
+      "totalLines": 327
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process
+}",
+    "new_string": "// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process
+}",
+    "new_string": "// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process
+}",
+    "newString": "// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string `json:"type"`
+	Time       string `json:"time"`
+	NodeName   string `json:"nodeName"`
+	Namespace  string `json:"namespace"`
+	Pod        string `json:"pod"`
+	Container  string `json:"container"`
+	Binary     string `json:"binary"`
+	Arguments  string `json:"arguments"`
+	ParentBin  string `json:"parentBin"`
+	Action     string `json:"action"` // "monitor" or "kill"
+	PolicyName string `json:"policyName"`
+	Function   string `json:"function"`
+	ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 17,
+        "oldLines": 19,
+        "newStart": 17,
+        "newLines": 22,
+        "lines": [
+          " ",
+          " // TetragonEvent is a normalised Tetragon runtime event for the frontend.",
+          " type TetragonEvent struct {",
+          "-  Type       string `json:"type"`",
+          "-  Time       string `json:"time"`",
+          "-  NodeName   string `json:"nodeName"`",
+          "-  Namespace  string `json:"namespace"`",
+          "-  Pod        string `json:"pod"`",
+          "-  Container  string `json:"container"`",
+          "-  Binary     string `json:"binary"`",
+          "-  Arguments  string `json:"arguments"`",
+          "-  ParentBin  string `json:"parentBin"`",
+          "-  Action     string `json:"action"` // "monitor" or "kill"",
+          "-  PolicyName string `json:"policyName"`",
+          "-  Function   string `json:"function"`",
+          "-  ProcessUID *uint32 `json:"processUid,omitempty"` // effective UID of the process",
+          "+  Type       string  `json:"type"`",
+          "+  Time       string  `json:"time"`",
+          "+  NodeName   string  `json:"nodeName"`",
+          "+  Namespace  string  `json:"namespace"`",
+          "+  Pod        string  `json:"pod"`",
+          "+  Container  string  `json:"container"`",
+          "+  Binary     string  `json:"binary"`",
+          "+  Arguments  string  `json:"arguments"`",
+          "+  ParentBin  string  `json:"parentBin"`",
+          "+  Action     string  `json:"action"`     // "monitor" or "kill"",
+          "+  PolicyName string  `json:"policyName"`",
+          "+  Function   string  `json:"function"`",
+          "+  FilePath   string  `json:"filePath"`   // file/path from file kprobes",
+          "+  FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"",
+          "+  NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes",
+          "+  ProcessUID *uint32 `json:"processUid,omitempty"`",
+          " }",
+          " ",
+          " // StreamTetragonEvents streams events from ALL Tetragon pods concurrently."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")",
+    "new_string": "	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch {
+		case strings.Contains(evt.Function, "security_file_permission"):
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case strings.Contains(evt.Function, "security_mmap_file"):
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}
+
+	action := anyStr(kp, "action")",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")",
+    "new_string": "	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch {
+		case strings.Contains(evt.Function, "security_file_permission"):
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case strings.Contains(evt.Function, "security_mmap_file"):
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}
+
+	action := anyStr(kp, "action")",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")",
+    "newString": "	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch {
+		case strings.Contains(evt.Function, "security_file_permission"):
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case strings.Contains(evt.Function, "security_mmap_file"):
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}
+
+	action := anyStr(kp, "action")",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 205,
+        "oldLines": 6,
+        "newStart": 205,
+        "newLines": 29,
+        "lines": [
+          "   evt.Function = anyStr(kp, "function_name", "functionName")",
+          "   evt.PolicyName = anyStr(kp, "policy_name", "policyName")",
+          " ",
+          "+  // Parse file path and operation for file-monitoring kprobes.",
+          "+  if args, ok := kp["args"].([]any); ok {",
+          "+    switch {",
+          "+    case strings.Contains(evt.Function, "security_file_permission"):",
+          "+      evt.FilePath = fileArgPath(args, 0)",
+          "+      if v := intArg(args, 1); v == 4 {",
+          "+        evt.FileOp = "read"",
+          "+      } else if v == 2 {",
+          "+        evt.FileOp = "write"",
+          "+      }",
+          "+    case strings.Contains(evt.Function, "security_mmap_file"):",
+          "+      evt.FilePath = fileArgPath(args, 0)",
+          "+      if prot := uint32Arg(args, 1); prot&0x02 != 0 {",
+          "+        evt.FileOp = "mmap-write"",
+          "+      } else if prot&0x01 != 0 {",
+          "+        evt.FileOp = "mmap-read"",
+          "+      }",
+          "+    case strings.Contains(evt.Function, "security_path_truncate"):",
+          "+      evt.FilePath = pathArgPath(args, 0)",
+          "+      evt.FileOp = "truncate"",
+          "+    }",
+          "+  }",
+          "+",
+          "   action := anyStr(kp, "action")",
+          "   if strings.Contains(strings.ToUpper(action), "SIGKILL") {",
+          "     evt.Action = "kill""
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "func anyMap(m map[string]any, keys ...string) map[string]any {",
+    "new_string": "func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "func anyMap(m map[string]any, keys ...string) map[string]any {",
+    "new_string": "func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "func anyMap(m map[string]any, keys ...string) map[string]any {",
+    "newString": "func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch {
+		case strings.Contains(evt.Function, "security_file_permission"):
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case strings.Contains(evt.Function, "security_mmap_file"):
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case strings.Contains(evt.Function, "security_path_truncate"):
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 289,
+        "oldLines": 6,
+        "newStart": 289,
+        "newLines": 62,
+        "lines": [
+          "   return """,
+          " }",
+          " ",
+          "+func fileArgPath(args []any, idx int) string {",
+          "+  if idx >= len(args) {",
+          "+    return """,
+          "+  }",
+          "+  arg, ok := args[idx].(map[string]any)",
+          "+  if !ok {",
+          "+    return """,
+          "+  }",
+          "+  if f, ok := arg["file_arg"].(map[string]any); ok {",
+          "+    return anyStr(f, "path")",
+          "+  }",
+          "+  return """,
+          "+}",
+          "+",
+          "+func pathArgPath(args []any, idx int) string {",
+          "+  if idx >= len(args) {",
+          "+    return """,
+          "+  }",
+          "+  arg, ok := args[idx].(map[string]any)",
+          "+  if !ok {",
+          "+    return """,
+          "+  }",
+          "+  if p, ok := arg["path_arg"].(map[string]any); ok {",
+          "+    return anyStr(p, "path")",
+          "+  }",
+          "+  return """,
+          "+}",
+          "+",
+          "+func intArg(args []any, idx int) int {",
+          "+  if idx >= len(args) {",
+          "+    return 0",
+          "+  }",
+          "+  arg, ok := args[idx].(map[string]any)",
+          "+  if !ok {",
+          "+    return 0",
+          "+  }",
+          "+  if v, ok := arg["int_arg"].(float64); ok {",
+          "+    return int(v)",
+          "+  }",
+          "+  return 0",
+          "+}",
+          "+",
+          "+func uint32Arg(args []any, idx int) uint32 {",
+          "+  if idx >= len(args) {",
+          "+    return 0",
+          "+  }",
+          "+  arg, ok := args[idx].(map[string]any)",
+          "+  if !ok {",
+          "+    return 0",
+          "+  }",
+          "+  if v, ok := arg["uint32_arg"].(float64); ok {",
+          "+    return uint32(v)",
+          "+  }",
+          "+  return 0",
+          "+}",
+          "+",
+          " func anyMap(m map[string]any, keys ...string) map[string]any {",
+          "   for _, k := range keys {",
+          "     if v, ok := m[k]; ok {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "  filePath: string     // file path from security_file_permission kprobe
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "new_string": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "  filePath: string     // file path from security_file_permission kprobe
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "new_string": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "oldString": "  filePath: string     // file path from security_file_permission kprobe
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "newString": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "originalFile": "export interface ProcessRule {
+  binaries: string[]
+}
+
+export interface FileRule {
+  paths: string[]
+  exceptBinaries?: string[]              // binaries exempted from this rule (matchBinaries: NotIn)
+  permission?: 'all' | 'read' | 'write' // default 'all'; 'read'=MAY_READ=4, 'write'=MAY_WRITE=2
+}
+
+export interface NetworkRule {
+  address: string  // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
+}
+
+export interface PolicyFormInput {
+  name: string
+  namespace?: string
+  podSelector?: Record<string, string>
+  processMode?: 'whitelist' | 'blacklist'  // whitelist = NotPostfix (default), blacklist = Postfix
+  process?: ProcessRule[]
+  fileMode?: 'whitelist' | 'blacklist'     // whitelist = NotPrefix, blacklist = Prefix (default)
+  file?: FileRule[]
+  network?: NetworkRule[]
+  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr
+}
+
+export interface PolicyRecord {
+  name: string
+  namespace?: string
+  scope: 'cluster' | 'namespaced'
+  mode: 'Monitoring' | 'Protect' | 'Mixed'
+  createdBy: string
+  createdAt: string
+  rawYaml: string
+}
+
+export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface TetragonEvent {
+  type: 'exec' | 'exit' | 'kprobe'
+  time: string
+  nodeName: string
+  namespace: string
+  pod: string
+  container: string
+  binary: string
+  arguments: string
+  parentBin: string
+  action: 'monitor' | 'kill' | ''
+  policyName: string
+  function: string
+  filePath: string     // file path from security_file_permission kprobe
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe
+  processUid?: number  // effective UID of the process (undefined = unknown)
+}
+
+export interface CreatePolicyPayload {
+  source: 'form' | 'yaml'
+  form?: PolicyFormInput
+  action?: string
+  rawYaml?: string
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 50,
+        "oldLines": 7,
+        "newStart": 50,
+        "newLines": 8,
+        "lines": [
+          "   action: 'monitor' | 'kill' | ''",
+          "   policyName: string",
+          "   function: string",
+          "-  filePath: string     // file path from security_file_permission kprobe",
+          "+  filePath: string     // file path from file kprobes",
+          "+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"",
+          "   netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+          "   processUid?: number  // effective UID of the process (undefined = unknown)",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })",
+    "new_string": "  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })",
+    "new_string": "  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })",
+    "newString": "  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }",
+    "originalFile": "import React, { useState } from 'react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })
+  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
+
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-44"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium">
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </React.Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 64,
+        "oldLines": 7,
+        "newStart": 64,
+        "newLines": 10,
+        "lines": [
+          " function DetailRow({ e }: { e: DisplayEvent }) {",
+          "   const items: { label: string; value: string }[] = []",
+          " ",
+          "-  if (e.filePath)  items.push({ label: 'File',    value: e.filePath })",
+          "+  if (e.filePath) {",
+          "+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'",
+          "+    items.push({ label: opLabel, value: e.filePath })",
+          "+  }",
+          "   if (e.netDest)   items.push({ label: 'Network', value: e.netDest })",
+          "   if (e.binary)    items.push({ label: 'Binary',  value: e.binary })",
+          "   // When the parent is runc, the "arguments" belong to runc (not to the"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 372ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: show file path and operation in Security Events detail
+
+Backend:
+- Add FilePath and FileOp fields to TetragonEvent
+- Parse security_file_permission args: path + read(4)/write(2)
+- Parse security_mmap_file args: path + mmap-read/mmap-write
+- Parse security_path_truncate args: path + truncate
+- Helper functions: fileArgPath, pathArgPath, intArg, uint32Arg
+
+Frontend:
+- Add fileOp to TetragonEvent type
+- Detail row shows "File (read)", "File (write)", "File (truncate)" etc.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit file event detail feature"
+  }
+}
+
+----------------------------------------
+
