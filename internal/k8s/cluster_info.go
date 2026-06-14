@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,16 +14,23 @@ type ClusterCIDR struct {
 	ServiceCIDRs []string `json:"serviceCIDRs"`
 }
 
-// GetClusterCIDR attempts to detect the cluster's pod and service CIDRs.
-// Detection order:
-//  1. kube-controller-manager pod args (--cluster-cidr)
-//  2. kube-apiserver pod args (--service-cluster-ip-range)
-//  3. Fallback: per-node spec.podCIDRs
+// GetClusterCIDR detects pod and service CIDRs from multiple sources.
+//
+// Pod CIDR detection order:
+//  1. kube-controller-manager pod args (--cluster-cidr)          — Kubernetes IPAM
+//  2. cilium-config ConfigMap (cluster-pool-ipv4-cidr,            — Cilium cluster-pool IPAM
+//     ipv4-native-routing-cidr, ipv4-cluster-cidr)
+//  3. kube-proxy ConfigMap (clusterCIDR in config body)           — kube-proxy config
+//  4. Node spec.podCIDRs fallback                                 — any CNI that sets node podCIDR
+//
+// Service CIDR detection order:
+//  1. kube-apiserver pod args (--service-cluster-ip-range)
+//  2. kube-proxy ConfigMap (clusterCIDR comment / service config)
 func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
 	result := ClusterCIDR{}
 
-	components := []string{"kube-controller-manager", "kube-apiserver"}
-	for _, component := range components {
+	// ── 1. Control-plane pod args ────────────────────────────────────────────
+	for _, component := range []string{"kube-controller-manager", "kube-apiserver"} {
 		pods, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
 			LabelSelector: "component=" + component,
 		})
@@ -44,7 +52,34 @@ func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
 		}
 	}
 
-	// Fallback for pod CIDRs: collect from nodes
+	// ── 2. cilium-config ConfigMap ────────────────────────────────────────────
+	if len(result.PodCIDRs) == 0 {
+		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "cilium-config", metav1.GetOptions{})
+		if err == nil {
+			for _, key := range []string{"cluster-pool-ipv4-cidr", "ipv4-native-routing-cidr", "ipv4-cluster-cidr"} {
+				if v := strings.TrimSpace(cm.Data[key]); v != "" {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, splitCIDRs(v)...)
+					break
+				}
+			}
+		}
+	}
+
+	// ── 3. kube-proxy ConfigMap ───────────────────────────────────────────────
+	// kube-proxy stores its config as a YAML blob inside the ConfigMap data.
+	// The clusterCIDR field covers pod CIDR for kube-proxy's own use.
+	if len(result.PodCIDRs) == 0 || len(result.ServiceCIDRs) == 0 {
+		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "kube-proxy", metav1.GetOptions{})
+		if err == nil {
+			for _, v := range cm.Data {
+				if cidrs := extractKubeProxyCIDR(v); len(cidrs) > 0 && len(result.PodCIDRs) == 0 {
+					result.PodCIDRs = appendUniq(result.PodCIDRs, cidrs...)
+				}
+			}
+		}
+	}
+
+	// ── 4. Node podCIDRs fallback ─────────────────────────────────────────────
 	if len(result.PodCIDRs) == 0 {
 		nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err == nil {
@@ -59,6 +94,17 @@ func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
 	}
 
 	return result
+}
+
+// extractKubeProxyCIDR parses the clusterCIDR value from a kube-proxy config blob.
+var reCIDR = regexp.MustCompile(`clusterCIDR:\s*"?([0-9./,\s]+)"?`)
+
+func extractKubeProxyCIDR(configBlob string) []string {
+	m := reCIDR.FindStringSubmatch(configBlob)
+	if len(m) < 2 {
+		return nil
+	}
+	return splitCIDRs(m[1])
 }
 
 func trimFlag(arg, flag string) (string, bool) {
