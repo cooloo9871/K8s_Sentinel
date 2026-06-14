@@ -21,7 +21,7 @@
 - **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
 - 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
 - **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
-- **Policy Templates**：內建常用範本與自訂範本；點擊 **Use Template** 可設定名稱後直接建立 Policy；點擊 **Open in Editor** 可檢視或修改自訂範本 YAML（僅限儲存，不可從 editor 建立 Policy）；範本資料儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
 
 ### Behavior Discovery — 行為探索
 
@@ -36,7 +36,7 @@
 - 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
 - Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
 - 依 Namespace、Pod 名稱、嚴重程度篩選
-- 點擊展開事件詳情：違規路徑、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
 - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
 - 時間顯示支援秒、分、時、天
 
@@ -56,7 +56,8 @@
 - **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
 - **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
 - 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
-- 使用者資料儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
 
 ---
 
