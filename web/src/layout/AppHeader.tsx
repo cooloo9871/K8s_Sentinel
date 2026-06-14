@@ -11,7 +11,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
-import { Separator } from '@/components/ui/separator'
 import { modeApi } from '../api/client'
 import { useAuth } from './AuthContext'
 import type { Mode } from '../api/types'
@@ -83,7 +82,6 @@ export function AppHeader({ onLogout }: Props) {
   return (
     <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
       <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-2 h-4" />
 
       <Breadcrumb>
         <BreadcrumbList>
@@ -106,7 +104,6 @@ export function AppHeader({ onLogout }: Props) {
 
       <div className="ml-auto flex items-center gap-2">
         <Badge variant={modeVariant}>{mode.toUpperCase()}</Badge>
-        <Separator orientation="vertical" className="h-4" />
         <span className="text-xs text-muted-foreground">{user?.username}</span>
         <Button variant="ghost" size="sm" className="text-xs h-7" onClick={onLogout}>
           Sign out
