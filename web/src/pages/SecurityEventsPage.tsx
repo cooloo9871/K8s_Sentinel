@@ -281,20 +281,20 @@ export function SecurityEventsPage() {
                       <TableCell>
                         <SeverityBadge severity={e.severity} />
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
+                      <TableCell className="max-w-[240px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <RuleTypeBadge fn={e.function} />
-                          <span className="font-mono text-sm font-medium">
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
                             {e.binary ? e.binary.split('/').pop() : '—'}
                           </span>
                         </div>
                         {e.filePath && (
-                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
                             {e.filePath}
                           </p>
                         )}
                         {e.netDest && (
-                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
                         )}
                       </TableCell>
                       <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
