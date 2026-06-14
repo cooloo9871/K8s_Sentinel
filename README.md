@@ -21,7 +21,11 @@
 - **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
 - 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
 - **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
-- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
 
 ### Behavior Discovery — 行為探索
 
@@ -36,7 +40,8 @@
 - 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
 - Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
 - 依 Namespace、Pod 名稱、嚴重程度篩選
-- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
 - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
 - 時間顯示支援秒、分、時、天
 
@@ -120,7 +125,10 @@ volumes:
 | API Group | 資源 | 操作 |
 |---|---|---|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
-| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 
 ---
