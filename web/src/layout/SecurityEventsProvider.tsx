@@ -61,13 +61,27 @@ function saveToStorage(events: DisplayEvent[]) {
 
 function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
   return (
-    a.binary === b.binary &&
-    a.pod === b.pod &&
-    a.function === b.function &&
+    a.binary    === b.binary    &&
+    a.pod       === b.pod       &&
+    a.function  === b.function  &&
     a.policyName === b.policyName &&
-    a.action === b.action &&
-    Math.abs(new Date(b.time).getTime() - new Date(a.time).getTime()) < DEDUP_WINDOW_MS
+    a.action    === b.action    &&
+    a.filePath  === b.filePath  &&
+    a.fileOp    === b.fileOp
   )
+}
+
+function dedupInsert(list: DisplayEvent[], newEvt: DisplayEvent): DisplayEvent[] {
+  const bTime = new Date(newEvt.time).getTime()
+  const idx = list.findIndex(e =>
+    isSameEvent(e, newEvt) &&
+    Math.abs(new Date(e.time).getTime() - bTime) < DEDUP_WINDOW_MS
+  )
+  if (idx !== -1) {
+    const updated = { ...list[idx], count: list[idx].count + 1, time: newEvt.time }
+    return [updated, ...list.filter((_, i) => i !== idx)]
+  }
+  return [newEvt, ...list]
 }
 
 interface SecurityEventsContextValue {
@@ -125,19 +139,12 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
         const newEvt: DisplayEvent = { ...evt, id, count: 1, severity }
 
         if (pausedRef.current) {
-          // While paused, buffer new events without updating the display.
-          pendingRef.current = [newEvt, ...pendingRef.current].slice(0, MAX_WARNINGS + MAX_CRITICALS)
+          pendingRef.current = dedupInsert(pendingRef.current, newEvt).slice(0, MAX_WARNINGS + MAX_CRITICALS)
           setPendingCount(pendingRef.current.length)
           return
         }
 
-        setEvents((prev) => {
-          if (prev.length > 0 && isSameEvent(prev[0], evt)) {
-            // Dedup: preserve the original id so the expanded row stays open.
-            return [{ ...prev[0], count: prev[0].count + 1, time: evt.time }, ...prev.slice(1)]
-          }
-          return capBySeverity([newEvt, ...prev])
-        })
+        setEvents((prev) => capBySeverity(dedupInsert(prev, newEvt)))
       } catch {}
     }
 
