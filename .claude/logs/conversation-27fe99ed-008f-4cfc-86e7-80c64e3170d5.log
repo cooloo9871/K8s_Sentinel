@@ -504972,3 +504972,1587 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+refactor: remove PDF export, keep CSV only
+
+Removed jsPDF/jspdf-autotable dependencies and exportPDF function.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit PDF removal"
+  },
+  "tool_response": {
+    "stdout": "[main e22950a] refactor: remove PDF export, keep CSV only
+ 5 files changed, 1781 insertions(+), 274 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "e22950a",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Warning 最多 300 條、Critical 最多 200 條 你認為保留的筆數會太少嗎？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "好，幫我改成 Warning 500 Critical 300"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "const MAX_WARNINGS  = 300
+const MAX_CRITICALS = 200",
+    "new_string": "const MAX_WARNINGS  = 500
+const MAX_CRITICALS = 300",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "const MAX_WARNINGS  = 300
+const MAX_CRITICALS = 200",
+    "new_string": "const MAX_WARNINGS  = 500
+const MAX_CRITICALS = 300",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "const MAX_WARNINGS  = 300
+const MAX_CRITICALS = 200",
+    "newString": "const MAX_WARNINGS  = 500
+const MAX_CRITICALS = 300",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_WARNINGS  = 300
+const MAX_CRITICALS = 200
+const DEDUP_WINDOW_MS = 30000
+
+/** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */
+function capBySeverity(events: DisplayEvent[]): DisplayEvent[] {
+  // events is sorted newest-first; slicing keeps the newest within each severity.
+  const warnIds = new Set(
+    events.filter(e => e.severity === 'warning').slice(0, MAX_WARNINGS).map(e => e.id)
+  )
+  const critIds = new Set(
+    events.filter(e => e.severity === 'critical').slice(0, MAX_CRITICALS).map(e => e.id)
+  )
+  return events.filter(e =>
+    (e.severity === 'warning' && warnIds.has(e.id)) ||
+    (e.severity === 'critical' && critIds.has(e.id))
+  )
+}
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  id: string   // stable unique ID set on creation, never changed on dedup
+  count: number
+  severity: Severity
+}
+
+const TTL_DAYS = 7
+const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const cutoff = Date.now() - TTL_MS
+      const data = JSON.parse(raw) as any[]
+      const mapped = data
+        .filter((e) => e.type === 'kprobe' && e.policyName)
+        .filter((e) => !e.time || new Date(e.time).getTime() >= cutoff)
+        .map((e) => ({
+          ...e,
+          id: e.id ?? `${e.time}-${e.pod}-${e.binary}-${Math.random()}`,
+          count: e.count ?? 1,
+          severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+        })) as DisplayEvent[]
+      return capBySeverity(mapped)
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary    === b.binary    &&
+    a.pod       === b.pod       &&
+    a.function  === b.function  &&
+    a.policyName === b.policyName &&
+    a.action    === b.action    &&
+    a.filePath  === b.filePath  &&
+    a.fileOp    === b.fileOp
+  )
+}
+
+function dedupInsert(list: DisplayEvent[], newEvt: DisplayEvent): DisplayEvent[] {
+  const bTime = new Date(newEvt.time).getTime()
+  const idx = list.findIndex(e =>
+    isSameEvent(e, newEvt) &&
+    Math.abs(new Date(e.time).getTime() - bTime) < DEDUP_WINDOW_MS
+  )
+  if (idx !== -1) {
+    const updated = { ...list[idx], count: list[idx].count + 1, time: newEvt.time }
+    return [updated, ...list.filter((_, i) => i !== idx)]
+  }
+  return [newEvt, ...list]
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  paused: boolean
+  pendingCount: number
+  togglePause: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  paused: false,
+  pendingCount: 0,
+  togglePause: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const [paused, setPaused] = useState(false)
+  const pausedRef = useRef(false)
+  const pendingRef = useRef<DisplayEvent[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events)
+
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        // Only store kprobe events that belong to a named user-defined TracingPolicy.
+        if (evt.type !== 'kprobe' || !evt.policyName) return
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        const id = `${evt.time}-${evt.pod}-${evt.binary}-${evt.policyName}-${Math.random().toString(36).slice(2)}`
+        const newEvt: DisplayEvent = { ...evt, id, count: 1, severity }
+
+        if (pausedRef.current) {
+          pendingRef.current = dedupInsert(pendingRef.current, newEvt).slice(0, MAX_WARNINGS + MAX_CRITICALS)
+          setPendingCount(pendingRef.current.length)
+          return
+        }
+
+        setEvents((prev) => capBySeverity(dedupInsert(prev, newEvt)))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }, [])
+
+  useEffect(() => { eventsRef.current = events }, [events])
+
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(events), 2000)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [events])
+
+  useEffect(() => { return () => { saveToStorage(eventsRef.current) } }, [])
+
+  const togglePause = useCallback(() => {
+    setPaused(prev => {
+      const nowPaused = !prev
+      pausedRef.current = nowPaused
+      if (!nowPaused && pendingRef.current.length > 0) {
+        // Resume: flush buffered events into the main list.
+        const pending = pendingRef.current
+        pendingRef.current = []
+        setPendingCount(0)
+        setEvents(prev => capBySeverity([...pending, ...prev]))
+      }
+      return nowPaused
+    })
+  }, [])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, paused, pendingCount, togglePause }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 8,
+        "newStart": 1,
+        "newLines": 8,
+        "lines": [
+          " import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'",
+          " import type { TetragonEvent } from '../api/types'",
+          " ",
+          "-const MAX_WARNINGS  = 300",
+          "-const MAX_CRITICALS = 200",
+          "+const MAX_WARNINGS  = 500",
+          "+const MAX_CRITICALS = 300",
+          " const DEDUP_WINDOW_MS = 30000",
+          " ",
+          " /** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 344ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/layout/SecurityEventsProvider.tsx && git commit -m "$(cat <<'EOF'
+fix: increase Security Events retention limits
+
+Warning: 300 → 500, Critical: 200 → 300
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit retention limit change"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/layout/SecurityEventsProvider.tsx && git commit -m "$(cat <<'EOF'
+fix: increase Security Events retention limits
+
+Warning: 300 → 500, Critical: 200 → 300
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit retention limit change"
+  },
+  "tool_response": {
+    "stdout": "[main 103b869] fix: increase Security Events retention limits
+ 1 file changed, 2 insertions(+), 2 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "103b869",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "更新 README"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限",
+    "new_string": "- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限",
+    "new_string": "- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限",
+    "newString": "- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地與來源（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 38,
+        "oldLines": 7,
+        "newStart": 38,
+        "newLines": 7,
+        "lines": [
+          " ### Notifications — 安全通知",
+          " ",
+          " - 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）",
+          "-- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限",
+          "+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL",
+          " - 依 Namespace、Pod 名稱、嚴重程度篩選",
+          " - 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地與來源（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等",
+          " - **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版",
+    "new_string": "- **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版",
+    "new_string": "- **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版",
+    "newString": "- **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地與來源（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 41,
+        "oldLines": 7,
+        "newStart": 41,
+        "newLines": 7,
+        "lines": [
+          " - Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL",
+          " - 依 Namespace、Pod 名稱、嚴重程度篩選",
+          " - 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地與來源（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等",
+          "-- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版",
+          "+- **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版",
+          " - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件",
+          " - 時間顯示支援秒、分、時、天",
+          " - **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別",
+    "new_string": "- **Export CSV**：將當前篩選結果匯出為 CSV，含所有事件欄位
+- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別",
+    "new_string": "- **Export CSV**：將當前篩選結果匯出為 CSV，含所有事件欄位
+- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別",
+    "newString": "- **Export CSV**：將當前篩選結果匯出為 CSV，含所有事件欄位
+- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地與來源（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 44,
+        "oldLines": 6,
+        "newStart": 44,
+        "newLines": 7,
+        "lines": [
+          " - **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版",
+          " - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件",
+          " - 時間顯示支援秒、分、時、天",
+          "+- **Export CSV**：將當前篩選結果匯出為 CSV，含所有事件欄位",
+          " - **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別",
+          " ",
+          " ### Cluster — 叢集資訊"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: update README — event limits, dedup window, CSV export
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README update"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: update README — event limits, dedup window, CSV export
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README update"
+  },
+  "tool_response": {
+    "stdout": "[main 7209d6a] docs: update README — event limits, dedup window, CSV export
+ 1 file changed, 3 insertions(+), 2 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "7209d6a",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Home>Cluster>Namespaces 這裡的頁面和功能幫我拿掉"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { NamespacesPage } from './pages/NamespacesPage'
+",
+    "new_string": "
+",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { NamespacesPage } from './pages/NamespacesPage'
+",
+    "new_string": "
+",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "import { NamespacesPage } from './pages/NamespacesPage'
+",
+    "newString": "
+",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { AuthProvider, useAuth } from './layout/AuthContext'
+import { LoginPage } from './pages/LoginPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+import { TetragonStatusPage } from './pages/TetragonStatusPage'
+import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
+import { UsersPage } from './pages/UsersPage'
+import { AlertsPage } from './pages/AlertsPage'
+
+function AppRoutes() {
+  const { user, loading, logout } = useAuth()
+
+  if (loading) return null
+
+  if (!user) {
+    return (
+      <LoginPage onLogin={() => window.location.replace('/dashboard')} />
+    )
+  }
+
+  return (
+    <SecurityEventsProvider>
+    <DiscoveryProvider>
+      <Routes>
+        <Route element={<AppLayout onLogout={logout} />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+          <Route path="/policies/tracing" element={<PolicyListPage />} />
+          <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+          <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
+          <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+          <Route path="/cluster/mode" element={<ModePage />} />
+          <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+          <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />
+          <Route path="/security/events" element={<SecurityEventsPage />} />
+          <Route path="/security/discovery" element={<DiscoveryPage />} />
+          <Route path="/settings/users" element={<UsersPage />} />
+          <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </DiscoveryProvider>
+    </SecurityEventsProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 9,
+        "oldLines": 7,
+        "newStart": 9,
+        "newLines": 7,
+        "lines": [
+          " import { PolicyListPage } from './pages/PolicyListPage'",
+          " import { PolicyEditPage } from './pages/PolicyEditPage'",
+          " import { ModePage } from './pages/ModePage'",
+          "-import { NamespacesPage } from './pages/NamespacesPage'",
+          "+",
+          " import { SecurityEventsPage } from './pages/SecurityEventsPage'",
+          " import { DiscoveryPage } from './pages/DiscoveryPage'",
+          " import { TetragonStatusPage } from './pages/TetragonStatusPage'"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "          <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+",
+    "new_string": "
+",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "          <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+",
+    "new_string": "
+",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "          <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+",
+    "newString": "
+",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { AuthProvider, useAuth } from './layout/AuthContext'
+import { LoginPage } from './pages/LoginPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+import { TetragonStatusPage } from './pages/TetragonStatusPage'
+import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
+import { UsersPage } from './pages/UsersPage'
+import { AlertsPage } from './pages/AlertsPage'
+
+function AppRoutes() {
+  const { user, loading, logout } = useAuth()
+
+  if (loading) return null
+
+  if (!user) {
+    return (
+      <LoginPage onLogin={() => window.location.replace('/dashboard')} />
+    )
+  }
+
+  return (
+    <SecurityEventsProvider>
+    <DiscoveryProvider>
+      <Routes>
+        <Route element={<AppLayout onLogout={logout} />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+          <Route path="/policies/tracing" element={<PolicyListPage />} />
+          <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+          <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
+          <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+          <Route path="/cluster/mode" element={<ModePage />} />
+          <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+          <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />
+          <Route path="/security/events" element={<SecurityEventsPage />} />
+          <Route path="/security/discovery" element={<DiscoveryPage />} />
+          <Route path="/settings/users" element={<UsersPage />} />
+          <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </DiscoveryProvider>
+    </SecurityEventsProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 41,
+        "oldLines": 7,
+        "newStart": 41,
+        "newLines": 7,
+        "lines": [
+          "           <Route path="/policies/templates" element={<PolicyTemplatesPage />} />",
+          "           <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />",
+          "           <Route path="/cluster/mode" element={<ModePage />} />",
+          "-          <Route path="/cluster/namespaces" element={<NamespacesPage />} />",
+          "+",
+          "           <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />",
+          "           <Route path="/security/events" element={<SecurityEventsPage />} />",
+          "           <Route path="/security/discovery" element={<DiscoveryPage />} />"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+",
+    "new_string": "
+",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+",
+    "new_string": "
+",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+",
+    "newString": "
+",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import logoUrl from '../assets/sentinel-logo-black.svg'
+import { useAuth } from './AuthContext'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+  const { user } = useAuth()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={logoUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/tracing')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/templates')}>
+                  <NavLink to="/policies/templates">Templates</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/tetragon')}>
+                  <NavLink to="/cluster/tetragon">Tetragon Agents</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 87,
+        "oldLines": 12,
+        "newStart": 87,
+        "newLines": 8,
+        "lines": [
+          "           <SidebarGroupLabel>Cluster</SidebarGroupLabel>",
+          "           <SidebarGroupContent>",
+          "             <SidebarMenu>",
+          "+",
+          "               <SidebarMenuItem>",
+          "-                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>",
+          "-                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>",
+          "-                </SidebarMenuButton>",
+          "-              </SidebarMenuItem>",
+          "-              <SidebarMenuItem>",
+          "                 <SidebarMenuButton asChild isActive={isActive('/cluster/tetragon')}>",
+          "                   <NavLink to="/cluster/tetragon">Tetragon Agents</NavLink>",
+          "                 </SidebarMenuButton>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rm /home/bigred/Sentinel/web/src/pages/NamespacesPage.tsx",
+    "description": "Delete NamespacesPage"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rm /home/bigred/Sentinel/web/src/pages/NamespacesPage.tsx",
+    "description": "Delete NamespacesPage"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": true
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 362ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: remove Namespaces page from Cluster section
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit removal"
+  }
+}
+
+----------------------------------------
+

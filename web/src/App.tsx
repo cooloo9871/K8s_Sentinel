@@ -9,7 +9,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { PolicyListPage } from './pages/PolicyListPage'
 import { PolicyEditPage } from './pages/PolicyEditPage'
 import { ModePage } from './pages/ModePage'
-import { NamespacesPage } from './pages/NamespacesPage'
+
 import { SecurityEventsPage } from './pages/SecurityEventsPage'
 import { DiscoveryPage } from './pages/DiscoveryPage'
 import { TetragonStatusPage } from './pages/TetragonStatusPage'
@@ -41,7 +41,7 @@ function AppRoutes() {
           <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
           <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
           <Route path="/cluster/mode" element={<ModePage />} />
-          <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+
           <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />
           <Route path="/security/events" element={<SecurityEventsPage />} />
           <Route path="/security/discovery" element={<DiscoveryPage />} />
