@@ -37,6 +37,9 @@ func main() {
 	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store)
 	go rsyslogDispatch.Run(context.Background())
 
+	admissionStore := admission.NewStore()
+	go admissionStore.Run(context.Background(), typedClient)
+
 	cfg := handler.Config{
 		Store:           store,
 		Users:           users,
@@ -45,7 +48,7 @@ func main() {
 		Dispatcher:      dispatcher,
 		Rsyslog:         rsyslogs,
 		RsyslogDispatch: rsyslogDispatch,
-		Admission:       admission.NewStore(),
+		Admission:       admissionStore,
 	}
 
 	mux := http.NewServeMux()

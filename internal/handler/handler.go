@@ -32,9 +32,6 @@ func New(cfg Config) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Public (no auth — kube-apiserver audit webhook)
-	r.Post("/api/admission-events/webhook", admissionWebhook(cfg.Admission))
-
 	// Public auth
 	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
 	r.Post("/api/auth/logout", logoutHandler())

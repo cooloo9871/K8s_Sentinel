@@ -158,14 +158,13 @@ export interface VAPBindingRecord {
 export interface AdmissionEvent {
   id: string
   time: string
-  username: string
-  verb: string
-  resource: string
-  name: string
   namespace: string
+  involvedKind: string  // ReplicaSet, StatefulSet, etc.
+  involvedName: string
   policyName: string
   bindingName: string
-  message: string
+  message: string       // violation expression
+  rawMessage: string
 }
 
 export const admissionApi = {
