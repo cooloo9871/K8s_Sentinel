@@ -70,7 +70,7 @@
 
 ### 前置需求
 
-- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）
+- Kubernetes 1.26+
 - `kubectl` 已設定 kubeconfig
 
 ### 步驟
