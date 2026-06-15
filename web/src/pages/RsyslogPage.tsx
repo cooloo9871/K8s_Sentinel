@@ -4,9 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -15,22 +13,11 @@ import { rsyslogApi, type RsyslogConfig } from '../api/client'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 
-const FACILITIES = [
-  { value: 16, label: 'local0' },
-  { value: 17, label: 'local1' },
-  { value: 18, label: 'local2' },
-  { value: 19, label: 'local3' },
-  { value: 20, label: 'local4' },
-  { value: 21, label: 'local5' },
-  { value: 22, label: 'local6' },
-  { value: 23, label: 'local7' },
-  { value: 3,  label: 'daemon' },
-  { value: 1,  label: 'user'   },
-]
 
 const EMPTY: Omit<RsyslogConfig, 'id'> = {
   name: '', host: '', port: 514, protocol: 'udp',
-  facility: 16, severities: [], namespaces: [], policies: [], enabled: true,
+  facility: 16, // fixed: local0
+  severities: [], namespaces: [], policies: [], enabled: true,
 }
 
 function ConfigForm({
@@ -52,24 +39,9 @@ function ConfigForm({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
-          <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My rsyslog" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs">Facility</Label>
-          <Select value={String(form.facility)} onValueChange={v => set('facility', parseInt(v))}>
-            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {FACILITIES.map(f => (
-                  <SelectItem key={f.value} value={String(f.value)}>{f.label} ({f.value})</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+        <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My Syslog" />
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -199,8 +171,6 @@ export function RsyslogPage() {
     } finally { setTesting(null) }
   }
 
-  const facilityLabel = (n: number) => FACILITIES.find(f => f.value === n)?.label ?? String(n)
-
   return (
     <>
       <div className="mb-6 flex items-start justify-between">
@@ -267,7 +237,7 @@ export function RsyslogPage() {
                   )}
                 </CardHeader>
                 <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
-                  <p className="font-mono">{cfg.host}:{cfg.port} — facility: {facilityLabel(cfg.facility)}</p>
+                  <p className="font-mono">{cfg.host}:{cfg.port}</p>
                   <div className="flex gap-4">
                     <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
                     <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
