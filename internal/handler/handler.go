@@ -55,6 +55,10 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
 		r.Get("/api/alerts", listAlerts(cfg.Alerts))
 		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
+		r.Get("/api/vap", listVAP(cfg.Store))
+		r.Get("/api/vap/{name}", getVAP(cfg.Store))
+		r.Get("/api/vap-bindings", listVAPBindings(cfg.Store))
+		r.Get("/api/vap-bindings/{name}", getVAPBinding(cfg.Store))
 
 		// Admin-only (writes)
 		r.Group(func(r chi.Router) {
@@ -78,6 +82,12 @@ func New(cfg Config) http.Handler {
 			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
 			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
 			r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
+			r.Post("/api/vap", applyVAP(cfg.Store))
+			r.Put("/api/vap/{name}", applyVAP(cfg.Store))
+			r.Delete("/api/vap/{name}", deleteVAP(cfg.Store))
+			r.Post("/api/vap-bindings", applyVAPBinding(cfg.Store))
+			r.Put("/api/vap-bindings/{name}", applyVAPBinding(cfg.Store))
+			r.Delete("/api/vap-bindings/{name}", deleteVAPBinding(cfg.Store))
 			r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
 			r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
 			r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))

@@ -135,6 +135,45 @@ export const alertsApi = {
     api.post('/alerts/test', { webhookURL }),
 }
 
+export interface VAPRecord {
+  name: string
+  failurePolicy: string
+  validationCount: number
+  createdAt: string
+  rawYaml: string
+}
+
+export interface VAPBindingRecord {
+  name: string
+  policyName: string
+  validationActions: string[]
+  createdAt: string
+  rawYaml: string
+}
+
+export const vapApi = {
+  listPolicies: (): Promise<VAPRecord[]> =>
+    api.get('/vap').then((r) => r.data),
+  getPolicy: (name: string): Promise<VAPRecord> =>
+    api.get(`/vap/${name}`).then((r) => r.data),
+  applyPolicy: (rawYaml: string): Promise<void> =>
+    api.post('/vap', { rawYaml }),
+  updatePolicy: (name: string, rawYaml: string): Promise<void> =>
+    api.put(`/vap/${name}`, { rawYaml }),
+  deletePolicy: (name: string): Promise<void> =>
+    api.delete(`/vap/${name}`),
+  listBindings: (): Promise<VAPBindingRecord[]> =>
+    api.get('/vap-bindings').then((r) => r.data),
+  getBinding: (name: string): Promise<VAPBindingRecord> =>
+    api.get(`/vap-bindings/${name}`).then((r) => r.data),
+  applyBinding: (rawYaml: string): Promise<void> =>
+    api.post('/vap-bindings', { rawYaml }),
+  updateBinding: (name: string, rawYaml: string): Promise<void> =>
+    api.put(`/vap-bindings/${name}`, { rawYaml }),
+  deleteBinding: (name: string): Promise<void> =>
+    api.delete(`/vap-bindings/${name}`),
+}
+
 export const clusterApi = {
   cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
     api.get('/cluster/cidr').then((r) => r.data),

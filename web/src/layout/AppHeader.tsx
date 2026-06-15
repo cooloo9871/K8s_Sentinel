@@ -23,6 +23,7 @@ const ROUTE_LABELS: Record<string, string> = {
   edit: 'Edit',
   templates: 'Templates',
   discovery: 'Behavior Discovery',
+  admission: 'Admission Policy',
   security: 'Notifications',
   events: 'Security Events',
   alerts: 'Alerts',
