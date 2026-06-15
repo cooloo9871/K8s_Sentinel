@@ -15,6 +15,7 @@ COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
 RUN addgroup -S -g 10001 sentinel && \
     adduser -S -u 10001 -G sentinel -H -s /sbin/nologin sentinel && \
+    go mod tidy && \
     CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/ && \
     mkdir -p /data/sentinel && \
     touch /data/sentinel/.keep && \
