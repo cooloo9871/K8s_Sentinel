@@ -69,9 +69,9 @@ func buildSlackText(p WebhookPayload) string {
 		lines = append(lines, fmt.Sprintf("*Node:* `%s`", p.NodeName))
 	}
 	if p.ProcessUID != nil {
-		user := fmt.Sprintf("'uid=%d'", *p.ProcessUID)
+		user := fmt.Sprintf("`uid=%d`", *p.ProcessUID)
 		if *p.ProcessUID == 0 {
-			user = "'root (uid=0)'"
+			user = "`root (uid=0)`"
 		}
 		lines = append(lines, fmt.Sprintf("*User:* %s", user))
 	}
