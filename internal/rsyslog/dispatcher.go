@@ -107,7 +107,6 @@ func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
 		return
 	}
 	msg := buildMessage(evt, severity)
-	log.Printf("rsyslog-dispatcher: sending msg to %s:%d: %s", cfg.Host, cfg.Port, msg)
 	var sendErr error
 	if severity == "critical" {
 		sendErr = w.Crit(msg)
@@ -117,8 +116,6 @@ func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
 	if sendErr != nil {
 		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
 		d.invalidate(cfg.ID)
-	} else {
-		log.Printf("rsyslog-dispatcher: sent ok")
 	}
 }
 
