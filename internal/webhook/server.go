@@ -63,13 +63,17 @@ func NewAdmissionHandler(evaluator *Evaluator, admStore *admission.Store) http.H
 		}
 		req := review.Request
 
+		log.Printf("admission-webhook: request ns=%s name=%s op=%s resource=%s/%s",
+			req.Namespace, req.Name, req.Operation, req.Resource.Group, req.Resource.Resource)
+
 		violations, err := evaluator.Evaluate(r.Context(), *req)
 		if err != nil {
 			log.Printf("admission-webhook: evaluate error: %v", err)
-			// On evaluation error, allow (failurePolicy=Ignore equivalent)
 			writeResponse(w, review.APIVersion, req.UID, true, "")
 			return
 		}
+
+		log.Printf("admission-webhook: %d violation(s)", len(violations))
 
 		if len(violations) == 0 {
 			writeResponse(w, review.APIVersion, req.UID, true, "")

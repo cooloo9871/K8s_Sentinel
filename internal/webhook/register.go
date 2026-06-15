@@ -72,7 +72,7 @@ func Register(ctx context.Context, typed kubernetes.Interface, caBundle []byte, 
 		if err != nil {
 			return err
 		}
-		log.Printf("admission-webhook: registered %q", webhookConfigName)
+		log.Printf("admission-webhook: registered %q pointing to %s/%s:443", webhookConfigName, svcNamespace, svcName)
 		return nil
 	}
 	if err != nil {

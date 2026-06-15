@@ -80,13 +80,13 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
-                  <NavLink to="/security/alerts">Alerts</NavLink>
+                <SidebarMenuButton asChild isActive={isActive('/security/admission')}>
+                  <NavLink to="/security/admission">Admission Events</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/security/admission')}>
-                  <NavLink to="/security/admission">Admission Events</NavLink>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
