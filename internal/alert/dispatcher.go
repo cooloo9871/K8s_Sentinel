@@ -15,40 +15,73 @@ import (
 )
 
 // WebhookPayload is the JSON body posted to webhook endpoints.
-// The Text field is a human-readable summary compatible with Slack Incoming Webhooks.
+// The Text field is a human-readable summary compatible with Slack Incoming Webhooks (mrkdwn).
 type WebhookPayload struct {
-	Text       string `json:"text"` // Slack-compatible summary
-	RuleName   string `json:"ruleName"`
-	Severity   string `json:"severity"`
-	Time       string `json:"time"`
-	Namespace  string `json:"namespace"`
-	Pod        string `json:"pod"`
-	Container  string `json:"container,omitempty"`
-	Binary     string `json:"binary,omitempty"`
-	PolicyName string `json:"policyName,omitempty"`
-	Function   string `json:"function,omitempty"`
-	FilePath   string `json:"filePath,omitempty"`
-	FileOp     string `json:"fileOp,omitempty"`
-	NetDest    string `json:"netDest,omitempty"`
-	NetSrc     string `json:"netSrc,omitempty"`
+	Text       string  `json:"text"` // Slack-compatible summary (mrkdwn)
+	RuleName   string  `json:"ruleName"`
+	Severity   string  `json:"severity"`
+	Time       string  `json:"time"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container,omitempty"`
+	NodeName   string  `json:"nodeName,omitempty"`
+	Binary     string  `json:"binary,omitempty"`
+	PolicyName string  `json:"policyName,omitempty"`
+	Function   string  `json:"function,omitempty"`
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+	FilePath   string  `json:"filePath,omitempty"`
+	FileOp     string  `json:"fileOp,omitempty"`
+	NetDest    string  `json:"netDest,omitempty"`
+	NetSrc     string  `json:"netSrc,omitempty"`
 }
 
 func buildText(p WebhookPayload) string {
-	sev := strings.ToUpper(p.Severity)
-	s := fmt.Sprintf("[%s] %s — %s/%s", sev, p.RuleName, p.Namespace, p.Pod)
-	if p.PolicyName != "" {
-		s += fmt.Sprintf("\nPolicy: %s", p.PolicyName)
+	icon := "⚠️"
+	if p.Severity == "critical" {
+		icon = "🔴"
 	}
-	if p.Binary != "" {
-		s += fmt.Sprintf(" | Binary: %s", p.Binary)
+	lines := []string{
+		fmt.Sprintf("%s *[%s]* %s", icon, strings.ToUpper(p.Severity), p.RuleName),
 	}
+
+	podLine := fmt.Sprintf("*Pod:* `%s/%s`", p.Namespace, p.Pod)
+	if p.NodeName != "" {
+		podLine += fmt.Sprintf("  •  *Node:* `%s`", p.NodeName)
+	}
+	lines = append(lines, podLine)
+
+	if p.PolicyName != "" || p.Binary != "" {
+		var parts []string
+		if p.PolicyName != "" {
+			parts = append(parts, fmt.Sprintf("*Policy:* `%s`", p.PolicyName))
+		}
+		if p.Binary != "" {
+			parts = append(parts, fmt.Sprintf("*Binary:* `%s`", p.Binary))
+		}
+		lines = append(lines, strings.Join(parts, "  •  "))
+	}
+
+	if p.ProcessUID != nil {
+		user := fmt.Sprintf("uid=%d", *p.ProcessUID)
+		if *p.ProcessUID == 0 {
+			user = "root (uid=0)"
+		}
+		lines = append(lines, fmt.Sprintf("*User:* %s", user))
+	}
+
 	if p.FilePath != "" {
-		s += fmt.Sprintf("\nFile (%s): %s", p.FileOp, p.FilePath)
+		lines = append(lines, fmt.Sprintf("*File (%s):* `%s`", p.FileOp, p.FilePath))
 	}
+
 	if p.NetDest != "" {
-		s += fmt.Sprintf("\nDestination: %s", p.NetDest)
+		netLine := fmt.Sprintf("*Destination:* `%s`", p.NetDest)
+		if p.NetSrc != "" {
+			netLine += fmt.Sprintf("  •  *Source:* `%s`", p.NetSrc)
+		}
+		lines = append(lines, netLine)
 	}
-	return s
+
+	return strings.Join(lines, "\n")
 }
 
 // Dispatcher watches the Tetragon event stream and fires webhook alerts.
@@ -136,9 +169,11 @@ func (d *Dispatcher) post(rule AlertRule, evt k8s.TetragonEvent, severity string
 		Namespace:  evt.Namespace,
 		Pod:        evt.Pod,
 		Container:  evt.Container,
+		NodeName:   evt.NodeName,
 		Binary:     evt.Binary,
 		PolicyName: evt.PolicyName,
 		Function:   evt.Function,
+		ProcessUID: evt.ProcessUID,
 		FilePath:   evt.FilePath,
 		FileOp:     evt.FileOp,
 		NetDest:    evt.NetDest,
