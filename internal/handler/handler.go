@@ -10,6 +10,7 @@ import (
 	"github.com/cooloo9871/sentinel/internal/alert"
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
 )
 
 // Config holds dependencies for all handlers.
@@ -17,8 +18,10 @@ type Config struct {
 	Store      *k8s.Store
 	Users      *auth.UserStore
 	Secret     []byte
-	Alerts     *alert.Store
-	Dispatcher *alert.Dispatcher
+	Alerts          *alert.Store
+	Dispatcher      *alert.Dispatcher
+	Rsyslog         *rsyslog.Store
+	RsyslogDispatch *rsyslog.Dispatcher
 }
 
 // New builds the HTTP handler tree.
@@ -51,6 +54,7 @@ func New(cfg Config) http.Handler {
 		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
 		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
 		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
 
 		// Admin-only (writes)
 		r.Group(func(r chi.Router) {
@@ -73,6 +77,10 @@ func New(cfg Config) http.Handler {
 			r.Post("/api/alerts", createAlert(cfg.Alerts))
 			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
 			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+			r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
+			r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
+			r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
+			r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))
 		})
 	})
 

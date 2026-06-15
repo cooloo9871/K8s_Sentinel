@@ -1,0 +1,296 @@
+import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { rsyslogApi, type RsyslogConfig } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+const FACILITIES = [
+  { value: 16, label: 'local0' },
+  { value: 17, label: 'local1' },
+  { value: 18, label: 'local2' },
+  { value: 19, label: 'local3' },
+  { value: 20, label: 'local4' },
+  { value: 21, label: 'local5' },
+  { value: 22, label: 'local6' },
+  { value: 23, label: 'local7' },
+  { value: 3,  label: 'daemon' },
+  { value: 1,  label: 'user'   },
+]
+
+const EMPTY: Omit<RsyslogConfig, 'id'> = {
+  name: '', host: '', port: 514, protocol: 'udp',
+  facility: 16, severities: [], namespaces: [], policies: [], enabled: true,
+}
+
+function ConfigForm({
+  initial, onSave, onCancel, saving,
+}: {
+  initial: Omit<RsyslogConfig, 'id'>
+  onSave: (c: Omit<RsyslogConfig, 'id'>) => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const [form, setForm] = useState(initial)
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm(f => ({ ...f, [k]: v }))
+
+  const toggleSeverity = (s: string) =>
+    set('severities', form.severities.includes(s)
+      ? form.severities.filter(x => x !== s)
+      : [...form.severities, s])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My rsyslog" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Facility</Label>
+          <Select value={String(form.facility)} onValueChange={v => set('facility', parseInt(v))}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {FACILITIES.map(f => (
+                  <SelectItem key={f.value} value={String(f.value)}>{f.label} ({f.value})</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 flex flex-col gap-1">
+          <Label className="text-xs">Host <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm font-mono" value={form.host}
+            onChange={e => set('host', e.target.value)} placeholder="192.168.1.1" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Port</Label>
+          <Input className="h-8 text-sm" type="number" value={form.port}
+            onChange={e => set('port', parseInt(e.target.value) || 514)} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Protocol</Label>
+          <div className="flex gap-2">
+            {(['udp', 'tcp'] as const).map(p => (
+              <Button key={p} size="sm" variant={form.protocol === p ? 'default' : 'outline'}
+                className="h-7 text-xs uppercase" onClick={() => set('protocol', p)}>{p}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Severity</Label>
+          <div className="flex gap-4">
+            {(['warning', 'critical'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm capitalize">
+                <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                  checked={form.severities.includes(s)} onChange={() => toggleSeverity(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Namespaces <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.namespaces.join(',')}
+          onChange={e => set('namespaces', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="default, kube-system" />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Policies <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.policies.join(',')}
+          onChange={e => set('policies', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="monitor-all-exec, monitor-all-file" />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSave(form)}
+          disabled={saving || !form.name.trim() || !form.host.trim()}>
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function RsyslogPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+
+  const [configs, setConfigs] = useState<RsyslogConfig[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editTarget, setEditTarget] = useState<RsyslogConfig | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try { setConfigs(await rsyslogApi.list()) } catch { }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCreate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    setSaving(true)
+    try {
+      await rsyslogApi.create(form)
+      toast.success('rsyslog config created.')
+      setShowForm(false); load()
+    } catch { toast.error('Failed to create rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    if (!editTarget) return
+    setSaving(true)
+    try {
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
+      toast.success('rsyslog config updated.')
+      setEditTarget(null); load()
+    } catch { toast.error('Failed to update rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleToggle = async (cfg: RsyslogConfig) => {
+    try {
+      await rsyslogApi.update(cfg.id, { ...cfg, enabled: !cfg.enabled })
+      load()
+    } catch { toast.error('Failed to toggle config') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await rsyslogApi.delete(deleteTarget.id)
+      toast.success('rsyslog config deleted.')
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete rsyslog config') }
+  }
+
+  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }
+
+  const facilityLabel = (n: number) => FACILITIES.find(f => f.value === n)?.label ?? String(n)
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">rsyslog</h4>
+          <p className="text-sm text-muted-foreground">Forward Security Events to rsyslog servers.</p>
+        </div>
+        {isAdmin && !showForm && (
+          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>
+        )}
+      </div>
+
+      {isAdmin && showForm && !editTarget && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New rsyslog Config</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ConfigForm initial={EMPTY} onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
+          </CardContent>
+        </Card>
+      )}
+
+      {configs.length === 0 && !showForm && (
+        <p className="py-10 text-center text-sm text-muted-foreground">No rsyslog configs configured.</p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {configs.map(cfg => (
+          <Card key={cfg.id} className={cfg.enabled ? '' : 'opacity-60'}>
+            {isAdmin && editTarget?.id === cfg.id ? (
+              <CardContent className="pt-4">
+                <ConfigForm initial={editTarget} onSave={handleUpdate}
+                  onCancel={() => setEditTarget(null)} saving={saving} />
+              </CardContent>
+            ) : (
+              <>
+                <CardHeader className="border-b pb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-sm">{cfg.name}</span>
+                    <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                      {cfg.enabled ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
+                    {cfg.severities.map(s => (
+                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                    ))}
+                  </div>
+                  {isAdmin && (
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
+                        {testing === cfg.id ? 'Sending...' : 'Test'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleToggle(cfg)}>
+                        {cfg.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(cfg)}>Delete</Button>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+                  <p className="font-mono">{cfg.host}:{cfg.port} — facility: {facilityLabel(cfg.facility)}</p>
+                  <div className="flex gap-4">
+                    <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
+                    <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
+                  </div>
+                </CardContent>
+              </>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete rsyslog Config</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}

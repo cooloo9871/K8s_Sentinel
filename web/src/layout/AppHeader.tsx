@@ -47,6 +47,10 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
     { label: 'Notifications' },
     { label: 'Alerts' },
   ],
+  '/security/rsyslog': [
+    { label: 'Notifications' },
+    { label: 'rsyslog' },
+  ],
 }
 
 function useBreadcrumbs() {

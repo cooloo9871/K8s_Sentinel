@@ -8,6 +8,7 @@ import (
 	"github.com/cooloo9871/sentinel/internal/alert"
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/handler"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
 	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
 	sentinelweb "github.com/cooloo9871/sentinel/web"
 )
@@ -31,12 +32,18 @@ func main() {
 	dispatcher := alert.NewDispatcher(alerts, store)
 	go dispatcher.Run(context.Background())
 
+	rsyslogs := rsyslog.NewStore("/data/sentinel/rsyslog.json")
+	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store)
+	go rsyslogDispatch.Run(context.Background())
+
 	cfg := handler.Config{
-		Store:      store,
-		Users:      users,
-		Secret:     secret,
-		Alerts:     alerts,
-		Dispatcher: dispatcher,
+		Store:           store,
+		Users:           users,
+		Secret:          secret,
+		Alerts:          alerts,
+		Dispatcher:      dispatcher,
+		Rsyslog:         rsyslogs,
+		RsyslogDispatch: rsyslogDispatch,
 	}
 
 	mux := http.NewServeMux()

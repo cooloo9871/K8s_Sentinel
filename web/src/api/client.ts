@@ -96,6 +96,32 @@ export interface AlertRule {
   enabled: boolean
 }
 
+export interface RsyslogConfig {
+  id: string
+  name: string
+  host: string
+  port: number
+  protocol: 'udp' | 'tcp'
+  facility: number        // 16=local0 … 23=local7
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]
+  policies: string[]
+  enabled: boolean
+}
+
+export const rsyslogApi = {
+  list: (): Promise<RsyslogConfig[]> =>
+    api.get('/rsyslog').then((r) => r.data ?? []),
+  create: (cfg: Omit<RsyslogConfig, 'id'>): Promise<RsyslogConfig> =>
+    api.post('/rsyslog', cfg).then((r) => r.data),
+  update: (id: string, cfg: RsyslogConfig): Promise<RsyslogConfig> =>
+    api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/rsyslog/${id}`),
+  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),
+}
+
 export const alertsApi = {
   list: (): Promise<AlertRule[]> =>
     api.get('/alerts').then((r) => r.data ?? []),

@@ -79,6 +79,11 @@ export function AppSidebar() {
                   <NavLink to="/security/alerts">Alerts</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
+                  <NavLink to="/security/rsyslog">rsyslog</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

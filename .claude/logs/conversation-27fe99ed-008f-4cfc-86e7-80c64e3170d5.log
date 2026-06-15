@@ -506556,3 +506556,4525 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: remove Namespaces page from Cluster section
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit removal"
+  },
+  "tool_response": {
+    "stdout": "[main dfdeb47] feat: remove Namespaces page from Cluster section
+ 4 files changed, 1587 insertions(+), 89 deletions(-)
+ delete mode 100644 web/src/pages/NamespacesPage.tsx",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "dfdeb47",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "我看 Security Events 一直持續有收 event 進來，但為何上面顯示的 events 比數感覺沒有同步一起增加？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "你這三個原因都不是"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "1. Security Events 的 list 有新的 row 出現，但 count 數字沒跟上"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "然後我看 process rule 並沒有等 30 秒才觸發同一筆 rule 啊？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "如果我按 pause 後，那我這時 export csv ，還沒進來的 event 會被匯出來嗎？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "我要新增 rsyslog 功能，他放在 Notifications 底下，這個功能是可以把 Security Events 記錄的 event 丟到 rsyslog.service 服務，並且可以 event 等級，和篩選條件來丟到 rsyslog.service 服務"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls /home/bigred/Sentinel/internal/",
+    "description": "Check internal directory structure"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls /home/bigred/Sentinel/internal/",
+    "description": "Check internal directory structure"
+  },
+  "tool_response": {
+    "stdout": "alert
+auth
+handler
+k8s
+policy",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/store.go",
+    "content": "package rsyslog
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"sync"
+)
+
+type Config struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Host       string   `json:"host"`
+	Port       int      `json:"port"`       // default 514
+	Protocol   string   `json:"protocol"`   // "udp" or "tcp"
+	Facility   int      `json:"facility"`   // syslog facility number (16=local0 … 23=local7)
+	Severities []string `json:"severities"` // ["warning","critical"], empty = all
+	Namespaces []string `json:"namespaces"` // empty = all
+	Policies   []string `json:"policies"`   // empty = all
+	Enabled    bool     `json:"enabled"`
+}
+
+type configFile struct {
+	Configs []Config `json:"configs"`
+}
+
+type Store struct {
+	mu      sync.RWMutex
+	configs map[string]Config
+	path    string
+}
+
+func NewStore(path string) *Store {
+	s := &Store{path: path, configs: make(map[string]Config)}
+	s.load()
+	return s
+}
+
+func (s *Store) load() {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return
+	}
+	var f configFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		return
+	}
+	for _, c := range f.Configs {
+		s.configs[c.ID] = c
+	}
+}
+
+func (s *Store) flush() {
+	configs := make([]Config, 0, len(s.configs))
+	for _, c := range s.configs {
+		configs = append(configs, c)
+	}
+	data, err := json.Marshal(configFile{Configs: configs})
+	if err != nil {
+		log.Printf("rsyslog: flush marshal error: %v", err)
+		return
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		log.Printf("rsyslog: flush write error: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		log.Printf("rsyslog: flush rename error: %v", err)
+	}
+}
+
+func (s *Store) List() []Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Config, 0, len(s.configs))
+	for _, c := range s.configs {
+		out = append(out, c)
+	}
+	return out
+}
+
+func (s *Store) Create(c Config) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.configs[c.ID]; exists {
+		return fmt.Errorf("config %q already exists", c.ID)
+	}
+	if c.Port == 0 {
+		c.Port = 514
+	}
+	if c.Protocol == "" {
+		c.Protocol = "udp"
+	}
+	s.configs[c.ID] = c
+	s.flush()
+	return nil
+}
+
+func (s *Store) Update(c Config) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.configs[c.ID]; !ok {
+		return false
+	}
+	s.configs[c.ID] = c
+	s.flush()
+	return true
+}
+
+func (s *Store) Delete(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.configs[id]; !ok {
+		return false
+	}
+	delete(s.configs, id)
+	s.flush()
+	return true
+}
+
+func (s *Store) EnabledConfigs() []Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []Config
+	for _, c := range s.configs {
+		if c.Enabled {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (c Config) Matches(severity, namespace, policy string) bool {
+	if len(c.Severities) > 0 && !contains(c.Severities, severity) {
+		return false
+	}
+	if len(c.Namespaces) > 0 && !contains(c.Namespaces, namespace) {
+		return false
+	}
+	if len(c.Policies) > 0 && !contains(c.Policies, policy) {
+		return false
+	}
+	return true
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/store.go",
+    "content": "package rsyslog
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"sync"
+)
+
+type Config struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Host       string   `json:"host"`
+	Port       int      `json:"port"`       // default 514
+	Protocol   string   `json:"protocol"`   // "udp" or "tcp"
+	Facility   int      `json:"facility"`   // syslog facility number (16=local0 … 23=local7)
+	Severities []string `json:"severities"` // ["warning","critical"], empty = all
+	Namespaces []string `json:"namespaces"` // empty = all
+	Policies   []string `json:"policies"`   // empty = all
+	Enabled    bool     `json:"enabled"`
+}
+
+type configFile struct {
+	Configs []Config `json:"configs"`
+}
+
+type Store struct {
+	mu      sync.RWMutex
+	configs map[string]Config
+	path    string
+}
+
+func NewStore(path string) *Store {
+	s := &Store{path: path, configs: make(map[string]Config)}
+	s.load()
+	return s
+}
+
+func (s *Store) load() {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return
+	}
+	var f configFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		return
+	}
+	for _, c := range f.Configs {
+		s.configs[c.ID] = c
+	}
+}
+
+func (s *Store) flush() {
+	configs := make([]Config, 0, len(s.configs))
+	for _, c := range s.configs {
+		configs = append(configs, c)
+	}
+	data, err := json.Marshal(configFile{Configs: configs})
+	if err != nil {
+		log.Printf("rsyslog: flush marshal error: %v", err)
+		return
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		log.Printf("rsyslog: flush write error: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		log.Printf("rsyslog: flush rename error: %v", err)
+	}
+}
+
+func (s *Store) List() []Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Config, 0, len(s.configs))
+	for _, c := range s.configs {
+		out = append(out, c)
+	}
+	return out
+}
+
+func (s *Store) Create(c Config) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.configs[c.ID]; exists {
+		return fmt.Errorf("config %q already exists", c.ID)
+	}
+	if c.Port == 0 {
+		c.Port = 514
+	}
+	if c.Protocol == "" {
+		c.Protocol = "udp"
+	}
+	s.configs[c.ID] = c
+	s.flush()
+	return nil
+}
+
+func (s *Store) Update(c Config) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.configs[c.ID]; !ok {
+		return false
+	}
+	s.configs[c.ID] = c
+	s.flush()
+	return true
+}
+
+func (s *Store) Delete(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.configs[id]; !ok {
+		return false
+	}
+	delete(s.configs, id)
+	s.flush()
+	return true
+}
+
+func (s *Store) EnabledConfigs() []Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []Config
+	for _, c := range s.configs {
+		if c.Enabled {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (c Config) Matches(severity, namespace, policy string) bool {
+	if len(c.Severities) > 0 && !contains(c.Severities, severity) {
+		return false
+	}
+	if len(c.Namespaces) > 0 && !contains(c.Namespaces, namespace) {
+		return false
+	}
+	if len(c.Policies) > 0 && !contains(c.Policies, policy) {
+		return false
+	}
+	return true
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/internal/rsyslog/store.go",
+    "content": "package rsyslog
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"sync"
+)
+
+type Config struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Host       string   `json:"host"`
+	Port       int      `json:"port"`       // default 514
+	Protocol   string   `json:"protocol"`   // "udp" or "tcp"
+	Facility   int      `json:"facility"`   // syslog facility number (16=local0 … 23=local7)
+	Severities []string `json:"severities"` // ["warning","critical"], empty = all
+	Namespaces []string `json:"namespaces"` // empty = all
+	Policies   []string `json:"policies"`   // empty = all
+	Enabled    bool     `json:"enabled"`
+}
+
+type configFile struct {
+	Configs []Config `json:"configs"`
+}
+
+type Store struct {
+	mu      sync.RWMutex
+	configs map[string]Config
+	path    string
+}
+
+func NewStore(path string) *Store {
+	s := &Store{path: path, configs: make(map[string]Config)}
+	s.load()
+	return s
+}
+
+func (s *Store) load() {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return
+	}
+	var f configFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		return
+	}
+	for _, c := range f.Configs {
+		s.configs[c.ID] = c
+	}
+}
+
+func (s *Store) flush() {
+	configs := make([]Config, 0, len(s.configs))
+	for _, c := range s.configs {
+		configs = append(configs, c)
+	}
+	data, err := json.Marshal(configFile{Configs: configs})
+	if err != nil {
+		log.Printf("rsyslog: flush marshal error: %v", err)
+		return
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		log.Printf("rsyslog: flush write error: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		log.Printf("rsyslog: flush rename error: %v", err)
+	}
+}
+
+func (s *Store) List() []Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Config, 0, len(s.configs))
+	for _, c := range s.configs {
+		out = append(out, c)
+	}
+	return out
+}
+
+func (s *Store) Create(c Config) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.configs[c.ID]; exists {
+		return fmt.Errorf("config %q already exists", c.ID)
+	}
+	if c.Port == 0 {
+		c.Port = 514
+	}
+	if c.Protocol == "" {
+		c.Protocol = "udp"
+	}
+	s.configs[c.ID] = c
+	s.flush()
+	return nil
+}
+
+func (s *Store) Update(c Config) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.configs[c.ID]; !ok {
+		return false
+	}
+	s.configs[c.ID] = c
+	s.flush()
+	return true
+}
+
+func (s *Store) Delete(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.configs[id]; !ok {
+		return false
+	}
+	delete(s.configs, id)
+	s.flush()
+	return true
+}
+
+func (s *Store) EnabledConfigs() []Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []Config
+	for _, c := range s.configs {
+		if c.Enabled {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (c Config) Matches(severity, namespace, policy string) bool {
+	if len(c.Severities) > 0 && !contains(c.Severities, severity) {
+		return false
+	}
+	if len(c.Namespaces) > 0 && !contains(c.Namespaces, namespace) {
+		return false
+	}
+	if len(c.Policies) > 0 && !contains(c.Policies, policy) {
+		return false
+	}
+	return true
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "content": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "content": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "content": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/rsyslog.go",
+    "content": "package handler
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)
+
+func listRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.List())
+	}
+}
+
+func createRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Name == "" || cfg.Host == "" {
+			http.Error(w, "name and host required", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = fmt.Sprintf("rsyslog-%d", time.Now().UnixMilli())
+		if err := store.Create(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		writeJSON(w, http.StatusCreated, cfg)
+	}
+}
+
+func updateRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = id
+		if !store.Update(cfg) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	}
+}
+
+func deleteRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if !store.Delete(id) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func testRsyslog(disp *rsyslog.Dispatcher) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Host == "" {
+			http.Error(w, "host required", http.StatusBadRequest)
+			return
+		}
+		if cfg.Port == 0 {
+			cfg.Port = 514
+		}
+		if cfg.Protocol == "" {
+			cfg.Protocol = "udp"
+		}
+		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/rsyslog.go",
+    "content": "package handler
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)
+
+func listRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.List())
+	}
+}
+
+func createRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Name == "" || cfg.Host == "" {
+			http.Error(w, "name and host required", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = fmt.Sprintf("rsyslog-%d", time.Now().UnixMilli())
+		if err := store.Create(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		writeJSON(w, http.StatusCreated, cfg)
+	}
+}
+
+func updateRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = id
+		if !store.Update(cfg) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	}
+}
+
+func deleteRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if !store.Delete(id) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func testRsyslog(disp *rsyslog.Dispatcher) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Host == "" {
+			http.Error(w, "host required", http.StatusBadRequest)
+			return
+		}
+		if cfg.Port == 0 {
+			cfg.Port = 514
+		}
+		if cfg.Protocol == "" {
+			cfg.Protocol = "udp"
+		}
+		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/internal/handler/rsyslog.go",
+    "content": "package handler
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)
+
+func listRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.List())
+	}
+}
+
+func createRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Name == "" || cfg.Host == "" {
+			http.Error(w, "name and host required", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = fmt.Sprintf("rsyslog-%d", time.Now().UnixMilli())
+		if err := store.Create(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		writeJSON(w, http.StatusCreated, cfg)
+	}
+}
+
+func updateRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = id
+		if !store.Update(cfg) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	}
+}
+
+func deleteRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if !store.Delete(id) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func testRsyslog(disp *rsyslog.Dispatcher) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Host == "" {
+			http.Error(w, "host required", http.StatusBadRequest)
+			return
+		}
+		if cfg.Port == 0 {
+			cfg.Port = 514
+		}
+		if cfg.Protocol == "" {
+			cfg.Protocol = "udp"
+		}
+		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "new_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "new_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "oldString": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)",
+    "newString": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store      *k8s.Store
+	Users      *auth.UserStore
+	Secret     []byte
+	Alerts     *alert.Store
+	Dispatcher *alert.Dispatcher
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	// Public
+	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
+	r.Post("/api/auth/logout", logoutHandler())
+
+	// Authenticated routes
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware(cfg.Secret))
+
+		// Viewer + Admin (read-only)
+		r.Get("/api/auth/me", meHandler())
+		r.Get("/api/policies", listPolicies(cfg.Store))
+		r.Post("/api/policies/preview", previewPolicy)
+		r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+		r.Get("/api/namespaces", listNamespaces(cfg.Store))
+		r.Get("/api/mode", getMode(cfg.Store))
+		r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
+		r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
+		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
+		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
+		r.Get("/api/templates", listTemplates(cfg.Store))
+		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
+		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
+		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
+		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+
+		// Admin-only (writes)
+		r.Group(func(r chi.Router) {
+			r.Use(adminOnly)
+
+			r.Post("/api/policies", createPolicy(cfg.Store))
+			r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+			r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
+			r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+			r.Put("/api/mode", setMode(cfg.Store))
+			r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
+			r.Post("/api/templates", createTemplate(cfg.Store))
+			r.Put("/api/templates/{id}", updateTemplate(cfg.Store))
+			r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
+			r.Get("/api/users", listUsersHandler(cfg.Users))
+			r.Post("/api/users", createUserHandler(cfg.Users))
+			r.Delete("/api/users/{username}", deleteUserHandler(cfg.Users))
+			r.Put("/api/settings/session-ttl", setSessionTTLHandler(cfg.Users))
+			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+		})
+	})
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 10,
+        "oldLines": 6,
+        "newStart": 10,
+        "newLines": 7,
+        "lines": [
+          "   "github.com/cooloo9871/sentinel/internal/alert"",
+          "   "github.com/cooloo9871/sentinel/internal/auth"",
+          "   "github.com/cooloo9871/sentinel/internal/k8s"",
+          "+  "github.com/cooloo9871/sentinel/internal/rsyslog"",
+          " )",
+          " ",
+          " // Config holds dependencies for all handlers."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	Alerts     *alert.Store
+	Dispatcher *alert.Dispatcher",
+    "new_string": "	Alerts          *alert.Store
+	Dispatcher      *alert.Dispatcher
+	Rsyslog         *rsyslog.Store
+	RsyslogDispatch *rsyslog.Dispatcher",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "	Alerts     *alert.Store
+	Dispatcher *alert.Dispatcher",
+    "new_string": "	Alerts          *alert.Store
+	Dispatcher      *alert.Dispatcher
+	Rsyslog         *rsyslog.Store
+	RsyslogDispatch *rsyslog.Dispatcher",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "oldString": "	Alerts     *alert.Store
+	Dispatcher *alert.Dispatcher",
+    "newString": "	Alerts          *alert.Store
+	Dispatcher      *alert.Dispatcher
+	Rsyslog         *rsyslog.Store
+	RsyslogDispatch *rsyslog.Dispatcher",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store      *k8s.Store
+	Users      *auth.UserStore
+	Secret     []byte
+	Alerts     *alert.Store
+	Dispatcher *alert.Dispatcher
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	// Public
+	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
+	r.Post("/api/auth/logout", logoutHandler())
+
+	// Authenticated routes
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware(cfg.Secret))
+
+		// Viewer + Admin (read-only)
+		r.Get("/api/auth/me", meHandler())
+		r.Get("/api/policies", listPolicies(cfg.Store))
+		r.Post("/api/policies/preview", previewPolicy)
+		r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+		r.Get("/api/namespaces", listNamespaces(cfg.Store))
+		r.Get("/api/mode", getMode(cfg.Store))
+		r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
+		r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
+		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
+		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
+		r.Get("/api/templates", listTemplates(cfg.Store))
+		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
+		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
+		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
+		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+
+		// Admin-only (writes)
+		r.Group(func(r chi.Router) {
+			r.Use(adminOnly)
+
+			r.Post("/api/policies", createPolicy(cfg.Store))
+			r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+			r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
+			r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+			r.Put("/api/mode", setMode(cfg.Store))
+			r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
+			r.Post("/api/templates", createTemplate(cfg.Store))
+			r.Put("/api/templates/{id}", updateTemplate(cfg.Store))
+			r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
+			r.Get("/api/users", listUsersHandler(cfg.Users))
+			r.Post("/api/users", createUserHandler(cfg.Users))
+			r.Delete("/api/users/{username}", deleteUserHandler(cfg.Users))
+			r.Put("/api/settings/session-ttl", setSessionTTLHandler(cfg.Users))
+			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+		})
+	})
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 18,
+        "oldLines": 8,
+        "newStart": 18,
+        "newLines": 10,
+        "lines": [
+          "   Store      *k8s.Store",
+          "   Users      *auth.UserStore",
+          "   Secret     []byte",
+          "-  Alerts     *alert.Store",
+          "-  Dispatcher *alert.Dispatcher",
+          "+  Alerts          *alert.Store",
+          "+  Dispatcher      *alert.Dispatcher",
+          "+  Rsyslog         *rsyslog.Store",
+          "+  RsyslogDispatch *rsyslog.Dispatcher",
+          " }",
+          " ",
+          " // New builds the HTTP handler tree."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "		r.Get("/api/alerts", listAlerts(cfg.Alerts))",
+    "new_string": "		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "		r.Get("/api/alerts", listAlerts(cfg.Alerts))",
+    "new_string": "		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "oldString": "		r.Get("/api/alerts", listAlerts(cfg.Alerts))",
+    "newString": "		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store      *k8s.Store
+	Users      *auth.UserStore
+	Secret     []byte
+	Alerts          *alert.Store
+	Dispatcher      *alert.Dispatcher
+	Rsyslog         *rsyslog.Store
+	RsyslogDispatch *rsyslog.Dispatcher
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	// Public
+	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
+	r.Post("/api/auth/logout", logoutHandler())
+
+	// Authenticated routes
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware(cfg.Secret))
+
+		// Viewer + Admin (read-only)
+		r.Get("/api/auth/me", meHandler())
+		r.Get("/api/policies", listPolicies(cfg.Store))
+		r.Post("/api/policies/preview", previewPolicy)
+		r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+		r.Get("/api/namespaces", listNamespaces(cfg.Store))
+		r.Get("/api/mode", getMode(cfg.Store))
+		r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
+		r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
+		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
+		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
+		r.Get("/api/templates", listTemplates(cfg.Store))
+		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
+		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
+		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
+		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+
+		// Admin-only (writes)
+		r.Group(func(r chi.Router) {
+			r.Use(adminOnly)
+
+			r.Post("/api/policies", createPolicy(cfg.Store))
+			r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+			r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
+			r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+			r.Put("/api/mode", setMode(cfg.Store))
+			r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
+			r.Post("/api/templates", createTemplate(cfg.Store))
+			r.Put("/api/templates/{id}", updateTemplate(cfg.Store))
+			r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
+			r.Get("/api/users", listUsersHandler(cfg.Users))
+			r.Post("/api/users", createUserHandler(cfg.Users))
+			r.Delete("/api/users/{username}", deleteUserHandler(cfg.Users))
+			r.Put("/api/settings/session-ttl", setSessionTTLHandler(cfg.Users))
+			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+		})
+	})
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 54,
+        "oldLines": 6,
+        "newStart": 54,
+        "newLines": 7,
+        "lines": [
+          "     r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))",
+          "     r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))",
+          "     r.Get("/api/alerts", listAlerts(cfg.Alerts))",
+          "+    r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))",
+          " ",
+          "     // Admin-only (writes)",
+          "     r.Group(func(r chi.Router) {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))",
+    "new_string": "			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+			r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
+			r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
+			r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
+			r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "old_string": "			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))",
+    "new_string": "			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+			r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
+			r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
+			r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
+			r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/handler.go",
+    "oldString": "			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))",
+    "newString": "			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+			r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
+			r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
+			r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
+			r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)
+
+// Config holds dependencies for all handlers.
+type Config struct {
+	Store      *k8s.Store
+	Users      *auth.UserStore
+	Secret     []byte
+	Alerts          *alert.Store
+	Dispatcher      *alert.Dispatcher
+	Rsyslog         *rsyslog.Store
+	RsyslogDispatch *rsyslog.Dispatcher
+}
+
+// New builds the HTTP handler tree.
+func New(cfg Config) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	// Public
+	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
+	r.Post("/api/auth/logout", logoutHandler())
+
+	// Authenticated routes
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware(cfg.Secret))
+
+		// Viewer + Admin (read-only)
+		r.Get("/api/auth/me", meHandler())
+		r.Get("/api/policies", listPolicies(cfg.Store))
+		r.Post("/api/policies/preview", previewPolicy)
+		r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+		r.Get("/api/namespaces", listNamespaces(cfg.Store))
+		r.Get("/api/mode", getMode(cfg.Store))
+		r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
+		r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
+		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
+		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
+		r.Get("/api/templates", listTemplates(cfg.Store))
+		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
+		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
+		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
+		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
+
+		// Admin-only (writes)
+		r.Group(func(r chi.Router) {
+			r.Use(adminOnly)
+
+			r.Post("/api/policies", createPolicy(cfg.Store))
+			r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+			r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
+			r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+			r.Put("/api/mode", setMode(cfg.Store))
+			r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
+			r.Post("/api/templates", createTemplate(cfg.Store))
+			r.Put("/api/templates/{id}", updateTemplate(cfg.Store))
+			r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
+			r.Get("/api/users", listUsersHandler(cfg.Users))
+			r.Post("/api/users", createUserHandler(cfg.Users))
+			r.Delete("/api/users/{username}", deleteUserHandler(cfg.Users))
+			r.Put("/api/settings/session-ttl", setSessionTTLHandler(cfg.Users))
+			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
+		})
+	})
+
+	return r
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 77,
+        "oldLines": 6,
+        "newStart": 77,
+        "newLines": 10,
+        "lines": [
+          "       r.Post("/api/alerts", createAlert(cfg.Alerts))",
+          "       r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))",
+          "       r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))",
+          "+      r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))",
+          "+      r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))",
+          "+      r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))",
+          "+      r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))",
+          "     })",
+          "   })",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"",
+    "new_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"",
+    "new_string": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/cmd/server/main.go",
+    "oldString": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"",
+    "newString": "	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"",
+    "originalFile": "package main
+
+import (
+	"context"
+	"io/fs"
+	"log"
+	"net/http"
+	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
+	sentinelweb "github.com/cooloo9871/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+	store.StartDiscoveryLoop(context.Background())
+
+	users := auth.NewUserStore("/data/sentinel/users.json")
+	secret, err := auth.LoadOrCreateSecret("/data/sentinel/.jwt-secret")
+	if err != nil {
+		log.Fatalf("jwt secret: %v", err)
+	}
+
+	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:      store,
+		Users:      users,
+		Secret:     secret,
+		Alerts:     alerts,
+		Dispatcher: dispatcher,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	log.Printf("starting sentinel on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 8,
+        "oldLines": 6,
+        "newStart": 8,
+        "newLines": 7,
+        "lines": [
+          "   "github.com/cooloo9871/sentinel/internal/alert"",
+          "   "github.com/cooloo9871/sentinel/internal/auth"",
+          "   "github.com/cooloo9871/sentinel/internal/handler"",
+          "+  "github.com/cooloo9871/sentinel/internal/rsyslog"",
+          "   k8sclient "github.com/cooloo9871/sentinel/internal/k8s"",
+          "   sentinelweb "github.com/cooloo9871/sentinel/web"",
+          " )"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:      store,
+		Users:      users,
+		Secret:     secret,
+		Alerts:     alerts,
+		Dispatcher: dispatcher,
+	}",
+    "new_string": "	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	rsyslogs := rsyslog.NewStore("/data/sentinel/rsyslog.json")
+	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store)
+	go rsyslogDispatch.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:           store,
+		Users:           users,
+		Secret:          secret,
+		Alerts:          alerts,
+		Dispatcher:      dispatcher,
+		Rsyslog:         rsyslogs,
+		RsyslogDispatch: rsyslogDispatch,
+	}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:      store,
+		Users:      users,
+		Secret:     secret,
+		Alerts:     alerts,
+		Dispatcher: dispatcher,
+	}",
+    "new_string": "	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	rsyslogs := rsyslog.NewStore("/data/sentinel/rsyslog.json")
+	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store)
+	go rsyslogDispatch.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:           store,
+		Users:           users,
+		Secret:          secret,
+		Alerts:          alerts,
+		Dispatcher:      dispatcher,
+		Rsyslog:         rsyslogs,
+		RsyslogDispatch: rsyslogDispatch,
+	}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/cmd/server/main.go",
+    "oldString": "	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:      store,
+		Users:      users,
+		Secret:     secret,
+		Alerts:     alerts,
+		Dispatcher: dispatcher,
+	}",
+    "newString": "	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	rsyslogs := rsyslog.NewStore("/data/sentinel/rsyslog.json")
+	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store)
+	go rsyslogDispatch.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:           store,
+		Users:           users,
+		Secret:          secret,
+		Alerts:          alerts,
+		Dispatcher:      dispatcher,
+		Rsyslog:         rsyslogs,
+		RsyslogDispatch: rsyslogDispatch,
+	}",
+    "originalFile": "package main
+
+import (
+	"context"
+	"io/fs"
+	"log"
+	"net/http"
+	"github.com/cooloo9871/sentinel/internal/alert"
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
+	sentinelweb "github.com/cooloo9871/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+	store.StartDiscoveryLoop(context.Background())
+
+	users := auth.NewUserStore("/data/sentinel/users.json")
+	secret, err := auth.LoadOrCreateSecret("/data/sentinel/.jwt-secret")
+	if err != nil {
+		log.Fatalf("jwt secret: %v", err)
+	}
+
+	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
+	cfg := handler.Config{
+		Store:      store,
+		Users:      users,
+		Secret:     secret,
+		Alerts:     alerts,
+		Dispatcher: dispatcher,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	log.Printf("starting sentinel on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 32,
+        "oldLines": 12,
+        "newStart": 32,
+        "newLines": 18,
+        "lines": [
+          "   dispatcher := alert.NewDispatcher(alerts, store)",
+          "   go dispatcher.Run(context.Background())",
+          " ",
+          "+  rsyslogs := rsyslog.NewStore("/data/sentinel/rsyslog.json")",
+          "+  rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store)",
+          "+  go rsyslogDispatch.Run(context.Background())",
+          "+",
+          "   cfg := handler.Config{",
+          "-    Store:      store,",
+          "-    Users:      users,",
+          "-    Secret:     secret,",
+          "-    Alerts:     alerts,",
+          "-    Dispatcher: dispatcher,",
+          "+    Store:           store,",
+          "+    Users:           users,",
+          "+    Secret:          secret,",
+          "+    Alerts:          alerts,",
+          "+    Dispatcher:      dispatcher,",
+          "+    Rsyslog:         rsyslogs,",
+          "+    RsyslogDispatch: rsyslogDispatch,",
+          "   }",
+          " ",
+          "   mux := http.NewServeMux()"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "GOTOOLCHAIN=local go build ./... 2>&1",
+    "description": "Verify Go build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "GOTOOLCHAIN=local go build ./... 2>&1",
+    "description": "Verify Go build"
+  },
+  "tool_response": {
+    "error": "Exit code 1
+go: go.mod requires go >= 1.26 (running go 1.22.2; GOTOOLCHAIN=local)",
+    "is_interrupt": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -r "rsyslog" /home/bigred/Sentinel/internal/ --include="*.go" -l && echo "syntax check passed"",
+    "description": "Quick check files exist"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -r "rsyslog" /home/bigred/Sentinel/internal/ --include="*.go" -l && echo "syntax check passed"",
+    "description": "Quick check files exist"
+  },
+  "tool_response": {
+    "stdout": "/home/bigred/Sentinel/internal/rsyslog/store.go
+/home/bigred/Sentinel/internal/handler/rsyslog.go
+/home/bigred/Sentinel/internal/handler/handler.go
+/home/bigred/Sentinel/internal/rsyslog/dispatcher.go
+syntax check passed",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const alertsApi = {",
+    "new_string": "export interface RsyslogConfig {
+  id: string
+  name: string
+  host: string
+  port: number
+  protocol: 'udp' | 'tcp'
+  facility: number        // 16=local0 … 23=local7
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]
+  policies: string[]
+  enabled: boolean
+}
+
+export const rsyslogApi = {
+  list: (): Promise<RsyslogConfig[]> =>
+    api.get('/rsyslog').then((r) => r.data ?? []),
+  create: (cfg: Omit<RsyslogConfig, 'id'>): Promise<RsyslogConfig> =>
+    api.post('/rsyslog', cfg).then((r) => r.data),
+  update: (id: string, cfg: RsyslogConfig): Promise<RsyslogConfig> =>
+    api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/rsyslog/${id}`),
+  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),
+}
+
+export const alertsApi = {",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "export const alertsApi = {",
+    "new_string": "export interface RsyslogConfig {
+  id: string
+  name: string
+  host: string
+  port: number
+  protocol: 'udp' | 'tcp'
+  facility: number        // 16=local0 … 23=local7
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]
+  policies: string[]
+  enabled: boolean
+}
+
+export const rsyslogApi = {
+  list: (): Promise<RsyslogConfig[]> =>
+    api.get('/rsyslog').then((r) => r.data ?? []),
+  create: (cfg: Omit<RsyslogConfig, 'id'>): Promise<RsyslogConfig> =>
+    api.post('/rsyslog', cfg).then((r) => r.data),
+  update: (id: string, cfg: RsyslogConfig): Promise<RsyslogConfig> =>
+    api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/rsyslog/${id}`),
+  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),
+}
+
+export const alertsApi = {",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "export const alertsApi = {",
+    "newString": "export interface RsyslogConfig {
+  id: string
+  name: string
+  host: string
+  port: number
+  protocol: 'udp' | 'tcp'
+  facility: number        // 16=local0 … 23=local7
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]
+  policies: string[]
+  enabled: boolean
+}
+
+export const rsyslogApi = {
+  list: (): Promise<RsyslogConfig[]> =>
+    api.get('/rsyslog').then((r) => r.data ?? []),
+  create: (cfg: Omit<RsyslogConfig, 'id'>): Promise<RsyslogConfig> =>
+    api.post('/rsyslog', cfg).then((r) => r.data),
+  update: (id: string, cfg: RsyslogConfig): Promise<RsyslogConfig> =>
+    api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/rsyslog/${id}`),
+  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),
+}
+
+export const alertsApi = {",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}
+
+export interface CustomTemplatePayload {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  yaml: string
+}
+
+export interface AuthUser {
+  username: string
+  role: 'admin' | 'viewer'
+}
+
+export const authApi = {
+  login: (username: string, password: string): Promise<AuthUser> =>
+    api.post('/auth/login', { username, password }).then((r) => r.data),
+  logout: (): Promise<void> =>
+    api.post('/auth/logout'),
+  me: (): Promise<AuthUser> =>
+    api.get('/auth/me').then((r) => r.data),
+}
+
+export interface UserRecord {
+  username: string
+  role: 'admin' | 'viewer'
+  createdAt: string
+}
+
+export const userApi = {
+  list: (): Promise<UserRecord[]> =>
+    api.get('/users').then((r) => r.data),
+  create: (username: string, password: string, role: 'admin' | 'viewer'): Promise<void> =>
+    api.post('/users', { username, password, role }),
+  delete: (username: string): Promise<void> =>
+    api.delete(`/users/${username}`),
+  changePassword: (username: string, password: string): Promise<void> =>
+    api.put(`/users/${username}/password`, { password }),
+}
+
+export interface AlertRule {
+  id: string
+  name: string
+  webhookURL: string
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]   // empty = all
+  policies: string[]     // empty = all
+  cooldownMin: number    // 0 = no cooldown
+  enabled: boolean
+}
+
+export const alertsApi = {
+  list: (): Promise<AlertRule[]> =>
+    api.get('/alerts').then((r) => r.data ?? []),
+  create: (rule: Omit<AlertRule, 'id'>): Promise<AlertRule> =>
+    api.post('/alerts', rule).then((r) => r.data),
+  update: (id: string, rule: AlertRule): Promise<AlertRule> =>
+    api.put(`/alerts/${id}`, rule).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/alerts/${id}`),
+  test: (webhookURL: string): Promise<void> =>
+    api.post('/alerts/test', { webhookURL }),
+}
+
+export const clusterApi = {
+  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),
+}
+
+export const settingsApi = {
+  getSessionTTL: (): Promise<{ sessionTTL: number }> =>
+    api.get('/settings/session-ttl').then((r) => r.data),
+  setSessionTTL: (seconds: number): Promise<void> =>
+    api.put('/settings/session-ttl', { sessionTTL: seconds }),
+}
+
+export const templateApi = {
+  list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
+    api.get('/templates').then((r) => r.data),
+  create: (t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.post('/templates', t).then((r) => r.data),
+  update: (id: string, t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.put(`/templates/${id}`, t).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/templates/${id}`),
+}
+
+",
+    "structuredPatch": [
+      {
+        "oldStart": 96,
+        "oldLines": 6,
+        "newStart": 96,
+        "newLines": 32,
+        "lines": [
+          "   enabled: boolean",
+          " }",
+          " ",
+          "+export interface RsyslogConfig {",
+          "+  id: string",
+          "+  name: string",
+          "+  host: string",
+          "+  port: number",
+          "+  protocol: 'udp' | 'tcp'",
+          "+  facility: number        // 16=local0 … 23=local7",
+          "+  severities: string[]   // ["warning","critical"], empty = all",
+          "+  namespaces: string[]",
+          "+  policies: string[]",
+          "+  enabled: boolean",
+          "+}",
+          "+",
+          "+export const rsyslogApi = {",
+          "+  list: (): Promise<RsyslogConfig[]> =>",
+          "+    api.get('/rsyslog').then((r) => r.data ?? []),",
+          "+  create: (cfg: Omit<RsyslogConfig, 'id'>): Promise<RsyslogConfig> =>",
+          "+    api.post('/rsyslog', cfg).then((r) => r.data),",
+          "+  update: (id: string, cfg: RsyslogConfig): Promise<RsyslogConfig> =>",
+          "+    api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),",
+          "+  delete: (id: string): Promise<void> =>",
+          "+    api.delete(`/rsyslog/${id}`),",
+          "+  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>",
+          "+    api.post('/rsyslog/test', cfg),",
+          "+}",
+          "+",
+          " export const alertsApi = {",
+          "   list: (): Promise<AlertRule[]> =>",
+          "     api.get('/alerts').then((r) => r.data ?? []),"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "content": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { rsyslogApi, type RsyslogConfig } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+const FACILITIES = [
+  { value: 16, label: 'local0' },
+  { value: 17, label: 'local1' },
+  { value: 18, label: 'local2' },
+  { value: 19, label: 'local3' },
+  { value: 20, label: 'local4' },
+  { value: 21, label: 'local5' },
+  { value: 22, label: 'local6' },
+  { value: 23, label: 'local7' },
+  { value: 3,  label: 'daemon' },
+  { value: 1,  label: 'user'   },
+]
+
+const EMPTY: Omit<RsyslogConfig, 'id'> = {
+  name: '', host: '', port: 514, protocol: 'udp',
+  facility: 16, severities: [], namespaces: [], policies: [], enabled: true,
+}
+
+function ConfigForm({
+  initial, onSave, onCancel, saving,
+}: {
+  initial: Omit<RsyslogConfig, 'id'>
+  onSave: (c: Omit<RsyslogConfig, 'id'>) => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const [form, setForm] = useState(initial)
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm(f => ({ ...f, [k]: v }))
+
+  const toggleSeverity = (s: string) =>
+    set('severities', form.severities.includes(s)
+      ? form.severities.filter(x => x !== s)
+      : [...form.severities, s])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My rsyslog" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Facility</Label>
+          <Select value={String(form.facility)} onValueChange={v => set('facility', parseInt(v))}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {FACILITIES.map(f => (
+                  <SelectItem key={f.value} value={String(f.value)}>{f.label} ({f.value})</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 flex flex-col gap-1">
+          <Label className="text-xs">Host <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm font-mono" value={form.host}
+            onChange={e => set('host', e.target.value)} placeholder="192.168.1.1" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Port</Label>
+          <Input className="h-8 text-sm" type="number" value={form.port}
+            onChange={e => set('port', parseInt(e.target.value) || 514)} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Protocol</Label>
+          <div className="flex gap-2">
+            {(['udp', 'tcp'] as const).map(p => (
+              <Button key={p} size="sm" variant={form.protocol === p ? 'default' : 'outline'}
+                className="h-7 text-xs uppercase" onClick={() => set('protocol', p)}>{p}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Severity</Label>
+          <div className="flex gap-4">
+            {(['warning', 'critical'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm capitalize">
+                <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                  checked={form.severities.includes(s)} onChange={() => toggleSeverity(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Namespaces <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.namespaces.join(',')}
+          onChange={e => set('namespaces', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="default, kube-system" />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Policies <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.policies.join(',')}
+          onChange={e => set('policies', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="monitor-all-exec, monitor-all-file" />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSave(form)}
+          disabled={saving || !form.name.trim() || !form.host.trim()}>
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function RsyslogPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+
+  const [configs, setConfigs] = useState<RsyslogConfig[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editTarget, setEditTarget] = useState<RsyslogConfig | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try { setConfigs(await rsyslogApi.list()) } catch { }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCreate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    setSaving(true)
+    try {
+      await rsyslogApi.create(form)
+      toast.success('rsyslog config created.')
+      setShowForm(false); load()
+    } catch { toast.error('Failed to create rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    if (!editTarget) return
+    setSaving(true)
+    try {
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
+      toast.success('rsyslog config updated.')
+      setEditTarget(null); load()
+    } catch { toast.error('Failed to update rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleToggle = async (cfg: RsyslogConfig) => {
+    try {
+      await rsyslogApi.update(cfg.id, { ...cfg, enabled: !cfg.enabled })
+      load()
+    } catch { toast.error('Failed to toggle config') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await rsyslogApi.delete(deleteTarget.id)
+      toast.success('rsyslog config deleted.')
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete rsyslog config') }
+  }
+
+  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }
+
+  const facilityLabel = (n: number) => FACILITIES.find(f => f.value === n)?.label ?? String(n)
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">rsyslog</h4>
+          <p className="text-sm text-muted-foreground">Forward Security Events to rsyslog servers.</p>
+        </div>
+        {isAdmin && !showForm && (
+          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>
+        )}
+      </div>
+
+      {isAdmin && showForm && !editTarget && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New rsyslog Config</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ConfigForm initial={EMPTY} onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
+          </CardContent>
+        </Card>
+      )}
+
+      {configs.length === 0 && !showForm && (
+        <p className="py-10 text-center text-sm text-muted-foreground">No rsyslog configs configured.</p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {configs.map(cfg => (
+          <Card key={cfg.id} className={cfg.enabled ? '' : 'opacity-60'}>
+            {isAdmin && editTarget?.id === cfg.id ? (
+              <CardContent className="pt-4">
+                <ConfigForm initial={editTarget} onSave={handleUpdate}
+                  onCancel={() => setEditTarget(null)} saving={saving} />
+              </CardContent>
+            ) : (
+              <>
+                <CardHeader className="border-b pb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-sm">{cfg.name}</span>
+                    <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                      {cfg.enabled ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
+                    {cfg.severities.map(s => (
+                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                    ))}
+                  </div>
+                  {isAdmin && (
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
+                        {testing === cfg.id ? 'Sending...' : 'Test'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleToggle(cfg)}>
+                        {cfg.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(cfg)}>Delete</Button>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+                  <p className="font-mono">{cfg.host}:{cfg.port} — facility: {facilityLabel(cfg.facility)}</p>
+                  <div className="flex gap-4">
+                    <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
+                    <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
+                  </div>
+                </CardContent>
+              </>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete rsyslog Config</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "content": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { rsyslogApi, type RsyslogConfig } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+const FACILITIES = [
+  { value: 16, label: 'local0' },
+  { value: 17, label: 'local1' },
+  { value: 18, label: 'local2' },
+  { value: 19, label: 'local3' },
+  { value: 20, label: 'local4' },
+  { value: 21, label: 'local5' },
+  { value: 22, label: 'local6' },
+  { value: 23, label: 'local7' },
+  { value: 3,  label: 'daemon' },
+  { value: 1,  label: 'user'   },
+]
+
+const EMPTY: Omit<RsyslogConfig, 'id'> = {
+  name: '', host: '', port: 514, protocol: 'udp',
+  facility: 16, severities: [], namespaces: [], policies: [], enabled: true,
+}
+
+function ConfigForm({
+  initial, onSave, onCancel, saving,
+}: {
+  initial: Omit<RsyslogConfig, 'id'>
+  onSave: (c: Omit<RsyslogConfig, 'id'>) => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const [form, setForm] = useState(initial)
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm(f => ({ ...f, [k]: v }))
+
+  const toggleSeverity = (s: string) =>
+    set('severities', form.severities.includes(s)
+      ? form.severities.filter(x => x !== s)
+      : [...form.severities, s])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My rsyslog" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Facility</Label>
+          <Select value={String(form.facility)} onValueChange={v => set('facility', parseInt(v))}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {FACILITIES.map(f => (
+                  <SelectItem key={f.value} value={String(f.value)}>{f.label} ({f.value})</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 flex flex-col gap-1">
+          <Label className="text-xs">Host <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm font-mono" value={form.host}
+            onChange={e => set('host', e.target.value)} placeholder="192.168.1.1" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Port</Label>
+          <Input className="h-8 text-sm" type="number" value={form.port}
+            onChange={e => set('port', parseInt(e.target.value) || 514)} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Protocol</Label>
+          <div className="flex gap-2">
+            {(['udp', 'tcp'] as const).map(p => (
+              <Button key={p} size="sm" variant={form.protocol === p ? 'default' : 'outline'}
+                className="h-7 text-xs uppercase" onClick={() => set('protocol', p)}>{p}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Severity</Label>
+          <div className="flex gap-4">
+            {(['warning', 'critical'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm capitalize">
+                <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                  checked={form.severities.includes(s)} onChange={() => toggleSeverity(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Namespaces <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.namespaces.join(',')}
+          onChange={e => set('namespaces', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="default, kube-system" />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Policies <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.policies.join(',')}
+          onChange={e => set('policies', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="monitor-all-exec, monitor-all-file" />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSave(form)}
+          disabled={saving || !form.name.trim() || !form.host.trim()}>
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function RsyslogPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+
+  const [configs, setConfigs] = useState<RsyslogConfig[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editTarget, setEditTarget] = useState<RsyslogConfig | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try { setConfigs(await rsyslogApi.list()) } catch { }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCreate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    setSaving(true)
+    try {
+      await rsyslogApi.create(form)
+      toast.success('rsyslog config created.')
+      setShowForm(false); load()
+    } catch { toast.error('Failed to create rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    if (!editTarget) return
+    setSaving(true)
+    try {
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
+      toast.success('rsyslog config updated.')
+      setEditTarget(null); load()
+    } catch { toast.error('Failed to update rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleToggle = async (cfg: RsyslogConfig) => {
+    try {
+      await rsyslogApi.update(cfg.id, { ...cfg, enabled: !cfg.enabled })
+      load()
+    } catch { toast.error('Failed to toggle config') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await rsyslogApi.delete(deleteTarget.id)
+      toast.success('rsyslog config deleted.')
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete rsyslog config') }
+  }
+
+  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }
+
+  const facilityLabel = (n: number) => FACILITIES.find(f => f.value === n)?.label ?? String(n)
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">rsyslog</h4>
+          <p className="text-sm text-muted-foreground">Forward Security Events to rsyslog servers.</p>
+        </div>
+        {isAdmin && !showForm && (
+          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>
+        )}
+      </div>
+
+      {isAdmin && showForm && !editTarget && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New rsyslog Config</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ConfigForm initial={EMPTY} onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
+          </CardContent>
+        </Card>
+      )}
+
+      {configs.length === 0 && !showForm && (
+        <p className="py-10 text-center text-sm text-muted-foreground">No rsyslog configs configured.</p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {configs.map(cfg => (
+          <Card key={cfg.id} className={cfg.enabled ? '' : 'opacity-60'}>
+            {isAdmin && editTarget?.id === cfg.id ? (
+              <CardContent className="pt-4">
+                <ConfigForm initial={editTarget} onSave={handleUpdate}
+                  onCancel={() => setEditTarget(null)} saving={saving} />
+              </CardContent>
+            ) : (
+              <>
+                <CardHeader className="border-b pb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-sm">{cfg.name}</span>
+                    <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                      {cfg.enabled ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
+                    {cfg.severities.map(s => (
+                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                    ))}
+                  </div>
+                  {isAdmin && (
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
+                        {testing === cfg.id ? 'Sending...' : 'Test'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleToggle(cfg)}>
+                        {cfg.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(cfg)}>Delete</Button>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+                  <p className="font-mono">{cfg.host}:{cfg.port} — facility: {facilityLabel(cfg.facility)}</p>
+                  <div className="flex gap-4">
+                    <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
+                    <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
+                  </div>
+                </CardContent>
+              </>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete rsyslog Config</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "content": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { rsyslogApi, type RsyslogConfig } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+const FACILITIES = [
+  { value: 16, label: 'local0' },
+  { value: 17, label: 'local1' },
+  { value: 18, label: 'local2' },
+  { value: 19, label: 'local3' },
+  { value: 20, label: 'local4' },
+  { value: 21, label: 'local5' },
+  { value: 22, label: 'local6' },
+  { value: 23, label: 'local7' },
+  { value: 3,  label: 'daemon' },
+  { value: 1,  label: 'user'   },
+]
+
+const EMPTY: Omit<RsyslogConfig, 'id'> = {
+  name: '', host: '', port: 514, protocol: 'udp',
+  facility: 16, severities: [], namespaces: [], policies: [], enabled: true,
+}
+
+function ConfigForm({
+  initial, onSave, onCancel, saving,
+}: {
+  initial: Omit<RsyslogConfig, 'id'>
+  onSave: (c: Omit<RsyslogConfig, 'id'>) => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const [form, setForm] = useState(initial)
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm(f => ({ ...f, [k]: v }))
+
+  const toggleSeverity = (s: string) =>
+    set('severities', form.severities.includes(s)
+      ? form.severities.filter(x => x !== s)
+      : [...form.severities, s])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My rsyslog" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Facility</Label>
+          <Select value={String(form.facility)} onValueChange={v => set('facility', parseInt(v))}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {FACILITIES.map(f => (
+                  <SelectItem key={f.value} value={String(f.value)}>{f.label} ({f.value})</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 flex flex-col gap-1">
+          <Label className="text-xs">Host <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm font-mono" value={form.host}
+            onChange={e => set('host', e.target.value)} placeholder="192.168.1.1" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Port</Label>
+          <Input className="h-8 text-sm" type="number" value={form.port}
+            onChange={e => set('port', parseInt(e.target.value) || 514)} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Protocol</Label>
+          <div className="flex gap-2">
+            {(['udp', 'tcp'] as const).map(p => (
+              <Button key={p} size="sm" variant={form.protocol === p ? 'default' : 'outline'}
+                className="h-7 text-xs uppercase" onClick={() => set('protocol', p)}>{p}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Severity</Label>
+          <div className="flex gap-4">
+            {(['warning', 'critical'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm capitalize">
+                <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                  checked={form.severities.includes(s)} onChange={() => toggleSeverity(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Namespaces <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.namespaces.join(',')}
+          onChange={e => set('namespaces', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="default, kube-system" />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Policies <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.policies.join(',')}
+          onChange={e => set('policies', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="monitor-all-exec, monitor-all-file" />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSave(form)}
+          disabled={saving || !form.name.trim() || !form.host.trim()}>
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function RsyslogPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+
+  const [configs, setConfigs] = useState<RsyslogConfig[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editTarget, setEditTarget] = useState<RsyslogConfig | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try { setConfigs(await rsyslogApi.list()) } catch { }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCreate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    setSaving(true)
+    try {
+      await rsyslogApi.create(form)
+      toast.success('rsyslog config created.')
+      setShowForm(false); load()
+    } catch { toast.error('Failed to create rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    if (!editTarget) return
+    setSaving(true)
+    try {
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
+      toast.success('rsyslog config updated.')
+      setEditTarget(null); load()
+    } catch { toast.error('Failed to update rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleToggle = async (cfg: RsyslogConfig) => {
+    try {
+      await rsyslogApi.update(cfg.id, { ...cfg, enabled: !cfg.enabled })
+      load()
+    } catch { toast.error('Failed to toggle config') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await rsyslogApi.delete(deleteTarget.id)
+      toast.success('rsyslog config deleted.')
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete rsyslog config') }
+  }
+
+  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }
+
+  const facilityLabel = (n: number) => FACILITIES.find(f => f.value === n)?.label ?? String(n)
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">rsyslog</h4>
+          <p className="text-sm text-muted-foreground">Forward Security Events to rsyslog servers.</p>
+        </div>
+        {isAdmin && !showForm && (
+          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>
+        )}
+      </div>
+
+      {isAdmin && showForm && !editTarget && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New rsyslog Config</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ConfigForm initial={EMPTY} onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
+          </CardContent>
+        </Card>
+      )}
+
+      {configs.length === 0 && !showForm && (
+        <p className="py-10 text-center text-sm text-muted-foreground">No rsyslog configs configured.</p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {configs.map(cfg => (
+          <Card key={cfg.id} className={cfg.enabled ? '' : 'opacity-60'}>
+            {isAdmin && editTarget?.id === cfg.id ? (
+              <CardContent className="pt-4">
+                <ConfigForm initial={editTarget} onSave={handleUpdate}
+                  onCancel={() => setEditTarget(null)} saving={saving} />
+              </CardContent>
+            ) : (
+              <>
+                <CardHeader className="border-b pb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-sm">{cfg.name}</span>
+                    <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                      {cfg.enabled ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
+                    {cfg.severities.map(s => (
+                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                    ))}
+                  </div>
+                  {isAdmin && (
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
+                        {testing === cfg.id ? 'Sending...' : 'Test'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleToggle(cfg)}>
+                        {cfg.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(cfg)}>Delete</Button>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+                  <p className="font-mono">{cfg.host}:{cfg.port} — facility: {facilityLabel(cfg.facility)}</p>
+                  <div className="flex gap-4">
+                    <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
+                    <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
+                  </div>
+                </CardContent>
+              </>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete rsyslog Config</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "security/alerts" /home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "description": "Find alerts sidebar entry"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "security/alerts" /home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "description": "Find alerts sidebar entry"
+  },
+  "tool_response": {
+    "stdout": "78:                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+79:                  <NavLink to="/security/alerts">Alerts</NavLink>",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "offset": 75,
+    "limit": 10
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "offset": 75,
+    "limit": 10
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+      "content": "                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+      "numLines": 10,
+      "startLine": 75,
+      "totalLines": 117
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>",
+    "new_string": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
+                  <NavLink to="/security/rsyslog">rsyslog</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>",
+    "new_string": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
+                  <NavLink to="/security/rsyslog">rsyslog</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>",
+    "newString": "              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
+                  <NavLink to="/security/rsyslog">rsyslog</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import logoUrl from '../assets/sentinel-logo-black.svg'
+import { useAuth } from './AuthContext'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+  const { user } = useAuth()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={logoUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/tracing')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/templates')}>
+                  <NavLink to="/policies/templates">Templates</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/tetragon')}>
+                  <NavLink to="/cluster/tetragon">Tetragon Agents</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 79,
+        "oldLines": 6,
+        "newStart": 79,
+        "newLines": 11,
+        "lines": [
+          "                   <NavLink to="/security/alerts">Alerts</NavLink>",
+          "                 </SidebarMenuButton>",
+          "               </SidebarMenuItem>",
+          "+              <SidebarMenuItem>",
+          "+                <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>",
+          "+                  <NavLink to="/security/rsyslog">rsyslog</NavLink>",
+          "+                </SidebarMenuButton>",
+          "+              </SidebarMenuItem>",
+          "             </SidebarMenu>",
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { AlertsPage } from './pages/AlertsPage'",
+    "new_string": "import { AlertsPage } from './pages/AlertsPage'
+import { RsyslogPage } from './pages/RsyslogPage'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "import { AlertsPage } from './pages/AlertsPage'",
+    "new_string": "import { AlertsPage } from './pages/AlertsPage'
+import { RsyslogPage } from './pages/RsyslogPage'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "import { AlertsPage } from './pages/AlertsPage'",
+    "newString": "import { AlertsPage } from './pages/AlertsPage'
+import { RsyslogPage } from './pages/RsyslogPage'",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { AuthProvider, useAuth } from './layout/AuthContext'
+import { LoginPage } from './pages/LoginPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+import { TetragonStatusPage } from './pages/TetragonStatusPage'
+import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
+import { UsersPage } from './pages/UsersPage'
+import { AlertsPage } from './pages/AlertsPage'
+
+function AppRoutes() {
+  const { user, loading, logout } = useAuth()
+
+  if (loading) return null
+
+  if (!user) {
+    return (
+      <LoginPage onLogin={() => window.location.replace('/dashboard')} />
+    )
+  }
+
+  return (
+    <SecurityEventsProvider>
+    <DiscoveryProvider>
+      <Routes>
+        <Route element={<AppLayout onLogout={logout} />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+          <Route path="/policies/tracing" element={<PolicyListPage />} />
+          <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+          <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
+          <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+          <Route path="/cluster/mode" element={<ModePage />} />
+
+          <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />
+          <Route path="/security/events" element={<SecurityEventsPage />} />
+          <Route path="/security/discovery" element={<DiscoveryPage />} />
+          <Route path="/settings/users" element={<UsersPage />} />
+          <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </DiscoveryProvider>
+    </SecurityEventsProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 16,
+        "oldLines": 6,
+        "newStart": 16,
+        "newLines": 7,
+        "lines": [
+          " import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'",
+          " import { UsersPage } from './pages/UsersPage'",
+          " import { AlertsPage } from './pages/AlertsPage'",
+          "+import { RsyslogPage } from './pages/RsyslogPage'",
+          " ",
+          " function AppRoutes() {",
+          "   const { user, loading, logout } = useAuth()"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "          <Route path="/security/alerts" element={<AlertsPage />} />",
+    "new_string": "          <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="/security/rsyslog" element={<RsyslogPage />} />",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "          <Route path="/security/alerts" element={<AlertsPage />} />",
+    "new_string": "          <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="/security/rsyslog" element={<RsyslogPage />} />",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "          <Route path="/security/alerts" element={<AlertsPage />} />",
+    "newString": "          <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="/security/rsyslog" element={<RsyslogPage />} />",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { AuthProvider, useAuth } from './layout/AuthContext'
+import { LoginPage } from './pages/LoginPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+import { TetragonStatusPage } from './pages/TetragonStatusPage'
+import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
+import { UsersPage } from './pages/UsersPage'
+import { AlertsPage } from './pages/AlertsPage'
+import { RsyslogPage } from './pages/RsyslogPage'
+
+function AppRoutes() {
+  const { user, loading, logout } = useAuth()
+
+  if (loading) return null
+
+  if (!user) {
+    return (
+      <LoginPage onLogin={() => window.location.replace('/dashboard')} />
+    )
+  }
+
+  return (
+    <SecurityEventsProvider>
+    <DiscoveryProvider>
+      <Routes>
+        <Route element={<AppLayout onLogout={logout} />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+          <Route path="/policies/tracing" element={<PolicyListPage />} />
+          <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+          <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
+          <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+          <Route path="/cluster/mode" element={<ModePage />} />
+
+          <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />
+          <Route path="/security/events" element={<SecurityEventsPage />} />
+          <Route path="/security/discovery" element={<DiscoveryPage />} />
+          <Route path="/settings/users" element={<UsersPage />} />
+          <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </DiscoveryProvider>
+    </SecurityEventsProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 48,
+        "oldLines": 6,
+        "newStart": 48,
+        "newLines": 7,
+        "lines": [
+          "           <Route path="/security/discovery" element={<DiscoveryPage />} />",
+          "           <Route path="/settings/users" element={<UsersPage />} />",
+          "           <Route path="/security/alerts" element={<AlertsPage />} />",
+          "+          <Route path="/security/rsyslog" element={<RsyslogPage />} />",
+          "           <Route path="*" element={<Navigate to="/dashboard" replace />} />",
+          "         </Route>",
+          "       </Routes>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "old_string": "  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],",
+    "new_string": "  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],
+  '/security/rsyslog': [
+    { label: 'Notifications' },
+    { label: 'rsyslog' },
+  ],",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "old_string": "  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],",
+    "new_string": "  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],
+  '/security/rsyslog': [
+    { label: 'Notifications' },
+    { label: 'rsyslog' },
+  ],",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "oldString": "  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],",
+    "newString": "  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],
+  '/security/rsyslog': [
+    { label: 'Notifications' },
+    { label: 'rsyslog' },
+  ],",
+    "originalFile": "import { Fragment, useEffect, useState } from 'react'
+import { useLocation, Link } from 'react-router-dom'
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { SidebarTrigger } from '@/components/ui/sidebar'
+import { modeApi } from '../api/client'
+import { useAuth } from './AuthContext'
+import type { Mode } from '../api/types'
+
+const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  alerts: 'Alerts',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],
+}
+
+function useBreadcrumbs() {
+  const { pathname } = useLocation()
+
+  if (PATH_OVERRIDES[pathname]) {
+    return [{ label: 'Home', to: '/dashboard' }, ...PATH_OVERRIDES[pathname]]
+  }
+
+  const segments = pathname.split('/').filter(Boolean)
+  const crumbs: { label: string; to?: string }[] = [{ label: 'Home', to: '/dashboard' }]
+  let path = ''
+  segments.forEach((seg, i) => {
+    path += `/${seg}`
+    const isLast = i === segments.length - 1
+    const label = ROUTE_LABELS[seg] ?? seg
+    crumbs.push(isLast ? { label } : { label, to: path })
+  })
+  return crumbs
+}
+
+interface Props {
+  onLogout: () => Promise<void>
+}
+
+export function AppHeader({ onLogout }: Props) {
+  const { user } = useAuth()
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const breadcrumbs = useBreadcrumbs()
+
+  useEffect(() => {
+    modeApi.get().then(setMode).catch(() => {})
+  }, [])
+
+  const modeVariant =
+    mode === 'Protect' ? 'destructive' : mode === 'Mixed' ? 'secondary' : 'outline'
+
+  return (
+    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+      <SidebarTrigger className="-ml-1" />
+
+      <Breadcrumb>
+        <BreadcrumbList>
+          {breadcrumbs.map((c, i) => (
+            <Fragment key={i}>
+              {i > 0 && <BreadcrumbSeparator />}
+              <BreadcrumbItem>
+                {c.to ? (
+                  <BreadcrumbLink asChild>
+                    <Link to={c.to}>{c.label}</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage>{c.label}</BreadcrumbPage>
+                )}
+              </BreadcrumbItem>
+            </Fragment>
+          ))}
+        </BreadcrumbList>
+      </Breadcrumb>
+
+      <div className="ml-auto flex items-center gap-2">
+        <Badge variant={modeVariant}>{mode.toUpperCase()}</Badge>
+        <span className="text-xs text-muted-foreground">{user?.username}</span>
+        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={onLogout}>
+          Sign out
+        </Button>
+      </div>
+    </header>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 47,
+        "oldLines": 6,
+        "newStart": 47,
+        "newLines": 10,
+        "lines": [
+          "     { label: 'Notifications' },",
+          "     { label: 'Alerts' },",
+          "   ],",
+          "+  '/security/rsyslog': [",
+          "+    { label: 'Notifications' },",
+          "+    { label: 'rsyslog' },",
+          "+  ],",
+          " }",
+          " ",
+          " function useBreadcrumbs() {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 344ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: add rsyslog forwarding for Security Events
+
+Backend:
+- internal/rsyslog/store.go: config store with file persistence at
+  /data/sentinel/rsyslog.json
+- internal/rsyslog/dispatcher.go: streams Tetragon events, filters by
+  severity/namespace/policy, sends via log/syslog (UDP/TCP); reconnects
+  on failure; TestSend for validation
+- internal/handler/rsyslog.go: REST CRUD + test handlers
+- GET /api/rsyslog: viewer + admin
+- POST/PUT/DELETE/test: admin only
+
+Frontend:
+- RsyslogPage: list/create/edit/delete configs, enable/disable, Test button
+  Config fields: name, host, port, protocol (UDP/TCP), facility (local0-7/
+  daemon/user), severity checkboxes, namespace/policy filters
+- Notifications > rsyslog in sidebar
+- Home > Notifications > rsyslog breadcrumb
+
+Syslog message format:
+  severity=WARNING namespace=default pod=nginx-abc policy=... binary=...
+  node=... user=... [file/network fields]
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit rsyslog feature"
+  }
+}
+
+----------------------------------------
+

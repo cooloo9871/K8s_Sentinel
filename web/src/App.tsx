@@ -16,6 +16,7 @@ import { TetragonStatusPage } from './pages/TetragonStatusPage'
 import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
 import { UsersPage } from './pages/UsersPage'
 import { AlertsPage } from './pages/AlertsPage'
+import { RsyslogPage } from './pages/RsyslogPage'
 
 function AppRoutes() {
   const { user, loading, logout } = useAuth()
@@ -47,6 +48,7 @@ function AppRoutes() {
           <Route path="/security/discovery" element={<DiscoveryPage />} />
           <Route path="/settings/users" element={<UsersPage />} />
           <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="/security/rsyslog" element={<RsyslogPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
