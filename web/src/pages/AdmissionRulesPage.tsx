@@ -67,8 +67,8 @@ function RuleForm({ initial, onSave, onCancel, saving }: {
   saving: boolean
 }) {
   const [form, setForm] = useState(initial)
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm(f => ({ ...f, [k]: v }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const set = (k: keyof FormState, v: any) => setForm(f => ({ ...f, [k]: v }))
 
   const toggleOp = (op: string) =>
     set('operations', form.operations.includes(op)
@@ -85,7 +85,7 @@ function RuleForm({ initial, onSave, onCancel, saving }: {
     set('validations', form.validations.map((v, idx) => idx === i ? { expression: tpl.expression, message: tpl.message } : v))
 
   const resources = RESOURCES[form.apiGroup] ?? ['*']
-  const valid = form.name.trim() && form.validations.some(v => v.expression.trim())
+  const valid = form.name.trim().length > 0 && form.validations.some(v => v.expression.trim().length > 0)
 
   return (
     <div className="flex flex-col gap-4">
