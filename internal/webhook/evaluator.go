@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/google/cel-go/cel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,31 +23,52 @@ type ViolationResult struct {
 	Expression  string
 }
 
+const cacheTTL = 30 * time.Second
+
 // Evaluator fetches VAP policies and evaluates them against admission requests.
+// Policies are cached for cacheTTL to reduce K8s API load.
 type Evaluator struct {
-	dynClient dynamic.Interface
+	dynClient    dynamic.Interface
+	mu           sync.RWMutex
+	policies     []unstructured.Unstructured
+	bindings     []unstructured.Unstructured
+	cacheExpires time.Time
 }
 
 func NewEvaluator(dynClient dynamic.Interface) *Evaluator {
 	return &Evaluator{dynClient: dynClient}
 }
 
+func (e *Evaluator) fetchPolicies(ctx context.Context) ([]unstructured.Unstructured, []unstructured.Unstructured, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if time.Now().Before(e.cacheExpires) {
+		return e.policies, e.bindings, nil
+	}
+	pl, err := e.dynClient.Resource(k8s.ExportVAPGVR()).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("list VAP: %w", err)
+	}
+	bl, err := e.dynClient.Resource(k8s.ExportVAPBindingGVR()).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("list VAPBinding: %w", err)
+	}
+	e.policies = pl.Items
+	e.bindings = bl.Items
+	e.cacheExpires = time.Now().Add(cacheTTL)
+	return e.policies, e.bindings, nil
+}
+
 // Evaluate checks all VAP policies that match the request and returns violations.
 func (e *Evaluator) Evaluate(ctx context.Context, req AdmissionRequest) ([]ViolationResult, error) {
-	// Fetch all VAP policies
-	policies, err := e.dynClient.Resource(k8s.ExportVAPGVR()).List(ctx, metav1.ListOptions{})
+	policies, bindings, err := e.fetchPolicies(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list VAP: %w", err)
-	}
-	// Fetch all VAP bindings
-	bindings, err := e.dynClient.Resource(k8s.ExportVAPBindingGVR()).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("list VAPBinding: %w", err)
+		return nil, err
 	}
 
 	// Build policy name → binding name map
 	policyBindings := map[string]string{}
-	for _, b := range bindings.Items {
+	for _, b := range bindings {
 		policyName, _, _ := unstructured.NestedString(b.Object, "spec", "policyName")
 		if policyName != "" {
 			policyBindings[policyName] = b.GetName()
@@ -53,7 +76,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, req AdmissionRequest) ([]Viola
 	}
 
 	var violations []ViolationResult
-	for _, policy := range policies.Items {
+	for _, policy := range policies {
 		if !matchesPolicy(policy, req) {
 			continue
 		}
