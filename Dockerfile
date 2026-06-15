@@ -21,7 +21,8 @@ RUN addgroup -S -g 10001 sentinel && \
     chown -R sentinel:sentinel /data/sentinel
 
 # Stage 3: minimal runtime image
-FROM gcr.io/distroless/static
+FROM scratch
+COPY --from=backend /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=backend /etc/passwd /etc/passwd
 COPY --from=backend /etc/group /etc/group
 COPY --from=backend /app/sentinel /sentinel
