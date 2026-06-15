@@ -124,7 +124,7 @@ func (s *RuleStore) Create(rawYAML string) (AdmissionRule, error) {
 	}
 	r := AdmissionRule{
 		ID:        fmt.Sprintf("rule-%d", time.Now().UnixMilli()),
-		Name:      spec.Name,
+		Name:      spec.Metadata.Name,
 		Enabled:   true,
 		Spec:      spec.Spec,
 		RawYAML:   rawYAML,

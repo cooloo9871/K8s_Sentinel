@@ -148,7 +148,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 // AddViolation records a violation from the webhook.
 func (s *Store) AddViolation(v Violation) {
 	s.mu.Lock()
-	key := "webhook-" + v.Namespace + "-" + v.Name + "-" + v.PolicyName
+	key := "webhook-" + v.Namespace + "-" + v.Name + "-" + v.RuleName
 	if _, exists := s.seen[key]; exists {
 		s.mu.Unlock()
 		return
