@@ -164,8 +164,8 @@ export function RsyslogPage() {
   const handleTest = async (cfg: RsyslogConfig) => {
     setTesting(cfg.id)
     try {
-      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
-      toast.success('Test message sent successfully.')
+      const { message } = await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success(message)
     } catch (e: unknown) {
       const msg =
         (e as { response?: { data?: string } })?.response?.data?.trim() ||

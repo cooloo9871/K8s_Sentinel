@@ -86,6 +86,10 @@ func testRsyslog(disp *rsyslog.Dispatcher) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		msg := "TCP test message sent successfully."
+		if cfg.Protocol == "udp" {
+			msg = "UDP packet sent — delivery unconfirmed (UDP is fire-and-forget)."
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"message": msg})
 	}
 }

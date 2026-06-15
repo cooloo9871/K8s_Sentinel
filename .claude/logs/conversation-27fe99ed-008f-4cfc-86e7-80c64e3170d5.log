@@ -516412,3 +516412,1430 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+fix: add 5s timeout to syslog test connection
+
+Backend: TestSend runs in goroutine with 5s timeout channel.
+Frontend: axios timeout 6s for test request.
+Both show "Connection timed out" / error instead of hanging indefinitely.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit timeout fix"
+  },
+  "tool_response": {
+    "stdout": "[main 2e7c863] fix: add 5s timeout to syslog test connection
+ 3 files changed, 2255 insertions(+), 9 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "2e7c863",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Syslog 點測試連線的時候，測試一個不存在的 ip 我看 dashboard 也沒顯示任何錯誤"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "offset": 130,
+    "limit": 12
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "offset": 130,
+    "limit": 12
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+      "content": "      await rsyslogApi.create(form)
+      toast.success('rsyslog config created.')
+      setShowForm(false); load()
+    } catch { toast.error('Failed to create rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    if (!editTarget) return
+    setSaving(true)
+    try {
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })",
+      "numLines": 12,
+      "startLine": 130,
+      "totalLines": 267
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "handleTest" /home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "description": "Find handleTest"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "handleTest" /home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "description": "Find handleTest"
+  },
+  "tool_response": {
+    "stdout": "164:  const handleTest = async (cfg: RsyslogConfig) => {
+225:                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "offset": 164,
+    "limit": 12
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "offset": 164,
+    "limit": 12
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+      "content": "  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }
+
+  return (
+    <>",
+      "numLines": 12,
+      "startLine": 164,
+      "totalLines": 267
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "old_string": "  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }",
+    "new_string": "  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent successfully.')
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: string } })?.response?.data?.trim() ||
+        (e instanceof Error ? e.message : 'Connection failed')
+      toast.error(msg)
+    } finally { setTesting(null) }
+  }",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "old_string": "  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }",
+    "new_string": "  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent successfully.')
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: string } })?.response?.data?.trim() ||
+        (e instanceof Error ? e.message : 'Connection failed')
+      toast.error(msg)
+    } finally { setTesting(null) }
+  }",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "oldString": "  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }",
+    "newString": "  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent successfully.')
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: string } })?.response?.data?.trim() ||
+        (e instanceof Error ? e.message : 'Connection failed')
+      toast.error(msg)
+    } finally { setTesting(null) }
+  }",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { rsyslogApi, type RsyslogConfig } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+
+const EMPTY: Omit<RsyslogConfig, 'id'> = {
+  name: '', host: '', port: 514, protocol: 'udp',
+  facility: 16, // fixed: local0
+  severities: [], namespaces: [], policies: [], enabled: true,
+}
+
+function ConfigForm({
+  initial, onSave, onCancel, saving,
+}: {
+  initial: Omit<RsyslogConfig, 'id'>
+  onSave: (c: Omit<RsyslogConfig, 'id'>) => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const [form, setForm] = useState(initial)
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm(f => ({ ...f, [k]: v }))
+
+  const toggleSeverity = (s: string) =>
+    set('severities', form.severities.includes(s)
+      ? form.severities.filter(x => x !== s)
+      : [...form.severities, s])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+        <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My Syslog" />
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 flex flex-col gap-1">
+          <Label className="text-xs">Host <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm font-mono" value={form.host}
+            onChange={e => set('host', e.target.value)} placeholder="192.168.1.1" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Port</Label>
+          <Input className="h-8 text-sm" type="number" value={form.port}
+            onChange={e => set('port', parseInt(e.target.value) || 514)} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Protocol</Label>
+          <div className="flex gap-2">
+            {(['udp', 'tcp'] as const).map(p => (
+              <Button key={p} size="sm" variant={form.protocol === p ? 'default' : 'outline'}
+                className="h-7 text-xs uppercase" onClick={() => set('protocol', p)}>{p}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Severity</Label>
+          <div className="flex gap-4">
+            {(['warning', 'critical'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm capitalize">
+                <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                  checked={form.severities.includes(s)} onChange={() => toggleSeverity(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Namespaces <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.namespaces.join(',')}
+          onChange={e => set('namespaces', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="default, kube-system" />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Policies <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.policies.join(',')}
+          onChange={e => set('policies', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="monitor-all-exec, monitor-all-file" />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSave(form)}
+          disabled={saving || !form.name.trim() || !form.host.trim()}>
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function RsyslogPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+
+  const [configs, setConfigs] = useState<RsyslogConfig[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editTarget, setEditTarget] = useState<RsyslogConfig | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try { setConfigs(await rsyslogApi.list()) } catch { }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCreate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    setSaving(true)
+    try {
+      await rsyslogApi.create(form)
+      toast.success('rsyslog config created.')
+      setShowForm(false); load()
+    } catch { toast.error('Failed to create rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    if (!editTarget) return
+    setSaving(true)
+    try {
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
+      toast.success('rsyslog config updated.')
+      setEditTarget(null); load()
+    } catch { toast.error('Failed to update rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleToggle = async (cfg: RsyslogConfig) => {
+    try {
+      await rsyslogApi.update(cfg.id, { ...cfg, enabled: !cfg.enabled })
+      load()
+    } catch { toast.error('Failed to toggle config') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await rsyslogApi.delete(deleteTarget.id)
+      toast.success('rsyslog config deleted.')
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete rsyslog config') }
+  }
+
+  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test failed')
+    } finally { setTesting(null) }
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Syslog</h4>
+          <p className="text-sm text-muted-foreground">Forward Security Events to syslog servers.</p>
+        </div>
+        {isAdmin && !showForm && (
+          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>
+        )}
+      </div>
+
+      {isAdmin && showForm && !editTarget && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New rsyslog Config</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ConfigForm initial={EMPTY} onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
+          </CardContent>
+        </Card>
+      )}
+
+      {configs.length === 0 && !showForm && (
+        <p className="py-10 text-center text-sm text-muted-foreground">No rsyslog configs configured.</p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {configs.map(cfg => (
+          <Card key={cfg.id} className={cfg.enabled ? '' : 'opacity-60'}>
+            {isAdmin && editTarget?.id === cfg.id ? (
+              <CardContent className="pt-4">
+                <ConfigForm initial={editTarget} onSave={handleUpdate}
+                  onCancel={() => setEditTarget(null)} saving={saving} />
+              </CardContent>
+            ) : (
+              <>
+                <CardHeader className="border-b pb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-sm">{cfg.name}</span>
+                    <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                      {cfg.enabled ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
+                    {cfg.severities.map(s => (
+                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                    ))}
+                  </div>
+                  {isAdmin && (
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
+                        {testing === cfg.id ? 'Sending...' : 'Test'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleToggle(cfg)}>
+                        {cfg.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(cfg)}>Delete</Button>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+                  <p className="font-mono">{cfg.host}:{cfg.port}</p>
+                  <div className="flex gap-4">
+                    <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
+                    <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
+                  </div>
+                </CardContent>
+              </>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete rsyslog Config</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 165,
+        "oldLines": 9,
+        "newStart": 165,
+        "newLines": 12,
+        "lines": [
+          "     setTesting(cfg.id)",
+          "     try {",
+          "       await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })",
+          "-      toast.success('Test message sent.')",
+          "+      toast.success('Test message sent successfully.')",
+          "     } catch (e: unknown) {",
+          "-      toast.error(e instanceof Error ? e.message : 'Test failed')",
+          "+      const msg =",
+          "+        (e as { response?: { data?: string } })?.response?.data?.trim() ||",
+          "+        (e instanceof Error ? e.message : 'Connection failed')",
+          "+      toast.error(msg)",
+          "     } finally { setTesting(null) }",
+          "   }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 374ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/RsyslogPage.tsx && git commit -m "$(cat <<'EOF'
+fix: show backend error message on syslog test failure
+
+Extract error from axios response.data instead of e.message,
+so timeout/connection errors are shown to the user.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit error display fix"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/RsyslogPage.tsx && git commit -m "$(cat <<'EOF'
+fix: show backend error message on syslog test failure
+
+Extract error from axios response.data instead of e.message,
+so timeout/connection errors are shown to the user.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit error display fix"
+  },
+  "tool_response": {
+    "stdout": "[main 184b6b9] fix: show backend error message on syslog test failure
+ 1 file changed, 5 insertions(+), 2 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "184b6b9",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Syslog 點測試連線的時候，測試一個不存在的 ip 我看 dashboard 他竟然是顯示成功發送"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/rsyslog.go",
+    "old_string": "		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)",
+    "new_string": "		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		msg := "TCP test message sent successfully."
+		if cfg.Protocol == "udp" {
+			msg = "UDP packet sent — delivery unconfirmed (UDP is fire-and-forget)."
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"message": msg})",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/handler/rsyslog.go",
+    "old_string": "		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)",
+    "new_string": "		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		msg := "TCP test message sent successfully."
+		if cfg.Protocol == "udp" {
+			msg = "UDP packet sent — delivery unconfirmed (UDP is fire-and-forget)."
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"message": msg})",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/handler/rsyslog.go",
+    "oldString": "		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)",
+    "newString": "		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		msg := "TCP test message sent successfully."
+		if cfg.Protocol == "udp" {
+			msg = "UDP packet sent — delivery unconfirmed (UDP is fire-and-forget)."
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"message": msg})",
+    "originalFile": "package handler
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/cooloo9871/sentinel/internal/rsyslog"
+)
+
+func listRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.List())
+	}
+}
+
+func createRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Name == "" || cfg.Host == "" {
+			http.Error(w, "name and host required", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = fmt.Sprintf("rsyslog-%d", time.Now().UnixMilli())
+		if err := store.Create(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		writeJSON(w, http.StatusCreated, cfg)
+	}
+}
+
+func updateRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		cfg.ID = id
+		if !store.Update(cfg) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	}
+}
+
+func deleteRsyslog(store *rsyslog.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if !store.Delete(id) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func testRsyslog(disp *rsyslog.Dispatcher) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg rsyslog.Config
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if cfg.Host == "" {
+			http.Error(w, "host required", http.StatusBadRequest)
+			return
+		}
+		if cfg.Port == 0 {
+			cfg.Port = 514
+		}
+		if cfg.Protocol == "" {
+			cfg.Protocol = "udp"
+		}
+		if err := disp.TestSend(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 86,
+        "oldLines": 6,
+        "newStart": 86,
+        "newLines": 10,
+        "lines": [
+          "       http.Error(w, err.Error(), http.StatusBadGateway)",
+          "       return",
+          "     }",
+          "-    w.WriteHeader(http.StatusNoContent)",
+          "+    msg := "TCP test message sent successfully."",
+          "+    if cfg.Protocol == "udp" {",
+          "+      msg = "UDP packet sent — delivery unconfirmed (UDP is fire-and-forget)."",
+          "+    }",
+          "+    writeJSON(w, http.StatusOK, map[string]string{"message": msg})",
+          "   }",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+    "new_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<{ message: string }> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }).then((r) => r.data),",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+    "new_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<{ message: string }> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }).then((r) => r.data),",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+    "newString": "  test: (cfg: Partial<RsyslogConfig>): Promise<{ message: string }> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }).then((r) => r.data),",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}
+
+export interface CustomTemplatePayload {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  yaml: string
+}
+
+export interface AuthUser {
+  username: string
+  role: 'admin' | 'viewer'
+}
+
+export const authApi = {
+  login: (username: string, password: string): Promise<AuthUser> =>
+    api.post('/auth/login', { username, password }).then((r) => r.data),
+  logout: (): Promise<void> =>
+    api.post('/auth/logout'),
+  me: (): Promise<AuthUser> =>
+    api.get('/auth/me').then((r) => r.data),
+}
+
+export interface UserRecord {
+  username: string
+  role: 'admin' | 'viewer'
+  createdAt: string
+}
+
+export const userApi = {
+  list: (): Promise<UserRecord[]> =>
+    api.get('/users').then((r) => r.data),
+  create: (username: string, password: string, role: 'admin' | 'viewer'): Promise<void> =>
+    api.post('/users', { username, password, role }),
+  delete: (username: string): Promise<void> =>
+    api.delete(`/users/${username}`),
+  changePassword: (username: string, password: string): Promise<void> =>
+    api.put(`/users/${username}/password`, { password }),
+}
+
+export interface AlertRule {
+  id: string
+  name: string
+  webhookURL: string
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]   // empty = all
+  policies: string[]     // empty = all
+  cooldownMin: number    // 0 = no cooldown
+  enabled: boolean
+}
+
+export interface RsyslogConfig {
+  id: string
+  name: string
+  host: string
+  port: number
+  protocol: 'udp' | 'tcp'
+  facility: number        // 16=local0 … 23=local7
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]
+  policies: string[]
+  enabled: boolean
+}
+
+export const rsyslogApi = {
+  list: (): Promise<RsyslogConfig[]> =>
+    api.get('/rsyslog').then((r) => r.data ?? []),
+  create: (cfg: Omit<RsyslogConfig, 'id'>): Promise<RsyslogConfig> =>
+    api.post('/rsyslog', cfg).then((r) => r.data),
+  update: (id: string, cfg: RsyslogConfig): Promise<RsyslogConfig> =>
+    api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/rsyslog/${id}`),
+  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),
+}
+
+export const alertsApi = {
+  list: (): Promise<AlertRule[]> =>
+    api.get('/alerts').then((r) => r.data ?? []),
+  create: (rule: Omit<AlertRule, 'id'>): Promise<AlertRule> =>
+    api.post('/alerts', rule).then((r) => r.data),
+  update: (id: string, rule: AlertRule): Promise<AlertRule> =>
+    api.put(`/alerts/${id}`, rule).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/alerts/${id}`),
+  test: (webhookURL: string): Promise<void> =>
+    api.post('/alerts/test', { webhookURL }),
+}
+
+export const clusterApi = {
+  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),
+}
+
+export const settingsApi = {
+  getSessionTTL: (): Promise<{ sessionTTL: number }> =>
+    api.get('/settings/session-ttl').then((r) => r.data),
+  setSessionTTL: (seconds: number): Promise<void> =>
+    api.put('/settings/session-ttl', { sessionTTL: seconds }),
+}
+
+export const templateApi = {
+  list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
+    api.get('/templates').then((r) => r.data),
+  create: (t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.post('/templates', t).then((r) => r.data),
+  update: (id: string, t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.put(`/templates/${id}`, t).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/templates/${id}`),
+}
+
+",
+    "structuredPatch": [
+      {
+        "oldStart": 118,
+        "oldLines": 8,
+        "newStart": 118,
+        "newLines": 8,
+        "lines": [
+          "     api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),",
+          "   delete: (id: string): Promise<void> =>",
+          "     api.delete(`/rsyslog/${id}`),",
+          "-  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>",
+          "-    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+          "+  test: (cfg: Partial<RsyslogConfig>): Promise<{ message: string }> =>",
+          "+    api.post('/rsyslog/test', cfg, { timeout: 6000 }).then((r) => r.data),",
+          " }",
+          " ",
+          " export const alertsApi = {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "old_string": "      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent successfully.')",
+    "new_string": "      const { message } = await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success(message)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "old_string": "      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent successfully.')",
+    "new_string": "      const { message } = await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success(message)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/RsyslogPage.tsx",
+    "oldString": "      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent successfully.')",
+    "newString": "      const { message } = await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success(message)",
+    "originalFile": "import { useCallback, useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { rsyslogApi, type RsyslogConfig } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
+import { useToast } from '../layout/AppToaster'
+
+
+const EMPTY: Omit<RsyslogConfig, 'id'> = {
+  name: '', host: '', port: 514, protocol: 'udp',
+  facility: 16, // fixed: local0
+  severities: [], namespaces: [], policies: [], enabled: true,
+}
+
+function ConfigForm({
+  initial, onSave, onCancel, saving,
+}: {
+  initial: Omit<RsyslogConfig, 'id'>
+  onSave: (c: Omit<RsyslogConfig, 'id'>) => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const [form, setForm] = useState(initial)
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm(f => ({ ...f, [k]: v }))
+
+  const toggleSeverity = (s: string) =>
+    set('severities', form.severities.includes(s)
+      ? form.severities.filter(x => x !== s)
+      : [...form.severities, s])
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+        <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="My Syslog" />
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 flex flex-col gap-1">
+          <Label className="text-xs">Host <span className="text-destructive">*</span></Label>
+          <Input className="h-8 text-sm font-mono" value={form.host}
+            onChange={e => set('host', e.target.value)} placeholder="192.168.1.1" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Port</Label>
+          <Input className="h-8 text-sm" type="number" value={form.port}
+            onChange={e => set('port', parseInt(e.target.value) || 514)} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Protocol</Label>
+          <div className="flex gap-2">
+            {(['udp', 'tcp'] as const).map(p => (
+              <Button key={p} size="sm" variant={form.protocol === p ? 'default' : 'outline'}
+                className="h-7 text-xs uppercase" onClick={() => set('protocol', p)}>{p}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Severity</Label>
+          <div className="flex gap-4">
+            {(['warning', 'critical'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm capitalize">
+                <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                  checked={form.severities.includes(s)} onChange={() => toggleSeverity(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Namespaces <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.namespaces.join(',')}
+          onChange={e => set('namespaces', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="default, kube-system" />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Policies <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
+        <Input className="h-8 text-sm" value={form.policies.join(',')}
+          onChange={e => set('policies', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+          placeholder="monitor-all-exec, monitor-all-file" />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSave(form)}
+          disabled={saving || !form.name.trim() || !form.host.trim()}>
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function RsyslogPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const toast = useToast()
+
+  const [configs, setConfigs] = useState<RsyslogConfig[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editTarget, setEditTarget] = useState<RsyslogConfig | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try { setConfigs(await rsyslogApi.list()) } catch { }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCreate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    setSaving(true)
+    try {
+      await rsyslogApi.create(form)
+      toast.success('rsyslog config created.')
+      setShowForm(false); load()
+    } catch { toast.error('Failed to create rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
+    if (!editTarget) return
+    setSaving(true)
+    try {
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
+      toast.success('rsyslog config updated.')
+      setEditTarget(null); load()
+    } catch { toast.error('Failed to update rsyslog config') }
+    finally { setSaving(false) }
+  }
+
+  const handleToggle = async (cfg: RsyslogConfig) => {
+    try {
+      await rsyslogApi.update(cfg.id, { ...cfg, enabled: !cfg.enabled })
+      load()
+    } catch { toast.error('Failed to toggle config') }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await rsyslogApi.delete(deleteTarget.id)
+      toast.success('rsyslog config deleted.')
+      setDeleteTarget(null); load()
+    } catch { toast.error('Failed to delete rsyslog config') }
+  }
+
+  const handleTest = async (cfg: RsyslogConfig) => {
+    setTesting(cfg.id)
+    try {
+      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
+      toast.success('Test message sent successfully.')
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: string } })?.response?.data?.trim() ||
+        (e instanceof Error ? e.message : 'Connection failed')
+      toast.error(msg)
+    } finally { setTesting(null) }
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Syslog</h4>
+          <p className="text-sm text-muted-foreground">Forward Security Events to syslog servers.</p>
+        </div>
+        {isAdmin && !showForm && (
+          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>
+        )}
+      </div>
+
+      {isAdmin && showForm && !editTarget && (
+        <Card className="mb-6 border-primary/40">
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">New rsyslog Config</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <ConfigForm initial={EMPTY} onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
+          </CardContent>
+        </Card>
+      )}
+
+      {configs.length === 0 && !showForm && (
+        <p className="py-10 text-center text-sm text-muted-foreground">No rsyslog configs configured.</p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {configs.map(cfg => (
+          <Card key={cfg.id} className={cfg.enabled ? '' : 'opacity-60'}>
+            {isAdmin && editTarget?.id === cfg.id ? (
+              <CardContent className="pt-4">
+                <ConfigForm initial={editTarget} onSave={handleUpdate}
+                  onCancel={() => setEditTarget(null)} saving={saving} />
+              </CardContent>
+            ) : (
+              <>
+                <CardHeader className="border-b pb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-sm">{cfg.name}</span>
+                    <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                      {cfg.enabled ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
+                    {cfg.severities.map(s => (
+                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                    ))}
+                  </div>
+                  {isAdmin && (
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
+                        {testing === cfg.id ? 'Sending...' : 'Test'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                        onClick={() => handleToggle(cfg)}>
+                        {cfg.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(cfg)}>Delete</Button>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+                  <p className="font-mono">{cfg.host}:{cfg.port}</p>
+                  <div className="flex gap-4">
+                    <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
+                    <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
+                  </div>
+                </CardContent>
+              </>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete rsyslog Config</AlertDialogTitle>
+            <AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 164,
+        "oldLines": 8,
+        "newStart": 164,
+        "newLines": 8,
+        "lines": [
+          "   const handleTest = async (cfg: RsyslogConfig) => {",
+          "     setTesting(cfg.id)",
+          "     try {",
+          "-      await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })",
+          "-      toast.success('Test message sent successfully.')",
+          "+      const { message } = await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })",
+          "+      toast.success(message)",
+          "     } catch (e: unknown) {",
+          "       const msg =",
+          "         (e as { response?: { data?: string } })?.response?.data?.trim() ||"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 350ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+fix: distinguish UDP/TCP result on syslog test
+
+UDP always "succeeds" (connectionless) — show explicit warning:
+  "UDP packet sent — delivery unconfirmed (UDP is fire-and-forget)."
+TCP confirms actual connection:
+  "TCP test message sent successfully."
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit UDP/TCP test message fix"
+  }
+}
+
+----------------------------------------
+
