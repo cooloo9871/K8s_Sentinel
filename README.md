@@ -45,7 +45,8 @@
 - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
 - 時間顯示支援秒、分、時、天
 - **Export CSV**：將當前篩選結果匯出為 CSV，含所有事件欄位
-- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別
+- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別；設定儲存在 `/data/sentinel/alerts.json`
+- **Syslog 轉送**：將 Security Events 轉送至 rsyslog/syslog server（UDP 或 TCP，port 514）；可設定 severity、Namespace、Policy 篩選條件；syslog tag 為 `sentinel`，訊息格式為 key=value；設定儲存在 `/data/sentinel/rsyslog.json`
 
 ### Cluster — 叢集資訊
 
@@ -106,7 +107,17 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 
 ### 持久化儲存（PV）
 
-Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定（帳號、Templates、Alert 規則、Syslog 設定）將會消失：
+
+| 檔案 | 說明 |
+|---|---|
+| `users.json` | 使用者帳號與 session 設定 |
+| `.jwt-secret` | JWT 簽章 secret（消失則所有 session 失效）|
+| `templates.json` | 自訂 Policy Templates |
+| `alerts.json` | Webhook 告警規則 |
+| `rsyslog.json` | Syslog 轉送設定 |
+
+掛載方式：
 
 ```yaml
 volumeMounts:
