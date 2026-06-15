@@ -165,9 +165,12 @@ export function RsyslogPage() {
     setTesting(cfg.id)
     try {
       await rsyslogApi.test({ host: cfg.host, port: cfg.port, protocol: cfg.protocol, facility: cfg.facility })
-      toast.success('Test message sent.')
+      toast.success('Test message sent successfully.')
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Test failed')
+      const msg =
+        (e as { response?: { data?: string } })?.response?.data?.trim() ||
+        (e instanceof Error ? e.message : 'Connection failed')
+      toast.error(msg)
     } finally { setTesting(null) }
   }
 
