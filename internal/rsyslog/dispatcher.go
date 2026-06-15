@@ -46,7 +46,6 @@ func (d *Dispatcher) Run(ctx context.Context) {
 }
 
 func (d *Dispatcher) runOnce(ctx context.Context) {
-	log.Printf("rsyslog-dispatcher: starting event stream")
 	events := make(chan k8s.TetragonEvent, 256)
 	go func() {
 		defer close(events)
@@ -60,7 +59,6 @@ func (d *Dispatcher) runOnce(ctx context.Context) {
 		}
 		d.dispatch(evt)
 	}
-	log.Printf("rsyslog-dispatcher: event stream ended")
 }
 
 func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
@@ -68,15 +66,10 @@ func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
 	if evt.Action == "kill" {
 		severity = "critical"
 	}
-	configs := d.store.EnabledConfigs()
-	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
-		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
-	for _, cfg := range configs {
+	for _, cfg := range d.store.EnabledConfigs() {
 		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
-			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
 			continue
 		}
-		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
 		go d.send(cfg, evt, severity)
 	}
 }
