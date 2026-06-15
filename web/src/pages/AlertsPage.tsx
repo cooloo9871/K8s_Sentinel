@@ -58,14 +58,18 @@ function RuleForm({
           onChange={e => set('webhookURL', e.target.value)} placeholder="https://hooks.slack.com/..." />
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Severity <span className="text-muted-foreground font-normal">(empty = all)</span></Label>
-        <div className="flex gap-2">
-          {['warning', 'critical'].map(s => (
-            <Button key={s} size="sm" className="capitalize h-7 text-xs"
-              variant={form.severities.includes(s) ? (s === 'critical' ? 'destructive' : 'default') : 'outline'}
-              onClick={() => toggleSeverity(s)}>
+        <Label className="text-xs">Severity</Label>
+        <div className="flex gap-4">
+          {(['warning', 'critical'] as const).map(s => (
+            <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none text-sm capitalize">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                checked={form.severities.includes(s)}
+                onChange={() => toggleSeverity(s)}
+              />
               {s}
-            </Button>
+            </label>
           ))}
         </div>
       </div>
