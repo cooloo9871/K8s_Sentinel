@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"sigs.k8s.io/yaml"
 )
 
 // ResourceRule matches specific K8s resources.
@@ -117,22 +116,27 @@ func (s *RuleStore) EnabledRules() []AdmissionRule {
 	return out
 }
 
-func (s *RuleStore) Create(rawYAML string) (AdmissionRule, error) {
-	spec, err := parseSpec(rawYAML)
-	if err != nil {
-		return AdmissionRule{}, err
+// CreatePayload is the JSON body for creating/updating a rule.
+type CreatePayload struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Spec        RuleSpec `json:"spec"`
+}
+
+func (s *RuleStore) Create(p CreatePayload) (AdmissionRule, error) {
+	if p.Name == "" {
+		return AdmissionRule{}, fmt.Errorf("name is required")
+	}
+	if len(p.Spec.Validations) == 0 {
+		return AdmissionRule{}, fmt.Errorf("at least one validation expression is required")
 	}
 	r := AdmissionRule{
 		ID:          fmt.Sprintf("rule-%d", time.Now().UnixMilli()),
-		Name:        spec.Name,
-		Description: spec.Description,
+		Name:        p.Name,
+		Description: p.Description,
 		Enabled:     true,
-		Spec: RuleSpec{
-			MatchConstraints: spec.MatchConstraints,
-			Validations:      spec.Validations,
-		},
-		RawYAML:   rawYAML,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Spec:        p.Spec,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 	s.mu.Lock()
 	s.rules[r.ID] = r
@@ -141,10 +145,9 @@ func (s *RuleStore) Create(rawYAML string) (AdmissionRule, error) {
 	return r, nil
 }
 
-func (s *RuleStore) Update(id, rawYAML string) (AdmissionRule, error) {
-	spec, err := parseSpec(rawYAML)
-	if err != nil {
-		return AdmissionRule{}, err
+func (s *RuleStore) Update(id string, p CreatePayload) (AdmissionRule, error) {
+	if p.Name == "" {
+		return AdmissionRule{}, fmt.Errorf("name is required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -152,13 +155,9 @@ func (s *RuleStore) Update(id, rawYAML string) (AdmissionRule, error) {
 	if !ok {
 		return AdmissionRule{}, fmt.Errorf("rule %q not found", id)
 	}
-	existing.Name = spec.Name
-	existing.Description = spec.Description
-	existing.Spec = RuleSpec{
-		MatchConstraints: spec.MatchConstraints,
-		Validations:      spec.Validations,
-	}
-	existing.RawYAML = rawYAML
+	existing.Name = p.Name
+	existing.Description = p.Description
+	existing.Spec = p.Spec
 	s.rules[id] = existing
 	s.flush()
 	return existing, nil
@@ -188,28 +187,3 @@ func (s *RuleStore) Delete(id string) bool {
 	return true
 }
 
-// sentinelRule is the Sentinel-native rule format (flat, no apiVersion/kind/metadata).
-type sentinelRule struct {
-	Name             string           `json:"name"`
-	Description      string           `json:"description,omitempty"`
-	MatchConstraints MatchConstraints `json:"matchConstraints"`
-	Validations      []Validation     `json:"validations"`
-}
-
-func parseSpec(rawYAML string) (sentinelRule, error) {
-	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
-	if err != nil {
-		return sentinelRule{}, fmt.Errorf("invalid YAML: %w", err)
-	}
-	var v sentinelRule
-	if err := json.Unmarshal(jsonBytes, &v); err != nil {
-		return sentinelRule{}, fmt.Errorf("parse error: %w", err)
-	}
-	if len(v.Validations) == 0 {
-		return sentinelRule{}, fmt.Errorf("validations must not be empty")
-	}
-	if v.Name == "" {
-		v.Name = fmt.Sprintf("rule-%d", time.Now().UnixMilli())
-	}
-	return v, nil
-}

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"io"
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,12 +17,12 @@ func listAdmissionRules(store *admission.RuleStore) http.HandlerFunc {
 
 func createAdmissionRule(store *admission.RuleStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil || len(body) == 0 {
-			http.Error(w, "body required", http.StatusBadRequest)
+		var p admission.CreatePayload
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		rule, err := store.Create(string(body))
+		rule, err := store.Create(p)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -34,12 +34,12 @@ func createAdmissionRule(store *admission.RuleStore) http.HandlerFunc {
 func updateAdmissionRule(store *admission.RuleStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		body, err := io.ReadAll(r.Body)
-		if err != nil || len(body) == 0 {
-			http.Error(w, "body required", http.StatusBadRequest)
+		var p admission.CreatePayload
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		rule, err := store.Update(id, string(body))
+		rule, err := store.Update(id, p)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
