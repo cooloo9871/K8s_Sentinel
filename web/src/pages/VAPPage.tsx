@@ -184,7 +184,6 @@ export function VAPPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Namespace</TableHead>
                       <TableHead>Failure Policy</TableHead>
                       <TableHead>Validations</TableHead>
                       <TableHead>Created By</TableHead>
@@ -198,7 +197,6 @@ export function VAPPage() {
                     ) : policies.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
                       <TableRow key={p.name}>
                         <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell><Badge variant="secondary" className="text-[10px]">{p.namespace}</Badge></TableCell>
                         <TableCell>
                           <Badge variant={p.failurePolicy === 'Fail' ? 'destructive' : 'secondary'}>
                             {p.failurePolicy || '—'}
@@ -241,7 +239,6 @@ export function VAPPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Namespace</TableHead>
                       <TableHead>Policy</TableHead>
                       <TableHead>Validation Actions</TableHead>
                       <TableHead>Created By</TableHead>
@@ -255,7 +252,6 @@ export function VAPPage() {
                     ) : bindings.filter(b => !search || b.name.toLowerCase().includes(search.toLowerCase())).map(b => (
                       <TableRow key={b.name}>
                         <TableCell className="font-medium">{b.name}</TableCell>
-                        <TableCell><Badge variant="secondary" className="text-[10px]">{b.namespace}</Badge></TableCell>
                         <TableCell className="text-muted-foreground">{b.policyName}</TableCell>
                         <TableCell>
                           <div className="flex gap-1 flex-wrap">
