@@ -36,31 +36,19 @@ type WebhookPayload struct {
 }
 
 func buildText(p WebhookPayload) string {
-	icon := "⚠️"
-	if p.Severity == "critical" {
-		icon = "🔴"
-	}
 	lines := []string{
-		fmt.Sprintf("%s *[%s]* %s", icon, strings.ToUpper(p.Severity), p.RuleName),
+		fmt.Sprintf("[%s] %s", strings.ToUpper(p.Severity), p.RuleName),
+		fmt.Sprintf("*Pod:* `%s/%s`", p.Namespace, p.Pod),
 	}
-
-	podLine := fmt.Sprintf("*Pod:* `%s/%s`", p.Namespace, p.Pod)
+	if p.PolicyName != "" {
+		lines = append(lines, fmt.Sprintf("*Policy:* `%s`", p.PolicyName))
+	}
+	if p.Binary != "" {
+		lines = append(lines, fmt.Sprintf("*Binary:* `%s`", p.Binary))
+	}
 	if p.NodeName != "" {
-		podLine += fmt.Sprintf("  •  *Node:* `%s`", p.NodeName)
+		lines = append(lines, fmt.Sprintf("*Node:* `%s`", p.NodeName))
 	}
-	lines = append(lines, podLine)
-
-	if p.PolicyName != "" || p.Binary != "" {
-		var parts []string
-		if p.PolicyName != "" {
-			parts = append(parts, fmt.Sprintf("*Policy:* `%s`", p.PolicyName))
-		}
-		if p.Binary != "" {
-			parts = append(parts, fmt.Sprintf("*Binary:* `%s`", p.Binary))
-		}
-		lines = append(lines, strings.Join(parts, "  •  "))
-	}
-
 	if p.ProcessUID != nil {
 		user := fmt.Sprintf("uid=%d", *p.ProcessUID)
 		if *p.ProcessUID == 0 {
@@ -68,19 +56,15 @@ func buildText(p WebhookPayload) string {
 		}
 		lines = append(lines, fmt.Sprintf("*User:* %s", user))
 	}
-
 	if p.FilePath != "" {
 		lines = append(lines, fmt.Sprintf("*File (%s):* `%s`", p.FileOp, p.FilePath))
 	}
-
 	if p.NetDest != "" {
-		netLine := fmt.Sprintf("*Destination:* `%s`", p.NetDest)
-		if p.NetSrc != "" {
-			netLine += fmt.Sprintf("  •  *Source:* `%s`", p.NetSrc)
-		}
-		lines = append(lines, netLine)
+		lines = append(lines, fmt.Sprintf("*Destination:* `%s`", p.NetDest))
 	}
-
+	if p.NetSrc != "" {
+		lines = append(lines, fmt.Sprintf("*Source:* `%s`", p.NetSrc))
+	}
 	return strings.Join(lines, "\n")
 }
 
