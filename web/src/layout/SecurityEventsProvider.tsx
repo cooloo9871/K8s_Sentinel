@@ -3,7 +3,7 @@ import type { TetragonEvent } from '../api/types'
 
 const MAX_WARNINGS  = 300
 const MAX_CRITICALS = 200
-const DEDUP_WINDOW_MS = 5000
+const DEDUP_WINDOW_MS = 30000
 
 /** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */
 function capBySeverity(events: DisplayEvent[]): DisplayEvent[] {
