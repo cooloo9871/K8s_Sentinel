@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 )
 
 // WebhookPayload is the JSON body posted to webhook endpoints.
+// The Text field is a human-readable summary compatible with Slack Incoming Webhooks.
 type WebhookPayload struct {
+	Text       string `json:"text"` // Slack-compatible summary
 	RuleName   string `json:"ruleName"`
 	Severity   string `json:"severity"`
 	Time       string `json:"time"`
@@ -28,6 +31,24 @@ type WebhookPayload struct {
 	FileOp     string `json:"fileOp,omitempty"`
 	NetDest    string `json:"netDest,omitempty"`
 	NetSrc     string `json:"netSrc,omitempty"`
+}
+
+func buildText(p WebhookPayload) string {
+	sev := strings.ToUpper(p.Severity)
+	s := fmt.Sprintf("[%s] %s — %s/%s", sev, p.RuleName, p.Namespace, p.Pod)
+	if p.PolicyName != "" {
+		s += fmt.Sprintf("\nPolicy: %s", p.PolicyName)
+	}
+	if p.Binary != "" {
+		s += fmt.Sprintf(" | Binary: %s", p.Binary)
+	}
+	if p.FilePath != "" {
+		s += fmt.Sprintf("\nFile (%s): %s", p.FileOp, p.FilePath)
+	}
+	if p.NetDest != "" {
+		s += fmt.Sprintf("\nDestination: %s", p.NetDest)
+	}
+	return s
 }
 
 // Dispatcher watches the Tetragon event stream and fires webhook alerts.
@@ -123,6 +144,7 @@ func (d *Dispatcher) post(rule AlertRule, evt k8s.TetragonEvent, severity string
 		NetDest:    evt.NetDest,
 		NetSrc:     evt.NetSrc,
 	}
+	payload.Text = buildText(payload)
 	body, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("alert-dispatcher: marshal error: %v", err)
@@ -151,6 +173,7 @@ func (d *Dispatcher) SendTest(webhookURL string) error {
 		PolicyName: "monitor-all-exec",
 		Function:   "sys_execve",
 	}
+	payload.Text = buildText(payload)
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
