@@ -476337,3 +476337,4659 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+fix: fix 2 bugs found in code review
+
+1. tetragon.go: use exact function name match in kprobe arg parsing
+   strings.Contains("tcp_connect_v6", "tcp_connect") would incorrectly
+   trigger NetDest parsing on wrong function. Changed to switch on exact
+   evt.Function value for all file/network kprobes. execve keeps
+   strings.Contains since syscalls have arch prefixes (__x64_, etc).
+
+2. PolicyTemplatesPage: add dialogLoading guard to openDialog
+   Without a guard, double-clicking or rapidly switching templates
+   while clusterApi.cidr() is in-flight could call setSelected() twice
+   with mismatched template name/YAML. Now ignores concurrent calls and
+   shows "Loading..." on all Use Template buttons while fetching.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit bug fixes"
+  },
+  "tool_response": {
+    "stdout": "[main aca87b8] fix: fix 2 bugs found in code review
+ 3 files changed, 13960 insertions(+), 6 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "aca87b8",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "更新 README"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/README.md",
+      "content": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium + Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+      "numLines": 131,
+      "startLine": 1,
+      "totalLines": 131
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+    "new_string": "- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+    "new_string": "- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+    "newString": "- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium + Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 21,
+        "oldLines": 7,
+        "newStart": 21,
+        "newLines": 11,
+        "lines": [
+          " - **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式",
+          " - 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy",
+          " - **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`",
+          "-- **Policy Templates**：內建常用範本（Monitor All Process Executions、Monitor All File Access）與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；點擊 **View YAML / Open in Editor** 查看或修改範本；自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+          "+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選",
+          "+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行",
+          "+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）",
+          "+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）",
+          "+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）",
+          " ",
+          " ### Behavior Discovery — 行為探索",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天",
+    "new_string": "- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天",
+    "new_string": "- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天",
+    "newString": "- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium + Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 40,
+        "oldLines": 7,
+        "newStart": 40,
+        "newLines": 8,
+        "lines": [
+          " - 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）",
+          " - Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限",
+          " - 依 Namespace、Pod 名稱、嚴重程度篩選",
+          "-- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / truncate）、網路目標、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等",
+          "+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等",
+          "+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版",
+          " - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件",
+          " - 時間顯示支援秒、分、時、天",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |",
+    "new_string": "| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |",
+    "new_string": "| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |",
+    "newString": "| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium + Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 125,
+        "oldLines": 7,
+        "newStart": 125,
+        "newLines": 10,
+        "lines": [
+          " | API Group | 資源 | 操作 |",
+          " |---|---|---|",
+          " | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |",
+          "-| `""` (core) | `namespaces`, `pods`, `pods/exec` | get, list |",
+          "+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |",
+          "+| `""` (core) | `events` | get, list, watch |",
+          "+| `""` (core) | `nodes` | get, list |",
+          "+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |",
+          " | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |",
+          " ",
+          " ---"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: update README — templates, event detail, dedup, RBAC
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README update"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: update README — templates, event detail, dedup, RBAC
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README update"
+  },
+  "tool_response": {
+    "stdout": "[main d5a2ead] docs: update README — templates, event detail, dedup, RBAC
+ 1 file changed, 11 insertions(+), 3 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "d5a2ead",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "在 Security Events 的 Rule / Detail 這個欄位，也會有名稱太長的時候，然後覆蓋到 Namespace 欄位的名字，不要有覆蓋"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "ruleType\\|Rule\\|Detail\\|TableCell\\|truncate\\|max-w" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -40",
+    "description": "Find Rule/Detail column in SecurityEventsPage"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "ruleType\\|Rule\\|Detail\\|TableCell\\|truncate\\|max-w" /home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx | head -40",
+    "description": "Find Rule/Detail column in SecurityEventsPage"
+  },
+  "tool_response": {
+    "stdout": "5:  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+19:function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+27:function RuleTypeBadge({ fn }: { fn: string }) {
+28:  const type = ruleType(fn)
+36:    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+64:function DetailRow({ e }: { e: DisplayEvent }) {
+103:      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+112:      </TableCell>
+260:                  <TableHead className="w-40">Rule / Detail</TableHead>
+276:                      <TableCell className="py-2 pl-3 pr-0">
+280:                      </TableCell>
+281:                      <TableCell>
+283:                      </TableCell>
+284:                      <TableCell>
+286:                          <RuleTypeBadge fn={e.function} />
+292:                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+299:                      </TableCell>
+300:                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+301:                      <TableCell className="text-sm">
+302:                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+308:                      </TableCell>
+309:                      <TableCell className="max-w-[180px]">
+311:                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+313:                      </TableCell>
+314:                      <TableCell>
+316:                      </TableCell>
+318:                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 280,
+    "limit": 25
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 280,
+    "limit": 25
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+      "content": "                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium">
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (",
+      "numLines": 25,
+      "startLine": 280,
+      "totalLines": 330
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium">
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                        )}
+                      </TableCell>",
+    "new_string": "                      <TableCell className="max-w-[240px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}
+                      </TableCell>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium">
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                        )}
+                      </TableCell>",
+    "new_string": "                      <TableCell className="max-w-[240px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}
+                      </TableCell>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium">
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                        )}
+                      </TableCell>",
+    "newString": "                      <TableCell className="max-w-[240px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}
+                      </TableCell>",
+    "originalFile": "import React, { useState } from 'react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }
+  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
+
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-44"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium">
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </React.Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 281,
+        "oldLines": 20,
+        "newStart": 281,
+        "newLines": 20,
+        "lines": [
+          "                       <TableCell>",
+          "                         <SeverityBadge severity={e.severity} />",
+          "                       </TableCell>",
+          "-                      <TableCell>",
+          "-                        <div className="flex items-center gap-1.5">",
+          "+                      <TableCell className="max-w-[240px]">",
+          "+                        <div className="flex items-center gap-1.5 min-w-0">",
+          "                           <RuleTypeBadge fn={e.function} />",
+          "-                          <span className="font-mono text-sm font-medium">",
+          "+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>",
+          "                             {e.binary ? e.binary.split('/').pop() : '—'}",
+          "                           </span>",
+          "                         </div>",
+          "                         {e.filePath && (",
+          "-                          <p className="truncate font-mono text-xs text-muted-foreground max-w-[260px]" title={e.filePath}>",
+          "+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>",
+          "                             {e.filePath}",
+          "                           </p>",
+          "                         )}",
+          "                         {e.netDest && (",
+          "-                          <p className="font-mono text-xs text-muted-foreground">{e.netDest}</p>",
+          "+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>",
+          "                         )}",
+          "                       </TableCell>",
+          "                       <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 347ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/SecurityEventsPage.tsx && git commit -m "$(cat <<'EOF'
+fix: truncate Rule/Detail column to prevent overflow into Namespace
+
+Added max-w-[240px] to the cell, truncate to binary name and netDest.
+All long values show full text on hover via title attribute.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit fix"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/SecurityEventsPage.tsx && git commit -m "$(cat <<'EOF'
+fix: truncate Rule/Detail column to prevent overflow into Namespace
+
+Added max-w-[240px] to the cell, truncate to binary name and netDest.
+All long values show full text on hover via title attribute.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit fix"
+  },
+  "tool_response": {
+    "stdout": "[main 3a60392] fix: truncate Rule/Detail column to prevent overflow into Namespace
+ 1 file changed, 5 insertions(+), 5 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "3a60392",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "在 Security Events 的 Rule / Detail 這個欄位，他的名稱還是會太常，然後覆蓋到 Namespace 欄位的名字，不要有覆蓋"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 255,
+    "limit": 60
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 255,
+    "limit": 60
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+      "content": "            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 {
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git checkout -- web/src/pages/SecurityEventsPage.tsx",
+    "description": "Restore file from git"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git checkout -- web/src/pages/SecurityEventsPage.tsx",
+    "description": "Restore file from git"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 284,
+    "limit": 3
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "offset": 284,
+    "limit": 3
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+      "content": "                      <TableCell className="max-w-[240px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />",
+      "numLines": 3,
+      "startLine": 284,
+      "totalLines": 330
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                      <TableCell className="max-w-[240px]">",
+    "new_string": "                      <TableCell className="overflow-hidden">",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                      <TableCell className="max-w-[240px]">",
+    "new_string": "                      <TableCell className="overflow-hidden">",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "                      <TableCell className="max-w-[240px]">",
+    "newString": "                      <TableCell className="overflow-hidden">",
+    "originalFile": "import React, { useState } from 'react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }
+  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
+
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-44"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell className="max-w-[240px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </React.Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 281,
+        "oldLines": 7,
+        "newStart": 281,
+        "newLines": 7,
+        "lines": [
+          "                       <TableCell>",
+          "                         <SeverityBadge severity={e.severity} />",
+          "                       </TableCell>",
+          "-                      <TableCell className="max-w-[240px]">",
+          "+                      <TableCell className="overflow-hidden">",
+          "                         <div className="flex items-center gap-1.5 min-w-0">",
+          "                           <RuleTypeBadge fn={e.function} />",
+          "                           <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | tail -3",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | tail -3",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/SecurityEventsPage.tsx && git commit -m "$(cat <<'EOF'
+fix: use overflow-hidden on Rule/Detail cell to prevent overflow
+
+max-w on table-fixed cells doesn't clip content; overflow-hidden does.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit fix"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/pages/SecurityEventsPage.tsx && git commit -m "$(cat <<'EOF'
+fix: use overflow-hidden on Rule/Detail cell to prevent overflow
+
+max-w on table-fixed cells doesn't clip content; overflow-hidden does.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit fix"
+  },
+  "tool_response": {
+    "stdout": "[main dea4e02] fix: use overflow-hidden on Rule/Detail cell to prevent overflow
+ 1 file changed, 1 insertion(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "dea4e02",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "你認為目前的 Sentinel 還需要添加什麼功能？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Security Events 的 network rule 裡面我想要可以看到 destination 和 source 而不是只有 destination，所以 Network 換成 Destination 然後再加一個 Source，在 detial 的內容裡面"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes",
+    "new_string": "	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes",
+    "new_string": "	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes",
+    "newString": "	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch evt.Function {
+		case "security_file_permission":
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case "security_mmap_file":
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case "security_path_truncate":
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case "tcp_connect":
+			evt.NetDest = sockArgDest(args, 0)
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 31,
+        "oldLines": 7,
+        "newStart": 31,
+        "newLines": 8,
+        "lines": [
+          "   Function   string  `json:"function"`",
+          "   FilePath   string  `json:"filePath"`   // file/path from file kprobes",
+          "   FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"",
+          "-  NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes",
+          "+  NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes",
+          "+  NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes",
+          "   ProcessUID *uint32 `json:"processUid,omitempty"`",
+          " }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "		case "tcp_connect":
+			evt.NetDest = sockArgDest(args, 0)",
+    "new_string": "		case "tcp_connect":
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "		case "tcp_connect":
+			evt.NetDest = sockArgDest(args, 0)",
+    "new_string": "		case "tcp_connect":
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "		case "tcp_connect":
+			evt.NetDest = sockArgDest(args, 0)",
+    "newString": "		case "tcp_connect":
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch evt.Function {
+		case "security_file_permission":
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case "security_mmap_file":
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case "security_path_truncate":
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case "tcp_connect":
+			evt.NetDest = sockArgDest(args, 0)
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 227,
+        "oldLines": 7,
+        "newStart": 227,
+        "newLines": 7,
+        "lines": [
+          "       evt.FilePath = pathArgPath(args, 0)",
+          "       evt.FileOp = "truncate"",
+          "     case "tcp_connect":",
+          "-      evt.NetDest = sockArgDest(args, 0)",
+          "+      evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)",
+          "     }",
+          "   }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}",
+    "new_string": "func sockArgEndpoints(args []any, idx int) (dest, src string) {
+	if idx >= len(args) {
+		return "", ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	formatAddr := func(addrKey, portKey string) string {
+		addr := anyStr(sock, addrKey)
+		if addr == "" {
+			return ""
+		}
+		if port, ok := sock[portKey].(float64); ok && port > 0 {
+			return fmt.Sprintf("%s:%d", addr, int(port))
+		}
+		return addr
+	}
+	return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}",
+    "new_string": "func sockArgEndpoints(args []any, idx int) (dest, src string) {
+	if idx >= len(args) {
+		return "", ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	formatAddr := func(addrKey, portKey string) string {
+		addr := anyStr(sock, addrKey)
+		if addr == "" {
+			return ""
+		}
+		if port, ok := sock[portKey].(float64); ok && port > 0 {
+			return fmt.Sprintf("%s:%d", addr, int(port))
+		}
+		return addr
+	}
+	return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}",
+    "newString": "func sockArgEndpoints(args []any, idx int) (dest, src string) {
+	if idx >= len(args) {
+		return "", ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	formatAddr := func(addrKey, portKey string) string {
+		addr := anyStr(sock, addrKey)
+		if addr == "" {
+			return ""
+		}
+		if port, ok := sock[portKey].(float64); ok && port > 0 {
+			return fmt.Sprintf("%s:%d", addr, int(port))
+		}
+		return addr
+	}
+	return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")
+}",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch evt.Function {
+		case "security_file_permission":
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case "security_mmap_file":
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case "security_path_truncate":
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case "tcp_connect":
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func sockArgDest(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	daddr := anyStr(sock, "daddr")
+	if daddr == "" {
+		return ""
+	}
+	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
+		return fmt.Sprintf("%s:%d", daddr, int(dport))
+	}
+	return daddr
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 292,
+        "oldLines": 26,
+        "newStart": 292,
+        "newLines": 29,
+        "lines": [
+          "   return """,
+          " }",
+          " ",
+          "-func sockArgDest(args []any, idx int) string {",
+          "+func sockArgEndpoints(args []any, idx int) (dest, src string) {",
+          "   if idx >= len(args) {",
+          "-    return """,
+          "+    return "", """,
+          "   }",
+          "   arg, ok := args[idx].(map[string]any)",
+          "   if !ok {",
+          "-    return """,
+          "+    return "", """,
+          "   }",
+          "   sock, ok := arg["sock_arg"].(map[string]any)",
+          "   if !ok {",
+          "-    return """,
+          "+    return "", """,
+          "   }",
+          "-  daddr := anyStr(sock, "daddr")",
+          "-  if daddr == "" {",
+          "-    return """,
+          "+  formatAddr := func(addrKey, portKey string) string {",
+          "+    addr := anyStr(sock, addrKey)",
+          "+    if addr == "" {",
+          "+      return """,
+          "+    }",
+          "+    if port, ok := sock[portKey].(float64); ok && port > 0 {",
+          "+      return fmt.Sprintf("%s:%d", addr, int(port))",
+          "+    }",
+          "+    return addr",
+          "   }",
+          "-  if dport, ok := sock["dport"].(float64); ok && dport > 0 {",
+          "-    return fmt.Sprintf("%s:%d", daddr, int(dport))",
+          "-  }",
+          "-  return daddr",
+          "+  return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")",
+          " }",
+          " ",
+          " func fileArgPath(args []any, idx int) string {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "new_string": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe
+  netSrc: string       // network source "addr:port" from tcp_connect kprobe",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "old_string": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "new_string": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe
+  netSrc: string       // network source "addr:port" from tcp_connect kprobe",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/types.ts",
+    "oldString": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+    "newString": "  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe
+  netSrc: string       // network source "addr:port" from tcp_connect kprobe",
+    "originalFile": "export interface ProcessRule {
+  binaries: string[]
+}
+
+export interface FileRule {
+  paths: string[]
+  exceptBinaries?: string[]              // binaries exempted from this rule (matchBinaries: NotIn)
+  permission?: 'all' | 'read' | 'write' // default 'all'; 'read'=MAY_READ=4, 'write'=MAY_WRITE=2
+}
+
+export interface NetworkRule {
+  address: string  // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
+}
+
+export interface PolicyFormInput {
+  name: string
+  namespace?: string
+  podSelector?: Record<string, string>
+  processMode?: 'whitelist' | 'blacklist'  // whitelist = NotPostfix (default), blacklist = Postfix
+  process?: ProcessRule[]
+  fileMode?: 'whitelist' | 'blacklist'     // whitelist = NotPrefix, blacklist = Prefix (default)
+  file?: FileRule[]
+  network?: NetworkRule[]
+  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
+  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr
+}
+
+export interface PolicyRecord {
+  name: string
+  namespace?: string
+  scope: 'cluster' | 'namespaced'
+  mode: 'Monitoring' | 'Protect' | 'Mixed'
+  createdBy: string
+  createdAt: string
+  rawYaml: string
+}
+
+export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
+
+export interface TetragonEvent {
+  type: 'exec' | 'exit' | 'kprobe'
+  time: string
+  nodeName: string
+  namespace: string
+  pod: string
+  container: string
+  binary: string
+  arguments: string
+  parentBin: string
+  action: 'monitor' | 'kill' | ''
+  policyName: string
+  function: string
+  filePath: string     // file path from file kprobes
+  fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
+  netDest: string      // network destination "addr:port" from tcp_connect kprobe
+  processUid?: number  // effective UID of the process (undefined = unknown)
+}
+
+export interface CreatePolicyPayload {
+  source: 'form' | 'yaml'
+  form?: PolicyFormInput
+  action?: string
+  rawYaml?: string
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 53,
+        "oldLines": 6,
+        "newStart": 53,
+        "newLines": 7,
+        "lines": [
+          "   filePath: string     // file path from file kprobes",
+          "   fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"",
+          "   netDest: string      // network destination "addr:port" from tcp_connect kprobe",
+          "+  netSrc: string       // network source "addr:port" from tcp_connect kprobe",
+          "   processUid?: number  // effective UID of the process (undefined = unknown)",
+          " }",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })",
+    "new_string": "  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })",
+    "new_string": "  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })",
+    "newString": "  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })",
+    "originalFile": "import React, { useState } from 'react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }
+  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
+
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-44"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell className="overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </React.Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 68,
+        "oldLines": 7,
+        "newStart": 68,
+        "newLines": 8,
+        "lines": [
+          "     const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'",
+          "     items.push({ label: opLabel, value: e.filePath })",
+          "   }",
+          "-  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })",
+          "+  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })",
+          "+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })",
+          "   if (e.binary)    items.push({ label: 'Binary',  value: e.binary })",
+          "   // When the parent is runc, the "arguments" belong to runc (not to the",
+          "   // binary being exec'd), so merge them into the Parent line to avoid confusion."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}",
+    "new_string": "                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>
+                        )}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}",
+    "new_string": "                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>
+                        )}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}",
+    "newString": "                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>
+                        )}",
+    "originalFile": "import React, { useState } from 'react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }
+  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
+
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-44"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell className="overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </React.Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 295,
+        "oldLines": 7,
+        "newStart": 295,
+        "newLines": 7,
+        "lines": [
+          "                           </p>",
+          "                         )}",
+          "                         {e.netDest && (",
+          "-                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>",
+          "+                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>",
+          "                         )}",
+          "                       </TableCell>",
+          "                       <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 362ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: show source and destination in Security Events network detail
+
+Backend:
+- TetragonEvent adds NetSrc field (saddr:sport)
+- sockArgEndpoints() replaces sockArgDest(), returns both dest and src
+  from sock_arg.daddr/dport and saddr/sport
+
+Frontend:
+- TetragonEvent type adds netSrc
+- Detail row: "Network" split into "Destination" and "Source"
+- Row inline display: netDest prefixed with → arrow
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit network source/destination feature"
+  }
+}
+
+----------------------------------------
+

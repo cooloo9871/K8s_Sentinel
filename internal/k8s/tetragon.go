@@ -31,7 +31,8 @@ type TetragonEvent struct {
 	Function   string  `json:"function"`
 	FilePath   string  `json:"filePath"`   // file/path from file kprobes
 	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
-	NetDest    string  `json:"netDest"`    // "addr:port" from network kprobes
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes
 	ProcessUID *uint32 `json:"processUid,omitempty"`
 }
 
@@ -226,7 +227,7 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 			evt.FilePath = pathArgPath(args, 0)
 			evt.FileOp = "truncate"
 		case "tcp_connect":
-			evt.NetDest = sockArgDest(args, 0)
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)
 		}
 	}
 
@@ -291,26 +292,29 @@ func anyStr(m map[string]any, keys ...string) string {
 	return ""
 }
 
-func sockArgDest(args []any, idx int) string {
+func sockArgEndpoints(args []any, idx int) (dest, src string) {
 	if idx >= len(args) {
-		return ""
+		return "", ""
 	}
 	arg, ok := args[idx].(map[string]any)
 	if !ok {
-		return ""
+		return "", ""
 	}
 	sock, ok := arg["sock_arg"].(map[string]any)
 	if !ok {
-		return ""
+		return "", ""
 	}
-	daddr := anyStr(sock, "daddr")
-	if daddr == "" {
-		return ""
+	formatAddr := func(addrKey, portKey string) string {
+		addr := anyStr(sock, addrKey)
+		if addr == "" {
+			return ""
+		}
+		if port, ok := sock[portKey].(float64); ok && port > 0 {
+			return fmt.Sprintf("%s:%d", addr, int(port))
+		}
+		return addr
 	}
-	if dport, ok := sock["dport"].(float64); ok && dport > 0 {
-		return fmt.Sprintf("%s:%d", daddr, int(dport))
-	}
-	return daddr
+	return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")
 }
 
 func fileArgPath(args []any, idx int) string {

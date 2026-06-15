@@ -68,7 +68,8 @@ function DetailRow({ e }: { e: DisplayEvent }) {
     const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
     items.push({ label: opLabel, value: e.filePath })
   }
-  if (e.netDest)   items.push({ label: 'Network', value: e.netDest })
+  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })
   if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
   // When the parent is runc, the "arguments" belong to runc (not to the
   // binary being exec'd), so merge them into the Parent line to avoid confusion.
@@ -294,7 +295,7 @@ export function SecurityEventsPage() {
                           </p>
                         )}
                         {e.netDest && (
-                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.netDest}>{e.netDest}</p>
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>
                         )}
                       </TableCell>
                       <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>

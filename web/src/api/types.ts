@@ -53,6 +53,7 @@ export interface TetragonEvent {
   filePath: string     // file path from file kprobes
   fileOp: string       // "read" | "write" | "mmap-read" | "mmap-write" | "truncate"
   netDest: string      // network destination "addr:port" from tcp_connect kprobe
+  netSrc: string       // network source "addr:port" from tcp_connect kprobe
   processUid?: number  // effective UID of the process (undefined = unknown)
 }
 
