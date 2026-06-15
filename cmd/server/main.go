@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"github.com/cooloo9871/sentinel/internal/alert"
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/handler"
 	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
@@ -26,10 +27,16 @@ func main() {
 		log.Fatalf("jwt secret: %v", err)
 	}
 
+	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	dispatcher := alert.NewDispatcher(alerts, store)
+	go dispatcher.Run(context.Background())
+
 	cfg := handler.Config{
-		Store:  store,
-		Users:  users,
-		Secret: secret,
+		Store:      store,
+		Users:      users,
+		Secret:     secret,
+		Alerts:     alerts,
+		Dispatcher: dispatcher,
 	}
 
 	mux := http.NewServeMux()

@@ -15,6 +15,7 @@ import { DiscoveryPage } from './pages/DiscoveryPage'
 import { TetragonStatusPage } from './pages/TetragonStatusPage'
 import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
 import { UsersPage } from './pages/UsersPage'
+import { AlertsPage } from './pages/AlertsPage'
 
 function AppRoutes() {
   const { user, loading, logout } = useAuth()
@@ -45,6 +46,7 @@ function AppRoutes() {
           <Route path="/security/events" element={<SecurityEventsPage />} />
           <Route path="/security/discovery" element={<DiscoveryPage />} />
           <Route path="/settings/users" element={<UsersPage />} />
+          <Route path="/settings/alerts" element={<AlertsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

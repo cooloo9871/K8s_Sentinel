@@ -85,6 +85,30 @@ export const userApi = {
     api.put(`/users/${username}/password`, { password }),
 }
 
+export interface AlertRule {
+  id: string
+  name: string
+  webhookURL: string
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]   // empty = all
+  policies: string[]     // empty = all
+  cooldownMin: number    // 0 = no cooldown
+  enabled: boolean
+}
+
+export const alertsApi = {
+  list: (): Promise<AlertRule[]> =>
+    api.get('/alerts').then((r) => r.data ?? []),
+  create: (rule: Omit<AlertRule, 'id'>): Promise<AlertRule> =>
+    api.post('/alerts', rule).then((r) => r.data),
+  update: (id: string, rule: AlertRule): Promise<AlertRule> =>
+    api.put(`/alerts/${id}`, rule).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/alerts/${id}`),
+  test: (webhookURL: string): Promise<void> =>
+    api.post('/alerts/test', { webhookURL }),
+}
+
 export const clusterApi = {
   cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
     api.get('/cluster/cidr').then((r) => r.data),

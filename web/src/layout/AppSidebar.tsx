@@ -105,6 +105,11 @@ export function AppSidebar() {
                     <NavLink to="/settings/users">Users</NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>
+                    <NavLink to="/settings/alerts">Alerts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

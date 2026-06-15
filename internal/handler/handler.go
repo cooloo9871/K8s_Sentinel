@@ -7,15 +7,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/cooloo9871/sentinel/internal/alert"
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
 // Config holds dependencies for all handlers.
 type Config struct {
-	Store  *k8s.Store
-	Users  *auth.UserStore
-	Secret []byte
+	Store      *k8s.Store
+	Users      *auth.UserStore
+	Secret     []byte
+	Alerts     *alert.Store
+	Dispatcher *alert.Dispatcher
 }
 
 // New builds the HTTP handler tree.
@@ -47,6 +50,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
 		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
 		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
+		r.Get("/api/alerts", listAlerts(cfg.Alerts))
 
 		// Admin-only (writes)
 		r.Group(func(r chi.Router) {
@@ -65,6 +69,10 @@ func New(cfg Config) http.Handler {
 			r.Post("/api/users", createUserHandler(cfg.Users))
 			r.Delete("/api/users/{username}", deleteUserHandler(cfg.Users))
 			r.Put("/api/settings/session-ttl", setSessionTTLHandler(cfg.Users))
+			r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
+			r.Post("/api/alerts", createAlert(cfg.Alerts))
+			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
+			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
 		})
 	})
 
