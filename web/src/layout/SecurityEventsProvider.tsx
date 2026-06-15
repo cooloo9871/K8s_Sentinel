@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { TetragonEvent } from '../api/types'
 
-const MAX_WARNINGS  = 300
-const MAX_CRITICALS = 200
+const MAX_WARNINGS  = 500
+const MAX_CRITICALS = 300
 const DEDUP_WINDOW_MS = 30000
 
 /** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */
