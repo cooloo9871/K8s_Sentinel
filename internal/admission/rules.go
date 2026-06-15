@@ -148,7 +148,7 @@ func (s *RuleStore) Update(id, rawYAML string) (AdmissionRule, error) {
 	if !ok {
 		return AdmissionRule{}, fmt.Errorf("rule %q not found", id)
 	}
-	existing.Name = spec.Name
+	existing.Name = spec.Metadata.Name
 	existing.Spec = spec.Spec
 	existing.RawYAML = rawYAML
 	s.rules[id] = existing
