@@ -13,6 +13,7 @@ import {
 import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
 import type { DisplayEvent } from '../layout/SecurityEventsProvider'
 import { formatTWTime } from '../utils/time'
+import { exportCSV, exportPDF } from '../utils/exportEvents'
 
 type FilterType = 'all' | 'warning' | 'critical'
 
@@ -179,6 +180,15 @@ export function SecurityEventsPage() {
                 +{pendingCount}
               </span>
             )}
+          </Button>
+
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportPDF(filtered)}>
+            Export PDF
           </Button>
 
           <Select value={nsFilter} onValueChange={setNsFilter}>
