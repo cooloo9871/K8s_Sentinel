@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { type AdmissionEvent } from '../api/client'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { formatTWTime } from '../utils/time'
 
 export function AdmissionEventsPage() {
@@ -64,14 +67,17 @@ export function AdmissionEventsPage() {
         <Input placeholder="Search name or policy..."
           value={search} onChange={e => setSearch(e.target.value)}
           className="h-8 w-56 text-sm" />
-        <select
-          value={nsFilter}
-          onChange={e => setNsFilter(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-        >
-          <option value="all">All Namespaces</option>
-          {namespaces.map(ns => <option key={ns} value={ns}>{ns}</option>)}
-        </select>
+        <Select value={nsFilter} onValueChange={setNsFilter}>
+          <SelectTrigger className="h-8 w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All Namespaces</SelectItem>
+              {namespaces.map(ns => <SelectItem key={ns} value={ns}>{ns}</SelectItem>)}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <span className="ml-auto text-xs text-muted-foreground">
           {filtered.length} event{filtered.length !== 1 ? 's' : ''}
         </span>
