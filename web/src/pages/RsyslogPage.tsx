@@ -205,8 +205,8 @@ export function RsyslogPage() {
     <>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h4 className="text-xl font-semibold">rsyslog</h4>
-          <p className="text-sm text-muted-foreground">Forward Security Events to rsyslog servers.</p>
+          <h4 className="text-xl font-semibold">Syslog</h4>
+          <p className="text-sm text-muted-foreground">Forward Security Events to syslog servers.</p>
         </div>
         {isAdmin && !showForm && (
           <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>

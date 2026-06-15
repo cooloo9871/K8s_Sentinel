@@ -49,7 +49,7 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
   ],
   '/security/rsyslog': [
     { label: 'Notifications' },
-    { label: 'rsyslog' },
+    { label: 'Syslog' },
   ],
 }
 

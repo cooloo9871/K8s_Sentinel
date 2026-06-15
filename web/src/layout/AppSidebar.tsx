@@ -81,7 +81,7 @@ export function AppSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
-                  <NavLink to="/security/rsyslog">rsyslog</NavLink>
+                  <NavLink to="/security/rsyslog">Syslog</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
