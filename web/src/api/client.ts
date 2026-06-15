@@ -119,7 +119,7 @@ export const rsyslogApi = {
   delete: (id: string): Promise<void> =>
     api.delete(`/rsyslog/${id}`),
   test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
-    api.post('/rsyslog/test', cfg),
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),
 }
 
 export const alertsApi = {

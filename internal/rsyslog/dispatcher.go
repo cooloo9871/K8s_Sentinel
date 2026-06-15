@@ -119,16 +119,27 @@ func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
 	}
 }
 
-// TestSend opens a one-shot connection and sends a test message.
+// TestSend opens a one-shot connection and sends a test message with a 5-second timeout.
 func (d *Dispatcher) TestSend(cfg Config) error {
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
-	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
-	if err != nil {
-		return fmt.Errorf("connect %s: %w", addr, err)
+	type result struct{ err error }
+	ch := make(chan result, 1)
+	go func() {
+		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+		priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+		w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+		if err != nil {
+			ch <- result{fmt.Errorf("connect %s: %w", addr, err)}
+			return
+		}
+		defer w.Close()
+		ch <- result{w.Notice("sentinel test message from Sentinel dashboard")}
+	}()
+	select {
+	case r := <-ch:
+		return r.err
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("connection timed out after 5s — check host and port")
 	}
-	defer w.Close()
-	return w.Notice("sentinel test message from Sentinel dashboard")
 }
 
 func buildMessage(evt k8s.TetragonEvent, severity string) string {

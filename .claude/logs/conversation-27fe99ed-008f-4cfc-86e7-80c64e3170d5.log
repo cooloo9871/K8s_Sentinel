@@ -514177,3 +514177,2238 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+refactor: remove Facility selector, hardcode local0 (16)
+
+Facility is always local0 — simplifies UI without losing functionality.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit facility removal"
+  },
+  "tool_response": {
+    "stdout": "[main 659ed26] refactor: remove Facility selector, hardcode local0 (16)
+ 2 files changed, 2269 insertions(+), 37 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "659ed26",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "示範在 /etc/rsyslog.conf 這裡要怎麼設定？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "可以定義 Sentinel 固定使用的 facility 名稱嗎？不要是 local 開頭的？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "2026/06/15 09:24:08 "GET http://192.168.1.55:32493/api/rsyslog HTTP/1.1" from 10.244.202.0:7307 - 200 187B in 407.946µs
+2026/06/15 09:24:10 "POST http://192.168.1.55:32493/api/rsyslog/test HTTP/1.1" from 10.244.202.0:24610 - 204 0B in 2.435333ms設定好 syslog 也測試通過，但觸發 event 後在 syslog server 沒有收到 log"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "245ms
+2026/06/15 09:28:49 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.774513ms
+2026/06/15 09:28:51 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 3.03714ms
+2026/06/15 09:28:53 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 2.492425ms
+2026/06/15 09:28:54 "PUT http://192.168.1.55:32493/api/rsyslog/rsyslog-1781515410270 HTTP/1.1" from 10.244.202.0:24610 - 200 195B in 33.423991ms
+2026/06/15 09:28:54 "GET http://192.168.1.55:32493/api/rsyslog HTTP/1.1" from 10.244.202.0:24610 - 200 197B in 224.575µs
+2026/06/15 09:28:55 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.997031ms
+2026/06/15 09:28:56 "POST http://192.168.1.55:32493/api/rsyslog/test HTTP/1.1" from 10.244.202.0:24610 - 204 0B in 54.559132ms
+2026/06/15 09:28:57 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.623307ms
+2026/06/15 09:28:59 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.551912ms
+2026/06/15 09:29:01 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.565694ms
+2026/06/15 09:29:03 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.720023ms
+2026/06/15 09:29:05 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 604.462µs
+2026/06/15 09:29:06 "GET http://192.168.1.55:32493/api/rsyslog HTTP/1.1" from 10.244.202.0:24610 - 200 197B in 231.033µs
+2026/06/15 09:29:07 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 128.488493ms
+2026/06/15 09:29:09 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.545468ms
+2026/06/15 09:29:11 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.434049ms
+2026/06/15 09:29:13 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.712409ms
+2026/06/15 09:29:15 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.675449ms
+2026/06/15 09:29:17 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 788.419µs
+2026/06/15 09:29:19 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.418694ms
+2026/06/15 09:29:21 "GET http://192.168.1.55:32493/api/discovery/profiles HTTP/1.1" from 10.244.202.0:24610 - 200 27398B in 1.504464msSeverity 兩個等級都有打勾，並且我沒有限制 ns 和 policy 但還是都沒收到 log，我確定現在 event 一直有產生"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "new_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "new_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "oldString": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "newString": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "originalFile": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 66,
+        "oldLines": 10,
+        "newStart": 66,
+        "newLines": 15,
+        "lines": [
+          "   if evt.Action == "kill" {",
+          "     severity = "critical"",
+          "   }",
+          "-  for _, cfg := range d.store.EnabledConfigs() {",
+          "+  configs := d.store.EnabledConfigs()",
+          "+  log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",",
+          "+    evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))",
+          "+  for _, cfg := range configs {",
+          "     if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {",
+          "+      log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)",
+          "       continue",
+          "     }",
+          "+    log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)",
+          "     go d.send(cfg, evt, severity)",
+          "   }",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}",
+    "new_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	log.Printf("rsyslog-dispatcher: starting event stream")
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+	log.Printf("rsyslog-dispatcher: event stream ended")
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}",
+    "new_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	log.Printf("rsyslog-dispatcher: starting event stream")
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+	log.Printf("rsyslog-dispatcher: event stream ended")
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "oldString": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}",
+    "newString": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	log.Printf("rsyslog-dispatcher: starting event stream")
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+	log.Printf("rsyslog-dispatcher: event stream ended")
+}",
+    "originalFile": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 46,
+        "oldLines": 6,
+        "newStart": 46,
+        "newLines": 7,
+        "lines": [
+          " }",
+          " ",
+          " func (d *Dispatcher) runOnce(ctx context.Context) {",
+          "+  log.Printf("rsyslog-dispatcher: starting event stream")",
+          "   events := make(chan k8s.TetragonEvent, 256)",
+          "   go func() {",
+          "     defer close(events)"
+        ]
+      },
+      {
+        "oldStart": 59,
+        "oldLines": 6,
+        "newStart": 60,
+        "newLines": 7,
+        "lines": [
+          "     }",
+          "     d.dispatch(evt)",
+          "   }",
+          "+  log.Printf("rsyslog-dispatcher: event stream ended")",
+          " }",
+          " ",
+          " func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/rsyslog/dispatcher.go && git commit -m "$(cat <<'EOF'
+debug: add rsyslog dispatcher logging for diagnosis
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit debug logging"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/rsyslog/dispatcher.go && git commit -m "$(cat <<'EOF'
+debug: add rsyslog dispatcher logging for diagnosis
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit debug logging"
+  },
+  "tool_response": {
+    "stdout": "[main 0988810] debug: add rsyslog dispatcher logging for diagnosis
+ 1 file changed, 8 insertions(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "0988810",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=kube-system pod=calico-node-ttpgg policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=kube-system pod=calico-node-ttpgg policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-redis-master-0 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-redis-master-0 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-redis-master-0 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-redis-master-0 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-redis-master-0 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-postgresql-0 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-postgresql-0 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:08 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-sidekiq-all-in-1-v2-74c74ff446-bfnsj policy=monitor-all-file-access-omic severity=warning configs=1
+2026/06/15 09:35:08 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-sidekiq-all-in-1-v2-74c74ff446-bfnsj policy=monitor-all-file-access-omic severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-gitlab-shell-6b59d9cbfc-jld4d policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=kube-system pod=calico-kube-controllers-7795b8cbc5-2q6m8 policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=gitlab-system pod=gitlab-gitlab-shell-6b59d9cbfc-jld4d policy=monitor-all-file-access-omic severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=kube-system pod=calico-node-bzmdb policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=kube-system pod=calico-node-bzmdb policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=kube-system pod=calico-node-bzmdb policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=kube-system pod=calico-node-bzmdb policy=monitor-all-process-executions-gg43 severity=warning configs=1
+2026/06/15 09:35:09 rsyslog-dispatcher: sending to 192.168.1.43:514
+2026/06/15 09:35:09 rsyslog-dispatcher: event ns=kube-system pod=calico-node-bzmdb policy=monitor-all-process-executions-gg43 severity=warning configs=1看 pod logs 他是一直有在送，會是我 rsyslog 設定錯嗎？
+$ cat /etc/rsyslog.conf
+# /etc/rsyslog.conf configuration file for rsyslog
+#
+# For more information install rsyslog-doc and see
+# /usr/share/doc/rsyslog-doc/html/configuration/index.html
+#
+# Default logging rules can be found in /etc/rsyslog.d/50-default.conf
+
+
+#################
+#### MODULES ####
+#################
+
+module(load="imuxsock") # provides support for local system logging
+#module(load="immark")  # provides --MARK-- message capability
+
+# provides UDP syslog reception
+#module(load="imudp")
+#input(type="imudp" port="514")
+
+# provides TCP syslog reception
+module(load="imtcp")
+input(type="imtcp" port="514")
+
+# provides kernel logging support and enable non-kernel klog messages
+module(load="imklog" permitnonkernelfacility="on")
+
+###########################
+#### GLOBAL DIRECTIVES ####
+###########################
+
+# Filter duplicated messages
+$RepeatedMsgReduction on
+
+#
+# Set the default permissions for all log files.
+#
+$FileOwner syslog
+$FileGroup adm
+$FileCreateMode 0640
+$DirCreateMode 0755
+$Umask 0022
+$PrivDropToUser syslog
+$PrivDropToGroup syslog
+
+#
+# Where to place spool and state files
+#
+$WorkDirectory /var/spool/rsyslog
+
+#
+# Include all config files in /etc/rsyslog.d/
+#
+$IncludeConfig /etc/rsyslog.d/*.conf
+
+local0.*    /var/log/sentinel/security-events.log"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "把 Sentinel 的 syslog config 測試 UDP 和 TCP 都不能發送，並且 rsyslog 我也開了 UDP 也不行$ ls -la /var/log/sentinel/
+total 8
+drwxr-xr-x  2 syslog adm    4096 Jun 15 17:21 .
+drwxr-xr-x 14 root   syslog 4096 Jun 15 17:21 .."
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "有了是因為沒有設定 sudo chown syslog:adm /var/log/sentinel"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	log.Printf("rsyslog-dispatcher: starting event stream")
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+	log.Printf("rsyslog-dispatcher: event stream ended")
+}",
+    "new_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	log.Printf("rsyslog-dispatcher: starting event stream")
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+	log.Printf("rsyslog-dispatcher: event stream ended")
+}",
+    "new_string": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "oldString": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	log.Printf("rsyslog-dispatcher: starting event stream")
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+	log.Printf("rsyslog-dispatcher: event stream ended")
+}",
+    "newString": "func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}",
+    "originalFile": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	log.Printf("rsyslog-dispatcher: starting event stream")
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+	log.Printf("rsyslog-dispatcher: event stream ended")
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 46,
+        "oldLines": 7,
+        "newStart": 46,
+        "newLines": 6,
+        "lines": [
+          " }",
+          " ",
+          " func (d *Dispatcher) runOnce(ctx context.Context) {",
+          "-  log.Printf("rsyslog-dispatcher: starting event stream")",
+          "   events := make(chan k8s.TetragonEvent, 256)",
+          "   go func() {",
+          "     defer close(events)"
+        ]
+      },
+      {
+        "oldStart": 60,
+        "oldLines": 7,
+        "newStart": 59,
+        "newLines": 6,
+        "lines": [
+          "     }",
+          "     d.dispatch(evt)",
+          "   }",
+          "-  log.Printf("rsyslog-dispatcher: event stream ended")",
+          " }",
+          " ",
+          " func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "new_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "new_string": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "oldString": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "newString": "func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}",
+    "originalFile": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	configs := d.store.EnabledConfigs()
+	log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",
+		evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))
+	for _, cfg := range configs {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)
+			continue
+		}
+		log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 66,
+        "oldLines": 15,
+        "newStart": 66,
+        "newLines": 10,
+        "lines": [
+          "   if evt.Action == "kill" {",
+          "     severity = "critical"",
+          "   }",
+          "-  configs := d.store.EnabledConfigs()",
+          "-  log.Printf("rsyslog-dispatcher: event ns=%s pod=%s policy=%s severity=%s configs=%d",",
+          "-    evt.Namespace, evt.Pod, evt.PolicyName, severity, len(configs))",
+          "-  for _, cfg := range configs {",
+          "+  for _, cfg := range d.store.EnabledConfigs() {",
+          "     if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {",
+          "-      log.Printf("rsyslog-dispatcher: rule %q skipped (no match)", cfg.Name)",
+          "       continue",
+          "     }",
+          "-    log.Printf("rsyslog-dispatcher: sending to %s:%d", cfg.Host, cfg.Port)",
+          "     go d.send(cfg, evt, severity)",
+          "   }",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/rsyslog/dispatcher.go && git commit -m "$(cat <<'EOF'
+chore: remove debug logging from rsyslog dispatcher
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit debug log removal"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add internal/rsyslog/dispatcher.go && git commit -m "$(cat <<'EOF'
+chore: remove debug logging from rsyslog dispatcher
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit debug log removal"
+  },
+  "tool_response": {
+    "stdout": "[main 72f12ba] chore: remove debug logging from rsyslog dispatcher
+ 1 file changed, 1 insertion(+), 8 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "72f12ba",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Syslog 點測試連線的時候，如果是連不到的位置，他測試會一直卡在 sending... 幫我做 timeout 並顯示連接異常，用英文顯示"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}",
+    "new_string": "// TestSend opens a one-shot connection and sends a test message with a 5-second timeout.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	type result struct{ err error }
+	ch := make(chan result, 1)
+	go func() {
+		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+		priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+		w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+		if err != nil {
+			ch <- result{fmt.Errorf("connect %s: %w", addr, err)}
+			return
+		}
+		defer w.Close()
+		ch <- result{w.Notice("sentinel test message from Sentinel dashboard")}
+	}()
+	select {
+	case r := <-ch:
+		return r.err
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("connection timed out after 5s — check host and port")
+	}
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "old_string": "// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}",
+    "new_string": "// TestSend opens a one-shot connection and sends a test message with a 5-second timeout.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	type result struct{ err error }
+	ch := make(chan result, 1)
+	go func() {
+		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+		priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+		w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+		if err != nil {
+			ch <- result{fmt.Errorf("connect %s: %w", addr, err)}
+			return
+		}
+		defer w.Close()
+		ch <- result{w.Notice("sentinel test message from Sentinel dashboard")}
+	}()
+	select {
+	case r := <-ch:
+		return r.err
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("connection timed out after 5s — check host and port")
+	}
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/rsyslog/dispatcher.go",
+    "oldString": "// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}",
+    "newString": "// TestSend opens a one-shot connection and sends a test message with a 5-second timeout.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	type result struct{ err error }
+	ch := make(chan result, 1)
+	go func() {
+		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+		priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+		w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+		if err != nil {
+			ch <- result{fmt.Errorf("connect %s: %w", addr, err)}
+			return
+		}
+		defer w.Close()
+		ch <- result{w.Notice("sentinel test message from Sentinel dashboard")}
+	}()
+	select {
+	case r := <-ch:
+		return r.err
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("connection timed out after 5s — check host and port")
+	}
+}",
+    "originalFile": "package rsyslog
+
+import (
+	"context"
+	"fmt"
+	gosyslog "log/syslog"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cooloo9871/sentinel/internal/k8s"
+)
+
+// Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
+type Dispatcher struct {
+	store   *Store
+	k8s     *k8s.Store
+	mu      sync.Mutex
+	writers map[string]*gosyslog.Writer // keyed by config ID
+}
+
+func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+	return &Dispatcher{
+		store:   store,
+		k8s:     k8s,
+		writers: make(map[string]*gosyslog.Writer),
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func (d *Dispatcher) runOnce(ctx context.Context) {
+	events := make(chan k8s.TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			log.Printf("rsyslog-dispatcher: stream error: %v", err)
+		}
+	}()
+	for evt := range events {
+		if evt.Type != "kprobe" || evt.PolicyName == "" {
+			continue
+		}
+		d.dispatch(evt)
+	}
+}
+
+func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
+	severity := "warning"
+	if evt.Action == "kill" {
+		severity = "critical"
+	}
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.send(cfg, evt, severity)
+	}
+}
+
+func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[cfg.ID]; ok {
+		return w, nil
+	}
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return nil, err
+	}
+	d.writers[cfg.ID] = w
+	return w, nil
+}
+
+func (d *Dispatcher) invalidate(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if w, ok := d.writers[id]; ok {
+		w.Close()
+		delete(d.writers, id)
+	}
+}
+
+func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildMessage(evt, severity)
+	var sendErr error
+	if severity == "critical" {
+		sendErr = w.Crit(msg)
+	} else {
+		sendErr = w.Warning(msg)
+	}
+	if sendErr != nil {
+		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+// TestSend opens a one-shot connection and sends a test message.
+func (d *Dispatcher) TestSend(cfg Config) error {
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE
+	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer w.Close()
+	return w.Notice("sentinel test message from Sentinel dashboard")
+}
+
+func buildMessage(evt k8s.TetragonEvent, severity string) string {
+	parts := []string{
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("namespace=%s", evt.Namespace),
+		fmt.Sprintf("pod=%s", evt.Pod),
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.Binary != "" {
+		parts = append(parts, fmt.Sprintf("binary=%s", evt.Binary))
+	}
+	if evt.NodeName != "" {
+		parts = append(parts, fmt.Sprintf("node=%s", evt.NodeName))
+	}
+	if evt.ProcessUID != nil {
+		if *evt.ProcessUID == 0 {
+			parts = append(parts, "user=root")
+		} else {
+			parts = append(parts, fmt.Sprintf("user=uid=%d", *evt.ProcessUID))
+		}
+	}
+	if evt.FilePath != "" {
+		parts = append(parts, fmt.Sprintf("file_op=%s", evt.FileOp), fmt.Sprintf("file_path=%s", evt.FilePath))
+	}
+	if evt.NetDest != "" {
+		parts = append(parts, fmt.Sprintf("dest=%s", evt.NetDest))
+	}
+	if evt.NetSrc != "" {
+		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 119,
+        "oldLines": 16,
+        "newStart": 119,
+        "newLines": 27,
+        "lines": [
+          "   }",
+          " }",
+          " ",
+          "-// TestSend opens a one-shot connection and sends a test message.",
+          "+// TestSend opens a one-shot connection and sends a test message with a 5-second timeout.",
+          " func (d *Dispatcher) TestSend(cfg Config) error {",
+          "-  addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)",
+          "-  priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE",
+          "-  w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")",
+          "-  if err != nil {",
+          "-    return fmt.Errorf("connect %s: %w", addr, err)",
+          "+  type result struct{ err error }",
+          "+  ch := make(chan result, 1)",
+          "+  go func() {",
+          "+    addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)",
+          "+    priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_NOTICE",
+          "+    w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")",
+          "+    if err != nil {",
+          "+      ch <- result{fmt.Errorf("connect %s: %w", addr, err)}",
+          "+      return",
+          "+    }",
+          "+    defer w.Close()",
+          "+    ch <- result{w.Notice("sentinel test message from Sentinel dashboard")}",
+          "+  }()",
+          "+  select {",
+          "+  case r := <-ch:",
+          "+    return r.err",
+          "+  case <-time.After(5 * time.Second):",
+          "+    return fmt.Errorf("connection timed out after 5s — check host and port")",
+          "   }",
+          "-  defer w.Close()",
+          "-  return w.Notice("sentinel test message from Sentinel dashboard")",
+          " }",
+          " ",
+          " func buildMessage(evt k8s.TetragonEvent, severity string) string {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),",
+    "new_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "old_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),",
+    "new_string": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/api/client.ts",
+    "oldString": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),",
+    "newString": "  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+    "originalFile": "import axios from 'axios'
+import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+
+const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => Promise.reject(err)
+)
+
+export const policyApi = {
+  list: (): Promise<PolicyRecord[]> =>
+    api.get('/policies').then((r) => r.data),
+
+  get: (name: string, namespace?: string): Promise<PolicyRecord> =>
+    api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
+
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
+
+  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
+    api.put(`/policies/${name}`, payload),
+
+  delete: (name: string, namespace?: string): Promise<void> =>
+    api.delete(`/policies/${name}`, { params: { namespace } }),
+
+  setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
+
+  preview: (form: CreatePolicyPayload): Promise<string> =>
+    api.post('/policies/preview', form).then((r) => r.data.yaml),
+}
+
+export const modeApi = {
+  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
+  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
+    api.put('/mode', { mode }),
+}
+
+export const namespaceApi = {
+  list: (): Promise<string[]> => api.get('/namespaces').then((r) => r.data),
+}
+
+export const podApi = {
+  labels: (namespace: string, pod: string): Promise<{ labels: Record<string, string> }> =>
+    api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
+}
+
+export interface CustomTemplatePayload {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  yaml: string
+}
+
+export interface AuthUser {
+  username: string
+  role: 'admin' | 'viewer'
+}
+
+export const authApi = {
+  login: (username: string, password: string): Promise<AuthUser> =>
+    api.post('/auth/login', { username, password }).then((r) => r.data),
+  logout: (): Promise<void> =>
+    api.post('/auth/logout'),
+  me: (): Promise<AuthUser> =>
+    api.get('/auth/me').then((r) => r.data),
+}
+
+export interface UserRecord {
+  username: string
+  role: 'admin' | 'viewer'
+  createdAt: string
+}
+
+export const userApi = {
+  list: (): Promise<UserRecord[]> =>
+    api.get('/users').then((r) => r.data),
+  create: (username: string, password: string, role: 'admin' | 'viewer'): Promise<void> =>
+    api.post('/users', { username, password, role }),
+  delete: (username: string): Promise<void> =>
+    api.delete(`/users/${username}`),
+  changePassword: (username: string, password: string): Promise<void> =>
+    api.put(`/users/${username}/password`, { password }),
+}
+
+export interface AlertRule {
+  id: string
+  name: string
+  webhookURL: string
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]   // empty = all
+  policies: string[]     // empty = all
+  cooldownMin: number    // 0 = no cooldown
+  enabled: boolean
+}
+
+export interface RsyslogConfig {
+  id: string
+  name: string
+  host: string
+  port: number
+  protocol: 'udp' | 'tcp'
+  facility: number        // 16=local0 … 23=local7
+  severities: string[]   // ["warning","critical"], empty = all
+  namespaces: string[]
+  policies: string[]
+  enabled: boolean
+}
+
+export const rsyslogApi = {
+  list: (): Promise<RsyslogConfig[]> =>
+    api.get('/rsyslog').then((r) => r.data ?? []),
+  create: (cfg: Omit<RsyslogConfig, 'id'>): Promise<RsyslogConfig> =>
+    api.post('/rsyslog', cfg).then((r) => r.data),
+  update: (id: string, cfg: RsyslogConfig): Promise<RsyslogConfig> =>
+    api.put(`/rsyslog/${id}`, cfg).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/rsyslog/${id}`),
+  test: (cfg: Partial<RsyslogConfig>): Promise<void> =>
+    api.post('/rsyslog/test', cfg),
+}
+
+export const alertsApi = {
+  list: (): Promise<AlertRule[]> =>
+    api.get('/alerts').then((r) => r.data ?? []),
+  create: (rule: Omit<AlertRule, 'id'>): Promise<AlertRule> =>
+    api.post('/alerts', rule).then((r) => r.data),
+  update: (id: string, rule: AlertRule): Promise<AlertRule> =>
+    api.put(`/alerts/${id}`, rule).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/alerts/${id}`),
+  test: (webhookURL: string): Promise<void> =>
+    api.post('/alerts/test', { webhookURL }),
+}
+
+export const clusterApi = {
+  cidr: (): Promise<{ podCIDRs: string[]; serviceCIDRs: string[]; nodeIPs: string[] }> =>
+    api.get('/cluster/cidr').then((r) => r.data),
+}
+
+export const settingsApi = {
+  getSessionTTL: (): Promise<{ sessionTTL: number }> =>
+    api.get('/settings/session-ttl').then((r) => r.data),
+  setSessionTTL: (seconds: number): Promise<void> =>
+    api.put('/settings/session-ttl', { sessionTTL: seconds }),
+}
+
+export const templateApi = {
+  list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
+    api.get('/templates').then((r) => r.data),
+  create: (t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.post('/templates', t).then((r) => r.data),
+  update: (id: string, t: CustomTemplatePayload): Promise<CustomTemplatePayload> =>
+    api.put(`/templates/${id}`, t).then((r) => r.data),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/templates/${id}`),
+}
+
+",
+    "structuredPatch": [
+      {
+        "oldStart": 119,
+        "oldLines": 7,
+        "newStart": 119,
+        "newLines": 7,
+        "lines": [
+          "   delete: (id: string): Promise<void> =>",
+          "     api.delete(`/rsyslog/${id}`),",
+          "   test: (cfg: Partial<RsyslogConfig>): Promise<void> =>",
+          "-    api.post('/rsyslog/test', cfg),",
+          "+    api.post('/rsyslog/test', cfg, { timeout: 6000 }),",
+          " }",
+          " ",
+          " export const alertsApi = {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 365ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+fix: add 5s timeout to syslog test connection
+
+Backend: TestSend runs in goroutine with 5s timeout channel.
+Frontend: axios timeout 6s for test request.
+Both show "Connection timed out" / error instead of hanging indefinitely.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit timeout fix"
+  }
+}
+
+----------------------------------------
+
