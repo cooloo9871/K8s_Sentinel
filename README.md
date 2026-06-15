@@ -123,7 +123,6 @@ volumes:
 | 變數 | 預設值 | 說明 |
 |---|---|---|
 | `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
-| `PORT` | `8080` | Sentinel 服務監聽的 port |
 
 ---
 

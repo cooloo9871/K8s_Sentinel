@@ -5,8 +5,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-	"os"
-
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/handler"
 	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
@@ -43,12 +41,8 @@ func main() {
 	}
 	mux.Handle("/", spaHandler(http.FS(staticFS)))
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	log.Printf("starting sentinel on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	log.Printf("starting sentinel on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)
 	}
 }

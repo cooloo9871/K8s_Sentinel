@@ -482966,3 +482966,1441 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "$(cat <<'EOF'
+feat: make Tetragon namespace configurable via TETRAGON_NAMESPACE
+
+Previously hardcoded to "kube-system". Now reads TETRAGON_NAMESPACE
+env var with "kube-system" as default. Affects pod listing for event
+streaming, process cache dump, and Tetragon agent health checks.
+
+Usage:
+  env:
+    - name: TETRAGON_NAMESPACE
+      value: "tetragon"
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit TETRAGON_NAMESPACE feature"
+  },
+  "tool_response": {
+    "stdout": "[main 73c9a6f] feat: make Tetragon namespace configurable via TETRAGON_NAMESPACE
+ 5 files changed, 1990 insertions(+), 5 deletions(-)
+ create mode 100644 internal/k8s/tetragon_ns.go",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "73c9a6f",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "更新 README"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md"
+  },
+  "tool_response": {
+    "type": "file_unchanged",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/README.md"
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig",
+    "new_string": "### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig",
+    "new_string": "### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig",
+    "newString": "### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 70,
+        "oldLines": 7,
+        "newStart": 70,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " ### 前置需求",
+          " ",
+          "-- Kubernetes 1.26+",
+          "+- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）",
+          " - `kubectl` 已設定 kubeconfig",
+          " ",
+          " ### 步驟"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。",
+    "new_string": "> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。",
+    "new_string": "> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。",
+    "newString": "> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 118,
+        "oldLines": 6,
+        "newStart": 118,
+        "newLines": 13,
+        "lines": [
+          " ",
+          " > Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。",
+          " ",
+          "+### 環境變數",
+          "+",
+          "+| 變數 | 預設值 | 說明 |",
+          "+|---|---|---|",
+          "+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |",
+          "+| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+          "+",
+          " ---",
+          " ",
+          " ## RBAC 權限"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: update README — add env vars section, fix prerequisites
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README update"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: update README — add env vars section, fix prerequisites
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README update"
+  },
+  "tool_response": {
+    "stdout": "[main d768da9] docs: update README — add env vars section, fix prerequisites
+ 1 file changed, 8 insertions(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "d768da9",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "已安裝 Cilium Tetragon 這個不用加，因為在安裝的時候也會自動安裝"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）",
+    "new_string": "- Kubernetes 1.26+",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）",
+    "new_string": "- Kubernetes 1.26+",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）",
+    "newString": "- Kubernetes 1.26+",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 70,
+        "oldLines": 7,
+        "newStart": 70,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " ### 前置需求",
+          " ",
+          "-- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）",
+          "+- Kubernetes 1.26+",
+          " - `kubectl` 已設定 kubeconfig",
+          " ",
+          " ### 步驟"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: remove Tetragon prerequisite (installed automatically)
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README fix"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add README.md && git commit -m "$(cat <<'EOF'
+docs: remove Tetragon prerequisite (installed automatically)
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit README fix"
+  },
+  "tool_response": {
+    "stdout": "[main 973a5ed] docs: remove Tetragon prerequisite (installed automatically)
+ 1 file changed, 1 insertion(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "973a5ed",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "我不要可以改動 Sentinel 的 PORT"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/cmd/server/main.go",
+      "content": "package main
+
+import (
+	"context"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
+	sentinelweb "github.com/cooloo9871/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+	store.StartDiscoveryLoop(context.Background())
+
+	users := auth.NewUserStore("/data/sentinel/users.json")
+	secret, err := auth.LoadOrCreateSecret("/data/sentinel/.jwt-secret")
+	if err != nil {
+		log.Fatalf("jwt secret: %v", err)
+	}
+
+	cfg := handler.Config{
+		Store:  store,
+		Users:  users,
+		Secret: secret,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+      "numLines": 68,
+      "startLine": 1,
+      "totalLines": 68
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {",
+    "new_string": "	log.Printf("starting sentinel on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {",
+    "new_string": "	log.Printf("starting sentinel on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/cmd/server/main.go",
+    "oldString": "	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {",
+    "newString": "	log.Printf("starting sentinel on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {",
+    "originalFile": "package main
+
+import (
+	"context"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
+	sentinelweb "github.com/cooloo9871/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+	store.StartDiscoveryLoop(context.Background())
+
+	users := auth.NewUserStore("/data/sentinel/users.json")
+	secret, err := auth.LoadOrCreateSecret("/data/sentinel/.jwt-secret")
+	if err != nil {
+		log.Fatalf("jwt secret: %v", err)
+	}
+
+	cfg := handler.Config{
+		Store:  store,
+		Users:  users,
+		Secret: secret,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting sentinel on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 43,
+        "oldLines": 12,
+        "newStart": 43,
+        "newLines": 8,
+        "lines": [
+          "   }",
+          "   mux.Handle("/", spaHandler(http.FS(staticFS)))",
+          " ",
+          "-  port := os.Getenv("PORT")",
+          "-  if port == "" {",
+          "-    port = "8080"",
+          "-  }",
+          "-  log.Printf("starting sentinel on :%s", port)",
+          "-  if err := http.ListenAndServe(":"+port, mux); err != nil {",
+          "+  log.Printf("starting sentinel on :8080")",
+          "+  if err := http.ListenAndServe(":8080", mux); err != nil {",
+          "     log.Fatal(err)",
+          "   }",
+          " }"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	"os"
+
+	"github.com/cooloo9871/sentinel/internal/auth"",
+    "new_string": "	"github.com/cooloo9871/sentinel/internal/auth"",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/cmd/server/main.go",
+    "old_string": "	"os"
+
+	"github.com/cooloo9871/sentinel/internal/auth"",
+    "new_string": "	"github.com/cooloo9871/sentinel/internal/auth"",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/cmd/server/main.go",
+    "oldString": "	"os"
+
+	"github.com/cooloo9871/sentinel/internal/auth"",
+    "newString": "	"github.com/cooloo9871/sentinel/internal/auth"",
+    "originalFile": "package main
+
+import (
+	"context"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/sentinel/internal/handler"
+	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
+	sentinelweb "github.com/cooloo9871/sentinel/web"
+)
+
+func main() {
+	dynClient, typedClient, restCfg, err := k8sclient.NewClients()
+	if err != nil {
+		log.Fatalf("k8s clients: %v", err)
+	}
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
+	store.StartDiscoveryLoop(context.Background())
+
+	users := auth.NewUserStore("/data/sentinel/users.json")
+	secret, err := auth.LoadOrCreateSecret("/data/sentinel/.jwt-secret")
+	if err != nil {
+		log.Fatalf("jwt secret: %v", err)
+	}
+
+	cfg := handler.Config{
+		Store:  store,
+		Users:  users,
+		Secret: secret,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", handler.New(cfg))
+
+	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
+	if err != nil {
+		log.Fatalf("embed sub: %v", err)
+	}
+	mux.Handle("/", spaHandler(http.FS(staticFS)))
+
+	log.Printf("starting sentinel on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, err := fsys.Open(r.URL.Path)
+		if err != nil {
+			r.URL.Path = "/"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 5,
+        "oldLines": 8,
+        "newStart": 5,
+        "newLines": 6,
+        "lines": [
+          "   "io/fs"",
+          "   "log"",
+          "   "net/http"",
+          "-  "os"",
+          "-",
+          "   "github.com/cooloo9871/sentinel/internal/auth"",
+          "   "github.com/cooloo9871/sentinel/internal/handler"",
+          "   k8sclient "github.com/cooloo9871/sentinel/internal/k8s""
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+    "new_string": "| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/README.md",
+    "old_string": "| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+    "new_string": "| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/README.md",
+    "oldString": "| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+    "newString": "| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |",
+    "originalFile": "# Sentinel
+
+<p align="center">
+  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+</p>
+
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+
+---
+
+## 功能總覽
+
+### Policies — 策略管理
+
+- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 依 namespace、scope 篩選策略清單
+- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
+- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
+- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
+- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
+- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
+- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
+- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
+  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
+  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+
+### Behavior Discovery — 行為探索
+
+- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
+- 資料夾圖示可切換 Namespace 分組視圖
+- 副本數增減時自動更新（最多 60 秒同步）
+- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+
+### Notifications — 安全通知
+
+- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- 依 Namespace、Pod 名稱、嚴重程度篩選
+- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
+- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
+- 時間顯示支援秒、分、時、天
+
+### Cluster — 叢集資訊
+
+- Namespace 列表及各 Namespace 的 Policy 數量
+- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+
+### Dashboard — 總覽
+
+- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- 快速切換 Global Protect Mode
+
+### 使用者管理 — User Management
+
+- 本地帳號登入（JWT，有效期 24 小時）
+- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
+- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
+- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
+- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
+- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+
+---
+
+## 部署
+
+### 前置需求
+
+- Kubernetes 1.26+
+- `kubectl` 已設定 kubeconfig
+
+### 步驟
+
+**Clone 專案**
+
+```bash
+git clone https://github.com/cooloo9871/Sentinel.git
+cd Sentinel
+```
+
+**方式 A — Kubernetes Job（不需本機 helm）**
+
+```bash
+kubectl apply -f deploy/install-job.yaml
+kubectl logs -n kube-system job/sentinel-installer -f
+```
+
+**方式 B — 本機腳本**
+
+```bash
+bash deploy/install.sh
+```
+
+### 存取 UI
+
+```bash
+kubectl port-forward -n sentinel-system svc/sentinel 8080:80
+# 開啟 http://localhost:8080
+```
+
+### 持久化儲存（PV）
+
+Sentinel 將使用者、Templates 及 JWT secret 存放於 `/data/sentinel/`。掛載 PersistentVolume 可在 Pod 重啟後保留資料：
+
+```yaml
+volumeMounts:
+  - name: data
+    mountPath: /data/sentinel
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: sentinel-data
+```
+
+> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |
+
+---
+
+## RBAC 權限
+
+| API Group | 資源 | 操作 |
+|---|---|---|
+| `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `events` | get, list, watch |
+| `""` (core) | `nodes` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+
+---
+
+## 授權
+
+[MIT License](LICENSE)
+",
+    "structuredPatch": [
+      {
+        "oldStart": 123,
+        "oldLines": 7,
+        "newStart": 123,
+        "newLines": 6,
+        "lines": [
+          " | 變數 | 預設值 | 說明 |",
+          " |---|---|---|",
+          " | `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |",
+          "-| `PORT` | `8080` | Sentinel 服務監聽的 port |",
+          " ",
+          " ---",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "$(cat <<'EOF'
+refactor: hardcode port 8080, remove PORT env var
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit port hardcode"
+  }
+}
+
+----------------------------------------
+
