@@ -137,16 +137,20 @@ export const alertsApi = {
 
 export interface VAPRecord {
   name: string
+  namespace: string
   failurePolicy: string
   validationCount: number
+  createdBy: string
   createdAt: string
   rawYaml: string
 }
 
 export interface VAPBindingRecord {
   name: string
+  namespace: string
   policyName: string
   validationActions: string[]
+  createdBy: string
   createdAt: string
   rawYaml: string
 }

@@ -16,6 +16,7 @@ import { YamlEditor } from '../components/YamlEditor'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 import { formatTWTime } from '../utils/time'
+import { Input } from '@/components/ui/input'
 
 const POLICY_TEMPLATE = `apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
@@ -62,6 +63,7 @@ export function VAPPage() {
   const [editorValid, setEditorValid] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'policy' | 'binding'; name: string } | null>(null)
+  const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -169,7 +171,8 @@ export function VAPPage() {
 
         {/* Policies Tab */}
         <TabsContent value="policies">
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex items-center justify-between">
+            <Input placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 w-56 text-sm" />
             {isAdmin && <Button size="sm" onClick={() => openNew('policy')}>+ New Policy</Button>}
           </div>
           <Card>
@@ -181,24 +184,28 @@ export function VAPPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
+                      <TableHead>Namespace</TableHead>
                       <TableHead>Failure Policy</TableHead>
                       <TableHead>Validations</TableHead>
-                      <TableHead>Created</TableHead>
+                      <TableHead>Created By</TableHead>
+                      <TableHead>Created Time</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {policies.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">No policies found</TableCell></TableRow>
-                    ) : policies.map(p => (
+                    {policies.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase())).length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No policies found</TableCell></TableRow>
+                    ) : policies.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
                       <TableRow key={p.name}>
                         <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell><Badge variant="secondary" className="text-[10px]">{p.namespace}</Badge></TableCell>
                         <TableCell>
                           <Badge variant={p.failurePolicy === 'Fail' ? 'destructive' : 'secondary'}>
                             {p.failurePolicy || '—'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{p.validationCount}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{p.createdBy}</TableCell>
                         <TableCell className="text-muted-foreground">{formatTWTime(p.createdAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -221,7 +228,8 @@ export function VAPPage() {
 
         {/* Bindings Tab */}
         <TabsContent value="bindings">
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex items-center justify-between">
+            <Input placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 w-56 text-sm" />
             {isAdmin && <Button size="sm" onClick={() => openNew('binding')}>+ New Binding</Button>}
           </div>
           <Card>
@@ -233,18 +241,21 @@ export function VAPPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
+                      <TableHead>Namespace</TableHead>
                       <TableHead>Policy</TableHead>
                       <TableHead>Validation Actions</TableHead>
-                      <TableHead>Created</TableHead>
+                      <TableHead>Created By</TableHead>
+                      <TableHead>Created Time</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {bindings.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">No bindings found</TableCell></TableRow>
-                    ) : bindings.map(b => (
+                    {bindings.filter(b => !search || b.name.toLowerCase().includes(search.toLowerCase())).length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No bindings found</TableCell></TableRow>
+                    ) : bindings.filter(b => !search || b.name.toLowerCase().includes(search.toLowerCase())).map(b => (
                       <TableRow key={b.name}>
                         <TableCell className="font-medium">{b.name}</TableCell>
+                        <TableCell><Badge variant="secondary" className="text-[10px]">{b.namespace}</Badge></TableCell>
                         <TableCell className="text-muted-foreground">{b.policyName}</TableCell>
                         <TableCell>
                           <div className="flex gap-1 flex-wrap">
@@ -253,6 +264,7 @@ export function VAPPage() {
                             ))}
                           </div>
                         </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{b.createdBy}</TableCell>
                         <TableCell className="text-muted-foreground">{formatTWTime(b.createdAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">

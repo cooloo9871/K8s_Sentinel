@@ -27,18 +27,22 @@ var (
 
 // VAPRecord is a ValidatingAdmissionPolicy as returned by the list/get API.
 type VAPRecord struct {
-	Name             string   `json:"name"`
-	FailurePolicy    string   `json:"failurePolicy"`
-	ValidationCount  int      `json:"validationCount"`
-	CreatedAt        string   `json:"createdAt"`
-	RawYAML          string   `json:"rawYaml"`
+	Name            string `json:"name"`
+	Namespace       string `json:"namespace"` // always "cluster-wide" for VAP
+	FailurePolicy   string `json:"failurePolicy"`
+	ValidationCount int    `json:"validationCount"`
+	CreatedBy       string `json:"createdBy"`
+	CreatedAt       string `json:"createdAt"`
+	RawYAML         string `json:"rawYaml"`
 }
 
 // VAPBindingRecord is a ValidatingAdmissionPolicyBinding as returned by the list/get API.
 type VAPBindingRecord struct {
 	Name              string   `json:"name"`
+	Namespace         string   `json:"namespace"` // always "cluster-wide" for VAP Binding
 	PolicyName        string   `json:"policyName"`
 	ValidationActions []string `json:"validationActions"`
+	CreatedBy         string   `json:"createdBy"`
 	CreatedAt         string   `json:"createdAt"`
 	RawYAML           string   `json:"rawYaml"`
 }
@@ -67,7 +71,7 @@ func (s *Store) GetVAP(ctx context.Context, name string) (VAPRecord, error) {
 	return toVAPRecord(*item)
 }
 
-func (s *Store) ApplyVAPRaw(ctx context.Context, rawYAML string) error {
+func (s *Store) ApplyVAPRaw(ctx context.Context, rawYAML, createdBy string) error {
 	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
 	if err != nil {
 		return fmt.Errorf("invalid YAML: %w", err)
@@ -76,6 +80,7 @@ func (s *Store) ApplyVAPRaw(ctx context.Context, rawYAML string) error {
 	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
 		return fmt.Errorf("unmarshal YAML: %w", err)
 	}
+	setCreatedByAnnotation(obj, createdBy)
 	name := obj.GetName()
 	_, err = s.client.Resource(vapGVR).Create(ctx, obj, metav1.CreateOptions{})
 	if err == nil {
@@ -89,6 +94,7 @@ func (s *Store) ApplyVAPRaw(ctx context.Context, rawYAML string) error {
 		return err
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
+	preserveCreatedBy(obj, existing)
 	_, err = s.client.Resource(vapGVR).Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
@@ -125,7 +131,7 @@ func (s *Store) GetVAPBinding(ctx context.Context, name string) (VAPBindingRecor
 	return toVAPBindingRecord(*item)
 }
 
-func (s *Store) ApplyVAPBindingRaw(ctx context.Context, rawYAML string) error {
+func (s *Store) ApplyVAPBindingRaw(ctx context.Context, rawYAML, createdBy string) error {
 	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
 	if err != nil {
 		return fmt.Errorf("invalid YAML: %w", err)
@@ -134,6 +140,7 @@ func (s *Store) ApplyVAPBindingRaw(ctx context.Context, rawYAML string) error {
 	if err := json.Unmarshal(jsonBytes, &obj.Object); err != nil {
 		return fmt.Errorf("unmarshal YAML: %w", err)
 	}
+	setCreatedByAnnotation(obj, createdBy)
 	name := obj.GetName()
 	_, err = s.client.Resource(vapBindingGVR).Create(ctx, obj, metav1.CreateOptions{})
 	if err == nil {
@@ -147,6 +154,7 @@ func (s *Store) ApplyVAPBindingRaw(ctx context.Context, rawYAML string) error {
 		return err
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
+	preserveCreatedBy(obj, existing)
 	_, err = s.client.Resource(vapBindingGVR).Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
@@ -174,10 +182,16 @@ func toVAPRecord(item unstructured.Unstructured) (VAPRecord, error) {
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
 		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
 	}
+	createdBy := "k8s-apply"
+	if v := item.GetAnnotations()[annotationCreatedBy]; v != "" {
+		createdBy = v
+	}
 	return VAPRecord{
 		Name:            item.GetName(),
+		Namespace:       "cluster-wide",
 		FailurePolicy:   failurePolicy,
 		ValidationCount: len(validations),
+		CreatedBy:       createdBy,
 		CreatedAt:       createdAt,
 		RawYAML:         string(rawYAML),
 	}, nil
@@ -198,10 +212,16 @@ func toVAPBindingRecord(item unstructured.Unstructured) (VAPBindingRecord, error
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
 		createdAt = ts.UTC().Format("2006-01-02T15:04:05Z")
 	}
+	createdBy := "k8s-apply"
+	if v := item.GetAnnotations()[annotationCreatedBy]; v != "" {
+		createdBy = v
+	}
 	return VAPBindingRecord{
 		Name:              item.GetName(),
+		Namespace:         "cluster-wide",
 		PolicyName:        policyName,
 		ValidationActions: actions,
+		CreatedBy:         createdBy,
 		CreatedAt:         createdAt,
 		RawYAML:           string(rawYAML),
 	}, nil
