@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,158 +43,167 @@ const TEMPLATES = [
 ]
 
 interface ValidationRow { expression: string; message: string }
-
 interface FormState {
-  name: string
-  description: string
-  apiGroup: string
-  resource: string
+  name: string; description: string
+  apiGroup: string; resource: string
   operations: string[]
   validations: ValidationRow[]
 }
 
 const EMPTY_FORM: FormState = {
-  name: '', description: '',
-  apiGroup: 'apps', resource: 'deployments',
-  operations: ['CREATE', 'UPDATE'],
-  validations: [{ expression: '', message: '' }],
+  name: '', description: '', apiGroup: 'apps', resource: 'deployments',
+  operations: ['CREATE', 'UPDATE'], validations: [{ expression: '', message: '' }],
 }
 
-function RuleForm({ initial, onSave, onCancel, saving }: {
-  initial: FormState
-  onSave: (f: FormState) => void
-  onCancel: () => void
-  saving: boolean
+function RuleForm({ initial, title, onSave, onBack, saving }: {
+  initial: FormState; title: string
+  onSave: (f: FormState) => void; onBack: () => void; saving: boolean
 }) {
-  const [form, setForm] = useState(initial)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const set = (k: keyof FormState, v: any) => setForm(f => ({ ...f, [k]: v }))
-
-  const toggleOp = (op: string) =>
-    set('operations', form.operations.includes(op)
-      ? form.operations.filter(x => x !== op)
-      : [...form.operations, op])
-
-  const setValidation = (i: number, field: keyof ValidationRow, val: string) =>
-    set('validations', form.validations.map((v, idx) => idx === i ? { ...v, [field]: val } : v))
-
-  const addValidation = () => set('validations', [...form.validations, { expression: '', message: '' }])
-  const removeValidation = (i: number) => set('validations', form.validations.filter((_, idx) => idx !== i))
-
-  const applyTemplate = (i: number, tpl: typeof TEMPLATES[0]) =>
-    set('validations', form.validations.map((v, idx) => idx === i ? { expression: tpl.expression, message: tpl.message } : v))
-
+  const [form, setForm] = useState<FormState>(initial)
+  const setField = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
+  const toggleOp = (op: string) => setField('operations',
+    form.operations.includes(op) ? form.operations.filter(x => x !== op) : [...form.operations, op])
+  const setVal = (i: number, f2: string, v: string) => setField('validations',
+    form.validations.map((row, idx) => idx === i ? { ...row, [f2]: v } : row))
+  const addVal = () => setField('validations', [...form.validations, { expression: '', message: '' }])
+  const removeVal = (i: number) => setField('validations', form.validations.filter((_, idx) => idx !== i))
+  const applyTpl = (i: number, label: string) => {
+    const tpl = TEMPLATES.find(t => t.label === label)
+    if (!tpl) return
+    setField('validations', form.validations.map((row, idx) =>
+      idx === i ? { expression: tpl.expression, message: tpl.message } : row))
+  }
   const resources = RESOURCES[form.apiGroup] ?? ['*']
-  const valid = form.name.trim().length > 0 && form.validations.some(v => v.expression.trim().length > 0)
+  const isValid = form.name.trim().length > 0 && form.validations.some(v => v.expression.trim().length > 0)
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
-          <Input className="h-8 text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="no-over-replica" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs">Description</Label>
-          <Input className="h-8 text-sm" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Optional description" />
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <h4 className="text-xl font-semibold">{title}</h4>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onBack}>← Back</Button>
+          <Button onClick={() => onSave(form)} disabled={saving || !isValid}>
+            {saving ? 'Saving...' : 'Save Rule'}
+          </Button>
         </div>
       </div>
 
-      <div className="rounded-md border p-3 flex flex-col gap-3">
-        <p className="text-xs font-medium text-muted-foreground">Target Resource</p>
+      <div className="flex flex-col gap-4 max-w-2xl">
+        {/* Basic info */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <Label className="text-xs">API Group</Label>
-            <Select value={form.apiGroup} onValueChange={v => { set('apiGroup', v); set('resource', RESOURCES[v]?.[0] ?? '*') }}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup>{API_GROUPS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectGroup></SelectContent>
-            </Select>
+            <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+            <Input className="h-8 text-sm" value={form.name}
+              onChange={e => setField('name', e.target.value)} placeholder="no-over-replica" />
           </div>
           <div className="flex flex-col gap-1">
-            <Label className="text-xs">Resource</Label>
-            <Select value={form.resource} onValueChange={v => set('resource', v)}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup>{resources.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectGroup></SelectContent>
-            </Select>
+            <Label className="text-xs">Description</Label>
+            <Input className="h-8 text-sm" value={form.description}
+              onChange={e => setField('description', e.target.value)} placeholder="Optional description" />
           </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs">Operations</Label>
-          <div className="flex gap-4">
-            {['CREATE', 'UPDATE', 'DELETE'].map(op => (
-              <label key={op} className="flex items-center gap-1.5 cursor-pointer text-sm">
-                <input type="checkbox" className="h-4 w-4 accent-primary"
-                  checked={form.operations.includes(op)} onChange={() => toggleOp(op)} />
-                {op}
-              </label>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      <div className="rounded-md border p-3 flex flex-col gap-3">
-        <p className="text-xs font-medium text-muted-foreground">Validation Conditions</p>
-        {form.validations.map((v, i) => (
-          <div key={i} className="flex flex-col gap-2 rounded border p-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Condition {i + 1}</span>
-              <div className="flex items-center gap-1">
-                <Select onValueChange={tpl => applyTemplate(i, TEMPLATES.find(t => t.label === tpl)!)}>
-                  <SelectTrigger className="h-6 text-[10px] w-36 border-dashed"><SelectValue placeholder="Use template" /></SelectTrigger>
-                  <SelectContent><SelectGroup>{TEMPLATES.map(t => <SelectItem key={t.label} value={t.label} className="text-xs">{t.label}</SelectItem>)}</SelectGroup></SelectContent>
-                </Select>
-                {form.validations.length > 1 && (
-                  <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive px-1"
-                    onClick={() => removeValidation(i)}>✕</Button>
-                )}
+        {/* Target resource */}
+        <div className="rounded-md border p-4 flex flex-col gap-3">
+          <p className="text-sm font-medium">Target Resource</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">API Group</Label>
+              <Select value={form.apiGroup} onValueChange={v => {
+                setField('apiGroup', v)
+                setField('resource', RESOURCES[v]?.[0] ?? '*')
+              }}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {API_GROUPS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Resource</Label>
+              <Select value={form.resource} onValueChange={v => setField('resource', v)}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {resources.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Operations</Label>
+            <div className="flex gap-4">
+              {['CREATE', 'UPDATE', 'DELETE'].map(op => (
+                <label key={op} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                  <input type="checkbox" className="h-4 w-4 accent-primary"
+                    checked={form.operations.includes(op)} onChange={() => toggleOp(op)} />
+                  {op}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Conditions */}
+        <div className="rounded-md border p-4 flex flex-col gap-3">
+          <p className="text-sm font-medium">Validation Conditions</p>
+          {form.validations.map((v, i) => (
+            <div key={i} className="rounded border p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Condition {i + 1}</span>
+                <div className="flex gap-1">
+                  <Select onValueChange={label => applyTpl(i, label)}>
+                    <SelectTrigger className="h-6 text-[10px] w-40 border-dashed">
+                      <SelectValue placeholder="Use template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {TEMPLATES.map(t => (
+                          <SelectItem key={t.label} value={t.label} className="text-xs">{t.label}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  {form.validations.length > 1 && (
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive"
+                      onClick={() => removeVal(i)}>✕</Button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Expression (CEL) <span className="text-destructive">*</span></Label>
+                <Input className="h-8 text-xs font-mono" value={v.expression}
+                  onChange={e => setVal(i, 'expression', e.target.value)}
+                  placeholder="object.spec.replicas <= 5" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Violation Message</Label>
+                <Input className="h-8 text-xs" value={v.message}
+                  onChange={e => setVal(i, 'message', e.target.value)}
+                  placeholder="Replicas must be <= 5" />
               </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs">Expression (CEL) <span className="text-destructive">*</span></Label>
-              <Input className="h-8 text-xs font-mono" value={v.expression}
-                onChange={e => setValidation(i, 'expression', e.target.value)}
-                placeholder='object.spec.replicas <= 5' />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs">Violation Message</Label>
-              <Input className="h-8 text-xs" value={v.message}
-                onChange={e => setValidation(i, 'message', e.target.value)}
-                placeholder='Replicas must be <= 5' />
-            </div>
-          </div>
-        ))}
-        <Button variant="outline" size="sm" className="h-7 text-xs self-start" onClick={addValidation}>
-          + Add Condition
-        </Button>
+          ))}
+          <Button variant="outline" size="sm" className="h-7 text-xs self-start" onClick={addVal}>
+            + Add Condition
+          </Button>
+        </div>
       </div>
-
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
-        <Button size="sm" onClick={() => onSave(form)} disabled={saving || !valid}>
-          {saving ? 'Saving...' : 'Save Rule'}
-        </Button>
-      </div>
-    </div>
+    </>
   )
 }
 
 function formToPayload(f: FormState) {
   return {
-    name: f.name.trim(),
-    description: f.description.trim(),
+    name: f.name.trim(), description: f.description.trim(),
     spec: {
       matchConstraints: {
-        resourceRules: [{
-          apiGroups: [f.apiGroup],
-          apiVersions: ['*'],
-          operations: f.operations,
-          resources: [f.resource],
-        }],
+        resourceRules: [{ apiGroups: [f.apiGroup], apiVersions: ['*'], operations: f.operations, resources: [f.resource] }],
       },
-      validations: f.validations.filter(v => v.expression.trim()).map(v => ({
-        expression: v.expression.trim(),
-        message: v.message.trim(),
-      })),
+      validations: f.validations.filter(v => v.expression.trim()).map(v => ({ expression: v.expression.trim(), message: v.message.trim() })),
     },
   }
 }
@@ -202,16 +211,17 @@ function formToPayload(f: FormState) {
 function ruleToForm(rule: AdmissionRule): FormState {
   const rr = rule.spec?.matchConstraints?.resourceRules?.[0]
   return {
-    name: rule.name,
-    description: rule.description ?? '',
+    name: rule.name, description: rule.description ?? '',
     apiGroup: rr?.apiGroups?.[0] ?? 'apps',
     resource: rr?.resources?.[0] ?? '*',
     operations: rr?.operations ?? ['CREATE', 'UPDATE'],
     validations: rule.spec?.validations?.length
-      ? rule.spec.validations.map((v: { expression: string; message: string }) => ({ expression: v.expression, message: v.message ?? '' }))
+      ? rule.spec.validations.map(v => ({ expression: v.expression, message: v.message ?? '' }))
       : [{ expression: '', message: '' }],
   }
 }
+
+type View = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; rule: AdmissionRule }
 
 export function AdmissionRulesPage() {
   const { user } = useAuth()
@@ -219,8 +229,7 @@ export function AdmissionRulesPage() {
   const toast = useToast()
 
   const [rules, setRules] = useState<AdmissionRule[]>([])
-  const [showForm, setShowForm] = useState(false)
-  const [editTarget, setEditTarget] = useState<AdmissionRule | null>(null)
+  const [view, setView] = useState<View>({ kind: 'list' })
   const [deleteTarget, setDeleteTarget] = useState<AdmissionRule | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -233,34 +242,27 @@ export function AdmissionRulesPage() {
   const handleSave = async (form: FormState) => {
     setSaving(true)
     try {
-      const payload = formToPayload(form)
-      if (editTarget) {
-        await admissionRulesApi.update(editTarget.id, payload)
+      if (view.kind === 'edit') {
+        await admissionRulesApi.update(view.rule.id, formToPayload(form))
         toast.success('Rule updated.')
-        setEditTarget(null)
       } else {
-        await admissionRulesApi.create(payload)
+        await admissionRulesApi.create(formToPayload(form))
         toast.success('Rule created.')
-        setShowForm(false)
       }
-      load()
+      setView({ kind: 'list' }); load()
     } catch (e: unknown) {
-      toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to save rule')
+      toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to save')
     } finally { setSaving(false) }
   }
 
-  const handleToggle = async (rule: AdmissionRule) => {
-    try { await admissionRulesApi.toggle(rule.id, !rule.enabled); load() }
-    catch { toast.error('Failed to toggle rule') }
+  if (view.kind === 'new') {
+    return <RuleForm initial={EMPTY_FORM} title="New Admission Rule"
+      onSave={handleSave} onBack={() => setView({ kind: 'list' })} saving={saving} />
   }
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return
-    try {
-      await admissionRulesApi.delete(deleteTarget.id)
-      toast.success('Rule deleted.')
-      setDeleteTarget(null); load()
-    } catch { toast.error('Failed to delete rule') }
+  if (view.kind === 'edit') {
+    return <RuleForm initial={ruleToForm(view.rule)} title={`Edit — ${view.rule.name}`}
+      onSave={handleSave} onBack={() => setView({ kind: 'list' })} saving={saving} />
   }
 
   return (
@@ -272,36 +274,10 @@ export function AdmissionRulesPage() {
             Enforced via Sentinel webhook. Violations appear in Admission Events.
           </p>
         </div>
-        {isAdmin && !showForm && !editTarget && (
-          <Button onClick={() => setShowForm(true)}>+ New Rule</Button>
-        )}
+        {isAdmin && <Button onClick={() => setView({ kind: 'new' })}>+ New Rule</Button>}
       </div>
 
-      {isAdmin && showForm && !editTarget && (
-        <Card className="mb-6 border-primary/40">
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">New Admission Rule</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <RuleForm initial={EMPTY_FORM} onSave={handleSave}
-              onCancel={() => setShowForm(false)} saving={saving} />
-          </CardContent>
-        </Card>
-      )}
-
-      {isAdmin && editTarget && (
-        <Card className="mb-6 border-primary/40">
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">Edit — {editTarget.name}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <RuleForm initial={ruleToForm(editTarget)} onSave={handleSave}
-              onCancel={() => setEditTarget(null)} saving={saving} />
-          </CardContent>
-        </Card>
-      )}
-
-      {rules.length === 0 && !showForm && (
+      {rules.length === 0 && (
         <p className="py-10 text-center text-sm text-muted-foreground">No admission rules configured.</p>
       )}
 
@@ -322,9 +298,12 @@ export function AdmissionRulesPage() {
               {isAdmin && (
                 <div className="flex items-center gap-2 shrink-0">
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
-                    onClick={() => { setEditTarget(rule); setShowForm(false) }}>Edit</Button>
+                    onClick={() => setView({ kind: 'edit', rule })}>Edit</Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
-                    onClick={() => handleToggle(rule)}>
+                    onClick={async () => {
+                      await admissionRulesApi.toggle(rule.id, !rule.enabled).catch(() => {})
+                      load()
+                    }}>
                     {rule.enabled ? 'Disable' : 'Enable'}
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
@@ -344,7 +323,12 @@ export function AdmissionRulesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={async () => {
+              if (!deleteTarget) return
+              await admissionRulesApi.delete(deleteTarget.id).catch(() => {})
+              toast.success('Rule deleted.')
+              setDeleteTarget(null); load()
+            }}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
