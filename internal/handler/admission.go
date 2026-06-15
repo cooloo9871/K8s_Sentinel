@@ -95,7 +95,8 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 		}
 		flusher.Flush()
 
-		ch := store.Subscribe()
+		ch, unsub := store.Subscribe()
+		defer unsub()
 		for {
 			select {
 			case <-r.Context().Done():

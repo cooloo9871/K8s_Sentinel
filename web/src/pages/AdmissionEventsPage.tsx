@@ -45,8 +45,12 @@ export function AdmissionEventsPage() {
 
   const filtered = events.filter(e => {
     if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
-    if (search && !e.involvedName.toLowerCase().includes(search.toLowerCase()) &&
-        !e.policyName.toLowerCase().includes(search.toLowerCase())) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!e.involvedName.toLowerCase().includes(q) &&
+          !e.name.toLowerCase().includes(q) &&
+          !e.policyName.toLowerCase().includes(q)) return false
+    }
     return true
   })
 

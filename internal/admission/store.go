@@ -38,15 +38,41 @@ const maxEvents = 500
 type Store struct {
 	mu     sync.RWMutex
 	events []Event
-	seen   map[string]struct{} // deduplicate by K8s Event UID
-	ch     chan Event
+	seen   map[string]struct{}    // deduplicate by event ID
+	subs   map[chan Event]struct{} // per-subscriber channels for fanout
 }
 
 func NewStore() *Store {
 	return &Store{
 		events: make([]Event, 0, maxEvents),
 		seen:   make(map[string]struct{}),
-		ch:     make(chan Event, 256),
+		subs:   make(map[chan Event]struct{}),
+	}
+}
+
+// Subscribe returns a per-subscriber channel and an unsubscribe function.
+func (s *Store) Subscribe() (<-chan Event, func()) {
+	ch := make(chan Event, 64)
+	s.mu.Lock()
+	s.subs[ch] = struct{}{}
+	s.mu.Unlock()
+	return ch, func() {
+		s.mu.Lock()
+		delete(s.subs, ch)
+		s.mu.Unlock()
+		close(ch)
+	}
+}
+
+// broadcast sends the event to all registered subscribers (non-blocking).
+func (s *Store) broadcast(e Event) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for ch := range s.subs {
+		select {
+		case ch <- e:
+		default: // slow subscriber; drop rather than block
+		}
 	}
 }
 
@@ -125,14 +151,14 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	}
 	s.events = append([]Event{evt}, s.events...)
 	if len(s.events) > maxEvents {
+		for _, old := range s.events[maxEvents:] {
+			delete(s.seen, old.ID)
+		}
 		s.events = s.events[:maxEvents]
 	}
 	s.mu.Unlock()
 
-	select {
-	case s.ch <- evt:
-	default:
-	}
+	s.broadcast(evt)
 }
 
 // Add appends a new event (from audit webhook) and trims to maxEvents.
@@ -145,13 +171,13 @@ func (s *Store) Add(e Event) {
 	s.seen[e.ID] = struct{}{}
 	s.events = append([]Event{e}, s.events...)
 	if len(s.events) > maxEvents {
+		for _, old := range s.events[maxEvents:] {
+			delete(s.seen, old.ID)
+		}
 		s.events = s.events[:maxEvents]
 	}
 	s.mu.Unlock()
-	select {
-	case s.ch <- e:
-	default:
-	}
+	s.broadcast(e)
 }
 
 // List returns all stored events (newest first).
@@ -163,10 +189,6 @@ func (s *Store) List() []Event {
 	return cp
 }
 
-// Subscribe returns the broadcast channel for new events.
-func (s *Store) Subscribe() <-chan Event {
-	return s.ch
-}
 
 var vapPattern = regexp.MustCompile(`ValidatingAdmissionPolicy '([^']+)' with binding '([^']+)'`)
 
