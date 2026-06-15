@@ -27,7 +27,7 @@ func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, e
 	var agents []TetragonAgentStatus
 
 	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
-		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 		})
 		if err != nil || len(list.Items) == 0 {

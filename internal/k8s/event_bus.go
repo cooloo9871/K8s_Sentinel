@@ -110,7 +110,7 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 // as JSON. This command was added in Tetragon v1.3.
 func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (int, error) {
 	req := s.typed.CoreV1().RESTClient().Post().
-		Resource("pods").Name(podName).Namespace("kube-system").
+		Resource("pods").Name(podName).Namespace(tetragonNamespace()).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "tetragon",

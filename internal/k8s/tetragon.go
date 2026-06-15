@@ -65,7 +65,7 @@ func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- Te
 	req := s.typed.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
-		Namespace("kube-system").
+		Namespace(tetragonNamespace()).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "tetragon",
@@ -136,7 +136,7 @@ func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- Te
 
 func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
 	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
-		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 		})
 		if err == nil && len(list.Items) > 0 {
@@ -147,7 +147,7 @@ func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
 			return names, nil
 		}
 	}
-	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+	return nil, fmt.Errorf("no Tetragon pods found in namespace %q (set TETRAGON_NAMESPACE if installed elsewhere)", tetragonNamespace())
 }
 
 // parseTetragonLog parses a single JSON line from tetra getevents -o json.

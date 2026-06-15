@@ -480993,3 +480993,1976 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: show source and destination in Security Events network detail
+
+Backend:
+- TetragonEvent adds NetSrc field (saddr:sport)
+- sockArgEndpoints() replaces sockArgDest(), returns both dest and src
+  from sock_arg.daddr/dport and saddr/sport
+
+Frontend:
+- TetragonEvent type adds netSrc
+- Detail row: "Network" split into "Destination" and "Source"
+- Row inline display: netDest prefixed with → arrow
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit network source/destination feature"
+  },
+  "tool_response": {
+    "stdout": "[main 2a60a78] feat: show source and destination in Security Events network detail
+ 4 files changed, 4677 insertions(+), 15 deletions(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "2a60a78",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "解釋一下 Sentinel 是如何連接到 tetragon 的？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "那 Behavior Discovery 又是怎麼運作的？"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "wc -l /home/bigred/Sentinel/internal/k8s/discovery_store.go && head -60 /home/bigred/Sentinel/internal/k8s/discovery_store.go",
+    "description": "Read discovery store"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "wc -l /home/bigred/Sentinel/internal/k8s/discovery_store.go && head -60 /home/bigred/Sentinel/internal/k8s/discovery_store.go",
+    "description": "Read discovery store"
+  },
+  "tool_response": {
+    "stdout": "114 /home/bigred/Sentinel/internal/k8s/discovery_store.go
+package k8s
+
+import (
+	"sort"
+	"sync"
+)
+
+// PodProfile accumulates process binaries observed for a single pod.
+// Data lives in memory for the lifetime of the Sentinel process and is
+// intentionally lost on pod restart — no file persistence.
+type PodProfile struct {
+	Namespace    string   `json:"namespace"`
+	Pod          string   `json:"pod"`
+	WorkloadKind string   `json:"workloadKind,omitempty"` // "Deployment", "DaemonSet", "StatefulSet", etc.
+	WorkloadName string   `json:"workloadName,omitempty"` // controller name
+	Binaries     []string `json:"binaries"`
+	FirstSeen    string   `json:"firstSeen"`
+	LastSeen     string   `json:"lastSeen"`
+}
+
+// DiscoveryProfileStore is a pure in-memory store.
+// Thread-safe; never writes to disk.
+type DiscoveryProfileStore struct {
+	mu       sync.RWMutex
+	profiles map[string]*PodProfile
+}
+
+func NewDiscoveryProfileStore() *DiscoveryProfileStore {
+	return &DiscoveryProfileStore{profiles: make(map[string]*PodProfile)}
+}
+
+// Update records a process_exec event. Non-exec and incomplete events are ignored.
+func (s *DiscoveryProfileStore) Update(evt TetragonEvent) {
+	if evt.Type != "exec" || evt.Namespace == "" || evt.Pod == "" || evt.Binary == "" {
+		return
+	}
+	key := evt.Namespace + "/" + evt.Pod
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.profiles[key]
+	if !ok {
+		p = &PodProfile{
+			Namespace: evt.Namespace,
+			Pod:       evt.Pod,
+			Binaries:  []string{},
+			FirstSeen: evt.Time,
+			LastSeen:  evt.Time,
+		}
+		s.profiles[key] = p
+	}
+	if evt.Time > p.LastSeen {
+		p.LastSeen = evt.Time
+	}
+	if !sliceContains(p.Binaries, evt.Binary) {
+		p.Binaries = append(p.Binaries, evt.Binary)
+	}
+}
+
+func (s *DiscoveryProfileStore) All() []*PodProfile {
+	s.mu.RLock()",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Discovery\\|StartDiscovery\\|Update\\|exec" /home/bigred/Sentinel/internal/k8s/event_bus.go | head -30",
+    "description": "Check event bus"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "Discovery\\|StartDiscovery\\|Update\\|exec" /home/bigred/Sentinel/internal/k8s/event_bus.go | head -30",
+    "description": "Check event bus"
+  },
+  "tool_response": {
+    "stdout": "17:// StartDiscoveryLoop seeds Discovery with already-running processes, then
+18:// continuously streams new process_exec events from Tetragon.
+22:func (s *Store) StartDiscoveryLoop(ctx context.Context) {
+31:			s.runDiscoveryOnce(ctx)
+60:func (s *Store) runDiscoveryOnce(ctx context.Context) {
+69:		s.Discovery.Update(evt)
+73:// scanRunningProcesses execs "tetra dump process-cache" in each Tetragon pod.
+114:		SubResource("exec").
+124:	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+126:		return 0, fmt.Errorf("exec setup: %w", err)
+129:	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+133:	if err := executor.StreamWithContext(execCtx, remotecommand.StreamOptions{Stdout: &buf}); err != nil {
+134:		return 0, fmt.Errorf("exec: %w", err)
+144:// feeds each process into the Discovery store.
+178:		s.Discovery.Update(TetragonEvent{
+179:			Type:      "exec",
+236:		// they appear as [Node] in Discovery which is confusing.
+246:		s.Discovery.SetWorkload(pod.Namespace, pod.Name, kind, name)
+250:	s.Discovery.PruneTerminated(runningKeys)
+270:				s.Discovery.Update(TetragonEvent{
+271:					Type: "exec", Namespace: pod.Namespace, Pod: pod.Name,",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/event_bus.go",
+    "offset": 17,
+    "limit": 60
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/event_bus.go",
+    "offset": 17,
+    "limit": 60
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/event_bus.go",
+      "content": "// StartDiscoveryLoop seeds Discovery with already-running processes, then
+// continuously streams new process_exec events from Tetragon.
+// A secondary goroutine refreshes workload info periodically so newly
+// created pods (e.g. scaled-up replicas) get their Deployment/DaemonSet
+// label assigned without waiting for a Sentinel restart.
+func (s *Store) StartDiscoveryLoop(ctx context.Context) {
+	// Primary: seed + stream events.
+	go func() {
+		s.scanRunningProcesses(ctx)
+
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			s.runDiscoveryOnce(ctx)
+			if ctx.Err() != nil {
+				return
+			}
+			fmt.Println("[sentinel-discovery] stream ended — reconnecting in 10s")
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(10 * time.Second):
+			}
+		}
+	}()
+
+	// Secondary: refresh workload owner info every 60s so new pods created
+	// after startup (scale-out, rollouts) are grouped under their Deployment.
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.populateWorkloadInfo(ctx)
+			}
+		}
+	}()
+}
+
+func (s *Store) runDiscoveryOnce(ctx context.Context) {
+	events := make(chan TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			fmt.Printf("[sentinel-discovery] stream error: %v\
+", err)
+		}
+	}()
+	for evt := range events {
+		s.Discovery.Update(evt)
+	}
+}
+
+// scanRunningProcesses execs "tetra dump process-cache" in each Tetragon pod.
+// tetra connects to the local Unix socket and dumps ALL processes Tetragon
+// has tracked (including those running before Sentinel started).
+// Falls back to pod-spec seeding if the command is unavailable.",
+      "numLines": 60,
+      "startLine": 17,
+      "totalLines": 280
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "如果 tetragon 已經先裝好，但不是在 kube-ssytem ns 那 Sentinel 可以連得到嗎？"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "kube-system" /home/bigred/Sentinel/internal/k8s/tetragon.go /home/bigred/Sentinel/internal/k8s/event_bus.go /home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+    "description": "Find hardcoded kube-system namespace"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -n "kube-system" /home/bigred/Sentinel/internal/k8s/tetragon.go /home/bigred/Sentinel/internal/k8s/event_bus.go /home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+    "description": "Find hardcoded kube-system namespace"
+  },
+  "tool_response": {
+    "stdout": "/home/bigred/Sentinel/internal/k8s/event_bus.go:113:		Resource("pods").Name(podName).Namespace("kube-system").
+/home/bigred/Sentinel/internal/k8s/tetragon_health.go:30:		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+/home/bigred/Sentinel/internal/k8s/tetragon.go:68:		Namespace("kube-system").
+/home/bigred/Sentinel/internal/k8s/tetragon.go:139:		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+/home/bigred/Sentinel/internal/k8s/tetragon.go:150:	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "好幫我加這個變更"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "offset": 1,
+    "limit": 12
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "offset": 1,
+    "limit": 12
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+      "content": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"",
+      "numLines": 12,
+      "startLine": 1,
+      "totalLines": 386
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon_ns.go",
+    "content": "package k8s
+
+import "os"
+
+// tetragonNamespace returns the namespace where Tetragon is installed.
+// Defaults to "kube-system"; override with TETRAGON_NAMESPACE env var.
+func tetragonNamespace() string {
+	if ns := os.Getenv("TETRAGON_NAMESPACE"); ns != "" {
+		return ns
+	}
+	return "kube-system"
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon_ns.go",
+    "content": "package k8s
+
+import "os"
+
+// tetragonNamespace returns the namespace where Tetragon is installed.
+// Defaults to "kube-system"; override with TETRAGON_NAMESPACE env var.
+func tetragonNamespace() string {
+	if ns := os.Getenv("TETRAGON_NAMESPACE"); ns != "" {
+		return ns
+	}
+	return "kube-system"
+}
+"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon_ns.go",
+    "content": "package k8s
+
+import "os"
+
+// tetragonNamespace returns the namespace where Tetragon is installed.
+// Defaults to "kube-system"; override with TETRAGON_NAMESPACE env var.
+func tetragonNamespace() string {
+	if ns := os.Getenv("TETRAGON_NAMESPACE"); ns != "" {
+		return ns
+	}
+	return "kube-system"
+}
+",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": ""kube-system"",
+    "new_string": "tetragonNamespace()",
+    "replace_all": true
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": ""kube-system"",
+    "new_string": "tetragonNamespace()",
+    "replace_all": true
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": ""kube-system"",
+    "newString": "tetragonNamespace()",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch evt.Function {
+		case "security_file_permission":
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case "security_mmap_file":
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case "security_path_truncate":
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case "tcp_connect":
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func sockArgEndpoints(args []any, idx int) (dest, src string) {
+	if idx >= len(args) {
+		return "", ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	formatAddr := func(addrKey, portKey string) string {
+		addr := anyStr(sock, addrKey)
+		if addr == "" {
+			return ""
+		}
+		if port, ok := sock[portKey].(float64); ok && port > 0 {
+			return fmt.Sprintf("%s:%d", addr, int(port))
+		}
+		return addr
+	}
+	return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 65,
+        "oldLines": 7,
+        "newStart": 65,
+        "newLines": 7,
+        "lines": [
+          "   req := s.typed.CoreV1().RESTClient().Post().",
+          "     Resource("pods").",
+          "     Name(podName).",
+          "-    Namespace("kube-system").",
+          "+    Namespace(tetragonNamespace()).",
+          "     SubResource("exec").",
+          "     VersionedParams(&corev1.PodExecOptions{",
+          "       Container: "tetragon","
+        ]
+      },
+      {
+        "oldStart": 136,
+        "oldLines": 7,
+        "newStart": 136,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {",
+          "   for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {",
+          "-    list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{",
+          "+    list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{",
+          "       LabelSelector: sel,",
+          "     })",
+          "     if err == nil && len(list.Items) > 0 {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": true
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/event_bus.go",
+    "old_string": ""kube-system"",
+    "new_string": "tetragonNamespace()",
+    "replace_all": true
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/event_bus.go",
+    "old_string": ""kube-system"",
+    "new_string": "tetragonNamespace()",
+    "replace_all": true
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/event_bus.go",
+    "oldString": ""kube-system"",
+    "newString": "tetragonNamespace()",
+    "originalFile": "package k8s
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+
+// StartDiscoveryLoop seeds Discovery with already-running processes, then
+// continuously streams new process_exec events from Tetragon.
+// A secondary goroutine refreshes workload info periodically so newly
+// created pods (e.g. scaled-up replicas) get their Deployment/DaemonSet
+// label assigned without waiting for a Sentinel restart.
+func (s *Store) StartDiscoveryLoop(ctx context.Context) {
+	// Primary: seed + stream events.
+	go func() {
+		s.scanRunningProcesses(ctx)
+
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			s.runDiscoveryOnce(ctx)
+			if ctx.Err() != nil {
+				return
+			}
+			fmt.Println("[sentinel-discovery] stream ended — reconnecting in 10s")
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(10 * time.Second):
+			}
+		}
+	}()
+
+	// Secondary: refresh workload owner info every 60s so new pods created
+	// after startup (scale-out, rollouts) are grouped under their Deployment.
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.populateWorkloadInfo(ctx)
+			}
+		}
+	}()
+}
+
+func (s *Store) runDiscoveryOnce(ctx context.Context) {
+	events := make(chan TetragonEvent, 256)
+	go func() {
+		defer close(events)
+		if err := s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+			fmt.Printf("[sentinel-discovery] stream error: %v\
+", err)
+		}
+	}()
+	for evt := range events {
+		s.Discovery.Update(evt)
+	}
+}
+
+// scanRunningProcesses execs "tetra dump process-cache" in each Tetragon pod.
+// tetra connects to the local Unix socket and dumps ALL processes Tetragon
+// has tracked (including those running before Sentinel started).
+// Falls back to pod-spec seeding if the command is unavailable.
+func (s *Store) scanRunningProcesses(ctx context.Context) {
+	if s.typed == nil || s.restConfig == nil {
+		return
+	}
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil || len(pods) == 0 {
+		s.seedFromPodSpecs(ctx)
+		return
+	}
+
+	total := 0
+	anyOK := false
+	for _, podName := range pods {
+		n, err := s.dumpProcessCacheViaTetra(ctx, podName)
+		if err != nil {
+			fmt.Printf("[sentinel-discovery] dump %s: %v\
+", podName, err)
+		} else {
+			total += n
+			anyOK = true
+		}
+	}
+	if !anyOK {
+		s.seedFromPodSpecs(ctx)
+	} else {
+		fmt.Printf("[sentinel-discovery] seeded %d processes via tetra dump\
+", total)
+	}
+	// Always populate workload info regardless of which seeding path was used.
+	s.populateWorkloadInfo(ctx)
+}
+
+// dumpProcessCacheViaTetra runs "tetra dump process-cache" inside the Tetragon
+// pod container. tetra talks to the local Unix socket at
+// /var/run/cilium/tetragon/tetragon.sock and outputs the full process cache
+// as JSON. This command was added in Tetragon v1.3.
+func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (int, error) {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").Name(podName).Namespace("kube-system").
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "dump", "processcache"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return 0, fmt.Errorf("exec setup: %w", err)
+	}
+
+	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	var buf bytes.Buffer
+	if err := executor.StreamWithContext(execCtx, remotecommand.StreamOptions{Stdout: &buf}); err != nil {
+		return 0, fmt.Errorf("exec: %w", err)
+	}
+	if buf.Len() == 0 {
+		return 0, fmt.Errorf("empty output (tetra dump process-cache may not be available)")
+	}
+
+	return s.parseAndSeedProcessCache(buf.Bytes())
+}
+
+// parseAndSeedProcessCache decodes JSON from "tetra dump process-cache" and
+// feeds each process into the Discovery store.
+//
+// Expected format:
+//
+//	{"processes":[{"process":{"binary":"...","pod":{"namespace":"...","name":"..."}}},...]}
+// parseAndSeedProcessCache decodes NDJSON from "tetra dump processcache".
+// Each line is one ProcessInternal object; lines without a pod field are
+// host/kernel processes and are skipped.
+func (s *Store) parseAndSeedProcessCache(data []byte) (int, error) {
+	type line struct {
+		Process struct {
+			Binary string `json:"binary"`
+			Pod    *struct {
+				Namespace string `json:"namespace"`
+				Name      string `json:"name"`
+			} `json:"pod"`
+		} `json:"process"`
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	count := 0
+	for _, raw := range bytes.Split(data, []byte("\
+")) {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 || raw[0] != '{' {
+			continue
+		}
+		var entry line
+		if err := json.Unmarshal(raw, &entry); err != nil {
+			continue
+		}
+		p := entry.Process
+		if p.Binary == "" || p.Pod == nil || p.Pod.Namespace == "" || p.Pod.Name == "" {
+			continue
+		}
+		s.Discovery.Update(TetragonEvent{
+			Type:      "exec",
+			Namespace: p.Pod.Namespace,
+			Pod:       p.Pod.Name,
+			Binary:    p.Binary,
+			Time:      now,
+		})
+		count++
+	}
+	return count, nil
+}
+
+// populateWorkloadInfo resolves pod owner references (ReplicaSet → Deployment,
+// DaemonSet, StatefulSet, etc.) and stores them in each PodProfile.
+// Uses only 2 batch K8s API calls regardless of pod count.
+func (s *Store) populateWorkloadInfo(ctx context.Context) {
+	if s.typed == nil {
+		return
+	}
+	// 1. List all ReplicaSets to build RS → Deployment mapping.
+	rsList, err := s.typed.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("[sentinel-discovery] workload info: list replicasets: %v (check RBAC for apps/replicasets)\
+", err)
+		return
+	}
+	// rs "namespace/name" → {deploymentName}
+	rsOwner := make(map[string]string, len(rsList.Items))
+	for _, rs := range rsList.Items {
+		for _, ref := range rs.OwnerReferences {
+			if ref.Kind == "Deployment" {
+				rsOwner[rs.Namespace+"/"+rs.Name] = ref.Name
+			}
+		}
+	}
+
+	// 2. List all running pods and resolve each pod's owner.
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		})
+	if err != nil {
+		return
+	}
+	// Build the set of currently running pod keys for pruning.
+	runningKeys := make(map[string]bool, len(pods.Items))
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == "Running" {
+			runningKeys[pod.Namespace+"/"+pod.Name] = true
+		}
+	}
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != "Running" {
+			continue
+		}
+		if len(pod.OwnerReferences) == 0 {
+			continue
+		}
+		ref := pod.OwnerReferences[0]
+		// Skip Node-owned static pods (kube-apiserver, etcd, etc.) —
+		// they appear as [Node] in Discovery which is confusing.
+		if ref.Kind == "Node" {
+			continue
+		}
+		kind, name := ref.Kind, ref.Name
+		if kind == "ReplicaSet" {
+			if depName, ok := rsOwner[pod.Namespace+"/"+ref.Name]; ok {
+				kind, name = "Deployment", depName
+			}
+		}
+		s.Discovery.SetWorkload(pod.Namespace, pod.Name, kind, name)
+	}
+
+	// Remove profiles for pods that are no longer running.
+	s.Discovery.PruneTerminated(runningKeys)
+}
+
+// seedFromPodSpecs is the final fallback when tetra dump is unavailable.
+func (s *Store) seedFromPodSpecs(ctx context.Context) {
+	if s.typed == nil {
+		return
+	}
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	count := 0
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != "Running" {
+			continue
+		}
+		for _, c := range pod.Spec.Containers {
+			if len(c.Command) > 0 && c.Command[0] != "" {
+				s.Discovery.Update(TetragonEvent{
+					Type: "exec", Namespace: pod.Namespace, Pod: pod.Name,
+					Binary: c.Command[0], Time: now,
+				})
+				count++
+			}
+		}
+	}
+	fmt.Printf("[sentinel-discovery] seeded %d processes from pod specs (fallback)\
+", count)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 110,
+        "oldLines": 7,
+        "newStart": 110,
+        "newLines": 7,
+        "lines": [
+          " // as JSON. This command was added in Tetragon v1.3.",
+          " func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (int, error) {",
+          "   req := s.typed.CoreV1().RESTClient().Post().",
+          "-    Resource("pods").Name(podName).Namespace("kube-system").",
+          "+    Resource("pods").Name(podName).Namespace(tetragonNamespace()).",
+          "     SubResource("exec").",
+          "     VersionedParams(&corev1.PodExecOptions{",
+          "       Container: "tetragon","
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": true
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+    "offset": 28,
+    "limit": 5
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+    "offset": 28,
+    "limit": 5
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+      "content": "
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})",
+      "numLines": 5,
+      "startLine": 28,
+      "totalLines": 68
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+    "old_string": "		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{",
+    "new_string": "		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+    "old_string": "		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{",
+    "new_string": "		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon_health.go",
+    "oldString": "		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{",
+    "newString": "		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{",
+    "originalFile": "package k8s
+
+import (
+	"context"
+	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// TetragonAgentStatus holds health information for one Tetragon DaemonSet pod.
+type TetragonAgentStatus struct {
+	PodName      string `json:"podName"`
+	NodeName     string `json:"nodeName"`
+	Phase        string `json:"phase"`    // Running / Pending / Failed / Unknown
+	Ready        bool   `json:"ready"`
+	RestartCount int32  `json:"restartCount"`
+	StartedAt    string `json:"startedAt,omitempty"`
+	Message      string `json:"message,omitempty"` // reason if not ready
+}
+
+// GetTetragonAgents returns the health status of all Tetragon DaemonSet pods.
+func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, error) {
+	if s.typed == nil {
+		return nil, fmt.Errorf("kubernetes client not initialised")
+	}
+
+	var agents []TetragonAgentStatus
+
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err != nil || len(list.Items) == 0 {
+			continue
+		}
+		for _, pod := range list.Items {
+			agent := TetragonAgentStatus{
+				PodName:  pod.Name,
+				NodeName: pod.Spec.NodeName,
+				Phase:    string(pod.Status.Phase),
+			}
+
+			// Find the "tetragon" container status.
+			for _, cs := range pod.Status.ContainerStatuses {
+				if cs.Name != "tetragon" {
+					continue
+				}
+				agent.Ready = cs.Ready
+				agent.RestartCount = cs.RestartCount
+				if cs.State.Running != nil {
+					agent.StartedAt = cs.State.Running.StartedAt.UTC().Format("2006-01-02T15:04:05Z")
+				}
+				if !cs.Ready {
+					if cs.State.Waiting != nil {
+						agent.Message = cs.State.Waiting.Reason
+					} else if cs.State.Terminated != nil {
+						agent.Message = cs.State.Terminated.Reason
+					}
+				}
+			}
+			agents = append(agents, agent)
+		}
+		return agents, nil
+	}
+
+	return agents, nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 27,
+        "oldLines": 7,
+        "newStart": 27,
+        "newLines": 7,
+        "lines": [
+          "   var agents []TetragonAgentStatus",
+          " ",
+          "   for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {",
+          "-    list, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{",
+          "+    list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{",
+          "       LabelSelector: sel,",
+          "     })",
+          "     if err != nil || len(list.Items) == 0 {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Verify Go build"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -rn "kube-system" /home/bigred/Sentinel/internal/k8s/",
+    "description": "Confirm no more hardcoded kube-system"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "grep -rn "kube-system" /home/bigred/Sentinel/internal/k8s/",
+    "description": "Confirm no more hardcoded kube-system"
+  },
+  "tool_response": {
+    "stdout": "/home/bigred/Sentinel/internal/k8s/tetragon_ns.go:6:// Defaults to "kube-system"; override with TETRAGON_NAMESPACE env var.
+/home/bigred/Sentinel/internal/k8s/tetragon_ns.go:11:	return "kube-system"
+/home/bigred/Sentinel/internal/k8s/cluster_info.go:35:		pods, err := s.typed.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+/home/bigred/Sentinel/internal/k8s/cluster_info.go:58:		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "cilium-config", metav1.GetOptions{})
+/home/bigred/Sentinel/internal/k8s/cluster_info.go:73:		cm, err := s.typed.CoreV1().ConfigMaps("kube-system").Get(ctx, "kube-proxy", metav1.GetOptions{})
+/home/bigred/Sentinel/internal/k8s/tetragon.go:150:	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+    "new_string": "	return nil, fmt.Errorf("no Tetragon pods found in namespace %q (set TETRAGON_NAMESPACE if installed elsewhere)", tetragonNamespace())",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "old_string": "	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+    "new_string": "	return nil, fmt.Errorf("no Tetragon pods found in namespace %q (set TETRAGON_NAMESPACE if installed elsewhere)", tetragonNamespace())",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/internal/k8s/tetragon.go",
+    "oldString": "	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+    "newString": "	return nil, fmt.Errorf("no Tetragon pods found in namespace %q (set TETRAGON_NAMESPACE if installed elsewhere)", tetragonNamespace())",
+    "originalFile": "package k8s
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
+)
+
+// TetragonEvent is a normalised Tetragon runtime event for the frontend.
+type TetragonEvent struct {
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	NodeName   string  `json:"nodeName"`
+	Namespace  string  `json:"namespace"`
+	Pod        string  `json:"pod"`
+	Container  string  `json:"container"`
+	Binary     string  `json:"binary"`
+	Arguments  string  `json:"arguments"`
+	ParentBin  string  `json:"parentBin"`
+	Action     string  `json:"action"`     // "monitor" or "kill"
+	PolicyName string  `json:"policyName"`
+	Function   string  `json:"function"`
+	FilePath   string  `json:"filePath"`   // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes
+	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
+// In a multi-node cluster each pod only sees its own node's events, so we
+// must aggregate all pods to get complete cluster coverage.
+func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
+	if s.typed == nil || s.restConfig == nil {
+		return fmt.Errorf("kubernetes clients not initialised")
+	}
+
+	pods, err := s.findAllTetragonPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, podName := range pods {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+		}(podName)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
+	req := s.typed.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace(tetragonNamespace()).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "tetragon",
+			Command:   []string{"tetra", "getevents", "-o", "json"},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", podName, err)
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	execDone := make(chan error, 1)
+	go func() {
+		defer pw.Close()
+		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		evt, ok := parseTetragonLog(scanner.Text())
+		if !ok {
+			continue
+		}
+		// For runc events with no pod context, resolve container ID → pod via K8s API.
+		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
+		// The container ID is still in evt.Arguments (from the calling runc process),
+		// and evt.ParentBin identifies the true runc caller.
+		if evt.Pod == "" && evt.Type == "kprobe" {
+			checkBin := evt.Binary
+			if strings.Contains(evt.ParentBin, "runc") {
+				checkBin = evt.ParentBin
+			}
+			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
+				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
+				if pod != "" {
+					evt.Pod = pod
+					evt.Namespace = ns
+					evt.Container = ctr
+				}
+			}
+		}
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return <-execDone
+}
+
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
+		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil && len(list.Items) > 0 {
+			names := make([]string, len(list.Items))
+			for i, p := range list.Items {
+				names[i] = p.Name
+			}
+			return names, nil
+		}
+	}
+	return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")
+}
+
+// parseTetragonLog parses a single JSON line from tetra getevents -o json.
+func parseTetragonLog(line string) (TetragonEvent, bool) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		return TetragonEvent{}, false
+	}
+
+	evt := TetragonEvent{
+		Time:     anyStr(raw, "time"),
+		NodeName: anyStr(raw, "node_name", "nodeName"),
+	}
+
+	// process_exec — base sensor, no TracingPolicy needed.
+	// Used by Behavior Discovery to learn process behaviors per pod.
+	if execData := anyMap(raw, "process_exec", "processExec"); execData != nil {
+		proc := anyMap(execData, "process")
+		if proc == nil {
+			return TetragonEvent{}, false
+		}
+		fillProcess(&evt, proc)
+		if evt.Pod == "" || evt.Binary == "" {
+			return TetragonEvent{}, false
+		}
+		evt.Type = "exec"
+		evt.Action = "monitor"
+		if parent := anyMap(execData, "parent"); parent != nil {
+			var p TetragonEvent
+			fillProcess(&p, parent)
+			evt.ParentBin = p.Binary
+		}
+		return evt, true
+	}
+
+	// process_kprobe — triggered only by active TracingPolicies.
+	kp := anyMap(raw, "process_kprobe", "processKprobe")
+	if kp == nil {
+		return TetragonEvent{}, false
+	}
+
+	evt.Type = "kprobe"
+
+	fillProcess(&evt, anyMap(kp, "process"))
+	// If process has no pod context (e.g. execve before the new binary is tracked),
+	// fall back to parent which is the calling shell / container entrypoint.
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(kp, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
+	evt.Function = anyStr(kp, "function_name", "functionName")
+	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
+
+	// Parse file path and operation for file-monitoring kprobes.
+	if args, ok := kp["args"].([]any); ok {
+		switch evt.Function {
+		case "security_file_permission":
+			evt.FilePath = fileArgPath(args, 0)
+			if v := intArg(args, 1); v == 4 {
+				evt.FileOp = "read"
+			} else if v == 2 {
+				evt.FileOp = "write"
+			}
+		case "security_mmap_file":
+			evt.FilePath = fileArgPath(args, 0)
+			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
+				evt.FileOp = "mmap-write"
+			} else if prot&0x01 != 0 {
+				evt.FileOp = "mmap-read"
+			}
+		case "security_path_truncate":
+			evt.FilePath = pathArgPath(args, 0)
+			evt.FileOp = "truncate"
+		case "tcp_connect":
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)
+		}
+	}
+
+	action := anyStr(kp, "action")
+	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
+		evt.Action = "kill"
+	} else {
+		evt.Action = "monitor"
+	}
+
+	// For execve kprobes the matching is on args[0] (the binary being executed),
+	// not on process.binary (which is the calling process, e.g. bash).
+	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
+	if strings.Contains(evt.Function, "execve") {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if execBin := anyStr(arg0, "string_arg", "stringArg"); execBin != "" {
+					evt.ParentBin = evt.Binary // keep caller as parent
+					evt.Binary = execBin
+				}
+			}
+		}
+	}
+
+	return evt, true
+}
+
+func fillProcess(evt *TetragonEvent, proc map[string]any) {
+	if proc == nil {
+		return
+	}
+	evt.Binary = anyStr(proc, "binary")
+	evt.Arguments = anyStr(proc, "arguments")
+	// uid=0 (root) is the proto3 default value and is omitted from JSON;
+	// treat absent uid as 0. Non-zero UIDs are always present in the JSON.
+	uid := uint32(0)
+	if v, ok := proc["uid"]; ok {
+		if n, ok := v.(float64); ok {
+			uid = uint32(n)
+		}
+	}
+	evt.ProcessUID = &uid
+	pod := anyMap(proc, "pod")
+	if pod == nil {
+		return
+	}
+	evt.Namespace = anyStr(pod, "namespace")
+	evt.Pod = anyStr(pod, "name")
+	if c := anyMap(pod, "container"); c != nil {
+		evt.Container = anyStr(c, "name")
+	}
+}
+
+func anyStr(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func sockArgEndpoints(args []any, idx int) (dest, src string) {
+	if idx >= len(args) {
+		return "", ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	sock, ok := arg["sock_arg"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	formatAddr := func(addrKey, portKey string) string {
+		addr := anyStr(sock, addrKey)
+		if addr == "" {
+			return ""
+		}
+		if port, ok := sock[portKey].(float64); ok && port > 0 {
+			return fmt.Sprintf("%s:%d", addr, int(port))
+		}
+		return addr
+	}
+	return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")
+}
+
+func fileArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if f, ok := arg["file_arg"].(map[string]any); ok {
+		return anyStr(f, "path")
+	}
+	return ""
+}
+
+func pathArgPath(args []any, idx int) string {
+	if idx >= len(args) {
+		return ""
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if p, ok := arg["path_arg"].(map[string]any); ok {
+		return anyStr(p, "path")
+	}
+	return ""
+}
+
+func intArg(args []any, idx int) int {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["int_arg"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func uint32Arg(args []any, idx int) uint32 {
+	if idx >= len(args) {
+		return 0
+	}
+	arg, ok := args[idx].(map[string]any)
+	if !ok {
+		return 0
+	}
+	if v, ok := arg["uint32_arg"].(float64); ok {
+		return uint32(v)
+	}
+	return 0
+}
+
+func anyMap(m map[string]any, keys ...string) map[string]any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if sub, ok := v.(map[string]any); ok {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 147,
+        "oldLines": 7,
+        "newStart": 147,
+        "newLines": 7,
+        "lines": [
+          "       return names, nil",
+          "     }",
+          "   }",
+          "-  return nil, fmt.Errorf("no Tetragon pods found in kube-system (is Tetragon installed?)")",
+          "+  return nil, fmt.Errorf("no Tetragon pods found in namespace %q (set TETRAGON_NAMESPACE if installed elsewhere)", tetragonNamespace())",
+          " }",
+          " ",
+          " // parseTetragonLog parses a single JSON line from tetra getevents -o json."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Final Go build check"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go build ./... 2>&1",
+    "description": "Final Go build check"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "$(cat <<'EOF'
+feat: make Tetragon namespace configurable via TETRAGON_NAMESPACE
+
+Previously hardcoded to "kube-system". Now reads TETRAGON_NAMESPACE
+env var with "kube-system" as default. Affects pod listing for event
+streaming, process cache dump, and Tetragon agent health checks.
+
+Usage:
+  env:
+    - name: TETRAGON_NAMESPACE
+      value: "tetragon"
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit TETRAGON_NAMESPACE feature"
+  }
+}
+
+----------------------------------------
+
