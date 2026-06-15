@@ -14,35 +14,54 @@ import (
 	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
-// WebhookPayload is the JSON body posted to webhook endpoints.
-// The Text field is a human-readable summary compatible with Slack Incoming Webhooks (mrkdwn).
-type WebhookPayload struct {
-	Text       string  `json:"text"` // Slack-compatible summary (mrkdwn)
-	RuleName   string  `json:"ruleName"`
-	Severity   string  `json:"severity"`
-	Time       string  `json:"time"`
-	Namespace  string  `json:"namespace"`
-	Pod        string  `json:"pod"`
-	Container  string  `json:"container,omitempty"`
-	NodeName   string  `json:"nodeName,omitempty"`
-	Binary     string  `json:"binary,omitempty"`
-	PolicyName string  `json:"policyName,omitempty"`
-	Function   string  `json:"function,omitempty"`
-	ProcessUID *uint32 `json:"processUid,omitempty"`
-	FilePath   string  `json:"filePath,omitempty"`
-	FileOp     string  `json:"fileOp,omitempty"`
-	NetDest    string  `json:"netDest,omitempty"`
-	NetSrc     string  `json:"netSrc,omitempty"`
+// slackAttachment adds a colored left border in Slack (warning=yellow, danger=red).
+type slackAttachment struct {
+	Color    string   `json:"color"`
+	Text     string   `json:"text"`
+	MrkdwnIn []string `json:"mrkdwn_in"`
 }
 
-func buildText(p WebhookPayload) string {
+// WebhookPayload is the JSON body posted to webhook endpoints.
+// Attachments provides Slack-specific colored formatting; Text is a plain fallback.
+type WebhookPayload struct {
+	Text        string            `json:"text"`                    // plain text fallback
+	Attachments []slackAttachment `json:"attachments,omitempty"`   // Slack color + mrkdwn
+	RuleName    string            `json:"ruleName"`
+	Severity    string            `json:"severity"`
+	Time        string            `json:"time"`
+	Namespace   string            `json:"namespace"`
+	Pod         string            `json:"pod"`
+	Container   string            `json:"container,omitempty"`
+	NodeName    string            `json:"nodeName,omitempty"`
+	Binary      string            `json:"binary,omitempty"`
+	PolicyName  string            `json:"policyName,omitempty"`
+	Function    string            `json:"function,omitempty"`
+	ProcessUID  *uint32           `json:"processUid,omitempty"`
+	FilePath    string            `json:"filePath,omitempty"`
+	FileOp      string            `json:"fileOp,omitempty"`
+	NetDest     string            `json:"netDest,omitempty"`
+	NetSrc      string            `json:"netSrc,omitempty"`
+}
+
+func ruleType(p WebhookPayload) string {
+	if p.NetDest != "" || p.NetSrc != "" {
+		return "Network Rule"
+	}
+	if p.FilePath != "" {
+		return "File Rule"
+	}
+	return "Process Rule"
+}
+
+func buildSlackText(p WebhookPayload) string {
 	lines := []string{
-		fmt.Sprintf("[%s] %s", strings.ToUpper(p.Severity), p.RuleName),
-		fmt.Sprintf("*Pod:* `%s/%s`", p.Namespace, p.Pod),
+		fmt.Sprintf("*[%s]* %s", strings.ToUpper(p.Severity), p.RuleName),
+		fmt.Sprintf("*Rule:* %s", ruleType(p)),
 	}
 	if p.PolicyName != "" {
 		lines = append(lines, fmt.Sprintf("*Policy:* `%s`", p.PolicyName))
 	}
+	lines = append(lines, fmt.Sprintf("*Pod:* `%s/%s`", p.Namespace, p.Pod))
 	if p.Binary != "" {
 		lines = append(lines, fmt.Sprintf("*Binary:* `%s`", p.Binary))
 	}
@@ -66,6 +85,18 @@ func buildText(p WebhookPayload) string {
 		lines = append(lines, fmt.Sprintf("*Source:* `%s`", p.NetSrc))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func buildPayload(p *WebhookPayload) {
+	color := "warning" // yellow for warning
+	if p.Severity == "critical" {
+		color = "danger" // red for critical
+	}
+	text := buildSlackText(*p)
+	p.Text = fmt.Sprintf("[%s] %s", strings.ToUpper(p.Severity), p.RuleName) // plain fallback
+	p.Attachments = []slackAttachment{
+		{Color: color, Text: text, MrkdwnIn: []string{"text"}},
+	}
 }
 
 // Dispatcher watches the Tetragon event stream and fires webhook alerts.
@@ -163,7 +194,7 @@ func (d *Dispatcher) post(rule AlertRule, evt k8s.TetragonEvent, severity string
 		NetDest:    evt.NetDest,
 		NetSrc:     evt.NetSrc,
 	}
-	payload.Text = buildText(payload)
+	buildPayload(&payload)
 	body, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("alert-dispatcher: marshal error: %v", err)
@@ -192,7 +223,7 @@ func (d *Dispatcher) SendTest(webhookURL string) error {
 		PolicyName: "monitor-all-exec",
 		Function:   "sys_execve",
 	}
-	payload.Text = buildText(payload)
+	buildPayload(&payload)
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
