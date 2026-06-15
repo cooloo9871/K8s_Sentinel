@@ -93,7 +93,7 @@ func buildPayload(p *WebhookPayload) {
 		color = "danger" // red for critical
 	}
 	text := buildSlackText(*p)
-	p.Text = fmt.Sprintf("[%s] %s", strings.ToUpper(p.Severity), p.RuleName) // plain fallback
+	p.Text = "" // outer text empty — attachment renders all content; avoids duplication
 	p.Attachments = []slackAttachment{
 		{Color: color, Text: text, MrkdwnIn: []string{"text"}},
 	}
