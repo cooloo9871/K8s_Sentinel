@@ -155,18 +155,14 @@ function RuleForm({ initial, title, onSave, onBack, saving }: {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Condition {i + 1}</span>
                 <div className="flex gap-1">
-                  <Select onValueChange={label => applyTpl(i, label)}>
-                    <SelectTrigger className="h-6 text-[10px] w-40 border-dashed">
-                      <SelectValue placeholder="Use template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {TEMPLATES.map(t => (
-                          <SelectItem key={t.label} value={t.label} className="text-xs">{t.label}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <select
+                    className="h-6 text-[10px] rounded border bg-background px-1 cursor-pointer"
+                    value=""
+                    onChange={e => { if (e.target.value) applyTpl(i, e.target.value) }}
+                  >
+                    <option value="">Use template...</option>
+                    {TEMPLATES.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
+                  </select>
                   {form.validations.length > 1 && (
                     <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive"
                       onClick={() => removeVal(i)}>✕</Button>
