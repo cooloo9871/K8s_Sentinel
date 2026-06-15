@@ -33,14 +33,13 @@ type Event struct {
 
 // Violation is used by the webhook to record a new violation.
 type Violation struct {
-	Namespace   string
-	Name        string
-	Resource    string
-	Operation   string
-	Username    string
-	PolicyName  string
-	BindingName string
-	Message     string
+	Namespace string
+	Name      string
+	Resource  string
+	Operation string
+	Username  string
+	RuleName  string
+	Message   string
 }
 
 const maxEvents = 500
@@ -156,17 +155,16 @@ func (s *Store) AddViolation(v Violation) {
 	}
 	s.seen[key] = struct{}{}
 	evt := Event{
-		ID:          key + "-" + time.Now().Format("20060102150405"),
-		Time:        time.Now().UTC().Format(time.RFC3339),
-		Namespace:   v.Namespace,
-		Name:        v.Name,
-		Resource:    v.Resource,
-		Operation:   v.Operation,
-		Username:    v.Username,
-		PolicyName:  v.PolicyName,
-		BindingName: v.BindingName,
-		Message:     v.Message,
-		Source:      "webhook",
+		ID:        key + "-" + time.Now().Format("20060102150405"),
+		Time:      time.Now().UTC().Format(time.RFC3339),
+		Namespace: v.Namespace,
+		Name:      v.Name,
+		Resource:  v.Resource,
+		Operation: v.Operation,
+		Username:  v.Username,
+		PolicyName: v.RuleName,
+		Message:   v.Message,
+		Source:    "webhook",
 	}
 	s.events = append([]Event{evt}, s.events...)
 	if len(s.events) > maxEvents {

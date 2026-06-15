@@ -180,6 +180,28 @@ export const admissionApi = {
     api.get('/admission-events').then((r) => r.data ?? []),
 }
 
+export interface AdmissionRule {
+  id: string
+  name: string
+  description?: string
+  enabled: boolean
+  rawYaml: string
+  createdAt: string
+}
+
+export const admissionRulesApi = {
+  list: (): Promise<AdmissionRule[]> =>
+    api.get('/admission-rules').then((r) => r.data ?? []),
+  create: (rawYaml: string): Promise<AdmissionRule> =>
+    api.post('/admission-rules', rawYaml, { headers: { 'Content-Type': 'text/plain' } }).then((r) => r.data),
+  update: (id: string, rawYaml: string): Promise<AdmissionRule> =>
+    api.put(`/admission-rules/${id}`, rawYaml, { headers: { 'Content-Type': 'text/plain' } }).then((r) => r.data),
+  toggle: (id: string, enabled: boolean): Promise<void> =>
+    api.patch(`/admission-rules/${id}/toggle?enabled=${enabled}`),
+  delete: (id: string): Promise<void> =>
+    api.delete(`/admission-rules/${id}`),
+}
+
 export const vapApi = {
   listPolicies: (): Promise<VAPRecord[]> =>
     api.get('/vap').then((r) => r.data),

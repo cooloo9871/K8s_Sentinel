@@ -89,14 +89,13 @@ func NewAdmissionHandler(evaluator *Evaluator, admStore *admission.Store) http.H
 		// Record in Admission Events store
 		for _, v := range violations {
 			admStore.AddViolation(admission.Violation{
-				Namespace:   req.Namespace,
-				Name:        req.Name,
-				Resource:    req.Resource.Resource,
-				Operation:   req.Operation,
-				Username:    req.UserInfo.Username,
-				PolicyName:  v.PolicyName,
-				BindingName: v.BindingName,
-				Message:     v.Message,
+				Namespace: req.Namespace,
+				Name:      req.Name,
+				Resource:  req.Resource.Resource,
+				Operation: req.Operation,
+				Username:  req.UserInfo.Username,
+				RuleName:  v.PolicyName,
+				Message:   v.Message,
 			})
 		}
 

@@ -62,6 +62,11 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/admission-rules')}>
+                  <NavLink to="/policies/admission-rules">Admission Rules</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/policies/admission')}>
                   <NavLink to="/policies/admission">Admission Policy</NavLink>
                 </SidebarMenuButton>

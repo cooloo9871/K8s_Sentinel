@@ -4,146 +4,82 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/google/cel-go/cel"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 
-	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/admission"
 )
 
 // ViolationResult holds a single CEL validation failure.
 type ViolationResult struct {
-	PolicyName  string
-	BindingName string
-	Message     string
-	Expression  string
+	PolicyName string
+	Message    string
+	Expression string
 }
 
-const cacheTTL = 30 * time.Second
-
-// Evaluator fetches VAP policies and evaluates them against admission requests.
-// Policies are cached for cacheTTL to reduce K8s API load.
+// Evaluator evaluates admission requests against Sentinel-managed rules.
 type Evaluator struct {
-	dynClient    dynamic.Interface
-	mu           sync.RWMutex
-	policies     []unstructured.Unstructured
-	bindings     []unstructured.Unstructured
-	cacheExpires time.Time
+	rules *admission.RuleStore
 }
 
-func NewEvaluator(dynClient dynamic.Interface) *Evaluator {
-	return &Evaluator{dynClient: dynClient}
+func NewEvaluator(rules *admission.RuleStore) *Evaluator {
+	return &Evaluator{rules: rules}
 }
 
-func (e *Evaluator) fetchPolicies(ctx context.Context) ([]unstructured.Unstructured, []unstructured.Unstructured, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if time.Now().Before(e.cacheExpires) {
-		return e.policies, e.bindings, nil
-	}
-	pl, err := e.dynClient.Resource(k8s.ExportVAPGVR()).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("list VAP: %w", err)
-	}
-	bl, err := e.dynClient.Resource(k8s.ExportVAPBindingGVR()).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("list VAPBinding: %w", err)
-	}
-	e.policies = pl.Items
-	e.bindings = bl.Items
-	e.cacheExpires = time.Now().Add(cacheTTL)
-	return e.policies, e.bindings, nil
-}
-
-// Evaluate checks all VAP policies that match the request and returns violations.
-func (e *Evaluator) Evaluate(ctx context.Context, req AdmissionRequest) ([]ViolationResult, error) {
-	policies, bindings, err := e.fetchPolicies(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build policy name → binding name map
-	policyBindings := map[string]string{}
-	for _, b := range bindings {
-		policyName, _, _ := unstructured.NestedString(b.Object, "spec", "policyName")
-		if policyName != "" {
-			policyBindings[policyName] = b.GetName()
-		}
-	}
-
+// Evaluate checks enabled rules against the request and returns violations.
+func (e *Evaluator) Evaluate(_ context.Context, req AdmissionRequest) ([]ViolationResult, error) {
 	var violations []ViolationResult
-	for _, policy := range policies {
-		if !matchesPolicy(policy, req) {
+	for _, rule := range e.rules.EnabledRules() {
+		if !matchesRule(rule, req) {
 			continue
 		}
-		vs, err := evaluateValidations(policy, req)
+		vs, err := evaluateValidations(rule, req)
 		if err != nil {
 			continue
 		}
-		for _, v := range vs {
-			v.PolicyName = policy.GetName()
-			v.BindingName = policyBindings[policy.GetName()]
-			violations = append(violations, v)
-		}
+		violations = append(violations, vs...)
 	}
 	return violations, nil
 }
 
-func matchesPolicy(policy unstructured.Unstructured, req AdmissionRequest) bool {
-	rules, _, _ := unstructured.NestedSlice(policy.Object, "spec", "matchConstraints", "resourceRules")
-	if len(rules) == 0 {
-		return true // no constraints = match all
-	}
-	for _, r := range rules {
-		rule, ok := r.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if matchesRule(rule, req) {
+func matchesRule(rule admission.AdmissionRule, req AdmissionRequest) bool {
+	for _, rr := range rule.Spec.MatchConstraints.ResourceRules {
+		if matchesResourceRule(rr, req) {
 			return true
 		}
 	}
-	return false
+	return len(rule.Spec.MatchConstraints.ResourceRules) == 0
 }
 
-func matchesRule(rule map[string]interface{}, req AdmissionRequest) bool {
-	groups, _, _ := unstructured.NestedStringSlice(rule, "apiGroups")
-	versions, _, _ := unstructured.NestedStringSlice(rule, "apiVersions")
-	resources, _, _ := unstructured.NestedStringSlice(rule, "resources")
-	operations, _, _ := unstructured.NestedStringSlice(rule, "operations")
-
-	if !matchSlice(groups, req.Resource.Group) {
+func matchesResourceRule(rr admission.ResourceRule, req AdmissionRequest) bool {
+	if !matchSlice(rr.APIGroups, req.Resource.Group) {
 		return false
 	}
-	if !matchSlice(versions, req.Resource.Version) {
+	if !matchSlice(rr.APIVersions, req.Resource.Version) {
 		return false
 	}
-	if !matchSlice(resources, req.Resource.Resource) {
+	if !matchSlice(rr.Resources, req.Resource.Resource) {
 		return false
 	}
-	if !matchSlice(operations, req.Operation) {
+	if !matchSlice(rr.Operations, req.Operation) {
 		return false
 	}
 	return true
 }
 
 func matchSlice(slice []string, val string) bool {
+	if len(slice) == 0 {
+		return true
+	}
 	for _, s := range slice {
 		if s == "*" || s == val {
 			return true
 		}
 	}
-	return len(slice) == 0 // empty = match all
+	return false
 }
 
-func evaluateValidations(policy unstructured.Unstructured, req AdmissionRequest) ([]ViolationResult, error) {
-	validations, _, _ := unstructured.NestedSlice(policy.Object, "spec", "validations")
-
-	// Parse object
+func evaluateValidations(rule admission.AdmissionRule, req AdmissionRequest) ([]ViolationResult, error) {
 	var objMap map[string]interface{}
 	if len(req.Object) > 0 {
 		_ = json.Unmarshal(req.Object, &objMap)
@@ -179,27 +115,23 @@ func evaluateValidations(policy unstructured.Unstructured, req AdmissionRequest)
 	}
 
 	var violations []ViolationResult
-	for _, v := range validations {
-		val, ok := v.(map[string]interface{})
-		if !ok {
+	for _, v := range rule.Spec.Validations {
+		if v.Expression == "" {
 			continue
 		}
-		expr, _ := val["expression"].(string)
-		msg, _ := val["message"].(string)
-		if expr == "" {
-			continue
-		}
-		passed, err := evalCEL(env, expr, activation)
+		passed, err := evalCEL(env, v.Expression, activation)
 		if err != nil {
 			continue
 		}
 		if !passed {
+			msg := v.Message
 			if msg == "" {
-				msg = fmt.Sprintf("failed expression: %s", expr)
+				msg = fmt.Sprintf("failed expression: %s", v.Expression)
 			}
 			violations = append(violations, ViolationResult{
+				PolicyName: rule.Name,
 				Message:    msg,
-				Expression: expr,
+				Expression: v.Expression,
 			})
 		}
 	}

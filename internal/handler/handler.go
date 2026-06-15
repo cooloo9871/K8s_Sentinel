@@ -24,6 +24,7 @@ type Config struct {
 	Rsyslog         *rsyslog.Store
 	RsyslogDispatch *rsyslog.Dispatcher
 	Admission       *admission.Store
+	AdmissionRules  *admission.RuleStore
 }
 
 // New builds the HTTP handler tree.
@@ -58,6 +59,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/alerts", listAlerts(cfg.Alerts))
 		r.Get("/api/admission-events", listAdmissionEvents(cfg.Admission))
 		r.Get("/api/admission-events/stream", streamAdmissionEvents(cfg.Admission))
+		r.Get("/api/admission-rules", listAdmissionRules(cfg.AdmissionRules))
 		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
 		r.Get("/api/vap", listVAP(cfg.Store))
 		r.Get("/api/vap/{name}", getVAP(cfg.Store))
@@ -86,6 +88,10 @@ func New(cfg Config) http.Handler {
 			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
 			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
 			r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
+			r.Post("/api/admission-rules", createAdmissionRule(cfg.AdmissionRules))
+			r.Put("/api/admission-rules/{id}", updateAdmissionRule(cfg.AdmissionRules))
+			r.Patch("/api/admission-rules/{id}/toggle", toggleAdmissionRule(cfg.AdmissionRules))
+			r.Delete("/api/admission-rules/{id}", deleteAdmissionRule(cfg.AdmissionRules))
 			r.Post("/api/vap", applyVAP(cfg.Store))
 			r.Put("/api/vap/{name}", applyVAP(cfg.Store))
 			r.Delete("/api/vap/{name}", deleteVAP(cfg.Store))

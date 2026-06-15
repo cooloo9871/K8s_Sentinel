@@ -41,6 +41,8 @@ func main() {
 	admissionStore := admission.NewStore()
 	go admissionStore.Run(context.Background(), typedClient)
 
+	admissionRules := admission.NewRuleStore("/data/sentinel/admission-rules.json")
+
 	// Start admission webhook server (HTTPS :8443)
 	tlsBundle, err := webhook.LoadOrCreate(
 		"/data/sentinel/webhook-tls.crt",
@@ -54,7 +56,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("webhook tls: %v", err)
 	}
-	evaluator := webhook.NewEvaluator(dynClient)
+	evaluator := webhook.NewEvaluator(admissionRules)
 	admHandler := webhook.NewAdmissionHandler(evaluator, admissionStore)
 	go func() {
 		if err := webhook.StartHTTPS(context.Background(), ":8443", tlsBundle, admHandler); err != nil {
@@ -77,6 +79,7 @@ func main() {
 		Rsyslog:         rsyslogs,
 		RsyslogDispatch: rsyslogDispatch,
 		Admission:       admissionStore,
+		AdmissionRules:  admissionRules,
 	}
 
 	mux := http.NewServeMux()
