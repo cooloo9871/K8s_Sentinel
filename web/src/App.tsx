@@ -46,7 +46,7 @@ function AppRoutes() {
           <Route path="/security/events" element={<SecurityEventsPage />} />
           <Route path="/security/discovery" element={<DiscoveryPage />} />
           <Route path="/settings/users" element={<UsersPage />} />
-          <Route path="/settings/alerts" element={<AlertsPage />} />
+          <Route path="/security/alerts" element={<AlertsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

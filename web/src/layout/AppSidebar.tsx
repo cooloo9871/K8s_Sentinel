@@ -74,6 +74,11 @@ export function AppSidebar() {
                   <NavLink to="/security/events">Security Events</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -103,11 +108,6 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
                     <NavLink to="/settings/users">Users</NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>
-                    <NavLink to="/settings/alerts">Alerts</NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

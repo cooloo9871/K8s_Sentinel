@@ -493351,3 +493351,1193 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: add webhook alerting for Security Events
+
+Backend:
+- internal/alert/store.go: AlertStore with CRUD, file persistence at
+  /data/sentinel/alerts.json, cooldown helpers
+- internal/alert/dispatcher.go: streams Tetragon events, matches rules,
+  respects cooldown, POSTs JSON payload to webhooks; SendTest for validation
+- internal/handler/alerts.go: REST handlers for CRUD + test endpoint
+- GET /api/alerts: viewer + admin
+- POST/PUT/DELETE /api/alerts, POST /api/alerts/test: admin only
+
+Frontend:
+- AlertsPage: list/create/edit/delete rules, enable/disable toggle,
+  Test button, filter config (severity/namespace/policy/cooldown)
+- Settings > Alerts in sidebar (admin only)
+- alertsApi in client.ts
+
+Webhook payload includes: ruleName, severity, time, namespace, pod,
+container, binary, policyName, function, filePath, fileOp, netDest, netSrc
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit webhook alerting feature"
+  },
+  "tool_response": {
+    "stdout": "[main 931d985] feat: add webhook alerting for Security Events
+ 10 files changed, 9678 insertions(+), 6 deletions(-)
+ create mode 100644 internal/alert/dispatcher.go
+ create mode 100644 internal/alert/store.go
+ create mode 100644 internal/handler/alerts.go
+ create mode 100644 web/src/pages/AlertsPage.tsx",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "931d985",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "Alerts 的功能幫我放到 Notifications 底下，Security Events 之後，要記得上面對應的 Home > 也要修改"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "offset": 17,
+    "limit": 30
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "offset": 17,
+    "limit": 30
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+      "content": "
+const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+}
+",
+      "numLines": 30,
+      "startLine": 17,
+      "totalLines": 115
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "old_string": "const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+}",
+    "new_string": "const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  alerts: 'Alerts',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],
+}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "old_string": "const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+}",
+    "new_string": "const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  alerts: 'Alerts',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],
+}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppHeader.tsx",
+    "oldString": "const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+}",
+    "newString": "const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  alerts: 'Alerts',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
+  ],
+}",
+    "originalFile": "import { Fragment, useEffect, useState } from 'react'
+import { useLocation, Link } from 'react-router-dom'
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { SidebarTrigger } from '@/components/ui/sidebar'
+import { modeApi } from '../api/client'
+import { useAuth } from './AuthContext'
+import type { Mode } from '../api/types'
+
+const ROUTE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  policies: 'Policies',
+  tracing: 'TracingPolicy',
+  new: 'New Policy',
+  edit: 'Edit',
+  templates: 'Templates',
+  discovery: 'Behavior Discovery',
+  security: 'Notifications',
+  events: 'Security Events',
+  cluster: 'Cluster',
+  mode: 'Mode Control',
+  namespaces: 'Namespaces',
+  tetragon: 'Tetragon Agents',
+}
+
+// Override the full breadcrumb trail for paths whose URL segments don't match
+// the desired label hierarchy (e.g. /security/discovery lives under Policies).
+const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
+  '/security/discovery': [
+    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Behavior Discovery' },
+  ],
+  '/security/events': [
+    { label: 'Notifications' },
+    { label: 'Security Events' },
+  ],
+}
+
+function useBreadcrumbs() {
+  const { pathname } = useLocation()
+
+  if (PATH_OVERRIDES[pathname]) {
+    return [{ label: 'Home', to: '/dashboard' }, ...PATH_OVERRIDES[pathname]]
+  }
+
+  const segments = pathname.split('/').filter(Boolean)
+  const crumbs: { label: string; to?: string }[] = [{ label: 'Home', to: '/dashboard' }]
+  let path = ''
+  segments.forEach((seg, i) => {
+    path += `/${seg}`
+    const isLast = i === segments.length - 1
+    const label = ROUTE_LABELS[seg] ?? seg
+    crumbs.push(isLast ? { label } : { label, to: path })
+  })
+  return crumbs
+}
+
+interface Props {
+  onLogout: () => Promise<void>
+}
+
+export function AppHeader({ onLogout }: Props) {
+  const { user } = useAuth()
+  const [mode, setMode] = useState<Mode>('Monitoring')
+  const breadcrumbs = useBreadcrumbs()
+
+  useEffect(() => {
+    modeApi.get().then(setMode).catch(() => {})
+  }, [])
+
+  const modeVariant =
+    mode === 'Protect' ? 'destructive' : mode === 'Mixed' ? 'secondary' : 'outline'
+
+  return (
+    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+      <SidebarTrigger className="-ml-1" />
+
+      <Breadcrumb>
+        <BreadcrumbList>
+          {breadcrumbs.map((c, i) => (
+            <Fragment key={i}>
+              {i > 0 && <BreadcrumbSeparator />}
+              <BreadcrumbItem>
+                {c.to ? (
+                  <BreadcrumbLink asChild>
+                    <Link to={c.to}>{c.label}</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage>{c.label}</BreadcrumbPage>
+                )}
+              </BreadcrumbItem>
+            </Fragment>
+          ))}
+        </BreadcrumbList>
+      </Breadcrumb>
+
+      <div className="ml-auto flex items-center gap-2">
+        <Badge variant={modeVariant}>{mode.toUpperCase()}</Badge>
+        <span className="text-xs text-muted-foreground">{user?.username}</span>
+        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={onLogout}>
+          Sign out
+        </Button>
+      </div>
+    </header>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 25,
+        "oldLines": 6,
+        "newStart": 25,
+        "newLines": 7,
+        "lines": [
+          "   discovery: 'Behavior Discovery',",
+          "   security: 'Notifications',",
+          "   events: 'Security Events',",
+          "+  alerts: 'Alerts',",
+          "   cluster: 'Cluster',",
+          "   mode: 'Mode Control',",
+          "   namespaces: 'Namespaces',"
+        ]
+      },
+      {
+        "oldStart": 42,
+        "oldLines": 6,
+        "newStart": 43,
+        "newLines": 10,
+        "lines": [
+          "     { label: 'Notifications' },",
+          "     { label: 'Security Events' },",
+          "   ],",
+          "+  '/security/alerts': [",
+          "+    { label: 'Notifications' },",
+          "+    { label: 'Alerts' },",
+          "+  ],",
+          " }",
+          " ",
+          " function useBreadcrumbs() {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "new_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "new_string": "        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "newString": "        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import logoUrl from '../assets/sentinel-logo-black.svg'
+import { useAuth } from './AuthContext'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+  const { user } = useAuth()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={logoUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/tracing')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/templates')}>
+                  <NavLink to="/policies/templates">Templates</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/tetragon')}>
+                  <NavLink to="/cluster/tetragon">Tetragon Agents</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>
+                    <NavLink to="/settings/alerts">Alerts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 74,
+        "oldLines": 6,
+        "newStart": 74,
+        "newLines": 11,
+        "lines": [
+          "                   <NavLink to="/security/events">Security Events</NavLink>",
+          "                 </SidebarMenuButton>",
+          "               </SidebarMenuItem>",
+          "+              <SidebarMenuItem>",
+          "+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>",
+          "+                  <NavLink to="/security/alerts">Alerts</NavLink>",
+          "+                </SidebarMenuButton>",
+          "+              </SidebarMenuItem>",
+          "             </SidebarMenu>",
+          "           </SidebarGroupContent>",
+          "         </SidebarGroup>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>
+                    <NavLink to="/settings/alerts">Alerts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}",
+    "new_string": "        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "old_string": "        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>
+                    <NavLink to="/settings/alerts">Alerts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}",
+    "new_string": "        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/AppSidebar.tsx",
+    "oldString": "        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>
+                    <NavLink to="/settings/alerts">Alerts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}",
+    "newString": "        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}",
+    "originalFile": "import { useLocation, NavLink } from 'react-router-dom'
+import logoUrl from '../assets/sentinel-logo-black.svg'
+import { useAuth } from './AuthContext'
+import {
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
+
+export function AppSidebar() {
+  const { pathname } = useLocation()
+  const { user } = useAuth()
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  return (
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <div className="flex items-center gap-2.5 px-2 py-3">
+          <img src={logoUrl} alt="Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                  <NavLink to="/dashboard">Dashboard</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Policies</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/tracing')}>
+                  <NavLink to="/policies/tracing">TracingPolicy</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/discovery')}>
+                  <NavLink to="/security/discovery">Behavior Discovery</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/policies/templates')}>
+                  <NavLink to="/policies/templates">Templates</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Notifications</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/events')}>
+                  <NavLink to="/security/events">Security Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                  <NavLink to="/security/alerts">Alerts</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Cluster</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/namespaces')}>
+                  <NavLink to="/cluster/namespaces">Namespaces</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/cluster/tetragon')}>
+                  <NavLink to="/cluster/tetragon">Tetragon Agents</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {user?.role === 'admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
+                    <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>
+                    <NavLink to="/settings/alerts">Alerts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 110,
+        "oldLines": 11,
+        "newStart": 110,
+        "newLines": 6,
+        "lines": [
+          "                     <NavLink to="/settings/users">Users</NavLink>",
+          "                   </SidebarMenuButton>",
+          "                 </SidebarMenuItem>",
+          "-                <SidebarMenuItem>",
+          "-                  <SidebarMenuButton asChild isActive={isActive('/settings/alerts')}>",
+          "-                    <NavLink to="/settings/alerts">Alerts</NavLink>",
+          "-                  </SidebarMenuButton>",
+          "-                </SidebarMenuItem>",
+          "               </SidebarMenu>",
+          "             </SidebarGroupContent>",
+          "           </SidebarGroup>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "          <Route path="/settings/alerts" element={<AlertsPage />} />",
+    "new_string": "          <Route path="/security/alerts" element={<AlertsPage />} />",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/App.tsx",
+    "old_string": "          <Route path="/settings/alerts" element={<AlertsPage />} />",
+    "new_string": "          <Route path="/security/alerts" element={<AlertsPage />} />",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/App.tsx",
+    "oldString": "          <Route path="/settings/alerts" element={<AlertsPage />} />",
+    "newString": "          <Route path="/security/alerts" element={<AlertsPage />} />",
+    "originalFile": "import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppLayout } from './layout/AppLayout'
+import { AppToaster } from './layout/AppToaster'
+import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { AuthProvider, useAuth } from './layout/AuthContext'
+import { LoginPage } from './pages/LoginPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { PolicyListPage } from './pages/PolicyListPage'
+import { PolicyEditPage } from './pages/PolicyEditPage'
+import { ModePage } from './pages/ModePage'
+import { NamespacesPage } from './pages/NamespacesPage'
+import { SecurityEventsPage } from './pages/SecurityEventsPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+import { TetragonStatusPage } from './pages/TetragonStatusPage'
+import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
+import { UsersPage } from './pages/UsersPage'
+import { AlertsPage } from './pages/AlertsPage'
+
+function AppRoutes() {
+  const { user, loading, logout } = useAuth()
+
+  if (loading) return null
+
+  if (!user) {
+    return (
+      <LoginPage onLogin={() => window.location.replace('/dashboard')} />
+    )
+  }
+
+  return (
+    <SecurityEventsProvider>
+    <DiscoveryProvider>
+      <Routes>
+        <Route element={<AppLayout onLogout={logout} />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
+          <Route path="/policies/tracing" element={<PolicyListPage />} />
+          <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
+          <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
+          <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+          <Route path="/cluster/mode" element={<ModePage />} />
+          <Route path="/cluster/namespaces" element={<NamespacesPage />} />
+          <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />
+          <Route path="/security/events" element={<SecurityEventsPage />} />
+          <Route path="/security/discovery" element={<DiscoveryPage />} />
+          <Route path="/settings/users" element={<UsersPage />} />
+          <Route path="/settings/alerts" element={<AlertsPage />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </DiscoveryProvider>
+    </SecurityEventsProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppToaster>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </AppToaster>
+    </BrowserRouter>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 46,
+        "oldLines": 7,
+        "newStart": 46,
+        "newLines": 7,
+        "lines": [
+          "           <Route path="/security/events" element={<SecurityEventsPage />} />",
+          "           <Route path="/security/discovery" element={<DiscoveryPage />} />",
+          "           <Route path="/settings/users" element={<UsersPage />} />",
+          "-          <Route path="/settings/alerts" element={<AlertsPage />} />",
+          "+          <Route path="/security/alerts" element={<AlertsPage />} />",
+          "           <Route path="*" element={<Navigate to="/dashboard" replace />} />",
+          "         </Route>",
+          "       </Routes>"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 336ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git add -A && git commit -m "$(cat <<'EOF'
+refactor: move Alerts to Notifications section (/security/alerts)
+
+- AppSidebar: Alerts moved under Notifications after Security Events
+- AppSidebar: Settings section keeps only Users
+- App.tsx: route changed from /settings/alerts to /security/alerts
+- AppHeader: PATH_OVERRIDES added for /security/alerts breadcrumb
+  showing Home > Notifications > Alerts
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit Alerts navigation refactor"
+  }
+}
+
+----------------------------------------
+

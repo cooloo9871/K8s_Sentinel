@@ -25,6 +25,7 @@ const ROUTE_LABELS: Record<string, string> = {
   discovery: 'Behavior Discovery',
   security: 'Notifications',
   events: 'Security Events',
+  alerts: 'Alerts',
   cluster: 'Cluster',
   mode: 'Mode Control',
   namespaces: 'Namespaces',
@@ -41,6 +42,10 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
   '/security/events': [
     { label: 'Notifications' },
     { label: 'Security Events' },
+  ],
+  '/security/alerts': [
+    { label: 'Notifications' },
+    { label: 'Alerts' },
   ],
 }
 
