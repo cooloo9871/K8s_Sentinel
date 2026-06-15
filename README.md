@@ -38,12 +38,13 @@
 ### Notifications — 安全通知
 
 - 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
-- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 300 條、Critical 最多 200 條，兩者獨立上限
+- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL
 - 依 Namespace、Pod 名稱、嚴重程度篩選
 - 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地與來源（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
-- **5 秒去重**：相同 event 在 5 秒內只顯示一次，count 累加，避免畫面被洗版
+- **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版
 - **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
 - 時間顯示支援秒、分、時、天
+- **Export CSV**：將當前篩選結果匯出為 CSV，含所有事件欄位
 - **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別
 
 ### Cluster — 叢集資訊
