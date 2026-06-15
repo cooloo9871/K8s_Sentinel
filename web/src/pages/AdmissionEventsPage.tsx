@@ -90,10 +90,11 @@ export function AdmissionEventsPage() {
                 <TableRow>
                   <TableHead className="w-8" />
                   <TableHead>Time</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Namespace</TableHead>
-                  <TableHead>Resource</TableHead>
+                  <TableHead>Resource / Name</TableHead>
                   <TableHead>Policy</TableHead>
-                  <TableHead>Binding</TableHead>
+                  <TableHead>User</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -108,23 +109,36 @@ export function AdmissionEventsPage() {
                         {expanded.has(e.id) ? '▾' : '▸'}
                       </TableCell>
                       <TableCell className="text-sm">{formatTWTime(e.time)}</TableCell>
+                      <TableCell>
+                        <Badge variant={e.source === 'webhook' ? 'default' : 'secondary'} className="text-[10px]">
+                          {e.source === 'webhook' ? 'webhook' : 'k8s event'}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{e.namespace || '—'}</TableCell>
                       <TableCell className="text-sm">
-                        <span className="text-muted-foreground text-xs">{e.involvedKind} </span>
-                        <span className="font-medium">{e.involvedName || '—'}</span>
+                        {e.source === 'webhook' ? (
+                          <>
+                            <span className="text-muted-foreground text-xs capitalize">{e.operation} </span>
+                            <span className="font-medium">{e.name || '—'}</span>
+                            <span className="text-muted-foreground text-xs"> ({e.resource})</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-muted-foreground text-xs">{e.involvedKind} </span>
+                            <span className="font-medium">{e.involvedName || '—'}</span>
+                          </>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="destructive" className="font-mono text-[10px] max-w-[180px] truncate block" title={e.policyName}>
                           {e.policyName || '—'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground truncate max-w-[160px]" title={e.bindingName}>
-                        {e.bindingName || '—'}
-                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{e.username || '—'}</TableCell>
                     </TableRow>
                     {expanded.has(e.id) && (
                       <TableRow key={`detail-${e.id}`} className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={6} className="py-3 pl-10 pr-6">
+                        <TableCell colSpan={7} className="py-3 pl-10 pr-6">
                           <div className="flex flex-col gap-1 text-xs">
                             <div className="flex gap-1.5">
                               <span className="shrink-0 text-muted-foreground">Violation:</span>

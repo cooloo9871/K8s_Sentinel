@@ -13,17 +13,34 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Event represents a single VAP violation captured from K8s Warning events.
+// Event represents a single VAP violation.
 type Event struct {
 	ID           string `json:"id"`
 	Time         string `json:"time"`
 	Namespace    string `json:"namespace"`
-	InvolvedKind string `json:"involvedKind"` // ReplicaSet, StatefulSet, etc.
+	InvolvedKind string `json:"involvedKind"` // from K8s Events watcher
 	InvolvedName string `json:"involvedName"`
+	Resource     string `json:"resource"`  // from webhook
+	Name         string `json:"name"`       // from webhook
+	Operation    string `json:"operation"`  // from webhook
+	Username     string `json:"username"`   // from webhook
 	PolicyName   string `json:"policyName"`
 	BindingName  string `json:"bindingName"`
-	Message      string `json:"message"` // violation expression
-	RawMessage   string `json:"rawMessage"`
+	Message      string `json:"message"`
+	Source       string `json:"source"` // "webhook" or "k8s-event"
+	RawMessage   string `json:"rawMessage,omitempty"`
+}
+
+// Violation is used by the webhook to record a new violation.
+type Violation struct {
+	Namespace   string
+	Name        string
+	Resource    string
+	Operation   string
+	Username    string
+	PolicyName  string
+	BindingName string
+	Message     string
 }
 
 const maxEvents = 500
@@ -123,6 +140,39 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	}
 	s.mu.Unlock()
 
+	select {
+	case s.ch <- evt:
+	default:
+	}
+}
+
+// AddViolation records a violation from the webhook.
+func (s *Store) AddViolation(v Violation) {
+	s.mu.Lock()
+	key := "webhook-" + v.Namespace + "-" + v.Name + "-" + v.PolicyName
+	if _, exists := s.seen[key]; exists {
+		s.mu.Unlock()
+		return
+	}
+	s.seen[key] = struct{}{}
+	evt := Event{
+		ID:          key + "-" + time.Now().Format("20060102150405"),
+		Time:        time.Now().UTC().Format(time.RFC3339),
+		Namespace:   v.Namespace,
+		Name:        v.Name,
+		Resource:    v.Resource,
+		Operation:   v.Operation,
+		Username:    v.Username,
+		PolicyName:  v.PolicyName,
+		BindingName: v.BindingName,
+		Message:     v.Message,
+		Source:      "webhook",
+	}
+	s.events = append([]Event{evt}, s.events...)
+	if len(s.events) > maxEvents {
+		s.events = s.events[:maxEvents]
+	}
+	s.mu.Unlock()
 	select {
 	case s.ch <- evt:
 	default:

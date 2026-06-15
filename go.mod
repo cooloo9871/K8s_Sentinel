@@ -3,6 +3,7 @@ module github.com/cooloo9871/sentinel
 go 1.26
 
 require (
+	cel.dev/cel v0.22.0
 	github.com/go-chi/chi/v5 v5.2.2
 	k8s.io/api v0.29.3
 	k8s.io/apimachinery v0.29.3

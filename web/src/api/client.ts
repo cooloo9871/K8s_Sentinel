@@ -159,12 +159,20 @@ export interface AdmissionEvent {
   id: string
   time: string
   namespace: string
-  involvedKind: string  // ReplicaSet, StatefulSet, etc.
+  // from K8s Events watcher
+  involvedKind: string
   involvedName: string
+  // from webhook (direct creates)
+  resource: string
+  name: string
+  operation: string
+  username: string
+  // common
   policyName: string
   bindingName: string
-  message: string       // violation expression
-  rawMessage: string
+  message: string
+  source: 'webhook' | 'k8s-event'
+  rawMessage?: string
 }
 
 export const admissionApi = {
