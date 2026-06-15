@@ -70,7 +70,7 @@
 
 ### 前置需求
 
-- Kubernetes 1.26+
+- Kubernetes 1.26+，已安裝 Cilium Tetragon（TracingPolicy CRD，建議 v1.3+）
 - `kubectl` 已設定 kubeconfig
 
 ### 步驟
@@ -117,6 +117,13 @@ volumes:
 ```
 
 > Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+|---|---|---|
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `PORT` | `8080` | Sentinel 服務監聽的 port |
 
 ---
 
