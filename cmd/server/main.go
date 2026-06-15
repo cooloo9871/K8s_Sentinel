@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"github.com/cooloo9871/sentinel/internal/admission"
 	"github.com/cooloo9871/sentinel/internal/alert"
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/handler"
@@ -44,6 +45,7 @@ func main() {
 		Dispatcher:      dispatcher,
 		Rsyslog:         rsyslogs,
 		RsyslogDispatch: rsyslogDispatch,
+		Admission:       admission.NewStore(),
 	}
 
 	mux := http.NewServeMux()

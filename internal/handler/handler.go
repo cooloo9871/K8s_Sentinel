@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/cooloo9871/sentinel/internal/admission"
 	"github.com/cooloo9871/sentinel/internal/alert"
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/k8s"
@@ -22,6 +23,7 @@ type Config struct {
 	Dispatcher      *alert.Dispatcher
 	Rsyslog         *rsyslog.Store
 	RsyslogDispatch *rsyslog.Dispatcher
+	Admission       *admission.Store
 }
 
 // New builds the HTTP handler tree.
@@ -30,7 +32,10 @@ func New(cfg Config) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Public
+	// Public (no auth — kube-apiserver audit webhook)
+	r.Post("/api/admission-events/webhook", admissionWebhook(cfg.Admission))
+
+	// Public auth
 	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
 	r.Post("/api/auth/logout", logoutHandler())
 
@@ -54,6 +59,8 @@ func New(cfg Config) http.Handler {
 		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
 		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
 		r.Get("/api/alerts", listAlerts(cfg.Alerts))
+		r.Get("/api/admission-events", listAdmissionEvents(cfg.Admission))
+		r.Get("/api/admission-events/stream", streamAdmissionEvents(cfg.Admission))
 		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
 		r.Get("/api/vap", listVAP(cfg.Store))
 		r.Get("/api/vap/{name}", getVAP(cfg.Store))

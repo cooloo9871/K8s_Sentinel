@@ -52,6 +52,10 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
     { label: 'Notifications' },
     { label: 'Syslog' },
   ],
+  '/security/admission': [
+    { label: 'Notifications' },
+    { label: 'Admission Events' },
+  ],
 }
 
 function useBreadcrumbs() {

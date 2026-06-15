@@ -17,6 +17,7 @@ import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
 import { UsersPage } from './pages/UsersPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { VAPPage } from './pages/VAPPage'
+import { AdmissionEventsPage } from './pages/AdmissionEventsPage'
 import { RsyslogPage } from './pages/RsyslogPage'
 
 function AppRoutes() {
@@ -51,6 +52,7 @@ function AppRoutes() {
           <Route path="/settings/users" element={<UsersPage />} />
           <Route path="/security/alerts" element={<AlertsPage />} />
           <Route path="/security/rsyslog" element={<RsyslogPage />} />
+          <Route path="/security/admission" element={<AdmissionEventsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

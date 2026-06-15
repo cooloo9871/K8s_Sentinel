@@ -155,6 +155,24 @@ export interface VAPBindingRecord {
   rawYaml: string
 }
 
+export interface AdmissionEvent {
+  id: string
+  time: string
+  username: string
+  verb: string
+  resource: string
+  name: string
+  namespace: string
+  policyName: string
+  bindingName: string
+  message: string
+}
+
+export const admissionApi = {
+  list: (): Promise<AdmissionEvent[]> =>
+    api.get('/admission-events').then((r) => r.data ?? []),
+}
+
 export const vapApi = {
   listPolicies: (): Promise<VAPRecord[]> =>
     api.get('/vap').then((r) => r.data),

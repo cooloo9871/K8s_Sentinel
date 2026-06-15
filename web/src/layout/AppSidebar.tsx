@@ -85,6 +85,11 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/security/admission')}>
+                  <NavLink to="/security/admission">Admission Events</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
                   <NavLink to="/security/rsyslog">Syslog</NavLink>
                 </SidebarMenuButton>
