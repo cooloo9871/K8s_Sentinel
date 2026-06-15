@@ -9,12 +9,13 @@ RUN npm run build
 # Stage 2: build Go binary
 FROM docker.io/library/golang:1.26-alpine AS backend
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY go.mod ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
 RUN addgroup -S -g 10001 sentinel && \
     adduser -S -u 10001 -G sentinel -H -s /sbin/nologin sentinel && \
+    go mod tidy && \
     CGO_ENABLED=0 GOOS=linux go build -o sentinel ./cmd/server/ && \
     mkdir -p /data/sentinel && \
     touch /data/sentinel/.keep && \
