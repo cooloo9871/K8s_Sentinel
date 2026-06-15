@@ -9,7 +9,7 @@ RUN npm run build
 # Stage 2: build Go binary
 FROM docker.io/library/golang:1.26-alpine AS backend
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY go.mod ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
