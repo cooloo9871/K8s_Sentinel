@@ -503195,3 +503195,1780 @@ EOF
 
 ----------------------------------------
 
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+feat: add Security Events export to CSV and PDF
+
+- exportEvents.ts: shared export logic
+  - CSV: pure JS, BOM-prefixed UTF-8, escapes quotes
+  - PDF: jsPDF + autotable, landscape A4, color-coded severity
+         (WARNING=amber, CRITICAL=red), exports filtered events
+- Both formats export the current filtered view (namespace/pod/severity)
+- Export CSV and Export PDF buttons in the Security Events header
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit export feature"
+  },
+  "tool_response": {
+    "stdout": "[main 9867f68] feat: add Security Events export to CSV and PDF
+ 5 files changed, 8982 insertions(+), 3 deletions(-)
+ create mode 100644 web/src/utils/exportEvents.ts",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "9867f68",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "在 Security Events 你認為每五秒顯示相同 event 一次，這個時會不會過短？"
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "改成 30 秒"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "const DEDUP_WINDOW_MS = 5000",
+    "new_string": "const DEDUP_WINDOW_MS = 30000",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "old_string": "const DEDUP_WINDOW_MS = 5000",
+    "new_string": "const DEDUP_WINDOW_MS = 30000",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/layout/SecurityEventsProvider.tsx",
+    "oldString": "const DEDUP_WINDOW_MS = 5000",
+    "newString": "const DEDUP_WINDOW_MS = 30000",
+    "originalFile": "import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { TetragonEvent } from '../api/types'
+
+const MAX_WARNINGS  = 300
+const MAX_CRITICALS = 200
+const DEDUP_WINDOW_MS = 5000
+
+/** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */
+function capBySeverity(events: DisplayEvent[]): DisplayEvent[] {
+  // events is sorted newest-first; slicing keeps the newest within each severity.
+  const warnIds = new Set(
+    events.filter(e => e.severity === 'warning').slice(0, MAX_WARNINGS).map(e => e.id)
+  )
+  const critIds = new Set(
+    events.filter(e => e.severity === 'critical').slice(0, MAX_CRITICALS).map(e => e.id)
+  )
+  return events.filter(e =>
+    (e.severity === 'warning' && warnIds.has(e.id)) ||
+    (e.severity === 'critical' && critIds.has(e.id))
+  )
+}
+const STORAGE_KEY = 'sentinel_security_events'
+
+export type Severity = 'warning' | 'critical'
+
+export interface DisplayEvent extends TetragonEvent {
+  id: string   // stable unique ID set on creation, never changed on dedup
+  count: number
+  severity: Severity
+}
+
+const TTL_DAYS = 7
+const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000
+
+function loadFromStorage(): DisplayEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const cutoff = Date.now() - TTL_MS
+      const data = JSON.parse(raw) as any[]
+      const mapped = data
+        .filter((e) => e.type === 'kprobe' && e.policyName)
+        .filter((e) => !e.time || new Date(e.time).getTime() >= cutoff)
+        .map((e) => ({
+          ...e,
+          id: e.id ?? `${e.time}-${e.pod}-${e.binary}-${Math.random()}`,
+          count: e.count ?? 1,
+          severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
+        })) as DisplayEvent[]
+      return capBySeverity(mapped)
+    }
+  } catch {}
+  return []
+}
+
+function saveToStorage(events: DisplayEvent[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+  } catch {}
+}
+
+function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
+  return (
+    a.binary    === b.binary    &&
+    a.pod       === b.pod       &&
+    a.function  === b.function  &&
+    a.policyName === b.policyName &&
+    a.action    === b.action    &&
+    a.filePath  === b.filePath  &&
+    a.fileOp    === b.fileOp
+  )
+}
+
+function dedupInsert(list: DisplayEvent[], newEvt: DisplayEvent): DisplayEvent[] {
+  const bTime = new Date(newEvt.time).getTime()
+  const idx = list.findIndex(e =>
+    isSameEvent(e, newEvt) &&
+    Math.abs(new Date(e.time).getTime() - bTime) < DEDUP_WINDOW_MS
+  )
+  if (idx !== -1) {
+    const updated = { ...list[idx], count: list[idx].count + 1, time: newEvt.time }
+    return [updated, ...list.filter((_, i) => i !== idx)]
+  }
+  return [newEvt, ...list]
+}
+
+interface SecurityEventsContextValue {
+  events: DisplayEvent[]
+  connected: boolean
+  error: string
+  reconnect: () => void
+  paused: boolean
+  pendingCount: number
+  togglePause: () => void
+}
+
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  error: '',
+  reconnect: () => {},
+  paused: false,
+  pendingCount: 0,
+  togglePause: () => {},
+})
+
+export function useSecurityEvents() {
+  return useContext(SecurityEventsContext)
+}
+
+export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const [paused, setPaused] = useState(false)
+  const pausedRef = useRef(false)
+  const pendingRef = useRef<DisplayEvent[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
+  const esRef = useRef<EventSource | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventsRef = useRef<DisplayEvent[]>(events)
+
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setError('')
+
+    const es = new EventSource('/api/events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: TetragonEvent = JSON.parse(e.data)
+        // Only store kprobe events that belong to a named user-defined TracingPolicy.
+        if (evt.type !== 'kprobe' || !evt.policyName) return
+        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
+        const id = `${evt.time}-${evt.pod}-${evt.binary}-${evt.policyName}-${Math.random().toString(36).slice(2)}`
+        const newEvt: DisplayEvent = { ...evt, id, count: 1, severity }
+
+        if (pausedRef.current) {
+          pendingRef.current = dedupInsert(pendingRef.current, newEvt).slice(0, MAX_WARNINGS + MAX_CRITICALS)
+          setPendingCount(pendingRef.current.length)
+          return
+        }
+
+        setEvents((prev) => capBySeverity(dedupInsert(prev, newEvt)))
+      } catch {}
+    }
+
+    es.addEventListener('stream-error', (e: MessageEvent) => {
+      setError(e.data)
+      setConnected(false)
+      es.close()
+    })
+
+    es.onerror = () => setConnected(false)
+  }, [])
+
+  useEffect(() => { eventsRef.current = events }, [events])
+
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveToStorage(events), 2000)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [events])
+
+  useEffect(() => { return () => { saveToStorage(eventsRef.current) } }, [])
+
+  const togglePause = useCallback(() => {
+    setPaused(prev => {
+      const nowPaused = !prev
+      pausedRef.current = nowPaused
+      if (!nowPaused && pendingRef.current.length > 0) {
+        // Resume: flush buffered events into the main list.
+        const pending = pendingRef.current
+        pendingRef.current = []
+        setPendingCount(0)
+        setEvents(prev => capBySeverity([...pending, ...prev]))
+      }
+      return nowPaused
+    })
+  }, [])
+
+  useEffect(() => {
+    connect()
+    return () => esRef.current?.close()
+  }, [])
+
+  return (
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, paused, pendingCount, togglePause }}>
+      {children}
+    </SecurityEventsContext.Provider>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 3,
+        "oldLines": 7,
+        "newStart": 3,
+        "newLines": 7,
+        "lines": [
+          " ",
+          " const MAX_WARNINGS  = 300",
+          " const MAX_CRITICALS = 200",
+          "-const DEDUP_WINDOW_MS = 5000",
+          "+const DEDUP_WINDOW_MS = 30000",
+          " ",
+          " /** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */",
+          " function capBySeverity(events: DisplayEvent[]): DisplayEvent[] {"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 499ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/layout/SecurityEventsProvider.tsx && git commit -m "$(cat <<'EOF'
+fix: increase dedup window from 5s to 30s in Security Events
+
+5s was too short — high-frequency processes (sshd, health checks) would
+reset and re-appear as new events every 5 seconds. 30s gives the count
+field time to accumulate meaningfully.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit dedup window change"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add web/src/layout/SecurityEventsProvider.tsx && git commit -m "$(cat <<'EOF'
+fix: increase dedup window from 5s to 30s in Security Events
+
+5s was too short — high-frequency processes (sshd, health checks) would
+reset and re-appear as new events every 5 seconds. 30s gives the count
+field time to accumulate meaningfully.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit dedup window change"
+  },
+  "tool_response": {
+    "stdout": "[main 1dbbd12] fix: increase dedup window from 5s to 30s in Security Events
+ 1 file changed, 1 insertion(+), 1 deletion(-)",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "gitOperation": {
+      "commit": {
+        "sha": "1dbbd12",
+        "kind": "committed"
+      }
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "Stop",
+  "assistant_reply": ""
+}
+
+----------------------------------------
+
+{
+  "event": "UserPromptSubmit",
+  "user_prompt": "輸出 CSV 就好，PDF 幫我拿掉"
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "import { exportCSV, exportPDF } from '../utils/exportEvents'",
+    "new_string": "import { exportCSV } from '../utils/exportEvents'",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "import { exportCSV, exportPDF } from '../utils/exportEvents'",
+    "new_string": "import { exportCSV } from '../utils/exportEvents'",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "import { exportCSV, exportPDF } from '../utils/exportEvents'",
+    "newString": "import { exportCSV } from '../utils/exportEvents'",
+    "originalFile": "import React, { useState } from 'react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
+import { exportCSV, exportPDF } from '../utils/exportEvents'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }
+  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportPDF(filtered)}>
+            Export PDF
+          </Button>
+
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-44"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell className="overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </React.Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 13,
+        "oldLines": 7,
+        "newStart": 13,
+        "newLines": 7,
+        "lines": [
+          " import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'",
+          " import type { DisplayEvent } from '../layout/SecurityEventsProvider'",
+          " import { formatTWTime } from '../utils/time'",
+          "-import { exportCSV, exportPDF } from '../utils/exportEvents'",
+          "+import { exportCSV } from '../utils/exportEvents'",
+          " ",
+          " type FilterType = 'all' | 'warning' | 'critical'",
+          " "
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportPDF(filtered)}>
+            Export PDF
+          </Button>",
+    "new_string": "          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>",
+    "replace_all": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "old_string": "          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportPDF(filtered)}>
+            Export PDF
+          </Button>",
+    "new_string": "          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/bigred/Sentinel/web/src/pages/SecurityEventsPage.tsx",
+    "oldString": "          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportPDF(filtered)}>
+            Export PDF
+          </Button>",
+    "newString": "          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>",
+    "originalFile": "import React, { useState } from 'react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { formatTWTime } from '../utils/time'
+import { exportCSV } from '../utils/exportEvents'
+
+type FilterType = 'all' | 'warning' | 'critical'
+
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+  if (!fn) return null
+  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
+  return null
+}
+
+function RuleTypeBadge({ fn }: { fn: string }) {
+  const type = ruleType(fn)
+  if (!type) return null
+  const styles: Record<string, string> = {
+    File: 'bg-orange-500/15 text-orange-700',
+    Network: 'bg-blue-500/15 text-blue-700',
+    Process: 'bg-purple-500/15 text-purple-700',
+  }
+  return (
+    <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
+  )
+}
+
+function SeverityBadge({ severity }: { severity: Severity }) {
+  if (severity === 'critical') {
+    return <Badge variant="destructive" className="font-medium">Critical</Badge>
+  }
+  return (
+    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 font-medium">
+      Warning
+    </Badge>
+  )
+}
+
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  const label = diff < 5 ? 'just now'
+    : diff < 60 ? `${diff}s ago`
+    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
+function DetailRow({ e }: { e: DisplayEvent }) {
+  const items: { label: string; value: string }[] = []
+
+  if (e.filePath) {
+    const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
+    items.push({ label: opLabel, value: e.filePath })
+  }
+  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })
+  if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
+  // When the parent is runc, the "arguments" belong to runc (not to the
+  // binary being exec'd), so merge them into the Parent line to avoid confusion.
+  if (e.parentBin) {
+    const isRuncParent = e.parentBin.includes('runc')
+    const parentValue = isRuncParent && e.arguments
+      ? `${e.parentBin} ${e.arguments}`
+      : e.parentBin
+    items.push({ label: 'Parent', value: parentValue })
+    if (!isRuncParent && e.arguments) {
+      items.push({ label: 'Arguments', value: e.arguments })
+    }
+  } else if (e.arguments) {
+    items.push({ label: 'Arguments', value: e.arguments })
+  }
+  if (e.processUid !== undefined) {
+    const user = e.processUid === 0 ? 'root (uid=0)' : `uid=${e.processUid}`
+    items.push({ label: 'User', value: user })
+  }
+  if (e.namespace)  items.push({ label: 'Namespace', value: e.namespace })
+  if (e.pod) {
+    const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
+    items.push({ label: 'Pod / Container', value: podValue })
+  }
+  if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
+  if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
+  items.push({ label: 'Time', value: formatTWTime(e.time) })
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+        <div className="flex flex-col gap-1 text-xs">
+          {items.map(({ label, value }) => (
+            <div key={label} className="flex min-w-0 gap-1.5">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}:</span>
+              <span className="font-mono min-w-0 flex-1" style={{ wordBreak: 'break-all', overflowWrap: 'break-word', whiteSpace: 'pre-wrap' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export function SecurityEventsPage() {
+  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [nsFilter, setNsFilter] = useState('all')
+  const [podSearch, setPodSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+
+  // Stable key derived from event content so expansions survive new events prepending.
+  // Use the stable unique ID assigned on event creation.
+  // This ensures each event row is independently expandable even when multiple
+  // events share the same pod/binary/policy/function combination.
+  const eventKey = (e: DisplayEvent) => e.id
+
+  const filtered = events.filter((e) => {
+    if (filter === 'warning' && e.severity !== 'warning') return false
+    if (filter === 'critical' && e.severity !== 'critical') return false
+    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
+    return true
+  })
+
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  return (
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Security Events</h4>
+          <p className="text-sm text-muted-foreground">
+            Policy-triggered kprobe events from your TracingPolicies
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            {connected ? (
+              <><IconWifi size={16} className="text-green-500" /><span className="text-green-600">Live</span></>
+            ) : (
+              <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
+            )}
+          </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
+
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportCSV(filtered)}>
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" className="h-9"
+            onClick={() => exportPDF(filtered)}>
+            Export PDF
+          </Button>
+
+          <Select value={nsFilter} onValueChange={setNsFilter}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Namespaces</SelectItem>
+                {namespaces.map(ns => (
+                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Search pod name..."
+            value={podSearch}
+            onChange={(e) => setPodSearch(e.target.value)}
+            className="h-9 w-44"
+          />
+
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="warning">Warning Only</SelectItem>
+                <SelectItem value="critical">Critical Only</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <span className="text-sm text-destructive">{error}</span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={reconnect}>
+            Reconnect
+          </Button>
+        </div>
+      )}
+
+      <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+              <IconActivity size={40} strokeWidth={1.5} />
+              <p className="text-base">
+                {connected
+                  ? podSearch ? `No events for pod "${podSearch}"` : 'Waiting for events...'
+                  : 'Not connected'}
+              </p>
+              <p className="text-sm">Events will appear here as Tetragon detects runtime activity</p>
+            </div>
+          ) : (
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-40">Rule / Detail</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
+                  <TableHead className="w-52">Pod / Container</TableHead>
+                  <TableHead className="w-36">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((e) => {
+                  const key = eventKey(e)
+                  return (
+                  <React.Fragment key={key}>
+                    <TableRow
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(key)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell>
+                        <SeverityBadge severity={e.severity} />
+                      </TableCell>
+                      <TableCell className="overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <RuleTypeBadge fn={e.function} />
+                          <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
+                            {e.binary ? e.binary.split('/').pop() : '—'}
+                          </span>
+                        </div>
+                        {e.filePath && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>
+                            {e.filePath}
+                          </p>
+                        )}
+                        {e.netDest && (
+                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {e.pod || '—'}
+                          {e.container && (
+                            <span className="text-xs text-muted-foreground"> / {e.container}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime iso={e.time} />
+                      </TableCell>
+                    </TableRow>
+                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                  </React.Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 186,
+        "oldLines": 10,
+        "newStart": 186,
+        "newLines": 6,
+        "lines": [
+          "             onClick={() => exportCSV(filtered)}>",
+          "             Export CSV",
+          "           </Button>",
+          "-          <Button variant="outline" size="sm" className="h-9"",
+          "-            onClick={() => exportPDF(filtered)}>",
+          "-            Export PDF",
+          "-          </Button>",
+          " ",
+          "           <Select value={nsFilter} onValueChange={setNsFilter}>",
+          "             <SelectTrigger className="h-9 w-40">"
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/exportEvents.ts"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/exportEvents.ts"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/home/bigred/Sentinel/web/src/utils/exportEvents.ts",
+      "content": "import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+
+function ruleType(fn: string): string {
+  if (fn.includes('tcp_connect')) return 'Network'
+  if (fn.includes('security_file') || fn.includes('security_path')) return 'File'
+  return 'Process'
+}
+
+function userLabel(uid: number | undefined): string {
+  if (uid === undefined) return ''
+  return uid === 0 ? 'root (uid=0)' : `uid=${uid}`
+}
+
+const COLUMNS = [
+  'Time', 'Severity', 'Rule', 'Namespace', 'Pod', 'Binary',
+  'Policy', 'Node', 'User', 'File Op', 'File Path', 'Destination', 'Source',
+]
+
+function toRow(e: DisplayEvent): string[] {
+  return [
+    e.time,
+    e.severity.toUpperCase(),
+    ruleType(e.function),
+    e.namespace,
+    e.pod + (e.container ? ` / ${e.container}` : ''),
+    e.binary,
+    e.policyName,
+    e.nodeName,
+    userLabel(e.processUid),
+    e.fileOp,
+    e.filePath,
+    e.netDest,
+    e.netSrc,
+  ]
+}
+
+export function exportCSV(events: DisplayEvent[], filename = 'security-events.csv') {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = COLUMNS.map(escape).join(',')
+  const rows = events.map(e => toRow(e).map(escape).join(','))
+  const csv = [header, ...rows].join('\\r\
+')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function exportPDF(events: DisplayEvent[], filename = 'security-events.pdf') {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  doc.setFontSize(14)
+  doc.text('Sentinel — Security Events', 14, 14)
+  doc.setFontSize(9)
+  doc.setTextColor(120)
+  doc.text(`Exported: ${new Date().toLocaleString()}  |  Total: ${events.length} events`, 14, 20)
+  doc.setTextColor(0)
+
+  autoTable(doc, {
+    startY: 25,
+    head: [COLUMNS],
+    body: events.map(toRow),
+    styles: { fontSize: 7, cellPadding: 1.5, overflow: 'ellipsize' },
+    headStyles: { fillColor: [30, 30, 30], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    didParseCell(data) {
+      if (data.section === 'body' && data.column.index === 1) {
+        const val = data.cell.raw as string
+        if (val === 'CRITICAL') data.cell.styles.textColor = [185, 28, 28]
+        else if (val === 'WARNING') data.cell.styles.textColor = [161, 98, 7]
+      }
+    },
+    columnStyles: {
+      0:  { cellWidth: 32 }, // Time
+      1:  { cellWidth: 16 }, // Severity
+      2:  { cellWidth: 16 }, // Rule
+      3:  { cellWidth: 22 }, // Namespace
+      4:  { cellWidth: 30 }, // Pod
+      5:  { cellWidth: 28 }, // Binary
+      6:  { cellWidth: 38 }, // Policy
+      7:  { cellWidth: 16 }, // Node
+      8:  { cellWidth: 20 }, // User
+      9:  { cellWidth: 12 }, // File Op
+      10: { cellWidth: 30 }, // File Path
+      11: { cellWidth: 22 }, // Destination
+      12: { cellWidth: 22 }, // Source
+    },
+  })
+
+  doc.save(filename)
+}
+",
+      "numLines": 96,
+      "startLine": 1,
+      "totalLines": 96
+    }
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/exportEvents.ts",
+    "content": "import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+
+function ruleType(fn: string): string {
+  if (fn.includes('tcp_connect')) return 'Network'
+  if (fn.includes('security_file') || fn.includes('security_path')) return 'File'
+  return 'Process'
+}
+
+function userLabel(uid: number | undefined): string {
+  if (uid === undefined) return ''
+  return uid === 0 ? 'root (uid=0)' : `uid=${uid}`
+}
+
+const COLUMNS = [
+  'Time', 'Severity', 'Rule', 'Namespace', 'Pod', 'Binary',
+  'Policy', 'Node', 'User', 'File Op', 'File Path', 'Destination', 'Source',
+]
+
+function toRow(e: DisplayEvent): string[] {
+  return [
+    e.time,
+    e.severity.toUpperCase(),
+    ruleType(e.function),
+    e.namespace,
+    e.pod + (e.container ? ` / ${e.container}` : ''),
+    e.binary,
+    e.policyName,
+    e.nodeName,
+    userLabel(e.processUid),
+    e.fileOp,
+    e.filePath,
+    e.netDest,
+    e.netSrc,
+  ]
+}
+
+export function exportCSV(events: DisplayEvent[], filename = 'security-events.csv') {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = COLUMNS.map(escape).join(',')
+  const rows = events.map(e => toRow(e).map(escape).join(','))
+  const csv = [header, ...rows].join('\\r\
+')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/bigred/Sentinel/web/src/utils/exportEvents.ts",
+    "content": "import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+
+function ruleType(fn: string): string {
+  if (fn.includes('tcp_connect')) return 'Network'
+  if (fn.includes('security_file') || fn.includes('security_path')) return 'File'
+  return 'Process'
+}
+
+function userLabel(uid: number | undefined): string {
+  if (uid === undefined) return ''
+  return uid === 0 ? 'root (uid=0)' : `uid=${uid}`
+}
+
+const COLUMNS = [
+  'Time', 'Severity', 'Rule', 'Namespace', 'Pod', 'Binary',
+  'Policy', 'Node', 'User', 'File Op', 'File Path', 'Destination', 'Source',
+]
+
+function toRow(e: DisplayEvent): string[] {
+  return [
+    e.time,
+    e.severity.toUpperCase(),
+    ruleType(e.function),
+    e.namespace,
+    e.pod + (e.container ? ` / ${e.container}` : ''),
+    e.binary,
+    e.policyName,
+    e.nodeName,
+    userLabel(e.processUid),
+    e.fileOp,
+    e.filePath,
+    e.netDest,
+    e.netSrc,
+  ]
+}
+
+export function exportCSV(events: DisplayEvent[], filename = 'security-events.csv') {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = COLUMNS.map(escape).join(',')
+  const rows = events.map(e => toRow(e).map(escape).join(','))
+  const csv = [header, ...rows].join('\\r\
+')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+"
+  },
+  "tool_response": {
+    "type": "update",
+    "filePath": "/home/bigred/Sentinel/web/src/utils/exportEvents.ts",
+    "content": "import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+
+function ruleType(fn: string): string {
+  if (fn.includes('tcp_connect')) return 'Network'
+  if (fn.includes('security_file') || fn.includes('security_path')) return 'File'
+  return 'Process'
+}
+
+function userLabel(uid: number | undefined): string {
+  if (uid === undefined) return ''
+  return uid === 0 ? 'root (uid=0)' : `uid=${uid}`
+}
+
+const COLUMNS = [
+  'Time', 'Severity', 'Rule', 'Namespace', 'Pod', 'Binary',
+  'Policy', 'Node', 'User', 'File Op', 'File Path', 'Destination', 'Source',
+]
+
+function toRow(e: DisplayEvent): string[] {
+  return [
+    e.time,
+    e.severity.toUpperCase(),
+    ruleType(e.function),
+    e.namespace,
+    e.pod + (e.container ? ` / ${e.container}` : ''),
+    e.binary,
+    e.policyName,
+    e.nodeName,
+    userLabel(e.processUid),
+    e.fileOp,
+    e.filePath,
+    e.netDest,
+    e.netSrc,
+  ]
+}
+
+export function exportCSV(events: DisplayEvent[], filename = 'security-events.csv') {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = COLUMNS.map(escape).join(',')
+  const rows = events.map(e => toRow(e).map(escape).join(','))
+  const csv = [header, ...rows].join('\\r\
+')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 5,
+        "newStart": 1,
+        "newLines": 3,
+        "lines": [
+          "-import jsPDF from 'jspdf'",
+          "-import autoTable from 'jspdf-autotable'",
+          " import type { DisplayEvent } from '../layout/SecurityEventsProvider'",
+          " ",
+          " function ruleType(fn: string): string {"
+        ]
+      },
+      {
+        "oldStart": 49,
+        "oldLines": 47,
+        "newStart": 47,
+        "newLines": 3,
+        "lines": [
+          "   a.click()",
+          "   URL.revokeObjectURL(url)",
+          " }",
+          "-",
+          "-export function exportPDF(events: DisplayEvent[], filename = 'security-events.pdf') {",
+          "-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })",
+          "-",
+          "-  doc.setFontSize(14)",
+          "-  doc.text('Sentinel — Security Events', 14, 14)",
+          "-  doc.setFontSize(9)",
+          "-  doc.setTextColor(120)",
+          "-  doc.text(`Exported: ${new Date().toLocaleString()}  |  Total: ${events.length} events`, 14, 20)",
+          "-  doc.setTextColor(0)",
+          "-",
+          "-  autoTable(doc, {",
+          "-    startY: 25,",
+          "-    head: [COLUMNS],",
+          "-    body: events.map(toRow),",
+          "-    styles: { fontSize: 7, cellPadding: 1.5, overflow: 'ellipsize' },",
+          "-    headStyles: { fillColor: [30, 30, 30], textColor: 255, fontStyle: 'bold' },",
+          "-    alternateRowStyles: { fillColor: [245, 245, 245] },",
+          "-    didParseCell(data) {",
+          "-      if (data.section === 'body' && data.column.index === 1) {",
+          "-        const val = data.cell.raw as string",
+          "-        if (val === 'CRITICAL') data.cell.styles.textColor = [185, 28, 28]",
+          "-        else if (val === 'WARNING') data.cell.styles.textColor = [161, 98, 7]",
+          "-      }",
+          "-    },",
+          "-    columnStyles: {",
+          "-      0:  { cellWidth: 32 }, // Time",
+          "-      1:  { cellWidth: 16 }, // Severity",
+          "-      2:  { cellWidth: 16 }, // Rule",
+          "-      3:  { cellWidth: 22 }, // Namespace",
+          "-      4:  { cellWidth: 30 }, // Pod",
+          "-      5:  { cellWidth: 28 }, // Binary",
+          "-      6:  { cellWidth: 38 }, // Policy",
+          "-      7:  { cellWidth: 16 }, // Node",
+          "-      8:  { cellWidth: 20 }, // User",
+          "-      9:  { cellWidth: 12 }, // File Op",
+          "-      10: { cellWidth: 30 }, // File Path",
+          "-      11: { cellWidth: 22 }, // Destination",
+          "-      12: { cellWidth: 22 }, // Source",
+          "-    },",
+          "-  })",
+          "-",
+          "-  doc.save(filename)",
+          "-}"
+        ]
+      }
+    ],
+    "originalFile": "import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+
+function ruleType(fn: string): string {
+  if (fn.includes('tcp_connect')) return 'Network'
+  if (fn.includes('security_file') || fn.includes('security_path')) return 'File'
+  return 'Process'
+}
+
+function userLabel(uid: number | undefined): string {
+  if (uid === undefined) return ''
+  return uid === 0 ? 'root (uid=0)' : `uid=${uid}`
+}
+
+const COLUMNS = [
+  'Time', 'Severity', 'Rule', 'Namespace', 'Pod', 'Binary',
+  'Policy', 'Node', 'User', 'File Op', 'File Path', 'Destination', 'Source',
+]
+
+function toRow(e: DisplayEvent): string[] {
+  return [
+    e.time,
+    e.severity.toUpperCase(),
+    ruleType(e.function),
+    e.namespace,
+    e.pod + (e.container ? ` / ${e.container}` : ''),
+    e.binary,
+    e.policyName,
+    e.nodeName,
+    userLabel(e.processUid),
+    e.fileOp,
+    e.filePath,
+    e.netDest,
+    e.netSrc,
+  ]
+}
+
+export function exportCSV(events: DisplayEvent[], filename = 'security-events.csv') {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = COLUMNS.map(escape).join(',')
+  const rows = events.map(e => toRow(e).map(escape).join(','))
+  const csv = [header, ...rows].join('\\r\
+')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function exportPDF(events: DisplayEvent[], filename = 'security-events.pdf') {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  doc.setFontSize(14)
+  doc.text('Sentinel — Security Events', 14, 14)
+  doc.setFontSize(9)
+  doc.setTextColor(120)
+  doc.text(`Exported: ${new Date().toLocaleString()}  |  Total: ${events.length} events`, 14, 20)
+  doc.setTextColor(0)
+
+  autoTable(doc, {
+    startY: 25,
+    head: [COLUMNS],
+    body: events.map(toRow),
+    styles: { fontSize: 7, cellPadding: 1.5, overflow: 'ellipsize' },
+    headStyles: { fillColor: [30, 30, 30], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    didParseCell(data) {
+      if (data.section === 'body' && data.column.index === 1) {
+        const val = data.cell.raw as string
+        if (val === 'CRITICAL') data.cell.styles.textColor = [185, 28, 28]
+        else if (val === 'WARNING') data.cell.styles.textColor = [161, 98, 7]
+      }
+    },
+    columnStyles: {
+      0:  { cellWidth: 32 }, // Time
+      1:  { cellWidth: 16 }, // Severity
+      2:  { cellWidth: 16 }, // Rule
+      3:  { cellWidth: 22 }, // Namespace
+      4:  { cellWidth: 30 }, // Pod
+      5:  { cellWidth: 28 }, // Binary
+      6:  { cellWidth: 38 }, // Policy
+      7:  { cellWidth: 16 }, // Node
+      8:  { cellWidth: 20 }, // User
+      9:  { cellWidth: 12 }, // File Op
+      10: { cellWidth: 30 }, // File Path
+      11: { cellWidth: 22 }, // Destination
+      12: { cellWidth: 22 }, // Source
+    },
+  })
+
+  doc.save(filename)
+}
+",
+    "userModified": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm uninstall jspdf jspdf-autotable 2>&1 | tail -3",
+    "description": "Remove jsPDF dependencies"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel/web && npm uninstall jspdf jspdf-autotable 2>&1 | tail -3",
+    "description": "Remove jsPDF dependencies"
+  },
+  "tool_response": {
+    "stdout": "  npm audit fix
+
+Run `npm audit` for details.",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build 2>&1 | grep -E "error|built"",
+    "description": "Build frontend"
+  },
+  "tool_response": {
+    "stdout": "✓ built in 380ms
+[plugin builtin:vite-reporter]",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  }
+}
+
+----------------------------------------
+
+{
+  "event": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd /home/bigred/Sentinel && git add -A && git commit -m "$(cat <<'EOF'
+refactor: remove PDF export, keep CSV only
+
+Removed jsPDF/jspdf-autotable dependencies and exportPDF function.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"",
+    "description": "Commit PDF removal"
+  }
+}
+
+----------------------------------------
+
