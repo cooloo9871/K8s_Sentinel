@@ -29,5 +29,5 @@ COPY --from=backend /etc/group /etc/group
 COPY --from=backend /app/sentinel /sentinel
 COPY --from=backend --chown=10001:10001 /data/sentinel /data/sentinel
 USER sentinel
-EXPOSE 8080 8443
+EXPOSE 8080
 ENTRYPOINT ["/sentinel"]
