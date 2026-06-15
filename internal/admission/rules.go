@@ -123,10 +123,14 @@ func (s *RuleStore) Create(rawYAML string) (AdmissionRule, error) {
 		return AdmissionRule{}, err
 	}
 	r := AdmissionRule{
-		ID:        fmt.Sprintf("rule-%d", time.Now().UnixMilli()),
-		Name:      spec.Metadata.Name,
-		Enabled:   true,
-		Spec:      spec.Spec,
+		ID:          fmt.Sprintf("rule-%d", time.Now().UnixMilli()),
+		Name:        spec.Name,
+		Description: spec.Description,
+		Enabled:     true,
+		Spec: RuleSpec{
+			MatchConstraints: spec.MatchConstraints,
+			Validations:      spec.Validations,
+		},
 		RawYAML:   rawYAML,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -148,8 +152,12 @@ func (s *RuleStore) Update(id, rawYAML string) (AdmissionRule, error) {
 	if !ok {
 		return AdmissionRule{}, fmt.Errorf("rule %q not found", id)
 	}
-	existing.Name = spec.Metadata.Name
-	existing.Spec = spec.Spec
+	existing.Name = spec.Name
+	existing.Description = spec.Description
+	existing.Spec = RuleSpec{
+		MatchConstraints: spec.MatchConstraints,
+		Validations:      spec.Validations,
+	}
 	existing.RawYAML = rawYAML
 	s.rules[id] = existing
 	s.flush()
@@ -180,28 +188,28 @@ func (s *RuleStore) Delete(id string) bool {
 	return true
 }
 
-// vapSpec is used for parsing name out of VAP-like YAML.
-type vapSpec struct {
-	Metadata struct {
-		Name string `json:"name"`
-	} `json:"metadata"`
-	Spec RuleSpec `json:"spec"`
+// sentinelRule is the Sentinel-native rule format (flat, no apiVersion/kind/metadata).
+type sentinelRule struct {
+	Name             string           `json:"name"`
+	Description      string           `json:"description,omitempty"`
+	MatchConstraints MatchConstraints `json:"matchConstraints"`
+	Validations      []Validation     `json:"validations"`
 }
 
-func parseSpec(rawYAML string) (vapSpec, error) {
+func parseSpec(rawYAML string) (sentinelRule, error) {
 	jsonBytes, err := yaml.YAMLToJSON([]byte(rawYAML))
 	if err != nil {
-		return vapSpec{}, fmt.Errorf("invalid YAML: %w", err)
+		return sentinelRule{}, fmt.Errorf("invalid YAML: %w", err)
 	}
-	var v vapSpec
+	var v sentinelRule
 	if err := json.Unmarshal(jsonBytes, &v); err != nil {
-		return vapSpec{}, fmt.Errorf("parse error: %w", err)
+		return sentinelRule{}, fmt.Errorf("parse error: %w", err)
 	}
-	if len(v.Spec.Validations) == 0 {
-		return vapSpec{}, fmt.Errorf("spec.validations must not be empty")
+	if len(v.Validations) == 0 {
+		return sentinelRule{}, fmt.Errorf("validations must not be empty")
 	}
-	if v.Metadata.Name == "" {
-		v.Metadata.Name = fmt.Sprintf("rule-%d", time.Now().UnixMilli())
+	if v.Name == "" {
+		v.Name = fmt.Sprintf("rule-%d", time.Now().UnixMilli())
 	}
 	return v, nil
 }

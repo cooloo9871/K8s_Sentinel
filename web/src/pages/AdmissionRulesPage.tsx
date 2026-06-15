@@ -12,20 +12,17 @@ import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 import { formatTWTime } from '../utils/time'
 
-const TEMPLATE = `apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: my-admission-rule
-spec:
-  matchConstraints:
-    resourceRules:
-    - apiGroups: ["apps"]
-      apiVersions: ["v1"]
-      operations: ["CREATE", "UPDATE"]
-      resources: ["deployments"]
-  validations:
-  - expression: "object.spec.replicas <= 5"
-    message: "Replicas must be <= 5"
+const TEMPLATE = `name: my-admission-rule
+description: Describe what this rule enforces
+matchConstraints:
+  resourceRules:
+  - apiGroups: ["apps"]
+    apiVersions: ["v1"]
+    operations: ["CREATE", "UPDATE"]
+    resources: ["deployments"]
+validations:
+- expression: "object.spec.replicas <= 5"
+  message: "Replicas must be <= 5"
 `
 
 type EditorState = { id?: string; yaml: string; readOnly: boolean }
