@@ -18,36 +18,6 @@ import { useToast } from '../layout/AppToaster'
 import { formatTWTime } from '../utils/time'
 import { Input } from '@/components/ui/input'
 
-const POLICY_TEMPLATE = `apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: my-policy
-spec:
-  failurePolicy: Fail
-  matchConstraints:
-    resourceRules:
-    - apiGroups: ["apps"]
-      apiVersions: ["v1"]
-      operations: ["CREATE", "UPDATE"]
-      resources: ["deployments"]
-  validations:
-  - expression: "object.spec.replicas <= 5"
-    message: "Replicas must be <= 5"
-`
-
-const BINDING_TEMPLATE = `apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicyBinding
-metadata:
-  name: my-policy-binding
-spec:
-  policyName: my-policy
-  validationActions: ["Deny"]
-  matchResources:
-    namespaceSelector:
-      matchLabels:
-        environment: production
-`
-
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 
 export function VAPPage() {
@@ -64,6 +34,7 @@ export function VAPPage() {
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'policy' | 'binding'; name: string } | null>(null)
   const [search, setSearch] = useState('')
+  const [activeTab, setActiveTab] = useState<'policies' | 'bindings'>('policies')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -78,10 +49,9 @@ export function VAPPage() {
   useEffect(() => { load() }, [load])
 
   const openNew = (kind: 'policy' | 'binding') => {
-    const yaml = kind === 'policy' ? POLICY_TEMPLATE : BINDING_TEMPLATE
-    setEditorYaml(yaml)
+    setEditorYaml('')
     setEditorValid(true)
-    setEditor({ kind, yaml })
+    setEditor({ kind, yaml: '' })
   }
 
   const openEdit = async (kind: 'policy' | 'binding', name: string, rawYaml: string) => {
@@ -102,6 +72,7 @@ export function VAPPage() {
         else await vapApi.applyBinding(editorYaml)
       }
       toast.success(`${editor.kind === 'policy' ? 'Policy' : 'Binding'} applied.`)
+      setActiveTab(editor.kind === 'policy' ? 'policies' : 'bindings')
       setEditor(null)
       load()
     } catch (e: unknown) {
@@ -157,7 +128,7 @@ export function VAPPage() {
         <p className="text-sm text-muted-foreground">Manage Kubernetes ValidatingAdmissionPolicies and Bindings.</p>
       </div>
 
-      <Tabs defaultValue="policies">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'policies' | 'bindings')}>
         <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
           <TabsTrigger value="policies"
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none">
@@ -173,7 +144,7 @@ export function VAPPage() {
         <TabsContent value="policies">
           <div className="mb-4 flex items-center justify-between">
             <Input placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 w-56 text-sm" />
-            {isAdmin && <Button size="sm" onClick={() => openNew('policy')}>+ New Policy</Button>}
+            {isAdmin && <Button size="sm" onClick={() => openNew('policy')}>+ New YAML</Button>}
           </div>
           <Card>
             <CardContent className="p-0">
@@ -228,7 +199,7 @@ export function VAPPage() {
         <TabsContent value="bindings">
           <div className="mb-4 flex items-center justify-between">
             <Input placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 w-56 text-sm" />
-            {isAdmin && <Button size="sm" onClick={() => openNew('binding')}>+ New Binding</Button>}
+            {isAdmin && <Button size="sm" onClick={() => openNew('binding')}>+ New YAML</Button>}
           </div>
           <Card>
             <CardContent className="p-0">
