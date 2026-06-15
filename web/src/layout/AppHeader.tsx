@@ -24,7 +24,6 @@ const ROUTE_LABELS: Record<string, string> = {
   templates: 'Templates',
   discovery: 'Behavior Discovery',
   admission: 'Admission Policy',
-  'admission-rules': 'Admission Rules',
   security: 'Notifications',
   events: 'Security Events',
   alerts: 'Alerts',

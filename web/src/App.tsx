@@ -16,8 +16,9 @@ import { TetragonStatusPage } from './pages/TetragonStatusPage'
 import { PolicyTemplatesPage } from './pages/PolicyTemplatesPage'
 import { UsersPage } from './pages/UsersPage'
 import { AlertsPage } from './pages/AlertsPage'
-import { AdmissionRulesPage } from './pages/AdmissionRulesPage'
+
 import { AdmissionEventsPage } from './pages/AdmissionEventsPage'
+import { VAPPage } from './pages/VAPPage'
 import { RsyslogPage } from './pages/RsyslogPage'
 
 function AppRoutes() {
@@ -42,7 +43,7 @@ function AppRoutes() {
           <Route path="/policies/tracing" element={<PolicyListPage />} />
           <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
           <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
-          <Route path="/policies/admission-rules" element={<AdmissionRulesPage />} />
+
           <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
           <Route path="/cluster/mode" element={<ModePage />} />
 
@@ -53,6 +54,7 @@ function AppRoutes() {
           <Route path="/security/alerts" element={<AlertsPage />} />
           <Route path="/security/rsyslog" element={<RsyslogPage />} />
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
+          <Route path="/policies/admission" element={<VAPPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

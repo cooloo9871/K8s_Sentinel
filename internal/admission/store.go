@@ -31,16 +31,6 @@ type Event struct {
 	RawMessage   string `json:"rawMessage,omitempty"`
 }
 
-// Violation is used by the webhook to record a new violation.
-type Violation struct {
-	Namespace string
-	Name      string
-	Resource  string
-	Operation string
-	Username  string
-	RuleName  string
-	Message   string
-}
 
 const maxEvents = 500
 
@@ -121,7 +111,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	if t == "" || e.LastTimestamp.IsZero() {
 		t = time.Now().UTC().Format(time.RFC3339)
 	}
-	policy, binding, violation := parseVAPMessage(e.Message)
+	policy, binding, violation := ParseVAPMessage(e.Message)
 	evt := Event{
 		ID:           uid,
 		Time:         t,
@@ -145,34 +135,21 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	}
 }
 
-// AddViolation records a violation from the webhook.
-func (s *Store) AddViolation(v Violation) {
+// Add appends a new event (from audit webhook) and trims to maxEvents.
+func (s *Store) Add(e Event) {
 	s.mu.Lock()
-	key := "webhook-" + v.Namespace + "-" + v.Name + "-" + v.RuleName
-	if _, exists := s.seen[key]; exists {
+	if _, exists := s.seen[e.ID]; exists {
 		s.mu.Unlock()
 		return
 	}
-	s.seen[key] = struct{}{}
-	evt := Event{
-		ID:        key + "-" + time.Now().Format("20060102150405"),
-		Time:      time.Now().UTC().Format(time.RFC3339),
-		Namespace: v.Namespace,
-		Name:      v.Name,
-		Resource:  v.Resource,
-		Operation: v.Operation,
-		Username:  v.Username,
-		PolicyName: v.RuleName,
-		Message:   v.Message,
-		Source:    "webhook",
-	}
-	s.events = append([]Event{evt}, s.events...)
+	s.seen[e.ID] = struct{}{}
+	s.events = append([]Event{e}, s.events...)
 	if len(s.events) > maxEvents {
 		s.events = s.events[:maxEvents]
 	}
 	s.mu.Unlock()
 	select {
-	case s.ch <- evt:
+	case s.ch <- e:
 	default:
 	}
 }
@@ -193,7 +170,8 @@ func (s *Store) Subscribe() <-chan Event {
 
 var vapPattern = regexp.MustCompile(`ValidatingAdmissionPolicy '([^']+)' with binding '([^']+)'`)
 
-func parseVAPMessage(msg string) (policy, binding, violation string) {
+// ParseVAPMessage extracts policyName, bindingName, and violation message from a K8s denial message.
+func ParseVAPMessage(msg string) (policy, binding, violation string) {
 	m := vapPattern.FindStringSubmatch(msg)
 	if len(m) == 3 {
 		policy, binding = m[1], m[2]
