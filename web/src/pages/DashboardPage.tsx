@@ -14,7 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, modeApi, namespaceApi } from '../api/client'
+import { policyApi, modeApi, namespaceApi, vapApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import type { PolicyRecord, Mode } from '../api/types'
@@ -67,14 +67,19 @@ export function DashboardPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [vapPolicies, setVapPolicies] = useState<VAPRecord[]>([])
+  const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [namespaceCount, setNamespaceCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const load = () => {
     setLoading(true)
-    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
-      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })
+    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list(), vapApi.listPolicies(), vapApi.listBindings()])
+      .then(([p, m, ns, vp, vb]) => {
+        setPolicies(p); setMode(m); setNamespaceCount(ns.length)
+        setVapPolicies(vp); setVapBindings(vb)
+      })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
   }
@@ -147,21 +152,15 @@ export function DashboardPage() {
         />
       </div>
 
-      {/* Recent policies */}
+      {/* Tracing Policy */}
       <Card>
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
-            <h3 className="text-base font-semibold">Recent Policies</h3>
+            <h3 className="text-base font-semibold">Tracing Policy</h3>
             <p className="text-sm text-muted-foreground">Latest {recent.length} of {policies.length} policies</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-sm"
-            onClick={() => navigate('/policies/tracing')}
-          >
-            View all
-            <IconArrowRight size={14} />
+          <Button variant="ghost" size="sm" className="gap-1 text-sm" onClick={() => navigate('/policies/tracing')}>
+            View all <IconArrowRight size={14} />
           </Button>
         </div>
         <CardContent className="p-0">
@@ -188,24 +187,64 @@ export function DashboardPage() {
               </TableHeader>
               <TableBody>
                 {recent.map((p) => (
-                  <TableRow
-                    key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}
-                  >
+                  <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>
-                      <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
-                        {p.scope}
-                      </Badge>
+                      <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>{p.scope}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={p.mode === 'Protect' ? 'destructive' : p.mode === 'Mixed' ? 'outline' : 'secondary'}>
-                        {p.mode}
-                      </Badge>
+                      <Badge variant={p.mode === 'Protect' ? 'destructive' : p.mode === 'Mixed' ? 'outline' : 'secondary'}>{p.mode}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{p.namespace ?? '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      <RelativeTime iso={p.createdAt} />
+                    <TableCell className="text-muted-foreground"><RelativeTime iso={p.createdAt} /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Admission Policy */}
+      <Card>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold">Admission Policy</h3>
+            <p className="text-sm text-muted-foreground">
+              {vapPolicies.length} polic{vapPolicies.length !== 1 ? 'ies' : 'y'}, {vapBindings.length} binding{vapBindings.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" className="gap-1 text-sm" onClick={() => navigate('/policies/admission')}>
+            View all <IconArrowRight size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {vapPolicies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+              <IconShieldCheck size={36} strokeWidth={1.5} />
+              <p className="text-sm">No admission policies</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Failure Policy</TableHead>
+                  <TableHead>Validations</TableHead>
+                  <TableHead>Created By</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vapPolicies.slice(0, 8).map((p) => (
+                  <TableRow key={p.name}>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.failurePolicy === 'Fail' ? 'destructive' : 'secondary'}>{p.failurePolicy || '—'}</Badge>
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{p.validationCount}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{p.createdBy}</TableCell>
+                    <TableCell className="text-muted-foreground"><RelativeTime iso={p.createdAt} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
