@@ -4,7 +4,7 @@
   <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
 </p>
 
-**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，並整合 ValidatingAdmissionPolicy 進行入場控制，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **K8s 安全管理 console**，整合 Cilium Tetragon 執行期監控與 ValidatingAdmissionPolicy 入場控制，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 Tracing Policy、Admission Policy、監控安全事件、推送告警，全面掌握 K8s workload 的零信任安全防線。
 
 ---
 
