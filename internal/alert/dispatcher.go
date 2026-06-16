@@ -175,11 +175,11 @@ func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
 		if skip {
 			continue
 		}
-		go d.postAdmission(rule, evt)
+		go d.postAdmission(rule, evt, severity)
 	}
 }
 
-func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event) {
+func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity string) {
 	lines := []string{
 		fmt.Sprintf("*[%s]* %s", strings.ToUpper(severity), rule.Name),
 		"*Rule:* Admission Event",
