@@ -45,11 +45,11 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
     { label: 'Security Events' },
   ],
   '/security/alerts': [
-    { label: 'Notifications' },
+    { label: 'Settings' },
     { label: 'Alerts' },
   ],
   '/security/rsyslog': [
-    { label: 'Notifications' },
+    { label: 'Settings' },
     { label: 'Syslog' },
   ],
   '/security/admission': [

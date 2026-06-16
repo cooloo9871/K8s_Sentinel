@@ -85,16 +85,6 @@ export function AppSidebar() {
                   <NavLink to="/security/admission">Admission Events</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
-                  <NavLink to="/security/alerts">Alerts</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
-                  <NavLink to="/security/rsyslog">Syslog</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -120,6 +110,16 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive('/settings/users')}>
                     <NavLink to="/settings/users">Users</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/security/alerts')}>
+                    <NavLink to="/security/alerts">Alerts</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/security/rsyslog')}>
+                    <NavLink to="/security/rsyslog">Syslog</NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
