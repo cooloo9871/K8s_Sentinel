@@ -126,13 +126,13 @@ export function AdmissionEventsPage() {
                       </TableCell>
                       <TableCell className="text-sm">{formatTWTime(e.time)}</TableCell>
                       <TableCell>
-                        <Badge variant={e.source === 'webhook' ? 'default' : 'secondary'} className="text-[10px]">
-                          {e.source === 'webhook' ? 'webhook' : 'k8s event'}
+                        <Badge variant={e.source === 'audit' ? 'default' : 'secondary'} className="text-[10px]">
+                          {e.source === 'audit' ? 'audit log' : 'k8s event'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{e.namespace || '—'}</TableCell>
                       <TableCell className="text-sm">
-                        {e.source === 'webhook' ? (
+                        {e.source === 'audit' ? (
                           <>
                             <span className="text-muted-foreground text-xs capitalize">{e.operation} </span>
                             <span className="font-medium">{e.name || '—'}</span>

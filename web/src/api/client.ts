@@ -171,7 +171,7 @@ export interface AdmissionEvent {
   policyName: string
   bindingName: string
   message: string
-  source: 'webhook' | 'k8s-event'
+  source: 'audit' | 'k8s-event'
   rawMessage?: string
 }
 

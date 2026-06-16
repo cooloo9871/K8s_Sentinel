@@ -148,6 +148,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 		BindingName:  binding,
 		Message:      violation,
 		RawMessage:   e.Message,
+		Source:       "k8s-event",
 	}
 	s.events = append([]Event{evt}, s.events...)
 	if len(s.events) > maxEvents {
