@@ -4,7 +4,7 @@
   <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
 </p>
 
-**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
+**Sentinel** 是一個部署在 Kubernetes 叢集內的 **Cilium Tetragon 安全策略管理 console**，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 TracingPolicy、監控安全事件、自動學習 Pod 行為，並整合 ValidatingAdmissionPolicy 進行入場控制，讓你完整掌握 K8s workload 實現零信任的關鍵技術。
 
 ---
 
@@ -12,60 +12,54 @@
 
 ### Policies — 策略管理
 
-- 建立、編輯、刪除 TracingPolicy（cluster-wide 或 namespace-scoped）
+- 建立、編輯、刪除 **Tracing Policy**（cluster-wide 或 namespace-scoped）
 - 依 namespace、scope 篩選策略清單
 - **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
-- **File Rules**：控制哪些檔案路徑可以存取（Blacklist，支援 Prefix 比對）；可指定僅封鎖讀取或寫入；可設定例外 process
+- **File Rules**：控制哪些檔案路徑可以存取；可指定僅封鎖讀取或寫入；可設定例外 process
 - **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
 - 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
 - **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
-- 即時 YAML Preview；支援直接以 YAML 建立或修改 Policy
 - **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
-- **Policy Templates**：三個內建範本與自訂範本；點擊 **Use Template** 設定名稱後直接建立 Policy；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
+- **Policy Templates**：三個內建範本與自訂範本；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
   - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
-  - **Monitor All File Access**：監控叢集所有 Pod 的敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
-  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為（`tcp_connect` + `NotDAddr`）；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測（支援 Kubernetes IPAM、Cilium cluster-pool、kube-proxy 等）
-  - 自訂範本儲存在 `/data/sentinel/templates.json`（可掛 PV 永存）
+  - **Monitor All File Access**：監控敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
+  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測
+- **Admission Policy**（ValidatingAdmissionPolicy）：管理 K8s 原生 VAP 資源，支援 YAML 編輯器建立/修改 Policy 與 Binding
 
 ### Behavior Discovery — 行為探索
 
 - 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
-- 依 Deployment / DaemonSet / StatefulSet 分組顯示（同一 workload 的多個副本合併）
-- 資料夾圖示可切換 Namespace 分組視圖
-- 副本數增減時自動更新（最多 60 秒同步）
-- **Create Policy**：一鍵從學習到的資料預填 Policy 表單，帶入 Pod Selector 與 Process Rules（Whitelist 模式）
+- 依 Deployment / DaemonSet / StatefulSet 分組顯示
+- **Create Policy**：一鍵預填 Policy 表單，帶入 Pod Selector 與 Process Rules
 
 ### Notifications — 安全通知
 
+#### Security Events
 - 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
-- Warning（偵測未攔截）/ Critical（已攔截終止）嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，兩者獨立上限，7 天 TTL
-- 依 Namespace、Pod 名稱、嚴重程度篩選
-- 點擊展開事件詳情：觸發檔案路徑與操作類型（read / write / mmap-read / mmap-write / truncate）、網路連線目的地與來源（addr:port）、執行 user（UID）、Pod / Container、Policy 名稱、parent process 等
-- **30 秒去重**：相同 event 在 30 秒內只顯示一次，count 累加，避免畫面被洗版
-- **Pause / Resume**：暫停畫面更新，慢慢讀取目前事件，Resume 後一次刷入所有暫存事件
-- 時間顯示支援秒、分、時、天
-- **Export CSV**：將當前篩選結果匯出為 CSV，含所有事件欄位
-- **Alerts（Webhook 告警）**：設定規則將 Security Events 即時推送到 Slack、Teams、Discord 等 Webhook 端點；每條規則可設定 severity（Warning / Critical）、Namespace、Policy 篩選條件及 cooldown 防洗版；Slack 訊息含彩色邊框（Warning=黃、Critical=紅）與 rule type（Process / File / Network）識別；設定儲存在 `/data/sentinel/alerts.json`
-- **Syslog 轉送**：將 Security Events 轉送至 rsyslog/syslog server（UDP 或 TCP，port 514）；可設定 severity、Namespace、Policy 篩選條件；syslog tag 為 `sentinel`，訊息格式為 key=value；設定儲存在 `/data/sentinel/rsyslog.json`
+- Warning / Critical 嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，30 秒去重
+- 點擊展開詳情：觸發檔案路徑與操作類型、網路連線目的地與來源、執行 user（UID）、Policy 名稱等
+- **Pause / Resume**、**Export CSV**
+
+#### Admission Events
+- 記錄 ValidatingAdmissionPolicy 違規事件
+- **Critical**（`Deny` action，請求被阻擋）/ **Warning**（`Audit` action，請求放行但記錄）
+- 來源：K8s Warning Events（controller 資源，免設定）或 **kube-apiserver audit webhook**（完整覆蓋，需設定）
+- Audit webhook 設定：`POST /api/admission-events/webhook`（kube-apiserver 直接呼叫）
 
 ### Cluster — 叢集資訊
 
-- Namespace 列表及各 Namespace 的 Policy 數量
-- **Tetragon Agents**：各節點 Tetragon DaemonSet pod 的健康狀態（Ready / Not Ready / Failed）、重啟次數、啟動時間，每 30 秒自動刷新
+- **Tetragon Agents**：各節點健康狀態、重啟次數、啟動時間，每 30 秒自動刷新
 
 ### Dashboard — 總覽
 
 - Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
-- 快速切換 Global Protect Mode
+- **Tracing Policy** 與 **Admission Policy** 清單快覽
 
-### 使用者管理 — User Management
+### Settings — 設定
 
-- 本地帳號登入（JWT，有效期 24 小時）
-- **Admin**：完整操作權限，包含建立/修改/刪除 Policy、管理使用者
-- **Viewer**：唯讀，可瀏覽所有頁面及查看 Policy / Template YAML，無法執行任何寫入操作
-- 首次啟動自動建立預設帳號 `admin` / `admin`，請立即修改密碼
-- **Session Timeout**：預設 3600 秒，Admin 可在 Settings > Users 動態調整，下次登入生效
-- 使用者資料與 session 設定儲存在 `/data/sentinel/users.json`（可掛 PV 永存）
+- **Users（使用者管理）**：本地帳號登入（JWT）、Admin / Viewer 角色、Session Timeout 設定
+- **Alerts（Webhook 告警）**：將 Security Events 和 Admission Events 推送到 Slack、Teams、Discord 等；可設定 Event Type（Security / Admission）、severity、Namespace、Policy 篩選及 cooldown；設定儲存在 `/data/sentinel/alerts.json`
+- **Syslog 轉送**：將事件轉送至 rsyslog/syslog server（UDP 或 TCP）；可設定 Event Type、severity、Namespace、Policy 篩選；設定儲存在 `/data/sentinel/rsyslog.json`
 
 ---
 
@@ -107,17 +101,15 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 
 ### 持久化儲存（PV）
 
-Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定（帳號、Templates、Alert 規則、Syslog 設定）將會消失：
+Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定將會消失：
 
 | 檔案 | 說明 |
 |---|---|
 | `users.json` | 使用者帳號與 session 設定 |
-| `.jwt-secret` | JWT 簽章 secret（消失則所有 session 失效）|
+| `.jwt-secret` | JWT 簽章 secret |
 | `templates.json` | 自訂 Policy Templates |
 | `alerts.json` | Webhook 告警規則 |
 | `rsyslog.json` | Syslog 轉送設定 |
-
-掛載方式：
 
 ```yaml
 volumeMounts:
@@ -131,11 +123,48 @@ volumes:
 
 > Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
 
+### Admission Events — Audit Webhook 設定
+
+kube-apiserver audit webhook 可讓 Sentinel 接收完整的 VAP 違規記錄：
+
+```yaml
+# /etc/kubernetes/audit-policy.yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+rules:
+  - level: Metadata
+    verbs: ["create", "update", "patch", "delete"]
+    omitStages: ["RequestReceived"]
+```
+
+```yaml
+# /etc/kubernetes/audit-webhook.yaml
+apiVersion: v1
+kind: Config
+clusters:
+  - name: sentinel
+    cluster:
+      server: http://<sentinel-clusterip>/api/admission-events/webhook
+users:
+  - name: sentinel
+contexts:
+  - name: default
+    context: { cluster: sentinel, user: sentinel }
+current-context: default
+```
+
+kube-apiserver 加上：
+```
+--audit-policy-file=/etc/kubernetes/audit-policy.yaml
+--audit-webhook-config-file=/etc/kubernetes/audit-webhook.yaml
+--audit-webhook-batch-max-wait=5s
+```
+
 ### 環境變數
 
 | 變數 | 預設值 | 說明 |
 |---|---|---|
-| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace，若非預設請設定此值 |
+| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace |
 
 ---
 
@@ -144,6 +173,7 @@ volumes:
 | API Group | 資源 | 操作 |
 |---|---|---|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `admissionregistration.k8s.io` | `validatingadmissionpolicies`, `validatingadmissionpolicybindings` | CRUD |
 | `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
 | `""` (core) | `events` | get, list, watch |
 | `""` (core) | `nodes` | get, list |
