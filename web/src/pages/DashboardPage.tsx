@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   IconShieldCheck,
-  IconServer,
   IconAlertTriangle,
   IconArrowRight,
   IconRefresh,
@@ -14,9 +13,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, modeApi, namespaceApi, vapApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
+import { policyApi, modeApi, vapApi, admissionApi, type VAPRecord, type VAPBindingRecord, type AdmissionEvent } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
+import { useSecurityEvents } from '../layout/SecurityEventsProvider'
 import type { PolicyRecord, Mode } from '../api/types'
 
 interface StatProps {
@@ -66,24 +66,27 @@ export function DashboardPage() {
   const toast = useToast()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const { events: secEvents } = useSecurityEvents()
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [vapPolicies, setVapPolicies] = useState<VAPRecord[]>([])
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
+  const [admissionEvents, setAdmissionEvents] = useState<AdmissionEvent[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
-  const [namespaceCount, setNamespaceCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const load = () => {
     setLoading(true)
     // Core data — failure shows an error
-    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
-      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })
+    Promise.all([policyApi.list(), modeApi.get()])
+      .then(([p, m]) => { setPolicies(p); setMode(m) })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
-    // VAP data — loaded independently, failure silently shows empty
+    // VAP data — loaded independently
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
-      .catch(() => { /* VAP unavailable — show empty section */ })
+      .catch(() => {})
+    // Admission Events count
+    admissionApi.list().then(setAdmissionEvents).catch(() => {})
   }
 
   useEffect(load, [])
@@ -91,6 +94,10 @@ export function DashboardPage() {
   const clusterCount = policies.filter((p) => p.scope === 'cluster').length
   const protectCount = policies.filter((p) => p.mode === 'Protect').length
   const recent = policies.slice(0, 8)
+  const secWarning = secEvents.filter(e => e.severity === 'warning').length
+  const secCritical = secEvents.filter(e => e.severity === 'critical').length
+  const admCritical = admissionEvents.filter(e => e.severity === 'critical').length
+  const admWarning = admissionEvents.filter(e => e.severity === 'warning').length
 
   const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
 
@@ -139,10 +146,17 @@ export function DashboardPage() {
           accent="#dc3545"
         />
         <StatCard
-          icon={<IconServer size={26} />}
-          label="Namespaces"
-          value={namespaceCount}
-          sub="managed namespaces"
+          icon={<IconAlertTriangle size={26} />}
+          label="Security Events"
+          value={secEvents.length}
+          sub={`W: ${secWarning} / C: ${secCritical}`}
+          accent="#f59e0b"
+        />
+        <StatCard
+          icon={<IconShieldCheck size={26} />}
+          label="Admission Events"
+          value={admissionEvents.length}
+          sub={`Critical: ${admCritical} / Warning: ${admWarning}`}
           accent="#8b5cf6"
         />
         <StatCard
