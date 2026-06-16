@@ -18,7 +18,7 @@ import type { Mode } from '../api/types'
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   policies: 'Policies',
-  tracing: 'TracingPolicy',
+  tracing: 'Tracing Policy',
   new: 'New Policy',
   edit: 'Edit',
   templates: 'Templates',
