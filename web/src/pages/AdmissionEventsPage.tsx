@@ -12,10 +12,13 @@ import {
 } from '@/components/ui/select'
 import { formatTWTime } from '../utils/time'
 
+type SeverityFilter = 'all' | 'warning' | 'critical'
+
 export function AdmissionEventsPage() {
   const [events, setEvents] = useState<AdmissionEvent[]>([])
   const [search, setSearch] = useState('')
   const [nsFilter, setNsFilter] = useState('all')
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const esRef = useRef<EventSource | null>(null)
 
@@ -45,6 +48,7 @@ export function AdmissionEventsPage() {
 
   const filtered = events.filter(e => {
     if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (severityFilter !== 'all' && e.severity !== severityFilter) return false
     if (search) {
       const q = search.toLowerCase()
       if (!e.involvedName.toLowerCase().includes(q) &&
@@ -79,6 +83,18 @@ export function AdmissionEventsPage() {
             <SelectGroup>
               <SelectItem value="all">All Namespaces</SelectItem>
               {namespaces.map(ns => <SelectItem key={ns} value={ns}>{ns}</SelectItem>)}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select value={severityFilter} onValueChange={v => setSeverityFilter(v as SeverityFilter)}>
+          <SelectTrigger className="h-8 w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All Events</SelectItem>
+              <SelectItem value="warning">Warning Only</SelectItem>
+              <SelectItem value="critical">Critical Only</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -118,7 +134,7 @@ export function AdmissionEventsPage() {
                   <>
                     <TableRow
                       key={e.id}
-                      className="cursor-pointer bg-destructive/5 hover:bg-destructive/10"
+                      className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
                       onClick={() => toggle(e.id)}
                     >
                       <TableCell className="py-2 pl-3 pr-0 text-muted-foreground text-xs">
@@ -126,9 +142,10 @@ export function AdmissionEventsPage() {
                       </TableCell>
                       <TableCell className="text-sm">{formatTWTime(e.time)}</TableCell>
                       <TableCell>
-                        <Badge variant={e.severity === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">
-                          {e.severity || 'critical'}
-                        </Badge>
+                        {e.severity === 'critical'
+                          ? <Badge variant="destructive" className="text-[10px]">CRITICAL</Badge>
+                          : <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-600">WARNING</Badge>
+                        }
                       </TableCell>
                       <TableCell>
                         <Badge variant={e.source === 'audit' ? 'default' : 'secondary'} className="text-[10px]">
