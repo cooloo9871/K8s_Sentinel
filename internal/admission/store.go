@@ -101,6 +101,9 @@ func (s *Store) load() {
 		}
 	}
 	if len(s.events) > maxEvents {
+		for _, old := range s.events[maxEvents:] {
+			delete(s.seen, old.ID)
+		}
 		s.events = s.events[:maxEvents]
 	}
 	// Ensure newest-first order after loading
@@ -149,20 +152,28 @@ func (s *Store) insertSorted(evt Event) {
 	s.events = append(s.events, evt)
 }
 
-func (s *Store) flush() {
-	data, err := json.Marshal(eventFile{Events: s.events})
-	if err != nil {
-		log.Printf("admission-store: flush marshal error: %v", err)
-		return
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		log.Printf("admission-store: flush write error: %v", err)
-		return
-	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		log.Printf("admission-store: flush rename error: %v", err)
-	}
+// flushLocked snapshots events while the lock is held, then writes to disk
+// after releasing the lock to avoid blocking concurrent reads during I/O.
+func (s *Store) flushLocked() {
+	// Snapshot under lock (caller must hold s.mu)
+	snapshot := make([]Event, len(s.events))
+	copy(snapshot, s.events)
+	// Disk write happens after caller releases the lock
+	go func() {
+		data, err := json.Marshal(eventFile{Events: snapshot})
+		if err != nil {
+			log.Printf("admission-store: flush marshal error: %v", err)
+			return
+		}
+		tmp := s.path + ".tmp"
+		if err := os.WriteFile(tmp, data, 0600); err != nil {
+			log.Printf("admission-store: flush write error: %v", err)
+			return
+		}
+		if err := os.Rename(tmp, s.path); err != nil {
+			log.Printf("admission-store: flush rename error: %v", err)
+		}
+	}()
 }
 
 // Subscribe returns a per-subscriber channel and an unsubscribe function.
@@ -277,7 +288,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 			// Remove from current position, then re-insert at sorted position
 			s.events = append(s.events[:i], s.events[i+1:]...)
 			s.insertSorted(updated)
-			s.flush()
+			s.flushLocked()
 			s.mu.Unlock()
 			s.broadcast(updated)
 			return
@@ -291,7 +302,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 		}
 		s.events = s.events[:maxEvents]
 	}
-	s.flush()
+	s.flushLocked()
 	s.mu.Unlock()
 
 	s.broadcast(evt)
@@ -318,7 +329,7 @@ func (s *Store) Add(e Event) {
 			s.events = append(s.events[:i], s.events[i+1:]...)
 			s.insertSorted(updated)
 			s.seen[e.ID] = struct{}{}
-			s.flush()
+			s.flushLocked()
 			s.mu.Unlock()
 			s.broadcast(updated)
 			return
@@ -332,7 +343,7 @@ func (s *Store) Add(e Event) {
 		}
 		s.events = s.events[:maxEvents]
 	}
-	s.flush()
+	s.flushLocked()
 	s.mu.Unlock()
 	s.broadcast(e)
 }
