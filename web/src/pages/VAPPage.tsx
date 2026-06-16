@@ -31,6 +31,7 @@ export function VAPPage() {
   const [editor, setEditor] = useState<EditTarget | null>(null)
   const [editorYaml, setEditorYaml] = useState('')
   const [editorValid, setEditorValid] = useState(true)
+  const [editorKey, setEditorKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'policy' | 'binding'; name: string } | null>(null)
   const [search, setSearch] = useState('')
@@ -51,12 +52,14 @@ export function VAPPage() {
   const openNew = (kind: 'policy' | 'binding') => {
     setEditorYaml('')
     setEditorValid(true)
+    setEditorKey(k => k + 1)
     setEditor({ kind, yaml: '' })
   }
 
-  const openEdit = async (kind: 'policy' | 'binding', name: string, rawYaml: string) => {
+  const openEdit = (kind: 'policy' | 'binding', name: string, rawYaml: string) => {
     setEditorYaml(rawYaml)
     setEditorValid(true)
+    setEditorKey(k => k + 1)
     setEditor({ kind, name, yaml: rawYaml })
   }
 
@@ -113,7 +116,7 @@ export function VAPPage() {
           </div>
         </div>
         <YamlEditor
-          key={editor.name ?? 'new'}
+          key={editorKey}
           initialValue={editorYaml}
           readOnly={!isAdmin}
           onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }}
