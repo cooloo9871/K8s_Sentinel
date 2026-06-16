@@ -157,13 +157,14 @@ export function AdmissionEventsPage() {
                         {e.source === 'audit' ? (
                           <>
                             <span className="text-muted-foreground text-xs capitalize">{e.operation} </span>
-                            <span className="font-medium">{e.name || '—'}</span>
-                            <span className="text-muted-foreground text-xs"> ({e.resource})</span>
+                            <span className="text-muted-foreground text-xs">{e.resource} </span>
+                            <span className="font-medium">({e.name || '—'})</span>
                           </>
                         ) : (
                           <>
-                            <span className="text-muted-foreground text-xs">{e.involvedKind} </span>
-                            <span className="font-medium">{e.involvedName || '—'}</span>
+                            <span className="text-muted-foreground text-xs capitalize">{e.operation || 'create'} </span>
+                            <span className="text-muted-foreground text-xs">{e.involvedKind?.toLowerCase() || ''}s </span>
+                            <span className="font-medium">({e.involvedName || '—'})</span>
                           </>
                         )}
                       </TableCell>
@@ -178,6 +179,16 @@ export function AdmissionEventsPage() {
                       <TableRow key={`detail-${e.id}`} className="bg-muted/30 hover:bg-muted/30">
                         <TableCell colSpan={7} className="py-3 pl-10 pr-6">
                           <div className="flex flex-col gap-1 text-xs">
+                            {(e.resource || e.involvedKind) && (
+                              <div className="flex gap-1.5">
+                                <span className="shrink-0 text-muted-foreground">Object:</span>
+                                <span className="font-mono">
+                                  {e.source === 'audit'
+                                    ? `${e.resource}/${e.name}`
+                                    : `${e.involvedKind?.toLowerCase()}s/${e.involvedName}`}
+                                </span>
+                              </div>
+                            )}
                             <div className="flex gap-1.5">
                               <span className="shrink-0 text-muted-foreground">Violation:</span>
                               <span className="font-mono" style={{ wordBreak: 'break-all' }}>{e.message}</span>

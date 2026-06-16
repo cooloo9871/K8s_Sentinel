@@ -199,8 +199,10 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity
 		ns = "cluster-wide"
 	}
 	lines = append(lines, fmt.Sprintf("*Namespace:* `%s`", ns))
-	if resource != "" {
-		lines = append(lines, fmt.Sprintf("*Resource:* `%s`", resource))
+	if evt.Resource != "" && resource != "" {
+		lines = append(lines, fmt.Sprintf("*Object:* `%s/%s`", evt.Resource, resource))
+	} else if resource != "" {
+		lines = append(lines, fmt.Sprintf("*Object:* `%s`", resource))
 	}
 	if evt.Username != "" {
 		lines = append(lines, fmt.Sprintf("*Requestor:* `%s`", evt.Username))

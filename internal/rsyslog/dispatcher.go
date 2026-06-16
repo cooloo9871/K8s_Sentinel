@@ -240,12 +240,17 @@ func buildAdmissionMessage(evt admission.Event, severity string) string {
 	if evt.Namespace != "" {
 		parts = append(parts, fmt.Sprintf("namespace=%s", evt.Namespace))
 	}
-	resource := evt.InvolvedName
-	if evt.Name != "" {
-		resource = evt.Name
+	if evt.Resource != "" {
+		parts = append(parts, fmt.Sprintf("resource=%s", evt.Resource))
+	} else if evt.InvolvedKind != "" {
+		parts = append(parts, fmt.Sprintf("resource=%ss", strings.ToLower(evt.InvolvedKind)))
 	}
-	if resource != "" {
-		parts = append(parts, fmt.Sprintf("resource=%s", resource))
+	name := evt.Name
+	if name == "" {
+		name = evt.InvolvedName
+	}
+	if name != "" {
+		parts = append(parts, fmt.Sprintf("name=%s", name))
 	}
 	if evt.PolicyName != "" {
 		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
