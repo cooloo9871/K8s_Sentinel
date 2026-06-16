@@ -62,12 +62,6 @@ export function AdmissionEventsPage() {
           <p className="text-sm text-muted-foreground">
             ValidatingAdmissionPolicy violations captured from Kubernetes Warning events.
           </p>
-          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-            Only controller-managed resource denials (e.g. Pods) appear without audit log.
-            For complete coverage including direct <code className="font-mono">kubectl apply</code> denials,
-            configure the kube-apiserver audit webhook to POST to{' '}
-            <code className="font-mono">/api/admission-events/webhook</code>.
-          </p>
         </div>
         <Button variant="ghost" size="sm" className="text-xs text-muted-foreground"
           onClick={() => setEvents([])}>Clear</Button>
@@ -96,9 +90,14 @@ export function AdmissionEventsPage() {
       <Card>
         <CardContent className="p-0">
           {filtered.length === 0 ? (
-            <div className="py-16 text-center text-sm text-muted-foreground">
+            <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
               <p>No admission violation events.</p>
-              <p className="mt-1 text-xs">Events appear when controller-managed resources (e.g. Pods) are denied by VAP.</p>
+              <p className="text-xs max-w-lg">
+                Only controller-managed resource denials (e.g. Pods) appear without audit log.
+                For complete coverage including direct <code className="font-mono">kubectl apply</code> denials,
+                configure the kube-apiserver audit webhook to POST to{' '}
+                <code className="font-mono">/api/admission-events/webhook</code>.
+              </p>
             </div>
           ) : (
             <Table>
