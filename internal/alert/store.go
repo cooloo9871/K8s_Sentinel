@@ -13,6 +13,7 @@ type AlertRule struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	WebhookURL  string   `json:"webhookURL"`
+	EventTypes  []string `json:"eventTypes"`  // ["security","admission"], empty = all
 	Severities  []string `json:"severities"`  // ["warning","critical"], empty = all
 	Namespaces  []string `json:"namespaces"`  // empty = all namespaces
 	Policies    []string `json:"policies"`    // empty = all policies
@@ -130,6 +131,14 @@ func (s *Store) EnabledRules() []AlertRule {
 		}
 	}
 	return out
+}
+
+// MatchesEventType returns true if the event type matches the rule's eventTypes filter.
+func (r AlertRule) MatchesEventType(eventType string) bool {
+	if len(r.EventTypes) == 0 {
+		return true
+	}
+	return contains(r.EventTypes, eventType)
 }
 
 // Matches returns true if the event matches the rule's filters.

@@ -89,6 +89,7 @@ export interface AlertRule {
   id: string
   name: string
   webhookURL: string
+  eventTypes: string[]   // ["security","admission"], empty = all
   severities: string[]   // ["warning","critical"], empty = all
   namespaces: string[]   // empty = all
   policies: string[]     // empty = all
@@ -103,6 +104,7 @@ export interface RsyslogConfig {
   port: number
   protocol: 'udp' | 'tcp'
   facility: number        // 16=local0 … 23=local7
+  eventTypes: string[]   // ["security","admission"], empty = all
   severities: string[]   // ["warning","critical"], empty = all
   namespaces: string[]
   policies: string[]

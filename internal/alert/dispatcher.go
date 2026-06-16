@@ -157,6 +157,9 @@ func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
 	severity := "critical"
 	rules := d.store.EnabledRules()
 	for _, rule := range rules {
+		if !rule.MatchesEventType("admission") {
+			continue
+		}
 		if !rule.Matches(severity, evt.Namespace, evt.PolicyName) {
 			continue
 		}
@@ -258,6 +261,9 @@ func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
 
 	rules := d.store.EnabledRules()
 	for _, rule := range rules {
+		if !rule.MatchesEventType("security") {
+			continue
+		}
 		if !rule.Matches(severity, evt.Namespace, evt.PolicyName) {
 			continue
 		}

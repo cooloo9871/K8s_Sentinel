@@ -15,6 +15,7 @@ import { useToast } from '../layout/AppToaster'
 const EMPTY_RULE: Omit<AlertRule, 'id'> = {
   name: '',
   webhookURL: '',
+  eventTypes: [],
   severities: [],
   namespaces: [],
   policies: [],
@@ -39,6 +40,12 @@ function RuleForm({
       : [...form.severities, s])
   }
 
+  const toggleEventType = (t: string) => {
+    set('eventTypes', form.eventTypes.includes(t)
+      ? form.eventTypes.filter(x => x !== t)
+      : [...form.eventTypes, t])
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3">
@@ -58,7 +65,19 @@ function RuleForm({
           onChange={e => set('webhookURL', e.target.value)} placeholder="https://hooks.slack.com/..." />
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Severity</Label>
+        <Label className="text-xs">Event Type <span className="text-muted-foreground font-normal">(empty = all)</span></Label>
+        <div className="flex gap-4">
+          {(['security', 'admission'] as const).map(t => (
+            <label key={t} className="flex items-center gap-1.5 cursor-pointer select-none text-sm capitalize">
+              <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                checked={form.eventTypes.includes(t)} onChange={() => toggleEventType(t)} />
+              {t === 'security' ? 'Security Events' : 'Admission Events'}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs">Severity <span className="text-muted-foreground font-normal">(empty = all)</span></Label>
         <div className="flex gap-4">
           {(['warning', 'critical'] as const).map(s => (
             <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none text-sm capitalize">

@@ -15,6 +15,7 @@ type Config struct {
 	Port       int      `json:"port"`       // default 514
 	Protocol   string   `json:"protocol"`   // "udp" or "tcp"
 	Facility   int      `json:"facility"`   // syslog facility number (16=local0 … 23=local7)
+	EventTypes []string `json:"eventTypes"` // ["security","admission"], empty = all
 	Severities []string `json:"severities"` // ["warning","critical"], empty = all
 	Namespaces []string `json:"namespaces"` // empty = all
 	Policies   []string `json:"policies"`   // empty = all
@@ -130,6 +131,13 @@ func (s *Store) EnabledConfigs() []Config {
 		}
 	}
 	return out
+}
+
+func (c Config) MatchesEventType(eventType string) bool {
+	if len(c.EventTypes) == 0 {
+		return true
+	}
+	return contains(c.EventTypes, eventType)
 }
 
 func (c Config) Matches(severity, namespace, policy string) bool {

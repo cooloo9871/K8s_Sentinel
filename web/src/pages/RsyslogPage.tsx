@@ -17,7 +17,7 @@ import { useToast } from '../layout/AppToaster'
 const EMPTY: Omit<RsyslogConfig, 'id'> = {
   name: '', host: '', port: 514, protocol: 'udp',
   facility: 16, // fixed: local0
-  severities: [], namespaces: [], policies: [], enabled: true,
+  eventTypes: [], severities: [], namespaces: [], policies: [], enabled: true,
 }
 
 function ConfigForm({
@@ -36,6 +36,11 @@ function ConfigForm({
     set('severities', form.severities.includes(s)
       ? form.severities.filter(x => x !== s)
       : [...form.severities, s])
+
+  const toggleEventType = (t: string) =>
+    set('eventTypes', form.eventTypes.includes(t)
+      ? form.eventTypes.filter(x => x !== t)
+      : [...form.eventTypes, t])
 
   return (
     <div className="flex flex-col gap-3">
@@ -64,6 +69,18 @@ function ConfigForm({
             {(['udp', 'tcp'] as const).map(p => (
               <Button key={p} size="sm" variant={form.protocol === p ? 'default' : 'outline'}
                 className="h-7 text-xs uppercase" onClick={() => set('protocol', p)}>{p}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Event Type <span className="text-muted-foreground font-normal">(empty = all)</span></Label>
+          <div className="flex gap-3">
+            {(['security', 'admission'] as const).map(t => (
+              <label key={t} className="flex items-center gap-1.5 cursor-pointer text-xs">
+                <input type="checkbox" className="h-4 w-4 accent-primary cursor-pointer"
+                  checked={form.eventTypes.includes(t)} onChange={() => toggleEventType(t)} />
+                {t === 'security' ? 'Security' : 'Admission'}
+              </label>
             ))}
           </div>
         </div>

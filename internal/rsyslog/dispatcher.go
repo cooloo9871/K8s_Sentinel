@@ -71,6 +71,9 @@ func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
 		severity = "critical"
 	}
 	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.MatchesEventType("security") {
+			continue
+		}
 		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
 			continue
 		}
@@ -194,8 +197,10 @@ func (d *Dispatcher) runAdmission(ctx context.Context) {
 }
 
 func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
-	// Admission events are always denials → critical severity
 	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.MatchesEventType("admission") {
+			continue
+		}
 		if !cfg.Matches("critical", evt.Namespace, evt.PolicyName) {
 			continue
 		}
