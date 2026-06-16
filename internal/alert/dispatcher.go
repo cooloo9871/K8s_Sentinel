@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cooloo9871/sentinel/internal/admission"
 	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
@@ -101,24 +102,27 @@ func buildPayload(p *WebhookPayload) {
 
 // Dispatcher watches the Tetragon event stream and fires webhook alerts.
 type Dispatcher struct {
-	store  *Store
-	k8s    *k8s.Store
-	mu     sync.Mutex
-	last   map[string]time.Time // cooldown tracking
-	client *http.Client
+	store    *Store
+	k8s      *k8s.Store
+	admStore *admission.Store
+	mu       sync.Mutex
+	last     map[string]time.Time // cooldown tracking
+	client   *http.Client
 }
 
-func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+func NewDispatcher(store *Store, k8s *k8s.Store, admStore *admission.Store) *Dispatcher {
 	return &Dispatcher{
-		store:  store,
-		k8s:    k8s,
-		last:   make(map[string]time.Time),
-		client: &http.Client{Timeout: 10 * time.Second},
+		store:    store,
+		k8s:      k8s,
+		admStore: admStore,
+		last:     make(map[string]time.Time),
+		client:   &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
 // Run streams Tetragon events and dispatches alerts. Reconnects automatically.
 func (d *Dispatcher) Run(ctx context.Context) {
+	go d.runAdmission(ctx)
 	for {
 		if ctx.Err() != nil {
 			return
@@ -132,6 +136,101 @@ func (d *Dispatcher) Run(ctx context.Context) {
 			return
 		case <-time.After(10 * time.Second):
 		}
+	}
+}
+
+func (d *Dispatcher) runAdmission(ctx context.Context) {
+	ch, unsub := d.admStore.Subscribe()
+	defer unsub()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt := <-ch:
+			d.dispatchAdmission(evt)
+		}
+	}
+}
+
+func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
+	// Admission events are always denials → critical severity
+	severity := "critical"
+	rules := d.store.EnabledRules()
+	for _, rule := range rules {
+		if !rule.Matches(severity, evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		key := CooldownKey(rule.ID, evt.Namespace, evt.Name, "admission", evt.PolicyName)
+		d.mu.Lock()
+		skip := WithinCooldown(d.last, key, rule.CooldownMin)
+		if !skip {
+			d.last[key] = time.Now()
+		}
+		d.mu.Unlock()
+		if skip {
+			continue
+		}
+		go d.postAdmission(rule, evt)
+	}
+}
+
+func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event) {
+	lines := []string{
+		fmt.Sprintf("*[CRITICAL]* %s", rule.Name),
+		"*Rule:* Admission Event",
+	}
+	if evt.PolicyName != "" {
+		lines = append(lines, fmt.Sprintf("*Policy:* `%s`", evt.PolicyName))
+	}
+	if evt.BindingName != "" {
+		lines = append(lines, fmt.Sprintf("*Binding:* `%s`", evt.BindingName))
+	}
+	resource := evt.InvolvedName
+	if evt.Name != "" {
+		resource = evt.Name
+	}
+	ns := evt.Namespace
+	if ns == "" {
+		ns = "cluster-wide"
+	}
+	lines = append(lines, fmt.Sprintf("*Namespace:* `%s`", ns))
+	if resource != "" {
+		lines = append(lines, fmt.Sprintf("*Resource:* `%s`", resource))
+	}
+	if evt.Username != "" {
+		lines = append(lines, fmt.Sprintf("*Requestor:* `%s`", evt.Username))
+	}
+	if evt.Message != "" {
+		lines = append(lines, fmt.Sprintf("*Violation:* %s", evt.Message))
+	}
+	text := strings.Join(lines, "\n")
+	payload := map[string]interface{}{
+		"text": "",
+		"attachments": []map[string]interface{}{
+			{"color": "danger", "text": text, "mrkdwn_in": []string{"text"}},
+		},
+		"ruleName":  rule.Name,
+		"severity":  "critical",
+		"time":      evt.Time,
+		"namespace": evt.Namespace,
+		"policy":    evt.PolicyName,
+		"binding":   evt.BindingName,
+		"resource":  resource,
+		"requestor": evt.Username,
+		"message":   evt.Message,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	resp, err := d.client.Post(rule.WebhookURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("alert-dispatcher: admission POST %q error: %v", rule.WebhookURL, err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		log.Printf("alert-dispatcher: admission POST %q returned %d", rule.WebhookURL, resp.StatusCode)
 	}
 }
 

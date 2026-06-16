@@ -30,16 +30,16 @@ func main() {
 		log.Fatalf("jwt secret: %v", err)
 	}
 
+	admissionStore := admission.NewStore()
+	go admissionStore.Run(context.Background(), typedClient)
+
 	alerts := alert.NewStore("/data/sentinel/alerts.json")
-	dispatcher := alert.NewDispatcher(alerts, store)
+	dispatcher := alert.NewDispatcher(alerts, store, admissionStore)
 	go dispatcher.Run(context.Background())
 
 	rsyslogs := rsyslog.NewStore("/data/sentinel/rsyslog.json")
-	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store)
+	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store, admissionStore)
 	go rsyslogDispatch.Run(context.Background())
-
-	admissionStore := admission.NewStore()
-	go admissionStore.Run(context.Background(), typedClient)
 
 	cfg := handler.Config{
 		Store:           store,

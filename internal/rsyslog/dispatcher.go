@@ -9,26 +9,30 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cooloo9871/sentinel/internal/admission"
 	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
 // Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
 type Dispatcher struct {
-	store   *Store
-	k8s     *k8s.Store
-	mu      sync.Mutex
-	writers map[string]*gosyslog.Writer // keyed by config ID
+	store    *Store
+	k8s      *k8s.Store
+	admStore *admission.Store
+	mu       sync.Mutex
+	writers  map[string]*gosyslog.Writer // keyed by config ID
 }
 
-func NewDispatcher(store *Store, k8s *k8s.Store) *Dispatcher {
+func NewDispatcher(store *Store, k8s *k8s.Store, admStore *admission.Store) *Dispatcher {
 	return &Dispatcher{
-		store:   store,
-		k8s:     k8s,
-		writers: make(map[string]*gosyslog.Writer),
+		store:    store,
+		k8s:      k8s,
+		admStore: admStore,
+		writers:  make(map[string]*gosyslog.Writer),
 	}
 }
 
 func (d *Dispatcher) Run(ctx context.Context) {
+	go d.runAdmission(ctx)
 	for {
 		if ctx.Err() != nil {
 			return
@@ -172,6 +176,73 @@ func buildMessage(evt k8s.TetragonEvent, severity string) string {
 	}
 	if evt.NetSrc != "" {
 		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (d *Dispatcher) runAdmission(ctx context.Context) {
+	ch, unsub := d.admStore.Subscribe()
+	defer unsub()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt := <-ch:
+			d.dispatchAdmission(evt)
+		}
+	}
+}
+
+func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
+	// Admission events are always denials → critical severity
+	for _, cfg := range d.store.EnabledConfigs() {
+		if !cfg.Matches("critical", evt.Namespace, evt.PolicyName) {
+			continue
+		}
+		go d.sendAdmission(cfg, evt)
+	}
+}
+
+func (d *Dispatcher) sendAdmission(cfg Config, evt admission.Event) {
+	w, err := d.writer(cfg)
+	if err != nil {
+		log.Printf("rsyslog-dispatcher: admission connect %s:%d error: %v", cfg.Host, cfg.Port, err)
+		d.invalidate(cfg.ID)
+		return
+	}
+	msg := buildAdmissionMessage(evt)
+	if sendErr := w.Crit(msg); sendErr != nil {
+		log.Printf("rsyslog-dispatcher: admission send error: %v", sendErr)
+		d.invalidate(cfg.ID)
+	}
+}
+
+func buildAdmissionMessage(evt admission.Event) string {
+	parts := []string{
+		"severity=CRITICAL",
+		"type=admission",
+	}
+	if evt.Namespace != "" {
+		parts = append(parts, fmt.Sprintf("namespace=%s", evt.Namespace))
+	}
+	resource := evt.InvolvedName
+	if evt.Name != "" {
+		resource = evt.Name
+	}
+	if resource != "" {
+		parts = append(parts, fmt.Sprintf("resource=%s", resource))
+	}
+	if evt.PolicyName != "" {
+		parts = append(parts, fmt.Sprintf("policy=%s", evt.PolicyName))
+	}
+	if evt.BindingName != "" {
+		parts = append(parts, fmt.Sprintf("binding=%s", evt.BindingName))
+	}
+	if evt.Username != "" {
+		parts = append(parts, fmt.Sprintf("requestor=%s", evt.Username))
+	}
+	if evt.Message != "" {
+		parts = append(parts, fmt.Sprintf("violation=%s", evt.Message))
 	}
 	return strings.Join(parts, " ")
 }
