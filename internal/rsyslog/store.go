@@ -134,14 +134,11 @@ func (s *Store) EnabledConfigs() []Config {
 }
 
 func (c Config) MatchesEventType(eventType string) bool {
-	if len(c.EventTypes) == 0 {
-		return true
-	}
 	return contains(c.EventTypes, eventType)
 }
 
 func (c Config) Matches(severity, namespace, policy string) bool {
-	if len(c.Severities) > 0 && !contains(c.Severities, severity) {
+	if !contains(c.Severities, severity) {
 		return false
 	}
 	if len(c.Namespaces) > 0 && !contains(c.Namespaces, namespace) {

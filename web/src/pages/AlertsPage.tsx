@@ -15,8 +15,8 @@ import { useToast } from '../layout/AppToaster'
 const EMPTY_RULE: Omit<AlertRule, 'id'> = {
   name: '',
   webhookURL: '',
-  eventTypes: [],
-  severities: [],
+  eventTypes: ['security', 'admission'],
+  severities: ['warning', 'critical'],
   namespaces: [],
   policies: [],
   cooldownMin: 5,
@@ -65,7 +65,7 @@ function RuleForm({
           onChange={e => set('webhookURL', e.target.value)} placeholder="https://hooks.slack.com/..." />
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Event Type <span className="text-muted-foreground font-normal">(empty = all)</span></Label>
+        <Label className="text-xs">Event Type</Label>
         <div className="flex gap-4">
           {(['security', 'admission'] as const).map(t => (
             <label key={t} className="flex items-center gap-1.5 cursor-pointer select-none text-sm capitalize">
@@ -77,7 +77,7 @@ function RuleForm({
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Severity <span className="text-muted-foreground font-normal">(empty = all)</span></Label>
+        <Label className="text-xs">Severity</Label>
         <div className="flex gap-4">
           {(['warning', 'critical'] as const).map(s => (
             <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none text-sm capitalize">
@@ -190,7 +190,7 @@ export function AlertsPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Alerts</h4>
-          <p className="text-sm text-muted-foreground">Webhook notifications for Security Events.</p>
+          <p className="text-sm text-muted-foreground">Send webhook notifications for Security Events and Admission Events.</p>
         </div>
         {isAdmin && !showForm && (
           <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Rule</Button>

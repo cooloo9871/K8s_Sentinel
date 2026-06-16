@@ -17,7 +17,7 @@ import { useToast } from '../layout/AppToaster'
 const EMPTY: Omit<RsyslogConfig, 'id'> = {
   name: '', host: '', port: 514, protocol: 'udp',
   facility: 16, // fixed: local0
-  eventTypes: [], severities: [], namespaces: [], policies: [], enabled: true,
+  eventTypes: ['security', 'admission'], severities: ['warning', 'critical'], namespaces: [], policies: [], enabled: true,
 }
 
 function ConfigForm({
@@ -73,7 +73,7 @@ function ConfigForm({
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <Label className="text-xs">Event Type <span className="text-muted-foreground font-normal">(empty = all)</span></Label>
+          <Label className="text-xs">Event Type</Label>
           <div className="flex gap-3">
             {(['security', 'admission'] as const).map(t => (
               <label key={t} className="flex items-center gap-1.5 cursor-pointer text-xs">
@@ -196,7 +196,7 @@ export function RsyslogPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Syslog</h4>
-          <p className="text-sm text-muted-foreground">Forward Security Events to syslog servers.</p>
+          <p className="text-sm text-muted-foreground">Forward Security Events and Admission Events to syslog servers.</p>
         </div>
         {isAdmin && !showForm && (
           <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>

@@ -133,17 +133,16 @@ func (s *Store) EnabledRules() []AlertRule {
 	return out
 }
 
-// MatchesEventType returns true if the event type matches the rule's eventTypes filter.
+// MatchesEventType returns true if the event type is in the rule's eventTypes.
+// Empty list means nothing matches (user must explicitly select event types).
 func (r AlertRule) MatchesEventType(eventType string) bool {
-	if len(r.EventTypes) == 0 {
-		return true
-	}
 	return contains(r.EventTypes, eventType)
 }
 
 // Matches returns true if the event matches the rule's filters.
+// Empty severities means nothing matches (user must explicitly select severities).
 func (r AlertRule) Matches(severity, namespace, policy string) bool {
-	if len(r.Severities) > 0 && !contains(r.Severities, severity) {
+	if !contains(r.Severities, severity) {
 		return false
 	}
 	if len(r.Namespaces) > 0 && !contains(r.Namespaces, namespace) {
