@@ -143,8 +143,8 @@ export function AdmissionEventsPage() {
                       <TableCell className="text-sm">{formatTWTime(e.time)}</TableCell>
                       <TableCell>
                         {e.severity === 'critical'
-                          ? <Badge variant="destructive" className="text-[10px]">CRITICAL</Badge>
-                          : <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-600">WARNING</Badge>
+                          ? <Badge variant="destructive" className="text-[10px] font-medium">Critical</Badge>
+                          : <Badge className="text-[10px] font-medium bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">Warning</Badge>
                         }
                       </TableCell>
                       <TableCell>
