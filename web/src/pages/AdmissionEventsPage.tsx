@@ -143,12 +143,12 @@ export function AdmissionEventsPage() {
                       <TableCell className="text-sm">{formatTWTime(e.time)}</TableCell>
                       <TableCell>
                         {e.severity === 'critical'
-                          ? <Badge variant="destructive" className="text-[10px] font-medium">Critical</Badge>
-                          : <Badge className="text-[10px] font-medium bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">Warning</Badge>
+                          ? <Badge variant="destructive" className="font-medium">Critical</Badge>
+                          : <Badge className="font-medium bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">Warning</Badge>
                         }
                       </TableCell>
                       <TableCell>
-                        <Badge variant={e.source === 'audit' ? 'default' : 'secondary'} className="text-[10px]">
+                        <Badge variant={e.source === 'audit' ? 'default' : 'secondary'}>
                           {e.source === 'audit' ? 'audit log' : 'k8s event'}
                         </Badge>
                       </TableCell>
@@ -169,11 +169,11 @@ export function AdmissionEventsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="destructive" className="font-mono text-[10px] max-w-[180px] truncate block" title={e.policyName}>
+                        <Badge variant="destructive" className="font-mono text-xs max-w-[180px] truncate block" title={e.policyName}>
                           {e.policyName || '—'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{e.username || '—'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{e.username || '—'}</TableCell>
                     </TableRow>
                     {expanded.has(e.id) && (
                       <TableRow key={`detail-${e.id}`} className="bg-muted/30 hover:bg-muted/30">
