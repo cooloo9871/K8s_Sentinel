@@ -149,7 +149,7 @@ export function PolicyListPage() {
       {/* Page header */}
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h4 className="text-xl font-semibold">TracingPolicy</h4>
+          <h4 className="text-xl font-semibold">Tracing Policy</h4>
           <p className="text-sm text-muted-foreground">Manage Cilium tracing policies</p>
         </div>
         {isAdmin && <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>}
