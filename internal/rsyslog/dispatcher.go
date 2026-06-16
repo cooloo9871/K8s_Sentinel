@@ -273,10 +273,10 @@ func buildAdmissionMessage(evt admission.Event, severity string) string {
 		parts = append(parts, fmt.Sprintf("action=%s", evt.Operation))
 	}
 	if evt.Username != "" {
-		parts = append(parts, fmt.Sprintf("requestor=%s", evt.Username))
+		parts = append(parts, fmt.Sprintf("requestor=%q", evt.Username))
 	}
 	if evt.Message != "" {
-		parts = append(parts, fmt.Sprintf("violation=%s", evt.Message))
+		parts = append(parts, fmt.Sprintf("violation=%q", evt.Message))
 	}
 	return strings.Join(parts, " ")
 }

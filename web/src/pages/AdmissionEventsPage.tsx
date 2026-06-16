@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -35,7 +35,8 @@ export function AdmissionEventsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const esRef = useRef<EventSource | null>(null)
 
-  const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
+  const sourceVisible = sourceFilter === 'all' ? events : events.filter(e => e.source === sourceFilter)
+  const namespaces = [...new Set(sourceVisible.map(e => e.namespace).filter(Boolean))].sort()
 
   useEffect(() => {
     const es = new EventSource('/api/admission-events/stream')
@@ -131,13 +132,19 @@ export function AdmissionEventsPage() {
         <CardContent className="p-0">
           {filtered.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
-              <p>No admission violation events.</p>
-              <p className="text-xs max-w-lg">
-                Only controller-managed resource denials (e.g. Pods) appear without audit log.
-                For complete coverage including direct <code className="font-mono">kubectl apply</code> denials,
-                configure the kube-apiserver audit webhook to POST to{' '}
-                <code className="font-mono">/api/admission-events/webhook</code>.
-              </p>
+              {events.length === 0 ? (
+                <>
+                  <p>No admission violation events.</p>
+                  <p className="text-xs max-w-lg">
+                    Only controller-managed resource denials (e.g. Pods) appear without audit log.
+                    For complete coverage including direct <code className="font-mono">kubectl apply</code> denials,
+                    configure the kube-apiserver audit webhook to POST to{' '}
+                    <code className="font-mono">/api/admission-events/webhook</code>.
+                  </p>
+                </>
+              ) : (
+                <p>No events match the current filters.</p>
+              )}
             </div>
           ) : (
             <Table>
@@ -154,9 +161,8 @@ export function AdmissionEventsPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map(e => (
-                  <>
+                  <Fragment key={e.id}>
                     <TableRow
-                      key={e.id}
                       className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
                       onClick={() => toggle(e.id)}
                     >
@@ -206,7 +212,7 @@ export function AdmissionEventsPage() {
                                 <span className="shrink-0 text-muted-foreground">Object:</span>
                                 <span className="font-mono">
                                   {e.source === 'audit'
-                                    ? `${e.resource}/${e.name}`
+                                    ? `${e.resource}/${e.name || '—'}`
                                     : `${e.involvedKind?.toLowerCase()}s/${e.involvedName}`}
                                 </span>
                               </div>
@@ -243,7 +249,7 @@ export function AdmissionEventsPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

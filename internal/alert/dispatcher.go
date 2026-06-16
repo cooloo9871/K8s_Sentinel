@@ -165,7 +165,11 @@ func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
 		if !rule.Matches(severity, evt.Namespace, evt.PolicyName) {
 			continue
 		}
-		key := CooldownKey(rule.ID, evt.Namespace, evt.Name, "admission", evt.PolicyName)
+		evtName := evt.Name
+		if evtName == "" {
+			evtName = evt.InvolvedName
+		}
+		key := CooldownKey(rule.ID, evt.Namespace, evtName, "admission", evt.PolicyName)
 		d.mu.Lock()
 		skip := WithinCooldown(d.last, key, rule.CooldownMin)
 		if !skip {
@@ -230,9 +234,11 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity
 		"policy":    evt.PolicyName,
 		"binding":   evt.BindingName,
 		"resource":  resource,
-		"action":    evt.Operation,
 		"requestor": evt.Username,
 		"message":   evt.Message,
+	}
+	if evt.Operation != "" {
+		payload["action"] = evt.Operation
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
