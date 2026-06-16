@@ -178,14 +178,12 @@ export function AdmissionEventsPage() {
                       <TableCell className="text-sm">
                         {e.source === 'audit' ? (
                           <>
-                            <span className="text-muted-foreground text-xs capitalize">{e.operation} </span>
                             <span className="text-muted-foreground text-xs">{e.resource}</span>
                             <span className="text-muted-foreground text-xs"> / </span>
                             <span className="font-medium">{e.name || '—'}</span>
                           </>
                         ) : (
                           <>
-                            <span className="text-muted-foreground text-xs capitalize">{e.operation || 'create'} </span>
                             <span className="text-muted-foreground text-xs">{e.involvedKind?.toLowerCase() || ''}s</span>
                             <span className="text-muted-foreground text-xs"> / </span>
                             <span className="font-medium">{e.involvedName || '—'}</span>
