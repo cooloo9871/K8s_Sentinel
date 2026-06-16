@@ -103,6 +103,42 @@ func (s *Store) load() {
 	if len(s.events) > maxEvents {
 		s.events = s.events[:maxEvents]
 	}
+	// Ensure newest-first order after loading
+	sortEventsDesc(s.events)
+}
+
+// sortEventsDesc sorts events newest-first in place.
+func sortEventsDesc(events []Event) {
+	for i := 1; i < len(events); i++ {
+		for j := i; j > 0; j-- {
+			if timeDiffSecs(events[j].Time, events[j-1].Time) > 0 {
+				// events[j] is newer than events[j-1], swap
+				events[j], events[j-1] = events[j-1], events[j]
+			} else {
+				break
+			}
+		}
+	}
+}
+
+// insertSorted inserts evt into s.events maintaining newest-first order.
+func (s *Store) insertSorted(evt Event) {
+	evtT, err := time.Parse(time.RFC3339, evt.Time)
+	if err != nil {
+		s.events = append([]Event{evt}, s.events...)
+		return
+	}
+	for i, existing := range s.events {
+		exT, err2 := time.Parse(time.RFC3339, existing.Time)
+		if err2 != nil || !evtT.Before(exT) {
+			// Insert at position i
+			s.events = append(s.events, Event{})
+			copy(s.events[i+1:], s.events[i:])
+			s.events[i] = evt
+			return
+		}
+	}
+	s.events = append(s.events, evt)
 }
 
 func (s *Store) flush() {
@@ -238,7 +274,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 		}
 	}
 
-	s.events = append([]Event{evt}, s.events...)
+	s.insertSorted(evt)
 	if len(s.events) > maxEvents {
 		for _, old := range s.events[maxEvents:] {
 			delete(s.seen, old.ID)
@@ -277,7 +313,7 @@ func (s *Store) Add(e Event) {
 		}
 	}
 	s.seen[e.ID] = struct{}{}
-	s.events = append([]Event{e}, s.events...)
+	s.insertSorted(e)
 	if len(s.events) > maxEvents {
 		for _, old := range s.events[maxEvents:] {
 			delete(s.seen, old.ID)
