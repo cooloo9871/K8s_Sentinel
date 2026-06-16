@@ -173,6 +173,7 @@ export interface AdmissionEvent {
   policyName: string
   bindingName: string
   message: string
+  severity: 'critical' | 'warning'
   source: 'audit' | 'k8s-event'
   rawMessage?: string
 }

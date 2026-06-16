@@ -153,8 +153,10 @@ func (d *Dispatcher) runAdmission(ctx context.Context) {
 }
 
 func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
-	// Admission events are always denials → critical severity
-	severity := "critical"
+	severity := evt.Severity
+	if severity == "" {
+		severity = "critical"
+	}
 	rules := d.store.EnabledRules()
 	for _, rule := range rules {
 		if !rule.MatchesEventType("admission") {
@@ -179,7 +181,7 @@ func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
 
 func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event) {
 	lines := []string{
-		fmt.Sprintf("*[CRITICAL]* %s", rule.Name),
+		fmt.Sprintf("*[%s]* %s", strings.ToUpper(severity), rule.Name),
 		"*Rule:* Admission Event",
 	}
 	if evt.PolicyName != "" {
@@ -206,14 +208,18 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event) {
 	if evt.Message != "" {
 		lines = append(lines, fmt.Sprintf("*Violation:* %s", evt.Message))
 	}
+	slackColor := "danger"
+	if severity == "warning" {
+		slackColor = "warning"
+	}
 	text := strings.Join(lines, "\n")
 	payload := map[string]interface{}{
 		"text": "",
 		"attachments": []map[string]interface{}{
-			{"color": "danger", "text": text, "mrkdwn_in": []string{"text"}},
+			{"color": slackColor, "text": text, "mrkdwn_in": []string{"text"}},
 		},
 		"ruleName":  rule.Name,
-		"severity":  "critical",
+		"severity":  severity,
 		"time":      evt.Time,
 		"namespace": evt.Namespace,
 		"policy":    evt.PolicyName,

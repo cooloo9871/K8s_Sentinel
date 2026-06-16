@@ -67,6 +67,7 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 					PolicyName:  policy,
 					BindingName: binding,
 					Message:     violation,
+					Severity:    "critical",
 					Source:      "audit",
 				})
 				continue
@@ -100,6 +101,7 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 							PolicyName:  v.Policy,
 							BindingName: v.Binding,
 							Message:     vmsg,
+							Severity:    "warning",
 							Source:      "audit",
 						})
 					}

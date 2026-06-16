@@ -27,7 +27,8 @@ type Event struct {
 	PolicyName   string `json:"policyName"`
 	BindingName  string `json:"bindingName"`
 	Message      string `json:"message"`
-	Source       string `json:"source"` // "webhook" or "k8s-event"
+	Severity     string `json:"severity"` // "critical" (Deny) or "warning" (Audit/Warn)
+	Source       string `json:"source"`   // "audit" or "k8s-event"
 	RawMessage   string `json:"rawMessage,omitempty"`
 }
 
@@ -147,6 +148,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 		PolicyName:   policy,
 		BindingName:  binding,
 		Message:      violation,
+		Severity:     "critical",
 		RawMessage:   e.Message,
 		Source:       "k8s-event",
 	}

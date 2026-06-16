@@ -197,34 +197,44 @@ func (d *Dispatcher) runAdmission(ctx context.Context) {
 }
 
 func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
+	severity := evt.Severity
+	if severity == "" {
+		severity = "critical"
+	}
 	for _, cfg := range d.store.EnabledConfigs() {
 		if !cfg.MatchesEventType("admission") {
 			continue
 		}
-		if !cfg.Matches("critical", evt.Namespace, evt.PolicyName) {
+		if !cfg.Matches(severity, evt.Namespace, evt.PolicyName) {
 			continue
 		}
-		go d.sendAdmission(cfg, evt)
+		go d.sendAdmission(cfg, evt, severity)
 	}
 }
 
-func (d *Dispatcher) sendAdmission(cfg Config, evt admission.Event) {
+func (d *Dispatcher) sendAdmission(cfg Config, evt admission.Event, severity string) {
 	w, err := d.writer(cfg)
 	if err != nil {
 		log.Printf("rsyslog-dispatcher: admission connect %s:%d error: %v", cfg.Host, cfg.Port, err)
 		d.invalidate(cfg.ID)
 		return
 	}
-	msg := buildAdmissionMessage(evt)
-	if sendErr := w.Crit(msg); sendErr != nil {
+	msg := buildAdmissionMessage(evt, severity)
+	var sendErr error
+	if severity == "warning" {
+		sendErr = w.Warning(msg)
+	} else {
+		sendErr = w.Crit(msg)
+	}
+	if sendErr != nil {
 		log.Printf("rsyslog-dispatcher: admission send error: %v", sendErr)
 		d.invalidate(cfg.ID)
 	}
 }
 
-func buildAdmissionMessage(evt admission.Event) string {
+func buildAdmissionMessage(evt admission.Event, severity string) string {
 	parts := []string{
-		"severity=CRITICAL",
+		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
 		"type=admission",
 	}
 	if evt.Namespace != "" {

@@ -105,6 +105,7 @@ export function AdmissionEventsPage() {
                 <TableRow>
                   <TableHead className="w-8" />
                   <TableHead>Time</TableHead>
+                  <TableHead>Severity</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Namespace</TableHead>
                   <TableHead>Resource / Name</TableHead>
@@ -124,6 +125,11 @@ export function AdmissionEventsPage() {
                         {expanded.has(e.id) ? '▾' : '▸'}
                       </TableCell>
                       <TableCell className="text-sm">{formatTWTime(e.time)}</TableCell>
+                      <TableCell>
+                        <Badge variant={e.severity === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">
+                          {e.severity || 'critical'}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={e.source === 'audit' ? 'default' : 'secondary'} className="text-[10px]">
                           {e.source === 'audit' ? 'audit log' : 'k8s event'}
