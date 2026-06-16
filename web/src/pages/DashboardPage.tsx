@@ -141,7 +141,7 @@ export function DashboardPage() {
           icon={<IconAlertTriangle size={26} />}
           label="Security Events"
           value={secEvents.length}
-          sub={`W: ${secWarning} / C: ${secCritical}`}
+          sub={`Critical: ${secCritical} / Warning: ${secWarning}`}
           accent="#f59e0b"
         />
         <StatCard
