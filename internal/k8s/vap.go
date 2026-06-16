@@ -88,6 +88,10 @@ func (s *Store) ApplyVAPRaw(ctx context.Context, rawYAML, createdBy string) erro
 	}
 	setCreatedByAnnotation(obj, createdBy)
 	name := obj.GetName()
+	// Strip server-managed fields before create to avoid "resourceVersion should not be set" error
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	obj.SetManagedFields(nil)
 	_, err = s.client.Resource(vapGVR).Create(ctx, obj, metav1.CreateOptions{})
 	if err == nil {
 		return nil
@@ -148,6 +152,9 @@ func (s *Store) ApplyVAPBindingRaw(ctx context.Context, rawYAML, createdBy strin
 	}
 	setCreatedByAnnotation(obj, createdBy)
 	name := obj.GetName()
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	obj.SetManagedFields(nil)
 	_, err = s.client.Resource(vapBindingGVR).Create(ctx, obj, metav1.CreateOptions{})
 	if err == nil {
 		return nil
