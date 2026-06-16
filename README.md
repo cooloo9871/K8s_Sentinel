@@ -45,6 +45,7 @@
 - **Critical**（`Deny` action，請求被阻擋）/ **Warning**（`Audit` action，請求放行但記錄）
 - 來源：K8s Warning Events（controller 資源，免設定）或 **kube-apiserver audit webhook**（完整覆蓋，需設定）
 - Audit webhook 設定：`POST /api/admission-events/webhook`（kube-apiserver 直接呼叫）
+- **30 秒去重**：相同 policy + namespace + 物件在 30 秒內只顯示一筆，count 累加，避免 controller retry 洗版
 - 最多保留 500 筆，**自動持久化**至 `/data/sentinel/admission-events.json`（掛 PV 後永存，重啟不消失）
 
 ### Cluster — 叢集資訊
