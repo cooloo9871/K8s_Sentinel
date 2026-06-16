@@ -31,7 +31,7 @@ export function AdmissionEventsPage() {
   const [search, setSearch] = useState('')
   const [nsFilter, setNsFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('audit')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const esRef = useRef<EventSource | null>(null)
 
