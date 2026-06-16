@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   IconShieldCheck,
-  IconAlertTriangle,
+  IconShieldLock,
+  IconShieldX,
+  IconActivity,
+  IconLock,
   IconArrowRight,
   IconRefresh,
 } from '@tabler/icons-react'
@@ -131,28 +134,28 @@ export function DashboardPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
-          icon={<IconShieldCheck size={26} />}
+          icon={<IconShieldLock size={26} />}
           label="Tracing Policy — Protect"
           value={protectCount}
           sub={`${policies.length - protectCount} monitoring`}
           accent="#dc3545"
         />
         <StatCard
-          icon={<IconAlertTriangle size={26} />}
+          icon={<IconActivity size={26} />}
           label="Security Events"
           value={secEvents.length}
           sub={`Critical: ${secCritical} / Warning: ${secWarning}`}
           accent="#f59e0b"
         />
         <StatCard
-          icon={<IconShieldCheck size={26} />}
+          icon={<IconShieldX size={26} />}
           label="Admission Events"
           value={admissionEvents.length}
           sub={`Critical: ${admCritical} / Warning: ${admWarning}`}
           accent="#8b5cf6"
         />
         <StatCard
-          icon={<IconAlertTriangle size={26} />}
+          icon={<IconLock size={26} />}
           label="Global Protect Mode"
           value={mode === 'Protect' ? 'ON' : mode === 'Mixed' ? 'MIXED' : 'OFF'}
           sub={mode === 'Protect' ? 'Actively blocking violations' : mode === 'Mixed' ? 'Policies have mixed modes' : 'Monitoring only'}
