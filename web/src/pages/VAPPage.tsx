@@ -113,6 +113,7 @@ export function VAPPage() {
           </div>
         </div>
         <YamlEditor
+          key={editor.name ?? 'new'}
           initialValue={editorYaml}
           readOnly={!isAdmin}
           onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }}
