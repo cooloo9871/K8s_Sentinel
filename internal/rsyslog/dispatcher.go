@@ -149,9 +149,20 @@ func (d *Dispatcher) TestSend(cfg Config) error {
 	}
 }
 
+func securityRuleType(fn string) string {
+	if strings.Contains(fn, "tcp_connect") {
+		return "network"
+	}
+	if strings.Contains(fn, "security_file") || strings.Contains(fn, "security_path") {
+		return "file"
+	}
+	return "process"
+}
+
 func buildMessage(evt k8s.TetragonEvent, severity string) string {
 	parts := []string{
 		fmt.Sprintf("severity=%s", strings.ToUpper(severity)),
+		fmt.Sprintf("type=%s", securityRuleType(evt.Function)),
 		fmt.Sprintf("namespace=%s", evt.Namespace),
 		fmt.Sprintf("pod=%s", evt.Pod),
 	}
