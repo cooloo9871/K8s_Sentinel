@@ -109,7 +109,7 @@ export function AdmissionEventsPage() {
                   <TableHead>Namespace</TableHead>
                   <TableHead>Resource / Name</TableHead>
                   <TableHead>Policy</TableHead>
-                  <TableHead>User</TableHead>
+                  <TableHead>Requestor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
