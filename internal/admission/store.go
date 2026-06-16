@@ -211,6 +211,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	policy, binding, violation := ParseVAPMessage(e.Message)
 	evt := Event{
 		ID:           uid,
+		Count:        1,
 		Time:         t,
 		Namespace:    e.InvolvedObject.Namespace,
 		InvolvedKind: e.InvolvedObject.Kind,
@@ -222,6 +223,21 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 		RawMessage:   e.Message,
 		Source:       "k8s-event",
 	}
+
+	// Content-based dedup within 30s (K8s may create new UIDs for the same retry)
+	for i, existing := range s.events {
+		if sameViolation(existing, evt) && timeDiffSecs(evt.Time, existing.Time) < dedupWindowSecs {
+			updated := existing
+			updated.Count++
+			updated.Time = evt.Time
+			s.events = append([]Event{updated}, append(s.events[:i], s.events[i+1:]...)...)
+			s.flush()
+			s.mu.Unlock()
+			s.broadcast(updated)
+			return
+		}
+	}
+
 	s.events = append([]Event{evt}, s.events...)
 	if len(s.events) > maxEvents {
 		for _, old := range s.events[maxEvents:] {
