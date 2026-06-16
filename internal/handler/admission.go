@@ -23,8 +23,9 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 
 		var list struct {
 			Items []struct {
-				AuditID                  string `json:"auditID"`
-				RequestReceivedTimestamp string `json:"requestReceivedTimestamp"`
+				AuditID                  string            `json:"auditID"`
+				RequestReceivedTimestamp string            `json:"requestReceivedTimestamp"`
+				Annotations              map[string]string `json:"annotations"`
 				User                     struct {
 					Username string `json:"username"`
 				} `json:"user"`
@@ -46,28 +47,64 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 		}
 
 		for _, item := range list.Items {
-			msg := item.ResponseStatus.Message
-			if !strings.Contains(msg, "ValidatingAdmissionPolicy") {
-				continue
-			}
-			policy, binding, violation := admission.ParseVAPMessage(msg)
 			t := item.RequestReceivedTimestamp
 			if t == "" {
 				t = time.Now().UTC().Format(time.RFC3339)
 			}
-			store.Add(admission.Event{
-				ID:          fmt.Sprintf("%s-%d", item.AuditID, time.Now().UnixNano()),
-				Time:        t,
-				Namespace:   item.ObjectRef.Namespace,
-				Resource:    item.ObjectRef.Resource,
-				Name:        item.ObjectRef.Name,
-				Operation:   item.Verb,
-				Username:    item.User.Username,
-				PolicyName:  policy,
-				BindingName: binding,
-				Message:     violation,
-				Source:      "audit",
-			})
+
+			// Case 1: Deny action — violation in responseStatus.message
+			msg := item.ResponseStatus.Message
+			if strings.Contains(msg, "ValidatingAdmissionPolicy") {
+				policy, binding, violation := admission.ParseVAPMessage(msg)
+				store.Add(admission.Event{
+					ID:          fmt.Sprintf("%s-deny-%d", item.AuditID, time.Now().UnixNano()),
+					Time:        t,
+					Namespace:   item.ObjectRef.Namespace,
+					Resource:    item.ObjectRef.Resource,
+					Name:        item.ObjectRef.Name,
+					Operation:   item.Verb,
+					Username:    item.User.Username,
+					PolicyName:  policy,
+					BindingName: binding,
+					Message:     violation,
+					Source:      "audit",
+				})
+				continue
+			}
+
+			// Case 2: Audit action — violation in annotations
+			const vapAnnotationKey = "validation.policy.admission.k8s.io/validation_failure"
+			if annVal, ok := item.Annotations[vapAnnotationKey]; ok {
+				var violations []struct {
+					Policy  string `json:"policy"`
+					Binding string `json:"binding"`
+					Validation struct {
+						Message    string `json:"message"`
+						Expression string `json:"expression"`
+					} `json:"validation"`
+				}
+				if err := json.Unmarshal([]byte(annVal), &violations); err == nil {
+					for i, v := range violations {
+						vmsg := v.Validation.Message
+						if vmsg == "" {
+							vmsg = fmt.Sprintf("failed expression: %s", v.Validation.Expression)
+						}
+						store.Add(admission.Event{
+							ID:          fmt.Sprintf("%s-audit-%d-%d", item.AuditID, i, time.Now().UnixNano()),
+							Time:        t,
+							Namespace:   item.ObjectRef.Namespace,
+							Resource:    item.ObjectRef.Resource,
+							Name:        item.ObjectRef.Name,
+							Operation:   item.Verb,
+							Username:    item.User.Username,
+							PolicyName:  v.Policy,
+							BindingName: v.Binding,
+							Message:     vmsg,
+							Source:      "audit",
+						})
+					}
+				}
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	}
