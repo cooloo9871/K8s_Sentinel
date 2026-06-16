@@ -12,6 +12,18 @@ import {
 } from '@/components/ui/select'
 import { formatTWTime } from '../utils/time'
 
+function RelativeTime({ iso }: { iso: string }) {
+  if (!iso) return <span className="text-muted-foreground">—</span>
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
+  const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+  const label = diff < 1 ? 'just now'
+    : diff < 60 ? `${diff}m ago`
+    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
+    : `${Math.floor(diff / 1440)}d ago`
+  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
+}
+
 type SeverityFilter = 'all' | 'warning' | 'critical'
 
 export function AdmissionEventsPage() {
@@ -120,13 +132,13 @@ export function AdmissionEventsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
-                  <TableHead>Time</TableHead>
                   <TableHead>Severity</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Namespace</TableHead>
                   <TableHead>Resource / Name</TableHead>
                   <TableHead>Policy</TableHead>
                   <TableHead>Requestor</TableHead>
+                  <TableHead>Time</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -140,7 +152,6 @@ export function AdmissionEventsPage() {
                       <TableCell className="py-2 pl-3 pr-0 text-muted-foreground text-xs">
                         {expanded.has(e.id) ? '▾' : '▸'}
                       </TableCell>
-                      <TableCell className="text-sm">{formatTWTime(e.time)}</TableCell>
                       <TableCell>
                         {e.severity === 'critical'
                           ? <Badge variant="destructive" className="font-medium">Critical</Badge>
@@ -169,15 +180,16 @@ export function AdmissionEventsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="destructive" className="font-mono text-xs max-w-[180px] truncate block" title={e.policyName}>
+                        <Badge variant="outline" className="font-mono text-xs max-w-[180px] truncate block" title={e.policyName}>
                           {e.policyName || '—'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{e.username || '—'}</TableCell>
+                      <TableCell><RelativeTime iso={e.time} /></TableCell>
                     </TableRow>
                     {expanded.has(e.id) && (
                       <TableRow key={`detail-${e.id}`} className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={7} className="py-3 pl-10 pr-6">
+                        <TableCell colSpan={8} className="py-3 pl-10 pr-6">
                           <div className="flex flex-col gap-1 text-xs">
                             {(e.resource || e.involvedKind) && (
                               <div className="flex gap-1.5">
