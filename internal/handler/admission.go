@@ -52,6 +52,12 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 				t = time.Now().UTC().Format(time.RFC3339)
 			}
 
+			// Normalize patch → update for display
+			verb := item.Verb
+			if verb == "patch" {
+				verb = "update"
+			}
+
 			// Case 1: Deny action — violation in responseStatus.message
 			msg := item.ResponseStatus.Message
 			if strings.Contains(msg, "ValidatingAdmissionPolicy") {
@@ -62,7 +68,7 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 					Namespace:   item.ObjectRef.Namespace,
 					Resource:    item.ObjectRef.Resource,
 					Name:        item.ObjectRef.Name,
-					Operation:   item.Verb,
+					Operation:   verb,
 					Username:    item.User.Username,
 					PolicyName:  policy,
 					BindingName: binding,
@@ -92,7 +98,7 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 							Namespace:   item.ObjectRef.Namespace,
 							Resource:    item.ObjectRef.Resource,
 							Name:        item.ObjectRef.Name,
-							Operation:   item.Verb,
+							Operation:   verb,
 							Username:    item.User.Username,
 							PolicyName:  v.Policy,
 							BindingName: v.Binding,

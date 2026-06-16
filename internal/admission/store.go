@@ -251,6 +251,7 @@ func (s *Store) Add(e Event) {
 			updated := existing
 			updated.Count++
 			updated.Time = e.Time
+			updated.Operation = e.Operation // update to latest verb
 			s.events = append([]Event{updated}, append(s.events[:i], s.events[i+1:]...)...)
 			s.seen[e.ID] = struct{}{}
 			s.flush()
