@@ -24,12 +24,14 @@ function RelativeTime({ iso }: { iso: string }) {
 }
 
 type SeverityFilter = 'all' | 'warning' | 'critical'
+type SourceFilter = 'all' | 'audit' | 'k8s-event'
 
 export function AdmissionEventsPage() {
   const [events, setEvents] = useState<AdmissionEvent[]>([])
   const [search, setSearch] = useState('')
   const [nsFilter, setNsFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const esRef = useRef<EventSource | null>(null)
 
@@ -60,6 +62,7 @@ export function AdmissionEventsPage() {
   const filtered = events.filter(e => {
     if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
     if (severityFilter !== 'all' && e.severity !== severityFilter) return false
+    if (sourceFilter !== 'all' && e.source !== sourceFilter) return false
     if (search) {
       const q = search.toLowerCase()
       if (!e.involvedName.toLowerCase().includes(q) &&
@@ -104,6 +107,18 @@ export function AdmissionEventsPage() {
               <SelectItem value="all">All Events</SelectItem>
               <SelectItem value="warning">Warning Only</SelectItem>
               <SelectItem value="critical">Critical Only</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select value={sourceFilter} onValueChange={v => setSourceFilter(v as SourceFilter)}>
+          <SelectTrigger className="h-8 w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="audit">Audit Log</SelectItem>
+              <SelectItem value="k8s-event">K8s Event</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
