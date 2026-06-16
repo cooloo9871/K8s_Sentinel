@@ -62,6 +62,12 @@ export function AdmissionEventsPage() {
           <p className="text-sm text-muted-foreground">
             ValidatingAdmissionPolicy violations captured from Kubernetes Warning events.
           </p>
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            Only controller-managed resource denials (e.g. Pods) appear without audit log.
+            For complete coverage including direct <code className="font-mono">kubectl apply</code> denials,
+            configure the kube-apiserver audit webhook to POST to{' '}
+            <code className="font-mono">/api/admission-events/webhook</code>.
+          </p>
         </div>
         <Button variant="ghost" size="sm" className="text-xs text-muted-foreground"
           onClick={() => setEvents([])}>Clear</Button>
