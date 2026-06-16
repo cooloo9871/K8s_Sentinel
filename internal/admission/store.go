@@ -107,17 +107,25 @@ func (s *Store) load() {
 	sortEventsDesc(s.events)
 }
 
-// sortEventsDesc sorts events newest-first in place.
+// sortEventsDesc sorts events newest-first in place using Go sort.
 func sortEventsDesc(events []Event) {
+	// Simple insertion sort (list is typically nearly sorted)
 	for i := 1; i < len(events); i++ {
-		for j := i; j > 0; j-- {
-			if timeDiffSecs(events[j].Time, events[j-1].Time) > 0 {
-				// events[j] is newer than events[j-1], swap
-				events[j], events[j-1] = events[j-1], events[j]
-			} else {
+		key := events[i]
+		keyT, err := time.Parse(time.RFC3339, key.Time)
+		if err != nil {
+			continue
+		}
+		j := i - 1
+		for j >= 0 {
+			jT, err2 := time.Parse(time.RFC3339, events[j].Time)
+			if err2 != nil || !keyT.After(jT) {
 				break
 			}
+			events[j+1] = events[j]
+			j--
 		}
+		events[j+1] = key
 	}
 }
 
@@ -266,7 +274,9 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 			updated := existing
 			updated.Count++
 			updated.Time = evt.Time
-			s.events = append([]Event{updated}, append(s.events[:i], s.events[i+1:]...)...)
+			// Remove from current position, then re-insert at sorted position
+			s.events = append(s.events[:i], s.events[i+1:]...)
+			s.insertSorted(updated)
 			s.flush()
 			s.mu.Unlock()
 			s.broadcast(updated)
@@ -304,7 +314,9 @@ func (s *Store) Add(e Event) {
 			updated.Count++
 			updated.Time = e.Time
 			updated.Operation = e.Operation // update to latest verb
-			s.events = append([]Event{updated}, append(s.events[:i], s.events[i+1:]...)...)
+			// Remove from current position, then re-insert at sorted position
+			s.events = append(s.events[:i], s.events[i+1:]...)
+			s.insertSorted(updated)
 			s.seen[e.ID] = struct{}{}
 			s.flush()
 			s.mu.Unlock()
