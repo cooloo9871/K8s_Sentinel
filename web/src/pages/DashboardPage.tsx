@@ -91,7 +91,6 @@ export function DashboardPage() {
 
   useEffect(load, [])
 
-  const clusterCount = policies.filter((p) => p.scope === 'cluster').length
   const protectCount = policies.filter((p) => p.mode === 'Protect').length
   const recent = policies.slice(0, 8)
   const secWarning = secEvents.filter(e => e.severity === 'warning').length
@@ -120,7 +119,7 @@ export function DashboardPage() {
         <div>
           <h2 className="text-2xl font-bold">Overview</h2>
           <p className="mt-1 text-base text-muted-foreground">
-            Cilium TracingPolicy management console
+            Kubernetes security management — Tetragon runtime monitoring &amp; Admission control
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load}>
@@ -133,14 +132,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           icon={<IconShieldCheck size={26} />}
-          label="Total Policies"
-          value={policies.length}
-          sub={`${clusterCount} cluster-scoped`}
-          accent="#2d7dd2"
-        />
-        <StatCard
-          icon={<IconShieldCheck size={26} />}
-          label="Protect Mode"
+          label="Tracing Policy — Protect"
           value={protectCount}
           sub={`${policies.length - protectCount} monitoring`}
           accent="#dc3545"
