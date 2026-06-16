@@ -137,7 +137,6 @@ export function AdmissionEventsPage() {
                   <TableHead>Namespace</TableHead>
                   <TableHead>Resource / Name</TableHead>
                   <TableHead>Policy</TableHead>
-                  <TableHead>Requestor</TableHead>
                   <TableHead>Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -168,14 +167,16 @@ export function AdmissionEventsPage() {
                         {e.source === 'audit' ? (
                           <>
                             <span className="text-muted-foreground text-xs capitalize">{e.operation} </span>
-                            <span className="text-muted-foreground text-xs">{e.resource} </span>
-                            <span className="font-medium">({e.name || '—'})</span>
+                            <span className="text-muted-foreground text-xs">{e.resource}</span>
+                            <span className="text-muted-foreground text-xs"> / </span>
+                            <span className="font-medium">{e.name || '—'}</span>
                           </>
                         ) : (
                           <>
                             <span className="text-muted-foreground text-xs capitalize">{e.operation || 'create'} </span>
-                            <span className="text-muted-foreground text-xs">{e.involvedKind?.toLowerCase() || ''}s </span>
-                            <span className="font-medium">({e.involvedName || '—'})</span>
+                            <span className="text-muted-foreground text-xs">{e.involvedKind?.toLowerCase() || ''}s</span>
+                            <span className="text-muted-foreground text-xs"> / </span>
+                            <span className="font-medium">{e.involvedName || '—'}</span>
                           </>
                         )}
                       </TableCell>
@@ -184,12 +185,11 @@ export function AdmissionEventsPage() {
                           {e.policyName || '—'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{e.username || '—'}</TableCell>
                       <TableCell><RelativeTime iso={e.time} /></TableCell>
                     </TableRow>
                     {expanded.has(e.id) && (
                       <TableRow key={`detail-${e.id}`} className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={8} className="py-3 pl-10 pr-6">
+                        <TableCell colSpan={7} className="py-3 pl-10 pr-6">
                           <div className="flex flex-col gap-1 text-xs">
                             {(e.resource || e.involvedKind) && (
                               <div className="flex gap-1.5">
@@ -213,6 +213,12 @@ export function AdmissionEventsPage() {
                               <span className="shrink-0 text-muted-foreground">Binding:</span>
                               <span className="font-mono">{e.bindingName}</span>
                             </div>
+                            {e.username && (
+                              <div className="flex gap-1.5">
+                                <span className="shrink-0 text-muted-foreground">Requestor:</span>
+                                <span className="font-mono">{e.username}</span>
+                              </div>
+                            )}
                             <div className="flex gap-1.5">
                               <span className="shrink-0 text-muted-foreground">Time:</span>
                               <span>{formatTWTime(e.time)}</span>
