@@ -4,7 +4,6 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { type AdmissionEvent } from '../api/client'
 import {
@@ -79,8 +78,6 @@ export function AdmissionEventsPage() {
             ValidatingAdmissionPolicy violations captured from Kubernetes Warning events.
           </p>
         </div>
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground"
-          onClick={() => setEvents([])}>Clear</Button>
       </div>
 
       <div className="mb-4 flex items-center gap-2">

@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("jwt secret: %v", err)
 	}
 
-	admissionStore := admission.NewStore()
+	admissionStore := admission.NewStore("/data/sentinel/admission-events.json")
 	go admissionStore.Run(context.Background(), typedClient)
 
 	alerts := alert.NewStore("/data/sentinel/alerts.json")

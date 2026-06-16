@@ -2,7 +2,9 @@ package admission
 
 import (
 	"context"
+	"encoding/json"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -20,10 +22,10 @@ type Event struct {
 	Namespace    string `json:"namespace"`
 	InvolvedKind string `json:"involvedKind"` // from K8s Events watcher
 	InvolvedName string `json:"involvedName"`
-	Resource     string `json:"resource"`  // from webhook
-	Name         string `json:"name"`       // from webhook
-	Operation    string `json:"operation"`  // from webhook
-	Username     string `json:"username"`   // from webhook
+	Resource     string `json:"resource"`   // from webhook
+	Name         string `json:"name"`        // from webhook
+	Operation    string `json:"operation"`   // from webhook
+	Username     string `json:"username"`    // from webhook
 	PolicyName   string `json:"policyName"`
 	BindingName  string `json:"bindingName"`
 	Message      string `json:"message"`
@@ -32,22 +34,65 @@ type Event struct {
 	RawMessage   string `json:"rawMessage,omitempty"`
 }
 
+type eventFile struct {
+	Events []Event `json:"events"`
+}
 
 const maxEvents = 500
 
-// Store holds recent VAP violation events in a ring buffer.
+// Store holds VAP violation events in a ring buffer with file persistence.
 type Store struct {
 	mu     sync.RWMutex
 	events []Event
 	seen   map[string]struct{}    // deduplicate by event ID
 	subs   map[chan Event]struct{} // per-subscriber channels for fanout
+	path   string                 // file path for persistence
 }
 
-func NewStore() *Store {
-	return &Store{
+func NewStore(path string) *Store {
+	s := &Store{
 		events: make([]Event, 0, maxEvents),
 		seen:   make(map[string]struct{}),
 		subs:   make(map[chan Event]struct{}),
+		path:   path,
+	}
+	s.load()
+	return s
+}
+
+func (s *Store) load() {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return
+	}
+	var f eventFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		return
+	}
+	for _, e := range f.Events {
+		if _, exists := s.seen[e.ID]; !exists {
+			s.seen[e.ID] = struct{}{}
+			s.events = append(s.events, e)
+		}
+	}
+	if len(s.events) > maxEvents {
+		s.events = s.events[:maxEvents]
+	}
+}
+
+func (s *Store) flush() {
+	data, err := json.Marshal(eventFile{Events: s.events})
+	if err != nil {
+		log.Printf("admission-store: flush marshal error: %v", err)
+		return
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		log.Printf("admission-store: flush write error: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		log.Printf("admission-store: flush rename error: %v", err)
 	}
 }
 
@@ -72,7 +117,7 @@ func (s *Store) broadcast(e Event) {
 	for ch := range s.subs {
 		select {
 		case ch <- e:
-		default: // slow subscriber; drop rather than block
+		default:
 		}
 	}
 }
@@ -159,6 +204,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 		}
 		s.events = s.events[:maxEvents]
 	}
+	s.flush()
 	s.mu.Unlock()
 
 	s.broadcast(evt)
@@ -179,6 +225,7 @@ func (s *Store) Add(e Event) {
 		}
 		s.events = s.events[:maxEvents]
 	}
+	s.flush()
 	s.mu.Unlock()
 	s.broadcast(e)
 }
@@ -191,7 +238,6 @@ func (s *Store) List() []Event {
 	copy(cp, s.events)
 	return cp
 }
-
 
 var vapPattern = regexp.MustCompile(`ValidatingAdmissionPolicy '([^']+)' with binding '([^']+)'`)
 

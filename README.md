@@ -110,6 +110,7 @@ Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 Persi
 | `templates.json` | 自訂 Policy Templates |
 | `alerts.json` | Webhook 告警規則 |
 | `rsyslog.json` | Syslog 轉送設定 |
+| `admission-events.json` | Admission Events 記錄（最多 500 筆）|
 
 ```yaml
 volumeMounts:
