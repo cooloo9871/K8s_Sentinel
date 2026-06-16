@@ -160,6 +160,7 @@ export interface VAPBindingRecord {
 export interface AdmissionEvent {
   id: string
   time: string
+  count: number
   namespace: string
   // from K8s Events watcher
   involvedKind: string

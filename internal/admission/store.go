@@ -15,10 +15,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const dedupWindowSecs = 30
+
 // Event represents a single VAP violation.
 type Event struct {
 	ID           string `json:"id"`
 	Time         string `json:"time"`
+	Count        int    `json:"count"`
 	Namespace    string `json:"namespace"`
 	InvolvedKind string `json:"involvedKind"` // from K8s Events watcher
 	InvolvedName string `json:"involvedName"`
@@ -32,6 +35,28 @@ type Event struct {
 	Severity     string `json:"severity"` // "critical" (Deny) or "warning" (Audit/Warn)
 	Source       string `json:"source"`   // "audit" or "k8s-event"
 	RawMessage   string `json:"rawMessage,omitempty"`
+}
+
+func sameViolation(a, b Event) bool {
+	return a.PolicyName == b.PolicyName &&
+		a.Namespace == b.Namespace &&
+		a.Name == b.Name &&
+		a.InvolvedName == b.InvolvedName &&
+		a.Operation == b.Operation &&
+		a.Source == b.Source
+}
+
+func timeDiffSecs(t1, t2 string) float64 {
+	d1, err1 := time.Parse(time.RFC3339, t1)
+	d2, err2 := time.Parse(time.RFC3339, t2)
+	if err1 != nil || err2 != nil {
+		return 9999
+	}
+	diff := d1.Sub(d2)
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff.Seconds()
 }
 
 type eventFile struct {
@@ -210,12 +235,29 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	s.broadcast(evt)
 }
 
-// Add appends a new event (from audit webhook) and trims to maxEvents.
+// Add appends a new event (from audit webhook) with 30s deduplication.
 func (s *Store) Add(e Event) {
+	if e.Count == 0 {
+		e.Count = 1
+	}
 	s.mu.Lock()
 	if _, exists := s.seen[e.ID]; exists {
 		s.mu.Unlock()
 		return
+	}
+	// Dedup: if same violation within dedupWindowSecs, increment count and move to top
+	for i, existing := range s.events {
+		if sameViolation(existing, e) && timeDiffSecs(e.Time, existing.Time) < dedupWindowSecs {
+			updated := existing
+			updated.Count++
+			updated.Time = e.Time
+			s.events = append([]Event{updated}, append(s.events[:i], s.events[i+1:]...)...)
+			s.seen[e.ID] = struct{}{}
+			s.flush()
+			s.mu.Unlock()
+			s.broadcast(updated)
+			return
+		}
 	}
 	s.seen[e.ID] = struct{}{}
 	s.events = append([]Event{e}, s.events...)

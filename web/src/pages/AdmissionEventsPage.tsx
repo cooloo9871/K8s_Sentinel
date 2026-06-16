@@ -182,7 +182,16 @@ export function AdmissionEventsPage() {
                           {e.policyName || '—'}
                         </Badge>
                       </TableCell>
-                      <TableCell><RelativeTime iso={e.time} /></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <RelativeTime iso={e.time} />
+                          {e.count > 1 && (
+                            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                              ×{e.count}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
                     {expanded.has(e.id) && (
                       <TableRow key={`detail-${e.id}`} className="bg-muted/30 hover:bg-muted/30">
