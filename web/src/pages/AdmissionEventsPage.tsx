@@ -211,6 +211,12 @@ export function AdmissionEventsPage() {
                                 </span>
                               </div>
                             )}
+                            {e.operation && (
+                              <div className="flex gap-1.5">
+                                <span className="shrink-0 text-muted-foreground">Action:</span>
+                                <span className="font-mono">{e.operation}</span>
+                              </div>
+                            )}
                             <div className="flex gap-1.5">
                               <span className="shrink-0 text-muted-foreground">Violation:</span>
                               <span className="font-mono" style={{ wordBreak: 'break-all' }}>{e.message}</span>
