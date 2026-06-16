@@ -269,6 +269,9 @@ func buildAdmissionMessage(evt admission.Event, severity string) string {
 	if evt.BindingName != "" {
 		parts = append(parts, fmt.Sprintf("binding=%s", evt.BindingName))
 	}
+	if evt.Operation != "" {
+		parts = append(parts, fmt.Sprintf("action=%s", evt.Operation))
+	}
 	if evt.Username != "" {
 		parts = append(parts, fmt.Sprintf("requestor=%s", evt.Username))
 	}

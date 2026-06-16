@@ -204,6 +204,9 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity
 	} else if resource != "" {
 		lines = append(lines, fmt.Sprintf("*Object:* `%s`", resource))
 	}
+	if evt.Operation != "" {
+		lines = append(lines, fmt.Sprintf("*Action:* `%s`", evt.Operation))
+	}
 	if evt.Username != "" {
 		lines = append(lines, fmt.Sprintf("*Requestor:* `%s`", evt.Username))
 	}
@@ -227,6 +230,7 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity
 		"policy":    evt.PolicyName,
 		"binding":   evt.BindingName,
 		"resource":  resource,
+		"action":    evt.Operation,
 		"requestor": evt.Username,
 		"message":   evt.Message,
 	}
