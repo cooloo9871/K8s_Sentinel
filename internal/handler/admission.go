@@ -76,6 +76,7 @@ func admissionWebhook(store *admission.Store) http.HandlerFunc {
 			// Case 2: Audit action — violation in annotations
 			const vapAnnotationKey = "validation.policy.admission.k8s.io/validation_failure"
 			if annVal, ok := item.Annotations[vapAnnotationKey]; ok {
+				log.Printf("admission-webhook: audit annotation raw: %s", annVal)
 				var violations []struct {
 					Policy  string `json:"policy"`
 					Binding string `json:"binding"`
