@@ -128,8 +128,10 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 			return
 		}
-		for _, e := range store.List() {
-			data, _ := json.Marshal(e)
+		// Send oldest-first so the frontend's prepend logic results in newest-first display
+		initial := store.List()
+		for i := len(initial) - 1; i >= 0; i-- {
+			data, _ := json.Marshal(initial[i])
 			fmt.Fprintf(w, "data: %s\n\n", data)
 		}
 		flusher.Flush()
