@@ -75,13 +75,15 @@ export function DashboardPage() {
 
   const load = () => {
     setLoading(true)
-    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list(), vapApi.listPolicies(), vapApi.listBindings()])
-      .then(([p, m, ns, vp, vb]) => {
-        setPolicies(p); setMode(m); setNamespaceCount(ns.length)
-        setVapPolicies(vp); setVapBindings(vb)
-      })
+    // Core data — failure shows an error
+    Promise.all([policyApi.list(), modeApi.get(), namespaceApi.list()])
+      .then(([p, m, ns]) => { setPolicies(p); setMode(m); setNamespaceCount(ns.length) })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
+    // VAP data — loaded independently, failure silently shows empty
+    Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
+      .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
+      .catch(() => { /* VAP unavailable — show empty section */ })
   }
 
   useEffect(load, [])
