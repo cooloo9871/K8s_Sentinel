@@ -688,23 +688,17 @@ export function VAPPage() {
                     <SelectContent>
                       <SelectGroup>
                         <SelectItem value="workloads">All Workloads (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs)</SelectItem>
-                      </SelectGroup>
-                      <SelectGroup>
                         <SelectItem value="pods">Pods</SelectItem>
                         <SelectItem value="deployments">Deployments</SelectItem>
                         <SelectItem value="statefulsets">StatefulSets</SelectItem>
                         <SelectItem value="daemonsets">DaemonSets</SelectItem>
                         <SelectItem value="jobs">Jobs</SelectItem>
                         <SelectItem value="cronjobs">CronJobs</SelectItem>
-                      </SelectGroup>
-                      <SelectGroup>
                         <SelectItem value="configmaps">ConfigMaps</SelectItem>
                         <SelectItem value="secrets">Secrets</SelectItem>
                         <SelectItem value="persistentvolumeclaims">PersistentVolumeClaims (PVC)</SelectItem>
                         <SelectItem value="services">Services</SelectItem>
                         <SelectItem value="serviceaccounts">ServiceAccounts</SelectItem>
-                      </SelectGroup>
-                      <SelectGroup>
                         <SelectItem value="ingresses">Ingresses</SelectItem>
                         <SelectItem value="networkpolicies">NetworkPolicies</SelectItem>
                       </SelectGroup>
