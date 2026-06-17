@@ -282,7 +282,7 @@ export function VAPPage() {
             <CardContent className="flex flex-col gap-5 p-6">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="builder-name">Policy Name</Label>
-                <Input id="builder-name" value={builderName} onChange={e => setBuilderName(e.target.value)} placeholder="e.g. deny-app-test-label" />
+                <Input id="builder-name" value={builderName} onChange={e => setBuilderName(e.target.value)} />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -407,7 +407,7 @@ export function VAPPage() {
             <CardContent className="flex flex-col gap-5 p-6">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="binding-name">Binding Name</Label>
-                <Input id="binding-name" value={bindingName} onChange={e => setBindingName(e.target.value)} placeholder="e.g. deny-app-test-label-binding" />
+                <Input id="binding-name" value={bindingName} onChange={e => setBindingName(e.target.value)} />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -426,7 +426,7 @@ export function VAPPage() {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input value={bindingPolicy} onChange={e => setBindingPolicy(e.target.value)} placeholder="e.g. my-policy" />
+                  <Input value={bindingPolicy} onChange={e => setBindingPolicy(e.target.value)} />
                 )}
               </div>
 
