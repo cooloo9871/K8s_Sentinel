@@ -472,7 +472,7 @@ type SecurityContextPart = 'no-privileged' | 'run-as-non-root'
 function parseExpressionToSecurityContextPart(expr: string): SecurityContextPart | null {
   const e = expr.replace(/\s+/g, ' ').trim()
   if (e.includes('c.securityContext.privileged == false')) return 'no-privileged'
-  if (e.includes('runAsNonRoot.orValue(false) == true')) return 'run-as-non-root'
+  if (e.includes('c.?securityContext.?runAsNonRoot.orValue(')) return 'run-as-non-root'
   return null
 }
 
