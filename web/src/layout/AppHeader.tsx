@@ -37,7 +37,7 @@ const ROUTE_LABELS: Record<string, string> = {
 // the desired label hierarchy (e.g. /security/discovery lives under Policies).
 const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
   '/security/discovery': [
-    { label: 'Policies', to: '/policies/tracing' },
+    { label: 'Policies' },
     { label: 'Behavior Discovery' },
   ],
   '/security/events': [
@@ -67,12 +67,8 @@ function useBreadcrumbs() {
 
   const segments = pathname.split('/').filter(Boolean)
   const crumbs: { label: string; to?: string }[] = [{ label: 'Home', to: '/dashboard' }]
-  let path = ''
-  segments.forEach((seg, i) => {
-    path += `/${seg}`
-    const isLast = i === segments.length - 1
-    const label = ROUTE_LABELS[seg] ?? seg
-    crumbs.push(isLast ? { label } : { label, to: path })
+  segments.forEach((seg) => {
+    crumbs.push({ label: ROUTE_LABELS[seg] ?? seg })
   })
   return crumbs
 }
