@@ -27,6 +27,15 @@ type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
 
+interface LabelRule {
+  key: string
+  condition: LabelCondition
+  value: string
+  message: string
+}
+
+const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
+
 // Policy builder ---------------------------------------------------------------
 
 function autoMessage(key: string, cond: LabelCondition, value: string): string {
@@ -36,27 +45,35 @@ function autoMessage(key: string, cond: LabelCondition, value: string): string {
     : `Resources must have label ${key}=${value}`
 }
 
-function generateLabelPolicyYaml(
-  name: string, key: string, cond: LabelCondition, value: string, msg: string,
-): string {
-  const safeName = name.trim() || 'my-policy'
-  const safeKey  = key.trim()   || 'app'
-  const safeVal  = value.trim() || 'value'
-  const safeMsg  = msg.trim()   || autoMessage(key, cond, value)
-
-  const exprLines = cond === '=='
-    // Deny when label key == value  →  pass when NOT (has && key==val)
+function ruleToYamlLines(rule: LabelRule): string[] {
+  const k = rule.key.trim()   || 'app'
+  const v = rule.value.trim() || 'value'
+  const m = rule.message.trim() || autoMessage(rule.key, rule.condition, rule.value)
+  const exprLines = rule.condition === '=='
     ? [
         '        !has(object.metadata.labels) ||',
-        `        !('${safeKey}' in object.metadata.labels) ||`,
-        `        object.metadata.labels['${safeKey}'] != '${safeVal}'`,
+        `        !('${k}' in object.metadata.labels) ||`,
+        `        object.metadata.labels['${k}'] != '${v}'`,
       ]
-    // Deny when label key != value  →  pass when has && key==val
     : [
         '        has(object.metadata.labels) &&',
-        `        '${safeKey}' in object.metadata.labels &&`,
-        `        object.metadata.labels['${safeKey}'] == '${safeVal}'`,
+        `        '${k}' in object.metadata.labels &&`,
+        `        object.metadata.labels['${k}'] == '${v}'`,
       ]
+  return [
+    '    - expression: >-',
+    ...exprLines,
+    `      message: "${m}"`,
+    '      reason: Forbidden',
+  ]
+}
+
+function generateLabelPolicyYaml(name: string, rules: LabelRule[]): string {
+  const safeName = name.trim() || 'my-policy'
+  const activeRules = rules.filter(r => r.key.trim() && r.value.trim())
+  const validationLines = activeRules.length
+    ? activeRules.flatMap(ruleToYamlLines)
+    : ruleToYamlLines(emptyRule())
 
   return [
     'apiVersion: admissionregistration.k8s.io/v1',
@@ -72,10 +89,7 @@ function generateLabelPolicyYaml(
     '        operations: [CREATE, UPDATE]',
     '        resources: ["*"]',
     '  validations:',
-    '    - expression: >-',
-    ...exprLines,
-    `      message: "${safeMsg}"`,
-    '      reason: Forbidden',
+    ...validationLines,
   ].join('\n')
 }
 
@@ -131,11 +145,13 @@ export function VAPPage() {
   // Policy builder state
   const [showBuilder, setShowBuilder] = useState(false)
   const [builderName, setBuilderName] = useState('')
-  const [labelKey, setLabelKey] = useState('')
-  const [labelCondition, setLabelCondition] = useState<LabelCondition>('==')
-  const [labelValue, setLabelValue] = useState('')
-  const [violationMsg, setViolationMsg] = useState('')
+  const [labelRules, setLabelRules] = useState<LabelRule[]>([emptyRule()])
   const [builderSaving, setBuilderSaving] = useState(false)
+
+  const updateRule = (i: number, field: keyof LabelRule, val: string) =>
+    setLabelRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  const addRule = () => setLabelRules(prev => [...prev, emptyRule()])
+  const removeRule = (i: number) => setLabelRules(prev => prev.filter((_, idx) => idx !== i))
 
   // Binding builder state
   const [showBindingBuilder, setShowBindingBuilder] = useState(false)
@@ -203,13 +219,15 @@ export function VAPPage() {
   }
 
   const handleBuilderApply = async () => {
-    if (!builderName.trim() || !labelKey.trim() || !labelValue.trim()) return
+    const valid = builderName.trim() && labelRules.some(r => r.key.trim() && r.value.trim())
+    if (!valid) return
     setBuilderSaving(true)
     try {
-      await vapApi.applyPolicy(generateLabelPolicyYaml(builderName, labelKey, labelCondition, labelValue, violationMsg))
+      await vapApi.applyPolicy(generateLabelPolicyYaml(builderName, labelRules))
       toast.success('Policy applied.')
       setShowBuilder(false)
-      setBuilderName(''); setLabelKey(''); setLabelCondition('=='); setLabelValue(''); setViolationMsg('')
+      setBuilderName('')
+      setLabelRules([emptyRule()])
       load()
     } catch (e: unknown) {
       toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
@@ -239,8 +257,8 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generateLabelPolicyYaml(builderName, labelKey, labelCondition, labelValue, violationMsg)
-    const canApply = builderName.trim() !== '' && labelKey.trim() !== '' && labelValue.trim() !== ''
+    const previewYaml = generateLabelPolicyYaml(builderName, labelRules)
+    const canApply = builderName.trim() !== '' && labelRules.some(r => r.key.trim() && r.value.trim())
     return (
       <>
         <div className="mb-6 flex items-center justify-between">
@@ -274,56 +292,73 @@ export function VAPPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4 rounded-lg border p-4">
-                <p className="text-sm font-medium">Label Rule</p>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="label-key">Label Key</Label>
-                  <Input id="label-key" value={labelKey} onChange={e => setLabelKey(e.target.value)} placeholder="e.g. app" />
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <Label>Label Rules</Label>
+                  <Button variant="outline" size="sm" onClick={addRule}>+ Add Rule</Button>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label>Condition</Label>
-                  <Select value={labelCondition} onValueChange={v => setLabelCondition(v as LabelCondition)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="==">== equals (deny when label matches)</SelectItem>
-                        <SelectItem value="!=">!= not equals (deny when label is missing or different)</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                {labelRules.map((rule, i) => (
+                  <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
+                      {labelRules.length > 1 && (
+                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                          onClick={() => removeRule(i)}>
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Key</span>
+                        <Input value={rule.key} onChange={e => updateRule(i, 'key', e.target.value)} placeholder="e.g. app" className="h-8 text-sm" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Condition</span>
+                        <Select value={rule.condition} onValueChange={v => updateRule(i, 'condition', v)}>
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="==">== equals</SelectItem>
+                              <SelectItem value="!=">!= not equals</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Value</span>
+                        <Input value={rule.value} onChange={e => updateRule(i, 'value', e.target.value)} placeholder="e.g. test" className="h-8 text-sm" />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                      <Input value={rule.message} onChange={e => updateRule(i, 'message', e.target.value)}
+                        placeholder={autoMessage(rule.key || 'key', rule.condition, rule.value || 'value')}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+
+                    {rule.key.trim() && rule.value.trim() && (
+                      <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                        {rule.condition === '=='
+                          ? `!has(labels) || !('${rule.key}' in labels) || labels['${rule.key}'] != '${rule.value}'`
+                          : `has(labels) && '${rule.key}' in labels && labels['${rule.key}'] == '${rule.value}'`}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {labelRules.length > 1 && (
                   <p className="text-xs text-muted-foreground">
-                    {labelCondition === '=='
-                      ? 'Resources where this label equals the value below will be denied.'
-                      : 'Resources where this label is missing or does not match the value will be denied.'}
+                    Each rule is evaluated independently — a request is denied if any rule fails.
                   </p>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="label-value">Label Value</Label>
-                  <Input id="label-value" value={labelValue} onChange={e => setLabelValue(e.target.value)} placeholder="e.g. test" />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="violation-msg">Violation Message</Label>
-                  <Input id="violation-msg" value={violationMsg} onChange={e => setViolationMsg(e.target.value)}
-                    placeholder={autoMessage(labelKey || 'key', labelCondition, labelValue || 'value')}
-                  />
-                </div>
+                )}
               </div>
-
-              {labelKey.trim() && labelValue.trim() && (
-                <div className="rounded-md bg-muted/40 px-3 py-2 text-xs font-mono text-muted-foreground">
-                  <span className="text-foreground block">
-                    {labelCondition === '=='
-                      ? `!has(labels) || !('${labelKey}' in labels) || labels['${labelKey}'] != '${labelValue}'`
-                      : `has(labels) && '${labelKey}' in labels && labels['${labelKey}'] == '${labelValue}'`}
-                  </span>
-                </div>
-              )}
             </CardContent>
           </Card>
 
