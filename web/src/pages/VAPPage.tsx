@@ -449,7 +449,7 @@ export function VAPPage() {
   const [builderEditName, setBuilderEditName] = useState<string | undefined>()
   const [builderName, setBuilderName] = useState('')
   const [builderRuleType, setBuilderRuleType] = useState<PolicyRuleType>('label')
-  const [builderApplyTo, setBuilderApplyTo] = useState<LabelApplyTo>('all')
+  const [builderApplyTo, setBuilderApplyTo] = useState<LabelApplyTo>('workloads')
   const [labelRules, setLabelRules] = useState<LabelRule[]>([emptyRule()])
   const [imageRules, setImageRules] = useState<ImageRule[]>([emptyImageRule()])
   const [replicaRules, setReplicaRules] = useState<ReplicaRule[]>([emptyReplicaRule()])
@@ -474,7 +474,7 @@ export function VAPPage() {
     setBuilderEditName(undefined)
     setBuilderName('')
     setBuilderRuleType('label')
-    setBuilderApplyTo('all')
+    setBuilderApplyTo('workloads')
     setLabelRules([emptyRule()])
     setImageRules([emptyImageRule()])
     setReplicaRules([emptyReplicaRule()])
@@ -619,7 +619,7 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo)
     const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
@@ -687,7 +687,6 @@ export function VAPPage() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="all">All Resources</SelectItem>
                         <SelectItem value="workloads">All Workloads (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs)</SelectItem>
                       </SelectGroup>
                       <SelectGroup>
