@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'image' | 'replica'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 
 interface LabelRule {
@@ -86,6 +86,36 @@ function ruleToYamlLines(rule: LabelRule): string[] {
         '        has(object.metadata.labels) &&',
         `        '${k}' in object.metadata.labels &&`,
         `        object.metadata.labels['${k}'] == '${v}'`,
+      ]
+  return [
+    '    - expression: >-',
+    ...exprLines,
+    `      message: "${escapeYaml(m)}"`,
+    '      reason: Forbidden',
+  ]
+}
+
+function autoAnnotationMessage(key: string, cond: LabelCondition, value: string): string {
+  if (!key.trim() || !value.trim()) return 'Annotation policy validation failed'
+  return cond === '=='
+    ? `Resources with annotation ${key}=${value} are not allowed`
+    : `Resources must have annotation ${key}=${value}`
+}
+
+function annotationRuleToYamlLines(rule: LabelRule): string[] {
+  const k = escapeCel(rule.key.trim()   || 'app')
+  const v = escapeCel(rule.value.trim() || 'value')
+  const m = rule.message.trim() || autoAnnotationMessage(rule.key, rule.condition, rule.value)
+  const exprLines = rule.condition === '=='
+    ? [
+        '        !has(object.metadata.annotations) ||',
+        `        !('${k}' in object.metadata.annotations) ||`,
+        `        object.metadata.annotations['${k}'] != '${v}'`,
+      ]
+    : [
+        '        has(object.metadata.annotations) &&',
+        `        '${k}' in object.metadata.annotations &&`,
+        `        object.metadata.annotations['${k}'] == '${v}'`,
       ]
   return [
     '    - expression: >-',
@@ -156,6 +186,9 @@ function generatePolicyYaml(
   if (ruleType === 'label') {
     const active = labelRules.filter(r => r.key.trim() && r.value.trim())
     validationLines = active.length ? active.flatMap(ruleToYamlLines) : ruleToYamlLines(emptyRule())
+  } else if (ruleType === 'annotation') {
+    const active = labelRules.filter(r => r.key.trim() && r.value.trim())
+    validationLines = active.length ? active.flatMap(annotationRuleToYamlLines) : annotationRuleToYamlLines(emptyRule())
   } else if (ruleType === 'image') {
     const active = imageRules.filter(r => r.type === 'no-latest' || r.registry.trim())
     validationLines = active.length ? active.flatMap(imageRuleToYamlLines) : imageRuleToYamlLines(emptyImageRule())
@@ -281,6 +314,15 @@ function parseExpressionToReplicaRule(expr: string, msg: string): ReplicaRule | 
   return null
 }
 
+function parseExpressionToAnnotationRule(expr: string, msg: string): LabelRule | null {
+  const e = expr.replace(/\s+/g, ' ').trim()
+  let m = e.match(/!\('([^']+)' in object\.metadata\.annotations\).*object\.metadata\.annotations\['[^']+'\] != '([^']+)'/)
+  if (m) return { key: m[1], condition: '==', value: m[2], message: msg }
+  m = e.match(/'([^']+)' in object\.metadata\.annotations.*object\.metadata\.annotations\['[^']+'\] == '([^']+)'/)
+  if (m) return { key: m[1], condition: '!=', value: m[2], message: msg }
+  return null
+}
+
 function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType
   labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
@@ -296,9 +338,12 @@ function tryParseBuilderPolicy(rawYaml: string): {
     const labelRules: LabelRule[] = []
     const imageRules: ImageRule[] = []
     const replicaRules: ReplicaRule[] = []
+    const annotationRules: LabelRule[] = []
     for (const v of spec.validations) {
       const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
       if (lr) { labelRules.push(lr); continue }
+      const ar = parseExpressionToAnnotationRule(v.expression ?? '', v.message ?? '')
+      if (ar) { annotationRules.push(ar); continue }
       const ir = parseExpressionToImageRule(v.expression ?? '', v.message ?? '')
       if (ir) { imageRules.push(ir); continue }
       const rr = parseExpressionToReplicaRule(v.expression ?? '', v.message ?? '')
@@ -306,10 +351,14 @@ function tryParseBuilderPolicy(rawYaml: string): {
       return null  // unknown expression type — fall through to YAML editor
     }
     // All rules must be the same type
-    const typesUsed = [labelRules.length > 0, imageRules.length > 0, replicaRules.length > 0].filter(Boolean).length
+    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0].filter(Boolean).length
     if (typesUsed > 1) return null
-    const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica' : imageRules.length > 0 ? 'image' : 'label'
-    return { name: meta?.name ?? '', ruleType, labelRules, imageRules, replicaRules }
+    const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica'
+      : imageRules.length > 0 ? 'image'
+      : annotationRules.length > 0 ? 'annotation'
+      : 'label'
+    // For annotation type, return annotationRules as labelRules (same interface)
+    return { name: meta?.name ?? '', ruleType, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules }
   } catch { return null }
 }
 
@@ -484,7 +533,7 @@ export function VAPPage() {
 
   const handleBuilderApply = async () => {
     const nameOk = builderName.trim()
-    const rulesOk = builderRuleType === 'label'
+    const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
@@ -531,7 +580,7 @@ export function VAPPage() {
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
     const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules)
-    const rulesOk = builderRuleType === 'label'
+    const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
@@ -582,6 +631,7 @@ export function VAPPage() {
                   <SelectContent>
                     <SelectGroup>
                       <SelectItem value="label">Label Check</SelectItem>
+                      <SelectItem value="annotation">Annotation Check</SelectItem>
                       <SelectItem value="image">Image Policy</SelectItem>
                       <SelectItem value="replica">Replica Limit</SelectItem>
                     </SelectGroup>
@@ -589,11 +639,11 @@ export function VAPPage() {
                 </Select>
               </div>
 
-              {/* ── Label Check rules ── */}
-              {builderRuleType === 'label' && (
+              {/* ── Label / Annotation Check rules ── */}
+              {(builderRuleType === 'label' || builderRuleType === 'annotation') && (
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <Label>Label Rules</Label>
+                    <Label>{builderRuleType === 'annotation' ? 'Annotation Rules' : 'Label Rules'}</Label>
                     <Button variant="outline" size="sm" onClick={addRule}>+ Add Rule</Button>
                   </div>
 
@@ -636,7 +686,9 @@ export function VAPPage() {
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
                         <Input value={rule.message} onChange={e => updateRule(i, 'message', e.target.value)}
-                          placeholder={autoMessage(rule.key || 'key', rule.condition, rule.value || 'value')}
+                          placeholder={builderRuleType === 'annotation'
+                            ? autoAnnotationMessage(rule.key || 'key', rule.condition, rule.value || 'value')
+                            : autoMessage(rule.key || 'key', rule.condition, rule.value || 'value')}
                           className="h-8 text-sm" />
                       </div>
 
