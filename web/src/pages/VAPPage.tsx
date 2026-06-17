@@ -97,12 +97,16 @@ function autoImageMessage(rule: ImageRule): string {
 function imageRuleToYamlLines(rule: ImageRule): string[] {
   const m = escapeYaml(rule.message.trim() || autoImageMessage(rule))
   const reg = rule.registry.trim() || 'registry.example.com'
-  const expr = rule.type === 'no-latest'
-    ? `object.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
-    : `object.spec.containers.all(c, c.image.startsWith('${reg}'))`
+  // Check containers at all three workload paths using CEL optional chaining (?.)
+  // so the same expression covers Pods, Deployments/StatefulSets/DaemonSets, and CronJobs.
+  const check = rule.type === 'no-latest'
+    ? `all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
+    : `all(c, c.image.startsWith('${reg}'))`
   return [
     '    - expression: >-',
-    `        ${expr}`,
+    `        object.spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check}`,
     `      message: "${m}"`,
     '      reason: Forbidden',
   ]
@@ -159,6 +163,14 @@ function generatePolicyYaml(
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
         '        resources: ["pods"]',
+        '      - apiGroups: ["apps"]',
+        '        apiVersions: ["v1"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]',
+        '      - apiGroups: ["batch"]',
+        '        apiVersions: ["v1"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["jobs", "cronjobs"]',
       ]
     : [
         '    resourceRules:',
@@ -677,8 +689,9 @@ export function VAPPage() {
 
                       <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
                         {rule.type === 'no-latest'
-                          ? `pod.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
-                          : `pod.spec.containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
+                          ? `containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
+                          : `containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
+                        <span className="ml-2 text-[10px] opacity-60">pods · deployments · statefulsets · jobs · cronjobs</span>
                       </div>
                     </div>
                   ))}
