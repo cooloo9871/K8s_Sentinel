@@ -329,8 +329,8 @@ export function VAPPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value="==">== equals — deny when label key matches the value</SelectItem>
-                            <SelectItem value="!=">!= not equals — deny when label key is missing or does not match the value</SelectItem>
+                            <SelectItem value="==">Deny when label key matches the value</SelectItem>
+                            <SelectItem value="!=">Deny when label key is missing or does not match the value</SelectItem>
                           </SelectGroup>
                         </SelectContent>
                       </Select>
