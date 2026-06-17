@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -29,13 +29,20 @@ type ValidationAction = 'Deny' | 'Audit' | 'Warn'
 
 // Policy builder ---------------------------------------------------------------
 
+function autoMessage(key: string, cond: LabelCondition, value: string): string {
+  if (!key.trim() || !value.trim()) return 'Label policy validation failed'
+  return cond === '=='
+    ? `Resources with label ${key}=${value} are not allowed`
+    : `Resources must have label ${key}=${value}`
+}
+
 function generateLabelPolicyYaml(
   name: string, key: string, cond: LabelCondition, value: string, msg: string,
 ): string {
   const safeName = name.trim() || 'my-policy'
   const safeKey  = key.trim()   || 'app'
   const safeVal  = value.trim() || 'value'
-  const safeMsg  = msg.trim()   || 'Label policy validation failed'
+  const safeMsg  = msg.trim()   || autoMessage(key, cond, value)
 
   const exprLines = cond === '=='
     // Deny when label key == value  →  pass when NOT (has && key==val)
@@ -129,18 +136,6 @@ export function VAPPage() {
   const [labelValue, setLabelValue] = useState('')
   const [violationMsg, setViolationMsg] = useState('')
   const [builderSaving, setBuilderSaving] = useState(false)
-  // Track the last auto-generated message so we only overwrite it (not user edits)
-  const lastAutoMsg = useRef('')
-
-  useEffect(() => {
-    const auto = labelKey.trim() && labelValue.trim()
-      ? labelCondition === '=='
-        ? `Resources with label ${labelKey}=${labelValue} are not allowed`
-        : `Resources must have label ${labelKey}=${labelValue}`
-      : ''
-    setViolationMsg(prev => (prev === '' || prev === lastAutoMsg.current) ? auto : prev)
-    lastAutoMsg.current = auto
-  }, [labelKey, labelCondition, labelValue])
 
   // Binding builder state
   const [showBindingBuilder, setShowBindingBuilder] = useState(false)
@@ -315,9 +310,7 @@ export function VAPPage() {
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="violation-msg">Violation Message</Label>
                   <Input id="violation-msg" value={violationMsg} onChange={e => setViolationMsg(e.target.value)}
-                    placeholder={labelCondition === '=='
-                      ? `Resources with ${labelKey || 'key'}=${labelValue || 'value'} are not allowed`
-                      : `Resources must have ${labelKey || 'key'}=${labelValue || 'value'}`}
+                    placeholder={autoMessage(labelKey || 'key', labelCondition, labelValue || 'value')}
                   />
                 </div>
               </div>
