@@ -128,7 +128,7 @@ export function AdmissionEventsPage() {
         </span>
       </div>
 
-      <Card>
+      <Card className="overflow-x-hidden">
         <CardContent className="p-0">
           {filtered.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
@@ -147,15 +147,15 @@ export function AdmissionEventsPage() {
               )}
             </div>
           ) : (
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
                   <TableHead className="w-24">Severity</TableHead>
                   <TableHead className="w-24">Source</TableHead>
                   <TableHead className="w-28">Namespace</TableHead>
-                  <TableHead>Resource / Name</TableHead>
-                  <TableHead className="w-52">Policy</TableHead>
+                  <TableHead className="w-44">Resource / Name</TableHead>
+                  <TableHead className="w-44">Policy</TableHead>
                   <TableHead className="w-24">Time</TableHead>
                 </TableRow>
               </TableHeader>
