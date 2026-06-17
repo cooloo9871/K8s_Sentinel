@@ -27,8 +27,9 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits'
 type ImagePolicyType = 'no-latest' | 'required-registry'
+type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
   | 'all' | 'workloads'
   | 'pods' | 'deployments' | 'statefulsets' | 'daemonsets' | 'jobs' | 'cronjobs'
@@ -57,9 +58,15 @@ interface ReplicaRule {
   message: string
 }
 
+interface ResourceLimitRule {
+  limitType: ResourceLimitType
+  message: string
+}
+
 const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
 const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', message: '' })
 const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'deployments', message: '' })
+const emptyResourceLimitRule = (): ResourceLimitRule => ({ limitType: 'both', message: '' })
 
 // Policy builder ---------------------------------------------------------------
 
@@ -196,6 +203,31 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
   ]
 }
 
+function autoResourceLimitMessage(rule: ResourceLimitRule): string {
+  return rule.limitType === 'cpu'
+    ? 'All containers must set CPU limits'
+    : rule.limitType === 'memory'
+    ? 'All containers must set memory limits'
+    : 'All containers must set CPU and memory limits'
+}
+
+function resourceLimitRuleToYamlLines(rule: ResourceLimitRule): string[] {
+  const m = escapeYaml(rule.message.trim() || autoResourceLimitMessage(rule))
+  const check = rule.limitType === 'cpu'
+    ? `all(c, has(c.resources) && has(c.resources.limits) && has(c.resources.limits.cpu))`
+    : rule.limitType === 'memory'
+    ? `all(c, has(c.resources) && has(c.resources.limits) && has(c.resources.limits.memory))`
+    : `all(c, has(c.resources) && has(c.resources.limits) && has(c.resources.limits.cpu) && has(c.resources.limits.memory))`
+  return [
+    '    - expression: >-',
+    `        object.spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check}`,
+    `      message: "${m}"`,
+    '      reason: Forbidden',
+  ]
+}
+
 function autoReplicaMessage(rule: ReplicaRule): string {
   const max = rule.maxReplicas > 0 ? rule.maxReplicas : 5
   const label = rule.resourceType === 'statefulsets' ? 'StatefulSet'
@@ -224,6 +256,7 @@ function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
 function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
   replicaRules: ReplicaRule[], applyTo: LabelApplyTo = 'all',
+  resourceLimitRules: ResourceLimitRule[] = [],
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
@@ -236,6 +269,8 @@ function generatePolicyYaml(
   } else if (ruleType === 'image') {
     const active = imageRules.filter(r => r.type === 'no-latest' || r.registry.trim())
     validationLines = active.length ? active.flatMap(imageRuleToYamlLines) : imageRuleToYamlLines(emptyImageRule())
+  } else if (ruleType === 'resource-limits') {
+    validationLines = resourceLimitRules.length ? resourceLimitRules.flatMap(resourceLimitRuleToYamlLines) : resourceLimitRuleToYamlLines(emptyResourceLimitRule())
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -253,7 +288,7 @@ function generatePolicyYaml(
         '      operations: [UPDATE]',
         '      resources: ["deployments/scale", "statefulsets/scale"]',
       ]
-    : ruleType === 'image'
+    : (ruleType === 'image' || ruleType === 'resource-limits')
     ? [
         '    resourceRules:',
         '      - apiGroups: [""]',
@@ -361,9 +396,20 @@ function parseExpressionToAnnotationRule(expr: string, msg: string): LabelRule |
   return null
 }
 
+function parseExpressionToResourceLimitRule(expr: string, msg: string): ResourceLimitRule | null {
+  const e = expr.replace(/\s+/g, ' ').trim()
+  if (!e.includes('has(c.resources.limits')) return null
+  const hasCpu = e.includes('has(c.resources.limits.cpu)')
+  const hasMem = e.includes('has(c.resources.limits.memory)')
+  if (hasCpu && hasMem) return { limitType: 'both', message: msg }
+  if (hasCpu) return { limitType: 'cpu', message: msg }
+  if (hasMem) return { limitType: 'memory', message: msg }
+  return null
+}
+
 function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType
-  labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
+  labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]; resourceLimitRules: ResourceLimitRule[]
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -377,6 +423,7 @@ function tryParseBuilderPolicy(rawYaml: string): {
     const imageRules: ImageRule[] = []
     const replicaRules: ReplicaRule[] = []
     const annotationRules: LabelRule[] = []
+    const resourceLimitRules: ResourceLimitRule[] = []
     for (const v of spec.validations) {
       const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
       if (lr) { labelRules.push(lr); continue }
@@ -386,17 +433,19 @@ function tryParseBuilderPolicy(rawYaml: string): {
       if (ir) { imageRules.push(ir); continue }
       const rr = parseExpressionToReplicaRule(v.expression ?? '', v.message ?? '')
       if (rr) { replicaRules.push(rr); continue }
+      const rlr = parseExpressionToResourceLimitRule(v.expression ?? '', v.message ?? '')
+      if (rlr) { resourceLimitRules.push(rlr); continue }
       return null  // unknown expression type — fall through to YAML editor
     }
     // All rules must be the same type
-    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0].filter(Boolean).length
+    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0].filter(Boolean).length
     if (typesUsed > 1) return null
     const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica'
       : imageRules.length > 0 ? 'image'
       : annotationRules.length > 0 ? 'annotation'
+      : resourceLimitRules.length > 0 ? 'resource-limits'
       : 'label'
-    // For annotation type, return annotationRules as labelRules (same interface)
-    return { name: meta?.name ?? '', ruleType, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules }
+    return { name: meta?.name ?? '', ruleType, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules }
   } catch { return null }
 }
 
@@ -453,6 +502,7 @@ export function VAPPage() {
   const [labelRules, setLabelRules] = useState<LabelRule[]>([emptyRule()])
   const [imageRules, setImageRules] = useState<ImageRule[]>([emptyImageRule()])
   const [replicaRules, setReplicaRules] = useState<ReplicaRule[]>([emptyReplicaRule()])
+  const [resourceLimitRules, setResourceLimitRules] = useState<ResourceLimitRule[]>([emptyResourceLimitRule()])
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -470,6 +520,11 @@ export function VAPPage() {
   const addReplicaRule = () => setReplicaRules(prev => [...prev, emptyReplicaRule()])
   const removeReplicaRule = (i: number) => setReplicaRules(prev => prev.filter((_, idx) => idx !== i))
 
+  const updateResourceLimitRule = (i: number, field: keyof ResourceLimitRule, val: string) =>
+    setResourceLimitRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  const addResourceLimitRule = () => setResourceLimitRules(prev => [...prev, emptyResourceLimitRule()])
+  const removeResourceLimitRule = (i: number) => setResourceLimitRules(prev => prev.filter((_, idx) => idx !== i))
+
   const resetBuilderForm = () => {
     setBuilderEditName(undefined)
     setBuilderName('')
@@ -478,6 +533,7 @@ export function VAPPage() {
     setLabelRules([emptyRule()])
     setImageRules([emptyImageRule()])
     setReplicaRules([emptyReplicaRule()])
+    setResourceLimitRules([emptyResourceLimitRule()])
   }
 
   // Binding builder state
@@ -518,6 +574,7 @@ export function VAPPage() {
         setLabelRules(parsed.labelRules.length ? parsed.labelRules : [emptyRule()])
         setImageRules(parsed.imageRules.length ? parsed.imageRules : [emptyImageRule()])
         setReplicaRules(parsed.replicaRules.length ? parsed.replicaRules : [emptyReplicaRule()])
+        setResourceLimitRules(parsed.resourceLimitRules.length ? parsed.resourceLimitRules : [emptyResourceLimitRule()])
         setShowBuilder(true)
         return
       }
@@ -577,11 +634,13 @@ export function VAPPage() {
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+      : builderRuleType === 'resource-limits'
+      ? true
       : replicaRules.some(r => r.maxReplicas > 0)
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -624,6 +683,8 @@ export function VAPPage() {
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+      : builderRuleType === 'resource-limits'
+      ? true
       : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
     return (
@@ -662,6 +723,7 @@ export function VAPPage() {
                     setLabelRules([emptyRule()])
                     setImageRules([emptyImageRule()])
                     setReplicaRules([emptyReplicaRule()])
+                    setResourceLimitRules([emptyResourceLimitRule()])
                   }}
                   disabled={!!builderEditName}
                 >
@@ -674,6 +736,7 @@ export function VAPPage() {
                       <SelectItem value="annotation">Annotation Check</SelectItem>
                       <SelectItem value="image">Image Policy</SelectItem>
                       <SelectItem value="replica">Replica Limit</SelectItem>
+                      <SelectItem value="resource-limits">Resource Limits</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -895,6 +958,60 @@ export function VAPPage() {
 
                   <p className="text-xs text-muted-foreground">
                     Applies to <span className="font-medium">apps/v1</span> Deployments and StatefulSets (CREATE/UPDATE) and their scale subresources (UPDATE).
+                  </p>
+                </div>
+              )}
+
+              {/* ── Resource Limits rules ── */}
+              {builderRuleType === 'resource-limits' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Resource Limit Rules</Label>
+                    <Button variant="outline" size="sm" onClick={addResourceLimitRule}>+ Add Rule</Button>
+                  </div>
+
+                  {resourceLimitRules.map((rule, i) => (
+                    <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
+                        {resourceLimitRules.length > 1 && (
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => removeResourceLimitRule(i)}>
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Limit Type</span>
+                        <Select value={rule.limitType} onValueChange={v => updateResourceLimitRule(i, 'limitType', v)}>
+                          <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="both">CPU and Memory — both limits must be set</SelectItem>
+                              <SelectItem value="cpu">CPU only — CPU limit must be set</SelectItem>
+                              <SelectItem value="memory">Memory only — memory limit must be set</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                        <Input value={rule.message} onChange={e => updateResourceLimitRule(i, 'message', e.target.value)}
+                          placeholder={autoResourceLimitMessage(rule)} className="h-8 text-sm" />
+                      </div>
+                    </div>
+                  ))}
+
+                  {resourceLimitRules.length > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      Each rule is evaluated independently — a request is denied if any rule fails.
+                    </p>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
                   </p>
                 </div>
               )}
