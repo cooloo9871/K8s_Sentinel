@@ -306,9 +306,15 @@ function tryParseBuilderBinding(rawYaml: string): {
     // was later hand-edited and re-opening in the builder would silently drop those fields.
     const mr = spec?.matchResources
     if (mr) {
-      if (Object.keys(mr).some(k => k !== 'namespaceSelector')) return null
+      // K8s may add null fields when defaulting (e.g. resourceRules: null, objectSelector: null).
+      // Only reject if there are non-null unsupported fields — those indicate hand-editing.
+      const nonNullExtra = Object.keys(mr).filter(k => k !== 'namespaceSelector' && mr[k] != null)
+      if (nonNullExtra.length > 0) return null
       const nsSel = mr.namespaceSelector as Record<string, unknown> | undefined
-      if (nsSel && Object.keys(nsSel).some(k => k !== 'matchLabels')) return null
+      if (nsSel) {
+        const nonNullNsExtra = Object.keys(nsSel).filter(k => k !== 'matchLabels' && nsSel[k] != null)
+        if (nonNullNsExtra.length > 0) return null
+      }
     }
     const ns = (mr?.namespaceSelector as { matchLabels?: Record<string, string> } | undefined)
       ?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
@@ -622,7 +628,7 @@ export function VAPPage() {
                           className="h-8 text-sm" />
                       </div>
 
-                      {rule.key.trim() && rule.value.trim() && (
+                      {!builderEditName && rule.key.trim() && rule.value.trim() && (
                         <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
                           {rule.condition === '=='
                             ? `!has(labels) || !('${rule.key}' in labels) || labels['${rule.key}'] != '${rule.value}'`
@@ -687,12 +693,14 @@ export function VAPPage() {
                           placeholder={autoImageMessage(rule)} className="h-8 text-sm" />
                       </div>
 
-                      <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                        {rule.type === 'no-latest'
-                          ? `containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
-                          : `containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
-                        <span className="ml-2 text-[10px] opacity-60">pods · deployments · statefulsets · jobs · cronjobs</span>
-                      </div>
+                      {!builderEditName && (
+                        <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                          {rule.type === 'no-latest'
+                            ? `containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
+                            : `containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
+                          <span className="ml-2 text-[10px] opacity-60">pods · deployments · statefulsets · jobs · cronjobs</span>
+                        </div>
+                      )}
                     </div>
                   ))}
 
@@ -740,9 +748,11 @@ export function VAPPage() {
                           placeholder={autoReplicaMessage(rule)} className="h-8 text-sm" />
                       </div>
 
-                      <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                        {`object.spec.replicas <= ${rule.maxReplicas || 5}`}
-                      </div>
+                      {!builderEditName && (
+                        <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                          {`object.spec.replicas <= ${rule.maxReplicas || 5}`}
+                        </div>
+                      )}
                     </div>
                   ))}
 
