@@ -216,15 +216,15 @@ export function VAPPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="==">== 必須有此 label（Require）</SelectItem>
-                        <SelectItem value="!=">!= 不能有此 label（Prohibit）</SelectItem>
+                        <SelectItem value="==">== Must have this label (Require)</SelectItem>
+                        <SelectItem value="!=">!= Must not have this label (Prohibit)</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     {labelCondition === '=='
-                      ? '資源必須帶有此 label，否則拒絕'
-                      : '資源不得帶有此 label，否則拒絕'}
+                      ? 'Resources missing this label will be denied.'
+                      : 'Resources carrying this label will be denied.'}
                   </p>
                 </div>
 
