@@ -32,7 +32,9 @@ type ImagePolicyType = 'no-latest' | 'required-registry'
 type LabelApplyTo =
   | 'all' | 'workloads'
   | 'pods' | 'deployments' | 'statefulsets' | 'daemonsets' | 'jobs' | 'cronjobs'
-  | 'configmaps' | 'secrets' | 'persistentvolumeclaims' | 'services' | 'namespaces'
+  | 'configmaps' | 'secrets' | 'persistentvolumeclaims' | 'services'
+  | 'ingresses' | 'networkpolicies' | 'serviceaccounts'
+  | 'namespaces'
 
 interface LabelRule {
   key: string
@@ -74,6 +76,10 @@ function applyToResourceRuleLines(applyTo: LabelApplyTo): string[] {
     '      - apiGroups: ["batch"]', '        apiVersions: ["v1"]',
     '        operations: [CREATE, UPDATE]', `        resources: [${resources}]`,
   ]
+  const networking = (resources: string) => [
+    '      - apiGroups: ["networking.k8s.io"]', '        apiVersions: ["v1"]',
+    '        operations: [CREATE, UPDATE]', `        resources: ["${resources}"]`,
+  ]
   const prefix = '    resourceRules:'
   switch (applyTo) {
     case 'workloads': return [prefix, ...core('pods'), ...apps('"deployments", "statefulsets", "daemonsets", "replicasets"'), ...batch('"jobs", "cronjobs"')]
@@ -87,6 +93,9 @@ function applyToResourceRuleLines(applyTo: LabelApplyTo): string[] {
     case 'secrets':                 return [prefix, ...core('secrets')]
     case 'persistentvolumeclaims':  return [prefix, ...core('persistentvolumeclaims')]
     case 'services':                return [prefix, ...core('services')]
+    case 'serviceaccounts':         return [prefix, ...core('serviceaccounts')]
+    case 'ingresses':               return [prefix, ...networking('ingresses')]
+    case 'networkpolicies':         return [prefix, ...networking('networkpolicies')]
     case 'namespaces':              return [prefix, ...core('namespaces')]
     default: return [prefix, '      - apiGroups: ["*"]', '        apiVersions: ["*"]', '        operations: [CREATE, UPDATE]', '        resources: ["*"]']
   }
@@ -694,7 +703,14 @@ export function VAPPage() {
                         <SelectItem value="secrets">Secrets</SelectItem>
                         <SelectItem value="persistentvolumeclaims">PersistentVolumeClaims (PVC)</SelectItem>
                         <SelectItem value="services">Services</SelectItem>
-                        <SelectItem value="namespaces">Namespaces</SelectItem>
+                        <SelectItem value="serviceaccounts">ServiceAccounts</SelectItem>
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectItem value="ingresses">Ingresses</SelectItem>
+                        <SelectItem value="networkpolicies">NetworkPolicies</SelectItem>
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectItem value="namespaces">Namespaces (cluster-scoped, namespace filter does not apply)</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
