@@ -522,8 +522,7 @@ export function VAPPage() {
 
   const updateResourceLimitRule = (i: number, field: keyof ResourceLimitRule, val: string) =>
     setResourceLimitRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
-  const addResourceLimitRule = () => setResourceLimitRules(prev => [...prev, emptyResourceLimitRule()])
-  const removeResourceLimitRule = (i: number) => setResourceLimitRules(prev => prev.filter((_, idx) => idx !== i))
+
 
   const resetBuilderForm = () => {
     setBuilderEditName(undefined)
@@ -963,28 +962,15 @@ export function VAPPage() {
               )}
 
               {/* ── Resource Limits rules ── */}
-              {builderRuleType === 'resource-limits' && (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Resource Limit Rules</Label>
-                    <Button variant="outline" size="sm" onClick={addResourceLimitRule}>+ Add Rule</Button>
-                  </div>
-
-                  {resourceLimitRules.map((rule, i) => (
-                    <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
-                        {resourceLimitRules.length > 1 && (
-                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                            onClick={() => removeResourceLimitRule(i)}>
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-
+              {builderRuleType === 'resource-limits' && (() => {
+                const rule = resourceLimitRules[0]
+                return (
+                  <div className="flex flex-col gap-3">
+                    <Label>Resource Limit Rule</Label>
+                    <div className="flex flex-col gap-3 rounded-lg border p-4">
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Limit Type</span>
-                        <Select value={rule.limitType} onValueChange={v => updateResourceLimitRule(i, 'limitType', v)}>
+                        <Select value={rule.limitType} onValueChange={v => updateResourceLimitRule(0, 'limitType', v)}>
                           <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
@@ -995,26 +981,18 @@ export function VAPPage() {
                           </SelectContent>
                         </Select>
                       </div>
-
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
-                        <Input value={rule.message} onChange={e => updateResourceLimitRule(i, 'message', e.target.value)}
+                        <Input value={rule.message} onChange={e => updateResourceLimitRule(0, 'message', e.target.value)}
                           placeholder={autoResourceLimitMessage(rule)} className="h-8 text-sm" />
                       </div>
                     </div>
-                  ))}
-
-                  {resourceLimitRules.length > 1 && (
                     <p className="text-xs text-muted-foreground">
-                      Each rule is evaluated independently — a request is denied if any rule fails.
+                      Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
                     </p>
-                  )}
-
-                  <p className="text-xs text-muted-foreground">
-                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
-                  </p>
-                </div>
-              )}
+                  </div>
+                )
+              })()}
             </CardContent>
           </Card>
 
