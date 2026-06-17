@@ -237,18 +237,20 @@ function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
     )
   }
   if (nonRoot) {
-    const cCheck = `all(c, !has(c.securityContext) || !has(c.securityContext.runAsNonRoot) || c.securityContext.runAsNonRoot == true)`
+    // Use nested orValue to model K8s inheritance: container-level overrides pod-level.
+    // c.?securityContext.?runAsNonRoot.orValue(podDefault) — if container sets the field,
+    // use it; otherwise fall back to the pod/template securityContext value.
+    const podCheck   = `all(c, c.?securityContext.?runAsNonRoot.orValue(object.spec.?securityContext.?runAsNonRoot.orValue(false)) == true)`
+    const tmplCheck  = `all(c, c.?securityContext.?runAsNonRoot.orValue(object.spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false)) == true)`
+    const jobCheck   = `all(c, c.?securityContext.?runAsNonRoot.orValue(object.spec.?jobTemplate.?spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false)) == true)`
     lines.push(
       '    - expression: >-',
-      `        (object.spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
-      `        object.spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
-      `        object.spec.?jobTemplate.?spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false) == true) &&`,
-      `        object.spec.?containers.orValue([]).${cCheck} &&`,
-      `        object.spec.?initContainers.orValue([]).${cCheck} &&`,
-      `        object.spec.?template.?spec.?containers.orValue([]).${cCheck} &&`,
-      `        object.spec.?template.?spec.?initContainers.orValue([]).${cCheck} &&`,
-      `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${cCheck} &&`,
-      `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${cCheck}`,
+      `        object.spec.?containers.orValue([]).${podCheck} &&`,
+      `        object.spec.?initContainers.orValue([]).${podCheck} &&`,
+      `        object.spec.?template.?spec.?containers.orValue([]).${tmplCheck} &&`,
+      `        object.spec.?template.?spec.?initContainers.orValue([]).${tmplCheck} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${jobCheck} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${jobCheck}`,
       `      message: "${m}"`,
       '      reason: Forbidden',
     )
