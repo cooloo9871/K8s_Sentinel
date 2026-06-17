@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
@@ -63,10 +63,18 @@ interface ResourceLimitRule {
   message: string
 }
 
+interface SecurityContextRule {
+  noPrivileged: boolean
+  runAsNonRoot: boolean
+  noPrivilegedMessage: string
+  runAsNonRootMessage: string
+}
+
 const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
 const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', message: '' })
 const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'deployments', message: '' })
 const emptyResourceLimitRule = (): ResourceLimitRule => ({ limitType: 'both', message: '' })
+const emptySecurityContextRule = (): SecurityContextRule => ({ noPrivileged: true, runAsNonRoot: false, noPrivilegedMessage: '', runAsNonRootMessage: '' })
 
 // Policy builder ---------------------------------------------------------------
 
@@ -203,6 +211,37 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
   ]
 }
 
+function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
+  const lines: string[] = []
+  if (rule.noPrivileged) {
+    const m = escapeYaml(rule.noPrivilegedMessage.trim() || 'Privileged containers are not allowed')
+    const check = `all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || c.securityContext.privileged == false)`
+    lines.push(
+      '    - expression: >-',
+      `        object.spec.?containers.orValue([]).${check} &&`,
+      `        object.spec.?initContainers.orValue([]).${check} &&`,
+      `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
+      `        object.spec.?template.?spec.?initContainers.orValue([]).${check} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${check}`,
+      `      message: "${m}"`,
+      '      reason: Forbidden',
+    )
+  }
+  if (rule.runAsNonRoot) {
+    const m = escapeYaml(rule.runAsNonRootMessage.trim() || 'Workloads must set runAsNonRoot: true in pod securityContext')
+    lines.push(
+      '    - expression: >-',
+      `        object.spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
+      `        object.spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false) == true`,
+      `      message: "${m}"`,
+      '      reason: Forbidden',
+    )
+  }
+  return lines
+}
+
 function autoResourceLimitMessage(rule: ResourceLimitRule): string {
   return rule.limitType === 'cpu'
     ? 'All containers must set CPU limits'
@@ -260,6 +299,7 @@ function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
   replicaRules: ReplicaRule[], applyTo: LabelApplyTo = 'all',
   resourceLimitRules: ResourceLimitRule[] = [],
+  securityContextRule: SecurityContextRule = emptySecurityContextRule(),
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
@@ -274,6 +314,9 @@ function generatePolicyYaml(
     validationLines = active.length ? active.flatMap(imageRuleToYamlLines) : imageRuleToYamlLines(emptyImageRule())
   } else if (ruleType === 'resource-limits') {
     validationLines = resourceLimitRules.length ? resourceLimitRules.flatMap(resourceLimitRuleToYamlLines) : resourceLimitRuleToYamlLines(emptyResourceLimitRule())
+  } else if (ruleType === 'security-context') {
+    validationLines = securityContextRuleToYamlLines(securityContextRule)
+    if (validationLines.length === 0) validationLines = securityContextRuleToYamlLines(emptySecurityContextRule())
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -291,7 +334,7 @@ function generatePolicyYaml(
         '      operations: [UPDATE]',
         '      resources: ["deployments/scale", "statefulsets/scale"]',
       ]
-    : (ruleType === 'image' || ruleType === 'resource-limits')
+    : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context')
     ? [
         '    resourceRules:',
         '      - apiGroups: [""]',
@@ -410,9 +453,18 @@ function parseExpressionToResourceLimitRule(expr: string, msg: string): Resource
   return null
 }
 
+type SecurityContextPart = 'no-privileged' | 'run-as-non-root'
+function parseExpressionToSecurityContextPart(expr: string): SecurityContextPart | null {
+  const e = expr.replace(/\s+/g, ' ').trim()
+  if (e.includes('c.securityContext.privileged == false')) return 'no-privileged'
+  if (e.includes('runAsNonRoot.orValue(false) == true')) return 'run-as-non-root'
+  return null
+}
+
 function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType
-  labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]; resourceLimitRules: ResourceLimitRule[]
+  labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
+  resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -427,6 +479,7 @@ function tryParseBuilderPolicy(rawYaml: string): {
     const replicaRules: ReplicaRule[] = []
     const annotationRules: LabelRule[] = []
     const resourceLimitRules: ResourceLimitRule[] = []
+    const scParts: { part: SecurityContextPart; message: string }[] = []
     for (const v of spec.validations) {
       const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
       if (lr) { labelRules.push(lr); continue }
@@ -438,17 +491,27 @@ function tryParseBuilderPolicy(rawYaml: string): {
       if (rr) { replicaRules.push(rr); continue }
       const rlr = parseExpressionToResourceLimitRule(v.expression ?? '', v.message ?? '')
       if (rlr) { resourceLimitRules.push(rlr); continue }
+      const scp = parseExpressionToSecurityContextPart(v.expression ?? '')
+      if (scp) { scParts.push({ part: scp, message: v.message ?? '' }); continue }
       return null  // unknown expression type — fall through to YAML editor
     }
+    // Build security context rule from parts
+    const securityContextRule: SecurityContextRule = {
+      noPrivileged: scParts.some(p => p.part === 'no-privileged'),
+      runAsNonRoot: scParts.some(p => p.part === 'run-as-non-root'),
+      noPrivilegedMessage: scParts.find(p => p.part === 'no-privileged')?.message ?? '',
+      runAsNonRootMessage: scParts.find(p => p.part === 'run-as-non-root')?.message ?? '',
+    }
     // All rules must be the same type
-    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0].filter(Boolean).length
+    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0].filter(Boolean).length
     if (typesUsed > 1) return null
     const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica'
       : imageRules.length > 0 ? 'image'
       : annotationRules.length > 0 ? 'annotation'
       : resourceLimitRules.length > 0 ? 'resource-limits'
+      : scParts.length > 0 ? 'security-context'
       : 'label'
-    return { name: meta?.name ?? '', ruleType, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules }
+    return { name: meta?.name ?? '', ruleType, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule }
   } catch { return null }
 }
 
@@ -506,6 +569,7 @@ export function VAPPage() {
   const [imageRules, setImageRules] = useState<ImageRule[]>([emptyImageRule()])
   const [replicaRules, setReplicaRules] = useState<ReplicaRule[]>([emptyReplicaRule()])
   const [resourceLimitRules, setResourceLimitRules] = useState<ResourceLimitRule[]>([emptyResourceLimitRule()])
+  const [securityContextRule, setSecurityContextRule] = useState<SecurityContextRule>(emptySecurityContextRule())
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -535,6 +599,7 @@ export function VAPPage() {
     setImageRules([emptyImageRule()])
     setReplicaRules([emptyReplicaRule()])
     setResourceLimitRules([emptyResourceLimitRule()])
+    setSecurityContextRule(emptySecurityContextRule())
   }
 
   // Binding builder state
@@ -576,6 +641,7 @@ export function VAPPage() {
         setImageRules(parsed.imageRules.length ? parsed.imageRules : [emptyImageRule()])
         setReplicaRules(parsed.replicaRules.length ? parsed.replicaRules : [emptyReplicaRule()])
         setResourceLimitRules(parsed.resourceLimitRules.length ? parsed.resourceLimitRules : [emptyResourceLimitRule()])
+        setSecurityContextRule(parsed.securityContextRule)
         setShowBuilder(true)
         return
       }
@@ -637,11 +703,13 @@ export function VAPPage() {
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
       ? true
+      : builderRuleType === 'security-context'
+      ? (securityContextRule.noPrivileged || securityContextRule.runAsNonRoot)
       : replicaRules.some(r => r.maxReplicas > 0)
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -686,6 +754,8 @@ export function VAPPage() {
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
       ? true
+      : builderRuleType === 'security-context'
+      ? (securityContextRule.noPrivileged || securityContextRule.runAsNonRoot)
       : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
     return (
@@ -725,6 +795,7 @@ export function VAPPage() {
                     setImageRules([emptyImageRule()])
                     setReplicaRules([emptyReplicaRule()])
                     setResourceLimitRules([emptyResourceLimitRule()])
+                    setSecurityContextRule(emptySecurityContextRule())
                   }}
                   disabled={!!builderEditName}
                 >
@@ -738,6 +809,7 @@ export function VAPPage() {
                       <SelectItem value="image">Image Policy</SelectItem>
                       <SelectItem value="replica">Replica Limit</SelectItem>
                       <SelectItem value="resource-limits">Resource Limits</SelectItem>
+                      <SelectItem value="security-context">Security Context</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -973,6 +1045,62 @@ export function VAPPage() {
                   </div>
                 )
               })()}
+
+              {/* ── Security Context rules ── */}
+              {builderRuleType === 'security-context' && (
+                <div className="flex flex-col gap-3">
+                  <Label>Security Context Checks</Label>
+                  <div className="flex flex-col gap-4 rounded-lg border p-4">
+
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="sc-no-privileged"
+                          checked={securityContextRule.noPrivileged}
+                          onCheckedChange={v => setSecurityContextRule(r => ({ ...r, noPrivileged: !!v }))}
+                        />
+                        <label htmlFor="sc-no-privileged" className="cursor-pointer text-sm">
+                          <span className="font-medium">No Privileged Containers</span>
+                          <span className="ml-2 text-xs text-muted-foreground">— deny containers with privileged: true</span>
+                        </label>
+                      </div>
+                      {securityContextRule.noPrivileged && (
+                        <Input
+                          value={securityContextRule.noPrivilegedMessage}
+                          onChange={e => setSecurityContextRule(r => ({ ...r, noPrivilegedMessage: e.target.value }))}
+                          placeholder="Privileged containers are not allowed"
+                          className="h-8 text-sm ml-6"
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="sc-run-as-non-root"
+                          checked={securityContextRule.runAsNonRoot}
+                          onCheckedChange={v => setSecurityContextRule(r => ({ ...r, runAsNonRoot: !!v }))}
+                        />
+                        <label htmlFor="sc-run-as-non-root" className="cursor-pointer text-sm">
+                          <span className="font-medium">Run as Non-Root</span>
+                          <span className="ml-2 text-xs text-muted-foreground">— require runAsNonRoot: true in pod securityContext</span>
+                        </label>
+                      </div>
+                      {securityContextRule.runAsNonRoot && (
+                        <Input
+                          value={securityContextRule.runAsNonRootMessage}
+                          onChange={e => setSecurityContextRule(r => ({ ...r, runAsNonRootMessage: e.target.value }))}
+                          placeholder="Workloads must set runAsNonRoot: true in pod securityContext"
+                          className="h-8 text-sm ml-6"
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
