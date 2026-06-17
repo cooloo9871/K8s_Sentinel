@@ -628,13 +628,6 @@ export function VAPPage() {
                           className="h-8 text-sm" />
                       </div>
 
-                      {!builderEditName && rule.key.trim() && rule.value.trim() && (
-                        <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                          {rule.condition === '=='
-                            ? `!has(labels) || !('${rule.key}' in labels) || labels['${rule.key}'] != '${rule.value}'`
-                            : `has(labels) && '${rule.key}' in labels && labels['${rule.key}'] == '${rule.value}'`}
-                        </div>
-                      )}
                     </div>
                   ))}
 
@@ -693,14 +686,6 @@ export function VAPPage() {
                           placeholder={autoImageMessage(rule)} className="h-8 text-sm" />
                       </div>
 
-                      {!builderEditName && (
-                        <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                          {rule.type === 'no-latest'
-                            ? `containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
-                            : `containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
-                          <span className="ml-2 text-[10px] opacity-60">pods · deployments · statefulsets · jobs · cronjobs</span>
-                        </div>
-                      )}
                     </div>
                   ))}
 
@@ -748,11 +733,6 @@ export function VAPPage() {
                           placeholder={autoReplicaMessage(rule)} className="h-8 text-sm" />
                       </div>
 
-                      {!builderEditName && (
-                        <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                          {`object.spec.replicas <= ${rule.maxReplicas || 5}`}
-                        </div>
-                      )}
                     </div>
                   ))}
 
