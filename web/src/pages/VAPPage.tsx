@@ -221,8 +221,11 @@ function resourceLimitRuleToYamlLines(rule: ResourceLimitRule): string[] {
   return [
     '    - expression: >-',
     `        object.spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?initContainers.orValue([]).${check} &&`,
     `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
-    `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check}`,
+    `        object.spec.?template.?spec.?initContainers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${check}`,
     `      message: "${m}"`,
     '      reason: Forbidden',
   ]
@@ -676,7 +679,7 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules)
     const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
