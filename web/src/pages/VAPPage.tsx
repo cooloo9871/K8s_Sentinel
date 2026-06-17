@@ -237,11 +237,18 @@ function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
     )
   }
   if (nonRoot) {
+    const cCheck = `all(c, !has(c.securityContext) || !has(c.securityContext.runAsNonRoot) || c.securityContext.runAsNonRoot == true)`
     lines.push(
       '    - expression: >-',
-      `        object.spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
+      `        (object.spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
       `        object.spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
-      `        object.spec.?jobTemplate.?spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false) == true`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?securityContext.?runAsNonRoot.orValue(false) == true) &&`,
+      `        object.spec.?containers.orValue([]).${cCheck} &&`,
+      `        object.spec.?initContainers.orValue([]).${cCheck} &&`,
+      `        object.spec.?template.?spec.?containers.orValue([]).${cCheck} &&`,
+      `        object.spec.?template.?spec.?initContainers.orValue([]).${cCheck} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${cCheck} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${cCheck}`,
       `      message: "${m}"`,
       '      reason: Forbidden',
     )
@@ -323,7 +330,6 @@ function generatePolicyYaml(
     validationLines = resourceLimitRules.length ? resourceLimitRules.flatMap(resourceLimitRuleToYamlLines) : resourceLimitRuleToYamlLines(emptyResourceLimitRule())
   } else if (ruleType === 'security-context') {
     validationLines = securityContextRuleToYamlLines(securityContextRule)
-    if (validationLines.length === 0) validationLines = securityContextRuleToYamlLines(emptySecurityContextRule())
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
