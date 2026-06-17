@@ -98,8 +98,8 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
   const m = escapeYaml(rule.message.trim() || autoImageMessage(rule))
   const reg = rule.registry.trim() || 'registry.example.com'
   const expr = rule.type === 'no-latest'
-    ? `!has(object.spec.containers) || object.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
-    : `!has(object.spec.containers) || object.spec.containers.all(c, c.image.startsWith('${reg}'))`
+    ? `object.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
+    : `object.spec.containers.all(c, c.image.startsWith('${reg}'))`
   return [
     '    - expression: >-',
     `        ${expr}`,
@@ -151,6 +151,14 @@ function generatePolicyYaml(
         '      apiVersions: ["v1"]',
         '      operations: [UPDATE]',
         '      resources: ["deployments/scale"]',
+      ]
+    : ruleType === 'image'
+    ? [
+        '    resourceRules:',
+        '      - apiGroups: [""]',
+        '        apiVersions: ["v1"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["pods"]',
       ]
     : [
         '    resourceRules:',
@@ -669,8 +677,8 @@ export function VAPPage() {
 
                       <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
                         {rule.type === 'no-latest'
-                          ? `spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
-                          : `spec.containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
+                          ? `pod.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
+                          : `pod.spec.containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
                       </div>
                     </div>
                   ))}
