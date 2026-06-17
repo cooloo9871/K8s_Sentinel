@@ -27,6 +27,8 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
+type PolicyRuleType = 'label' | 'image'
+type ImagePolicyType = 'no-latest' | 'required-registry'
 
 interface LabelRule {
   key: string
@@ -35,7 +37,14 @@ interface LabelRule {
   message: string
 }
 
+interface ImageRule {
+  type: ImagePolicyType
+  registry: string  // only for 'required-registry'
+  message: string
+}
+
 const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
+const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', message: '' })
 
 // Policy builder ---------------------------------------------------------------
 
@@ -73,12 +82,38 @@ function ruleToYamlLines(rule: LabelRule): string[] {
   ]
 }
 
-function generateLabelPolicyYaml(name: string, rules: LabelRule[]): string {
+function autoImageMessage(rule: ImageRule): string {
+  if (rule.type === 'no-latest') return 'Container images must not use the :latest tag'
+  const r = rule.registry.trim()
+  return r ? `Container images must be from ${r}` : 'Container images must be from an allowed registry'
+}
+
+function imageRuleToYamlLines(rule: ImageRule): string[] {
+  const m = escapeYaml(rule.message.trim() || autoImageMessage(rule))
+  const reg = rule.registry.trim() || 'registry.example.com'
+  const expr = rule.type === 'no-latest'
+    ? `!has(object.spec.containers) || object.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
+    : `!has(object.spec.containers) || object.spec.containers.all(c, c.image.startsWith('${reg}'))`
+  return [
+    '    - expression: >-',
+    `        ${expr}`,
+    `      message: "${m}"`,
+    '      reason: Forbidden',
+  ]
+}
+
+function generatePolicyYaml(
+  name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
+): string {
   const safeName = name.trim() || 'my-policy'
-  const activeRules = rules.filter(r => r.key.trim() && r.value.trim())
-  const validationLines = activeRules.length
-    ? activeRules.flatMap(ruleToYamlLines)
-    : ruleToYamlLines(emptyRule())
+  let validationLines: string[]
+  if (ruleType === 'label') {
+    const active = labelRules.filter(r => r.key.trim() && r.value.trim())
+    validationLines = active.length ? active.flatMap(ruleToYamlLines) : ruleToYamlLines(emptyRule())
+  } else {
+    const active = imageRules.filter(r => r.type === 'no-latest' || r.registry.trim())
+    validationLines = active.length ? active.flatMap(imageRuleToYamlLines) : imageRuleToYamlLines(emptyImageRule())
+  }
 
   return [
     'apiVersion: admissionregistration.k8s.io/v1',
@@ -145,7 +180,18 @@ function parseExpressionToRule(expr: string, msg: string): LabelRule | null {
   return null
 }
 
-function tryParseBuilderPolicy(rawYaml: string): { name: string; rules: LabelRule[] } | null {
+function parseExpressionToImageRule(expr: string, msg: string): ImageRule | null {
+  const e = expr.replace(/\s+/g, ' ').trim()
+  if (e.includes("!c.image.endsWith(':latest')"))
+    return { type: 'no-latest', registry: '', message: msg }
+  const m = e.match(/c\.image\.startsWith\('([^']+)'\)/)
+  if (m) return { type: 'required-registry', registry: m[1], message: msg }
+  return null
+}
+
+function tryParseBuilderPolicy(rawYaml: string): {
+  name: string; ruleType: PolicyRuleType; labelRules: LabelRule[]; imageRules: ImageRule[]
+} | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
     if (doc?.kind !== 'ValidatingAdmissionPolicy') return null
@@ -153,13 +199,20 @@ function tryParseBuilderPolicy(rawYaml: string): { name: string; rules: LabelRul
     if (meta?.annotations?.['sentinel.io/builder'] !== 'true') return null
     const spec = doc.spec as { validations?: Array<{ expression?: string; message?: string }> }
     if (!spec?.validations?.length) return null
-    const rules: LabelRule[] = []
+
+    const labelRules: LabelRule[] = []
+    const imageRules: ImageRule[] = []
     for (const v of spec.validations) {
-      const rule = parseExpressionToRule(v.expression ?? '', v.message ?? '')
-      if (!rule) return null
-      rules.push(rule)
+      const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
+      if (lr) { labelRules.push(lr); continue }
+      const ir = parseExpressionToImageRule(v.expression ?? '', v.message ?? '')
+      if (ir) { imageRules.push(ir); continue }
+      return null  // unknown expression type — fall through to YAML editor
     }
-    return { name: meta?.name ?? '', rules }
+    // All rules must be the same type
+    if (labelRules.length > 0 && imageRules.length > 0) return null
+    const ruleType: PolicyRuleType = imageRules.length > 0 ? 'image' : 'label'
+    return { name: meta?.name ?? '', ruleType, labelRules, imageRules }
   } catch { return null }
 }
 
@@ -219,13 +272,28 @@ export function VAPPage() {
   const [showBuilder, setShowBuilder] = useState(false)
   const [builderEditName, setBuilderEditName] = useState<string | undefined>()
   const [builderName, setBuilderName] = useState('')
+  const [builderRuleType, setBuilderRuleType] = useState<PolicyRuleType>('label')
   const [labelRules, setLabelRules] = useState<LabelRule[]>([emptyRule()])
+  const [imageRules, setImageRules] = useState<ImageRule[]>([emptyImageRule()])
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
     setLabelRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
   const addRule = () => setLabelRules(prev => [...prev, emptyRule()])
   const removeRule = (i: number) => setLabelRules(prev => prev.filter((_, idx) => idx !== i))
+
+  const updateImageRule = (i: number, field: keyof ImageRule, val: string) =>
+    setImageRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  const addImageRule = () => setImageRules(prev => [...prev, emptyImageRule()])
+  const removeImageRule = (i: number) => setImageRules(prev => prev.filter((_, idx) => idx !== i))
+
+  const resetBuilderForm = () => {
+    setBuilderEditName(undefined)
+    setBuilderName('')
+    setBuilderRuleType('label')
+    setLabelRules([emptyRule()])
+    setImageRules([emptyImageRule()])
+  }
 
   // Binding builder state
   const [showBindingBuilder, setShowBindingBuilder] = useState(false)
@@ -261,7 +329,9 @@ export function VAPPage() {
       if (parsed) {
         setBuilderEditName(name)
         setBuilderName(parsed.name)
-        setLabelRules(parsed.rules)
+        setBuilderRuleType(parsed.ruleType)
+        setLabelRules(parsed.labelRules.length ? parsed.labelRules : [emptyRule()])
+        setImageRules(parsed.imageRules.length ? parsed.imageRules : [emptyImageRule()])
         setShowBuilder(true)
         return
       }
@@ -316,18 +386,19 @@ export function VAPPage() {
   }
 
   const handleBuilderApply = async () => {
-    const valid = builderName.trim() && labelRules.some(r => r.key.trim() && r.value.trim())
-    if (!valid) return
+    const nameOk = builderName.trim()
+    const rulesOk = builderRuleType === 'label'
+      ? labelRules.some(r => r.key.trim() && r.value.trim())
+      : imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+    if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generateLabelPolicyYaml(builderName, labelRules)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
       setShowBuilder(false)
-      setBuilderEditName(undefined)
-      setBuilderName('')
-      setLabelRules([emptyRule()])
+      resetBuilderForm()
       load()
     } catch (e: unknown) {
       toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
@@ -360,8 +431,11 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generateLabelPolicyYaml(builderName, labelRules)
-    const canApply = builderName.trim() !== '' && labelRules.some(r => r.key.trim() && r.value.trim())
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules)
+    const rulesOk = builderRuleType === 'label'
+      ? labelRules.some(r => r.key.trim() && r.value.trim())
+      : imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+    const canApply = builderName.trim() !== '' && rulesOk
     return (
       <>
         <div className="mb-6 flex items-center justify-between">
@@ -370,7 +444,7 @@ export function VAPPage() {
             <p className="text-sm text-muted-foreground">Configure the policy rules below, then click Apply.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowBuilder(false); setBuilderEditName(undefined); setBuilderName(''); setLabelRules([emptyRule()]) }}>← Back</Button>
+            <Button variant="outline" onClick={() => { setShowBuilder(false); resetBuilderForm() }}>← Back</Button>
             {isAdmin && (
               <Button onClick={handleBuilderApply} disabled={!canApply || builderSaving}>
                 {builderSaving ? 'Applying...' : 'Apply'}
@@ -391,79 +465,158 @@ export function VAPPage() {
 
               <div className="flex flex-col gap-1.5">
                 <Label>Rule Type</Label>
-                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                  Label Check
-                </div>
+                <Select
+                  value={builderRuleType}
+                  onValueChange={v => {
+                    setBuilderRuleType(v as PolicyRuleType)
+                    setLabelRules([emptyRule()])
+                    setImageRules([emptyImageRule()])
+                  }}
+                  disabled={!!builderEditName}
+                >
+                  <SelectTrigger className={builderEditName ? 'opacity-60 cursor-default' : ''}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="label">Label Check</SelectItem>
+                      <SelectItem value="image">Image Policy</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <Label>Label Rules</Label>
-                  <Button variant="outline" size="sm" onClick={addRule}>+ Add Rule</Button>
-                </div>
+              {/* ── Label Check rules ── */}
+              {builderRuleType === 'label' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Label Rules</Label>
+                    <Button variant="outline" size="sm" onClick={addRule}>+ Add Rule</Button>
+                  </div>
 
-                {labelRules.map((rule, i) => (
-                  <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
-                      {labelRules.length > 1 && (
-                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                          onClick={() => removeRule(i)}>
-                          Remove
-                        </Button>
+                  {labelRules.map((rule, i) => (
+                    <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
+                        {labelRules.length > 1 && (
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => removeRule(i)}>
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">Key</span>
+                          <Input value={rule.key} onChange={e => updateRule(i, 'key', e.target.value)} placeholder="e.g. app" className="h-8 text-sm" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">Value</span>
+                          <Input value={rule.value} onChange={e => updateRule(i, 'value', e.target.value)} placeholder="e.g. test" className="h-8 text-sm" />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Condition</span>
+                        <Select value={rule.condition} onValueChange={v => updateRule(i, 'condition', v)}>
+                          <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="==">Deny when label key matches the value</SelectItem>
+                              <SelectItem value="!=">Deny when label key is missing or does not match the value</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                        <Input value={rule.message} onChange={e => updateRule(i, 'message', e.target.value)}
+                          placeholder={autoMessage(rule.key || 'key', rule.condition, rule.value || 'value')}
+                          className="h-8 text-sm" />
+                      </div>
+
+                      {rule.key.trim() && rule.value.trim() && (
+                        <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                          {rule.condition === '=='
+                            ? `!has(labels) || !('${rule.key}' in labels) || labels['${rule.key}'] != '${rule.value}'`
+                            : `has(labels) && '${rule.key}' in labels && labels['${rule.key}'] == '${rule.value}'`}
+                        </div>
                       )}
                     </div>
+                  ))}
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Key</span>
-                        <Input value={rule.key} onChange={e => updateRule(i, 'key', e.target.value)} placeholder="e.g. app" className="h-8 text-sm" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Value</span>
-                        <Input value={rule.value} onChange={e => updateRule(i, 'value', e.target.value)} placeholder="e.g. test" className="h-8 text-sm" />
-                      </div>
-                    </div>
+                  {labelRules.length > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      Each rule is evaluated independently — a request is denied if any rule fails.
+                    </p>
+                  )}
+                </div>
+              )}
 
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Condition</span>
-                      <Select value={rule.condition} onValueChange={v => updateRule(i, 'condition', v)}>
-                        <SelectTrigger className="text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="==">Deny when label key matches the value</SelectItem>
-                            <SelectItem value="!=">Deny when label key is missing or does not match the value</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
-                      <Input value={rule.message} onChange={e => updateRule(i, 'message', e.target.value)}
-                        placeholder={autoMessage(rule.key || 'key', rule.condition, rule.value || 'value')}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-
-                    {rule.key.trim() && rule.value.trim() && (
-                      <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                        {rule.condition === '=='
-                          ? `!has(labels) || !('${rule.key}' in labels) || labels['${rule.key}'] != '${rule.value}'`
-                          : `has(labels) && '${rule.key}' in labels && labels['${rule.key}'] == '${rule.value}'`}
-                      </div>
-                    )}
+              {/* ── Image Policy rules ── */}
+              {builderRuleType === 'image' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Image Rules</Label>
+                    <Button variant="outline" size="sm" onClick={addImageRule}>+ Add Rule</Button>
                   </div>
-                ))}
 
-                {labelRules.length > 1 && (
-                  <p className="text-xs text-muted-foreground">
-                    Each rule is evaluated independently — a request is denied if any rule fails.
-                  </p>
-                )}
-              </div>
+                  {imageRules.map((rule, i) => (
+                    <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
+                        {imageRules.length > 1 && (
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => removeImageRule(i)}>
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Image Check</span>
+                        <Select value={rule.type} onValueChange={v => updateImageRule(i, 'type', v)}>
+                          <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="no-latest">No Latest Tag — deny images using :latest or no tag</SelectItem>
+                              <SelectItem value="required-registry">Required Registry — deny images not from the specified registry</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {rule.type === 'required-registry' && (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">Registry</span>
+                          <Input value={rule.registry} onChange={e => updateImageRule(i, 'registry', e.target.value)}
+                            placeholder="e.g. registry.example.com" className="h-8 text-sm" />
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                        <Input value={rule.message} onChange={e => updateImageRule(i, 'message', e.target.value)}
+                          placeholder={autoImageMessage(rule)} className="h-8 text-sm" />
+                      </div>
+
+                      <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                        {rule.type === 'no-latest'
+                          ? `spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
+                          : `spec.containers.all(c, c.image.startsWith('${rule.registry || 'registry.example.com'}'))`}
+                      </div>
+                    </div>
+                  ))}
+
+                  {imageRules.length > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      Each rule is evaluated independently — a request is denied if any rule fails.
+                    </p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
