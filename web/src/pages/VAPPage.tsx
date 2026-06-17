@@ -310,29 +310,30 @@ export function VAPPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Key</span>
                         <Input value={rule.key} onChange={e => updateRule(i, 'key', e.target.value)} placeholder="e.g. app" className="h-8 text-sm" />
                       </div>
                       <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Condition</span>
-                        <Select value={rule.condition} onValueChange={v => updateRule(i, 'condition', v)}>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectItem value="==">== equals</SelectItem>
-                              <SelectItem value="!=">!= not equals</SelectItem>
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Value</span>
                         <Input value={rule.value} onChange={e => updateRule(i, 'value', e.target.value)} placeholder="e.g. test" className="h-8 text-sm" />
                       </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Condition</span>
+                      <Select value={rule.condition} onValueChange={v => updateRule(i, 'condition', v)}>
+                        <SelectTrigger className="text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="==">== equals — deny when label key matches the value</SelectItem>
+                            <SelectItem value="!=">!= not equals — deny when label key is missing or does not match the value</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="flex flex-col gap-1">
