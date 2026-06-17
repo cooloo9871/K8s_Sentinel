@@ -43,14 +43,17 @@ interface ImageRule {
   message: string
 }
 
+type ReplicaResourceType = 'deployments' | 'statefulsets' | 'both'
+
 interface ReplicaRule {
   maxReplicas: number
+  resourceType: ReplicaResourceType
   message: string
 }
 
 const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
 const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', message: '' })
-const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, message: '' })
+const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'deployments', message: '' })
 
 // Policy builder ---------------------------------------------------------------
 
@@ -114,14 +117,24 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
 
 function autoReplicaMessage(rule: ReplicaRule): string {
   const max = rule.maxReplicas > 0 ? rule.maxReplicas : 5
-  return `Deployment replicas must not exceed ${max}`
+  const label = rule.resourceType === 'statefulsets' ? 'StatefulSet'
+    : rule.resourceType === 'both' ? 'Workload'
+    : 'Deployment'
+  return `${label} replicas must not exceed ${max}`
 }
 
 function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
   const max = rule.maxReplicas > 0 ? rule.maxReplicas : 5
   const m = escapeYaml(rule.message.trim() || autoReplicaMessage(rule))
+  // Use kind guard so multiple rules with different types can coexist
+  // in the same policy with shared matchConstraints.
+  const expr = rule.resourceType === 'deployments'
+    ? `object.kind != 'Deployment' || object.spec.replicas <= ${max}`
+    : rule.resourceType === 'statefulsets'
+    ? `object.kind != 'StatefulSet' || object.spec.replicas <= ${max}`
+    : `object.spec.replicas <= ${max}`
   return [
-    `    - expression: "object.spec.replicas <= ${max}"`,
+    `    - expression: "${expr}"`,
     `      message: "${m}"`,
     '      reason: Forbidden',
   ]
@@ -150,11 +163,11 @@ function generatePolicyYaml(
         '    - apiGroups: ["apps"]',
         '      apiVersions: ["v1"]',
         '      operations: [CREATE, UPDATE]',
-        '      resources: ["deployments"]',
+        '      resources: ["deployments", "statefulsets"]',
         '    - apiGroups: ["apps"]',
         '      apiVersions: ["v1"]',
         '      operations: [UPDATE]',
-        '      resources: ["deployments/scale"]',
+        '      resources: ["deployments/scale", "statefulsets/scale"]',
       ]
     : ruleType === 'image'
     ? [
@@ -251,8 +264,13 @@ function parseExpressionToImageRule(expr: string, msg: string): ImageRule | null
 }
 
 function parseExpressionToReplicaRule(expr: string, msg: string): ReplicaRule | null {
-  const m = expr.trim().match(/^object\.spec\.replicas\s*<=\s*(\d+)$/)
-  if (m) return { maxReplicas: parseInt(m[1], 10), message: msg }
+  const e = expr.trim()
+  let m = e.match(/^object\.kind != 'Deployment' \|\| object\.spec\.replicas <= (\d+)$/)
+  if (m) return { maxReplicas: parseInt(m[1], 10), resourceType: 'deployments', message: msg }
+  m = e.match(/^object\.kind != 'StatefulSet' \|\| object\.spec\.replicas <= (\d+)$/)
+  if (m) return { maxReplicas: parseInt(m[1], 10), resourceType: 'statefulsets', message: msg }
+  m = e.match(/^object\.spec\.replicas\s*<=\s*(\d+)$/)
+  if (m) return { maxReplicas: parseInt(m[1], 10), resourceType: 'both', message: msg }
   return null
 }
 
@@ -703,14 +721,29 @@ export function VAPPage() {
                         )}
                       </div>
 
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Max Replicas</span>
-                        <Input
-                          type="number" min={1}
-                          value={rule.maxReplicas}
-                          onChange={e => updateReplicaRule(i, 'maxReplicas', Math.max(1, parseInt(e.target.value) || 1))}
-                          className="h-8 text-sm w-32"
-                        />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">Resource Type</span>
+                          <Select value={rule.resourceType} onValueChange={v => updateReplicaRule(i, 'resourceType', v)}>
+                            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                <SelectItem value="deployments">Deployments</SelectItem>
+                                <SelectItem value="statefulsets">StatefulSets</SelectItem>
+                                <SelectItem value="both">Both</SelectItem>
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">Max Replicas</span>
+                          <Input
+                            type="number" min={1}
+                            value={rule.maxReplicas}
+                            onChange={e => updateReplicaRule(i, 'maxReplicas', Math.max(1, parseInt(e.target.value) || 1))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
                       </div>
 
                       <div className="flex flex-col gap-1">
@@ -729,7 +762,7 @@ export function VAPPage() {
                   )}
 
                   <p className="text-xs text-muted-foreground">
-                    Applies to <span className="font-medium">apps/v1 Deployments</span> (CREATE/UPDATE) and <span className="font-medium">deployments/scale</span> (UPDATE).
+                    Applies to <span className="font-medium">apps/v1</span> Deployments and StatefulSets (CREATE/UPDATE) and their scale subresources (UPDATE).
                   </p>
                 </div>
               )}
