@@ -183,17 +183,19 @@ export function AdmissionEventsPage() {
                       <TableCell className="text-sm text-muted-foreground">{e.namespace || '—'}</TableCell>
                       <TableCell className="text-sm">
                         {e.source === 'audit' ? (
-                          <>
-                            <span className="text-muted-foreground text-xs">{e.resource}</span>
-                            <span className="text-muted-foreground text-xs"> / </span>
-                            <span className="font-medium">{e.name || '—'}</span>
-                          </>
+                          <div className="truncate" title={`${e.resource} / ${e.name || '—'}`}>
+                            {e.name || '—'}
+                            {e.resource && (
+                              <span className="text-xs text-muted-foreground"> / {e.resource}</span>
+                            )}
+                          </div>
                         ) : (
-                          <>
-                            <span className="text-muted-foreground text-xs">{e.involvedKind?.toLowerCase() || ''}s</span>
-                            <span className="text-muted-foreground text-xs"> / </span>
-                            <span className="font-medium">{e.involvedName || '—'}</span>
-                          </>
+                          <div className="truncate" title={`${e.involvedKind?.toLowerCase() || ''}s / ${e.involvedName || '—'}`}>
+                            {e.involvedName || '—'}
+                            {e.involvedKind && (
+                              <span className="text-xs text-muted-foreground"> / {e.involvedKind.toLowerCase()}s</span>
+                            )}
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>
