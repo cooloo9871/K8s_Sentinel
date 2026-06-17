@@ -676,8 +676,12 @@ export function VAPPage() {
                           <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectItem value="==">Deny when label key matches the value</SelectItem>
-                              <SelectItem value="!=">Deny when label key is missing or does not match the value</SelectItem>
+                              <SelectItem value="==">
+                                {builderRuleType === 'annotation' ? 'Deny when annotation key matches the value' : 'Deny when label key matches the value'}
+                              </SelectItem>
+                              <SelectItem value="!=">
+                                {builderRuleType === 'annotation' ? 'Deny when annotation key is missing or does not match the value' : 'Deny when label key is missing or does not match the value'}
+                              </SelectItem>
                             </SelectGroup>
                           </SelectContent>
                         </Select>
