@@ -1072,8 +1072,8 @@ export function VAPPage() {
                         <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value="no-privileged">No Privileged Containers — deny containers with privileged: true</SelectItem>
-                            <SelectItem value="run-as-non-root">Run as Non-Root — require runAsNonRoot: true in pod securityContext</SelectItem>
+                            <SelectItem value="no-privileged">No Privileged Containers</SelectItem>
+                            <SelectItem value="run-as-non-root">Run as Non-Root</SelectItem>
                             <SelectItem value="both">Both</SelectItem>
                           </SelectGroup>
                         </SelectContent>
