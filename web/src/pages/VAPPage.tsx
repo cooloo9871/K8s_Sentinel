@@ -164,9 +164,30 @@ function tryParseBuilderBinding(rawYaml: string): {
     const spec = doc.spec as {
       policyName?: string
       validationActions?: string[]
-      matchResources?: { namespaceSelector?: { matchLabels?: Record<string, string> } }
+      matchResources?: Record<string, unknown>
     }
-    const ns = spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
+
+    // Only accept bindings whose matchResources is absent OR is exactly
+    // { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': <ns> } } }
+    // Any other structure (resourceRules, objectSelector, matchExpressions, etc.)
+    // means the binding was hand-crafted and must be edited in the YAML editor.
+    const mr = spec?.matchResources
+    if (mr) {
+      const mrKeys = Object.keys(mr)
+      if (mrKeys.some(k => k !== 'namespaceSelector')) return null
+      const nsSel = mr.namespaceSelector as Record<string, unknown> | undefined
+      if (nsSel) {
+        if (Object.keys(nsSel).some(k => k !== 'matchLabels')) return null
+        const ml = nsSel.matchLabels as Record<string, string> | undefined
+        if (ml) {
+          const mlKeys = Object.keys(ml)
+          if (mlKeys.length !== 1 || mlKeys[0] !== 'kubernetes.io/metadata.name') return null
+        }
+      }
+    }
+
+    const ns = (mr?.namespaceSelector as { matchLabels?: Record<string, string> } | undefined)
+      ?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
     return {
       name: meta?.name ?? '',
       policyName: spec?.policyName ?? '',
