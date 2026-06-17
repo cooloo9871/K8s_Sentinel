@@ -263,8 +263,8 @@ function tryParseBuilderPolicy(rawYaml: string): {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
     if (doc?.kind !== 'ValidatingAdmissionPolicy') return null
-    const meta = doc.metadata as { name?: string; annotations?: Record<string, string> }
-    if (meta?.annotations?.['sentinel.io/builder'] !== 'true') return null
+    const meta = doc.metadata as { name?: string; annotations?: Record<string, unknown> }
+    if (String(meta?.annotations?.['sentinel.io/builder']) !== 'true') return null
     const spec = doc.spec as { validations?: Array<{ expression?: string; message?: string }> }
     if (!spec?.validations?.length) return null
 
@@ -294,30 +294,16 @@ function tryParseBuilderBinding(rawYaml: string): {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
     if (doc?.kind !== 'ValidatingAdmissionPolicyBinding') return null
-    const meta = doc.metadata as { name?: string; annotations?: Record<string, string> }
-    if (meta?.annotations?.['sentinel.io/builder'] !== 'true') return null
+    const meta = doc.metadata as { name?: string; annotations?: Record<string, unknown> }
+    // Use String() to handle both string 'true' and boolean true — K8s YAML
+    // serialization may omit quotes, causing js-yaml to parse the value as boolean.
+    if (String(meta?.annotations?.['sentinel.io/builder']) !== 'true') return null
     const spec = doc.spec as {
       policyName?: string
       validationActions?: string[]
-      matchResources?: Record<string, unknown>
+      matchResources?: { namespaceSelector?: { matchLabels?: Record<string, string> } }
     }
-    // Only accept builder-compatible matchResources: absent OR only namespaceSelector.matchLabels
-    // Any other structure (resourceRules, objectSelector, matchExpressions) means the binding
-    // was later hand-edited and re-opening in the builder would silently drop those fields.
-    const mr = spec?.matchResources
-    if (mr) {
-      // K8s may add null fields when defaulting (e.g. resourceRules: null, objectSelector: null).
-      // Only reject if there are non-null unsupported fields — those indicate hand-editing.
-      const nonNullExtra = Object.keys(mr).filter(k => k !== 'namespaceSelector' && mr[k] != null)
-      if (nonNullExtra.length > 0) return null
-      const nsSel = mr.namespaceSelector as Record<string, unknown> | undefined
-      if (nsSel) {
-        const nonNullNsExtra = Object.keys(nsSel).filter(k => k !== 'matchLabels' && nsSel[k] != null)
-        if (nonNullNsExtra.length > 0) return null
-      }
-    }
-    const ns = (mr?.namespaceSelector as { matchLabels?: Record<string, string> } | undefined)
-      ?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
+    const ns = spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
     return {
       name: meta?.name ?? '',
       policyName: spec?.policyName ?? '',
