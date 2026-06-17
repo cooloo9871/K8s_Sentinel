@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -129,6 +129,18 @@ export function VAPPage() {
   const [labelValue, setLabelValue] = useState('')
   const [violationMsg, setViolationMsg] = useState('')
   const [builderSaving, setBuilderSaving] = useState(false)
+  // Track the last auto-generated message so we only overwrite it (not user edits)
+  const lastAutoMsg = useRef('')
+
+  useEffect(() => {
+    const auto = labelKey.trim() && labelValue.trim()
+      ? labelCondition === '=='
+        ? `Resources with label ${labelKey}=${labelValue} are not allowed`
+        : `Resources must have label ${labelKey}=${labelValue}`
+      : ''
+    setViolationMsg(prev => (prev === '' || prev === lastAutoMsg.current) ? auto : prev)
+    lastAutoMsg.current = auto
+  }, [labelKey, labelCondition, labelValue])
 
   // Binding builder state
   const [showBindingBuilder, setShowBindingBuilder] = useState(false)
