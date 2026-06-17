@@ -58,7 +58,11 @@ const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'de
 // Policy builder ---------------------------------------------------------------
 
 function escapeYaml(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
+}
+
+function escapeCel(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 }
 
 function autoMessage(key: string, cond: LabelCondition, value: string): string {
@@ -69,8 +73,8 @@ function autoMessage(key: string, cond: LabelCondition, value: string): string {
 }
 
 function ruleToYamlLines(rule: LabelRule): string[] {
-  const k = rule.key.trim()   || 'app'
-  const v = rule.value.trim() || 'value'
+  const k = escapeCel(rule.key.trim()   || 'app')
+  const v = escapeCel(rule.value.trim() || 'value')
   const m = rule.message.trim() || autoMessage(rule.key, rule.condition, rule.value)
   const exprLines = rule.condition === '=='
     ? [
@@ -99,7 +103,10 @@ function autoImageMessage(rule: ImageRule): string {
 
 function imageRuleToYamlLines(rule: ImageRule): string[] {
   const m = escapeYaml(rule.message.trim() || autoImageMessage(rule))
-  const reg = rule.registry.trim() || 'registry.example.com'
+  const regRaw = rule.registry.trim() || 'registry.example.com'
+  // Ensure trailing slash to prevent subdomain bypass (registry.example.com.evil.io would
+  // pass a startsWith('registry.example.com') check without the slash).
+  const reg = escapeCel(regRaw.endsWith('/') ? regRaw : `${regRaw}/`)
   // Check containers at all three workload paths using CEL optional chaining (?.)
   // so the same expression covers Pods, Deployments/StatefulSets/DaemonSets, and CronJobs.
   const check = rule.type === 'no-latest'
@@ -565,6 +572,7 @@ export function VAPPage() {
                     setBuilderRuleType(v as PolicyRuleType)
                     setLabelRules([emptyRule()])
                     setImageRules([emptyImageRule()])
+                    setReplicaRules([emptyReplicaRule()])
                   }}
                   disabled={!!builderEditName}
                 >
@@ -819,18 +827,23 @@ export function VAPPage() {
 
               <div className="flex flex-col gap-1.5">
                 <Label>Policy</Label>
-                <Select value={bindingPolicy} onValueChange={setBindingPolicy} disabled={loading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loading ? 'Loading...' : 'Select a policy...'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {policies.map(p => (
-                        <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                {!loading && policies.length === 0 ? (
+                  <Input value={bindingPolicy} onChange={e => setBindingPolicy(e.target.value)}
+                    placeholder="Enter policy name..." />
+                ) : (
+                  <Select value={bindingPolicy} onValueChange={setBindingPolicy} disabled={loading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={loading ? 'Loading...' : 'Select a policy...'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {policies.map(p => (
+                          <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
