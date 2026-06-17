@@ -709,9 +709,6 @@ export function VAPPage() {
                         <SelectItem value="ingresses">Ingresses</SelectItem>
                         <SelectItem value="networkpolicies">NetworkPolicies</SelectItem>
                       </SelectGroup>
-                      <SelectGroup>
-                        <SelectItem value="namespaces">Namespaces (cluster-scoped, namespace filter does not apply)</SelectItem>
-                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </div>
