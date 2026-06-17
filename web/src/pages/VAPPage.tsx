@@ -16,6 +16,7 @@ import {
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import yaml from 'js-yaml'
 import { vapApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
 import { YamlEditor } from '../components/YamlEditor'
 import { useAuth } from '../layout/AuthContext'
@@ -123,6 +124,58 @@ function generateBindingYaml(
   return lines.join('\n')
 }
 
+// YAML → builder state parsers -------------------------------------------------
+
+function parseExpressionToRule(expr: string, msg: string): LabelRule | null {
+  const e = expr.replace(/\s+/g, ' ').trim()
+  // == pattern: deny when key==value
+  let m = e.match(/!\('([^']+)' in object\.metadata\.labels\).*object\.metadata\.labels\['[^']+'\] != '([^']+)'/)
+  if (m) return { key: m[1], condition: '==', value: m[2], message: msg }
+  // != pattern: deny when key!=value / missing
+  m = e.match(/'([^']+)' in object\.metadata\.labels.*object\.metadata\.labels\['[^']+'\] == '([^']+)'/)
+  if (m) return { key: m[1], condition: '!=', value: m[2], message: msg }
+  return null
+}
+
+function tryParseBuilderPolicy(rawYaml: string): { name: string; rules: LabelRule[] } | null {
+  try {
+    const doc = yaml.load(rawYaml) as Record<string, unknown>
+    if (doc?.kind !== 'ValidatingAdmissionPolicy') return null
+    const meta = doc.metadata as { name?: string }
+    const spec = doc.spec as { validations?: Array<{ expression?: string; message?: string }> }
+    if (!spec?.validations?.length) return null
+    const rules: LabelRule[] = []
+    for (const v of spec.validations) {
+      const rule = parseExpressionToRule(v.expression ?? '', v.message ?? '')
+      if (!rule) return null
+      rules.push(rule)
+    }
+    return { name: meta?.name ?? '', rules }
+  } catch { return null }
+}
+
+function tryParseBuilderBinding(rawYaml: string): {
+  name: string; policyName: string; namespace: string; actions: ValidationAction[]
+} | null {
+  try {
+    const doc = yaml.load(rawYaml) as Record<string, unknown>
+    if (doc?.kind !== 'ValidatingAdmissionPolicyBinding') return null
+    const meta = doc.metadata as { name?: string }
+    const spec = doc.spec as {
+      policyName?: string
+      validationActions?: string[]
+      matchResources?: { namespaceSelector?: { matchLabels?: Record<string, string> } }
+    }
+    const ns = spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
+    return {
+      name: meta?.name ?? '',
+      policyName: spec?.policyName ?? '',
+      actions: (spec?.validationActions ?? ['Deny']) as ValidationAction[],
+      namespace: ns,
+    }
+  } catch { return null }
+}
+
 // Page -------------------------------------------------------------------------
 
 export function VAPPage() {
@@ -144,6 +197,7 @@ export function VAPPage() {
 
   // Policy builder state
   const [showBuilder, setShowBuilder] = useState(false)
+  const [builderEditName, setBuilderEditName] = useState<string | undefined>()
   const [builderName, setBuilderName] = useState('')
   const [labelRules, setLabelRules] = useState<LabelRule[]>([emptyRule()])
   const [builderSaving, setBuilderSaving] = useState(false)
@@ -155,6 +209,7 @@ export function VAPPage() {
 
   // Binding builder state
   const [showBindingBuilder, setShowBindingBuilder] = useState(false)
+  const [bindingEditName, setBindingEditName] = useState<string | undefined>()
   const [bindingName, setBindingName] = useState('')
   const [bindingPolicy, setBindingPolicy] = useState('')
   const [bindingNamespace, setBindingNamespace] = useState('')
@@ -181,6 +236,28 @@ export function VAPPage() {
   }
 
   const openEdit = (kind: 'policy' | 'binding', name: string, rawYaml: string) => {
+    if (kind === 'policy') {
+      const parsed = tryParseBuilderPolicy(rawYaml)
+      if (parsed) {
+        setBuilderEditName(name)
+        setBuilderName(parsed.name)
+        setLabelRules(parsed.rules)
+        setShowBuilder(true)
+        return
+      }
+    }
+    if (kind === 'binding') {
+      const parsed = tryParseBuilderBinding(rawYaml)
+      if (parsed) {
+        setBindingEditName(name)
+        setBindingName(parsed.name)
+        setBindingPolicy(parsed.policyName)
+        setBindingNamespace(parsed.namespace)
+        setBindingActions(new Set(parsed.actions))
+        setShowBindingBuilder(true)
+        return
+      }
+    }
     setEditorYaml(rawYaml)
     setEditorValid(true)
     setEditorKey(k => k + 1)
@@ -223,9 +300,12 @@ export function VAPPage() {
     if (!valid) return
     setBuilderSaving(true)
     try {
-      await vapApi.applyPolicy(generateLabelPolicyYaml(builderName, labelRules))
+      const y = generateLabelPolicyYaml(builderName, labelRules)
+      if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
+      else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
       setShowBuilder(false)
+      setBuilderEditName(undefined)
       setBuilderName('')
       setLabelRules([emptyRule()])
       load()
@@ -238,9 +318,12 @@ export function VAPPage() {
     if (!bindingName.trim() || !bindingPolicy.trim() || bindingActions.size === 0) return
     setBindingBuilderSaving(true)
     try {
-      await vapApi.applyBinding(generateBindingYaml(bindingName, bindingPolicy, bindingNamespace, [...bindingActions]))
+      const y = generateBindingYaml(bindingName, bindingPolicy, bindingNamespace, [...bindingActions])
+      if (bindingEditName) await vapApi.updateBinding(bindingEditName, y)
+      else await vapApi.applyBinding(y)
       toast.success('Binding applied.')
       setShowBindingBuilder(false)
+      setBindingEditName(undefined)
       setBindingName(''); setBindingPolicy(''); setBindingNamespace(''); setBindingActions(new Set(['Deny']))
       load()
     } catch (e: unknown) {
@@ -263,11 +346,11 @@ export function VAPPage() {
       <>
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h4 className="text-xl font-semibold">New Policy</h4>
+            <h4 className="text-xl font-semibold">{builderEditName ? 'Edit Policy' : 'New Policy'}</h4>
             <p className="text-sm text-muted-foreground">Configure the policy rules below, then click Apply.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowBuilder(false)}>← Back</Button>
+            <Button variant="outline" onClick={() => { setShowBuilder(false); setBuilderEditName(undefined) }}>← Back</Button>
             {isAdmin && (
               <Button onClick={handleBuilderApply} disabled={!canApply || builderSaving}>
                 {builderSaving ? 'Applying...' : 'Apply'}
@@ -388,11 +471,11 @@ export function VAPPage() {
       <>
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h4 className="text-xl font-semibold">New Binding</h4>
+            <h4 className="text-xl font-semibold">{bindingEditName ? 'Edit Binding' : 'New Binding'}</h4>
             <p className="text-sm text-muted-foreground">Bind a policy to a scope and choose validation actions.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowBindingBuilder(false)}>← Back</Button>
+            <Button variant="outline" onClick={() => { setShowBindingBuilder(false); setBindingEditName(undefined) }}>← Back</Button>
             {isAdmin && (
               <Button onClick={handleBindingBuilderApply} disabled={!canApply || bindingBuilderSaving}>
                 {bindingBuilderSaving ? 'Applying...' : 'Apply'}
