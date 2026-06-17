@@ -1065,12 +1065,15 @@ export function VAPPage() {
                         </label>
                       </div>
                       {securityContextRule.noPrivileged && (
-                        <Input
-                          value={securityContextRule.noPrivilegedMessage}
-                          onChange={e => setSecurityContextRule(r => ({ ...r, noPrivilegedMessage: e.target.value }))}
-                          placeholder="Privileged containers are not allowed"
-                          className="h-8 text-sm ml-6"
-                        />
+                        <div className="flex flex-col gap-1 pl-6">
+                          <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                          <Input
+                            value={securityContextRule.noPrivilegedMessage}
+                            onChange={e => setSecurityContextRule(r => ({ ...r, noPrivilegedMessage: e.target.value }))}
+                            placeholder="Privileged containers are not allowed"
+                            className="h-8 text-sm"
+                          />
+                        </div>
                       )}
                     </div>
 
@@ -1087,12 +1090,15 @@ export function VAPPage() {
                         </label>
                       </div>
                       {securityContextRule.runAsNonRoot && (
-                        <Input
-                          value={securityContextRule.runAsNonRootMessage}
-                          onChange={e => setSecurityContextRule(r => ({ ...r, runAsNonRootMessage: e.target.value }))}
-                          placeholder="Workloads must set runAsNonRoot: true in pod securityContext"
-                          className="h-8 text-sm ml-6"
-                        />
+                        <div className="flex flex-col gap-1 pl-6">
+                          <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                          <Input
+                            value={securityContextRule.runAsNonRootMessage}
+                            onChange={e => setSecurityContextRule(r => ({ ...r, runAsNonRootMessage: e.target.value }))}
+                            placeholder="Workloads must set runAsNonRoot: true in pod securityContext"
+                            className="h-8 text-sm"
+                          />
+                        </div>
                       )}
                     </div>
                   </div>
