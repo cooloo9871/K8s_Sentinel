@@ -517,8 +517,7 @@ export function VAPPage() {
 
   const updateReplicaRule = (i: number, field: keyof ReplicaRule, val: string | number) =>
     setReplicaRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
-  const addReplicaRule = () => setReplicaRules(prev => [...prev, emptyReplicaRule()])
-  const removeReplicaRule = (i: number) => setReplicaRules(prev => prev.filter((_, idx) => idx !== i))
+
 
   const updateResourceLimitRule = (i: number, field: keyof ResourceLimitRule, val: string) =>
     setResourceLimitRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
@@ -896,29 +895,16 @@ export function VAPPage() {
               )}
 
               {/* ── Replica Limit rules ── */}
-              {builderRuleType === 'replica' && (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Replica Rules</Label>
-                    <Button variant="outline" size="sm" onClick={addReplicaRule}>+ Add Rule</Button>
-                  </div>
-
-                  {replicaRules.map((rule, i) => (
-                    <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
-                        {replicaRules.length > 1 && (
-                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                            onClick={() => removeReplicaRule(i)}>
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-
+              {builderRuleType === 'replica' && (() => {
+                const rule = replicaRules[0]
+                return (
+                  <div className="flex flex-col gap-3">
+                    <Label>Replica Limit Rule</Label>
+                    <div className="flex flex-col gap-3 rounded-lg border p-4">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-muted-foreground">Resource Type</span>
-                          <Select value={rule.resourceType} onValueChange={v => updateReplicaRule(i, 'resourceType', v)}>
+                          <Select value={rule.resourceType} onValueChange={v => updateReplicaRule(0, 'resourceType', v)}>
                             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectGroup>
@@ -934,32 +920,23 @@ export function VAPPage() {
                           <Input
                             type="number" min={1}
                             value={rule.maxReplicas}
-                            onChange={e => updateReplicaRule(i, 'maxReplicas', Math.max(1, parseInt(e.target.value) || 1))}
+                            onChange={e => updateReplicaRule(0, 'maxReplicas', Math.max(1, parseInt(e.target.value) || 1))}
                             className="h-8 text-sm"
                           />
                         </div>
                       </div>
-
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
-                        <Input value={rule.message} onChange={e => updateReplicaRule(i, 'message', e.target.value)}
+                        <Input value={rule.message} onChange={e => updateReplicaRule(0, 'message', e.target.value)}
                           placeholder={autoReplicaMessage(rule)} className="h-8 text-sm" />
                       </div>
-
                     </div>
-                  ))}
-
-                  {replicaRules.length > 1 && (
                     <p className="text-xs text-muted-foreground">
-                      Each rule is evaluated independently — a request is denied if any rule fails.
+                      Applies to <span className="font-medium">apps/v1</span> Deployments and StatefulSets (CREATE/UPDATE) and their scale subresources (UPDATE).
                     </p>
-                  )}
-
-                  <p className="text-xs text-muted-foreground">
-                    Applies to <span className="font-medium">apps/v1</span> Deployments and StatefulSets (CREATE/UPDATE) and their scale subresources (UPDATE).
-                  </p>
-                </div>
-              )}
+                  </div>
+                )
+              })()}
 
               {/* ── Resource Limits rules ── */}
               {builderRuleType === 'resource-limits' && (() => {
