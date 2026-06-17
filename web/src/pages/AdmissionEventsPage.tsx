@@ -151,12 +151,12 @@ export function AdmissionEventsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Namespace</TableHead>
+                  <TableHead className="w-24">Severity</TableHead>
+                  <TableHead className="w-24">Source</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
                   <TableHead>Resource / Name</TableHead>
-                  <TableHead>Policy</TableHead>
-                  <TableHead>Time</TableHead>
+                  <TableHead className="w-52">Policy</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
