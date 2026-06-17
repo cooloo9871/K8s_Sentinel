@@ -81,6 +81,8 @@ function generateLabelPolicyYaml(name: string, rules: LabelRule[]): string {
     'kind: ValidatingAdmissionPolicy',
     'metadata:',
     `  name: "${safeName}"`,
+    '  annotations:',
+    '    sentinel.io/builder: "true"',
     'spec:',
     '  failurePolicy: Fail',
     '  matchConstraints:',
@@ -109,6 +111,8 @@ function generateBindingYaml(
     'kind: ValidatingAdmissionPolicyBinding',
     'metadata:',
     `  name: "${safeName}"`,
+    '  annotations:',
+    '    sentinel.io/builder: "true"',
     'spec:',
     `  policyName: "${safePolicy}"`,
     `  validationActions: [${actStr}]`,
@@ -141,7 +145,8 @@ function tryParseBuilderPolicy(rawYaml: string): { name: string; rules: LabelRul
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
     if (doc?.kind !== 'ValidatingAdmissionPolicy') return null
-    const meta = doc.metadata as { name?: string }
+    const meta = doc.metadata as { name?: string; annotations?: Record<string, string> }
+    if (meta?.annotations?.['sentinel.io/builder'] !== 'true') return null
     const spec = doc.spec as { validations?: Array<{ expression?: string; message?: string }> }
     if (!spec?.validations?.length) return null
     const rules: LabelRule[] = []
@@ -160,34 +165,14 @@ function tryParseBuilderBinding(rawYaml: string): {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
     if (doc?.kind !== 'ValidatingAdmissionPolicyBinding') return null
-    const meta = doc.metadata as { name?: string }
+    const meta = doc.metadata as { name?: string; annotations?: Record<string, string> }
+    if (meta?.annotations?.['sentinel.io/builder'] !== 'true') return null
     const spec = doc.spec as {
       policyName?: string
       validationActions?: string[]
-      matchResources?: Record<string, unknown>
+      matchResources?: { namespaceSelector?: { matchLabels?: Record<string, string> } }
     }
-
-    // Only accept bindings whose matchResources is absent OR is exactly
-    // { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': <ns> } } }
-    // Any other structure (resourceRules, objectSelector, matchExpressions, etc.)
-    // means the binding was hand-crafted and must be edited in the YAML editor.
-    const mr = spec?.matchResources
-    if (mr) {
-      const mrKeys = Object.keys(mr)
-      if (mrKeys.some(k => k !== 'namespaceSelector')) return null
-      const nsSel = mr.namespaceSelector as Record<string, unknown> | undefined
-      if (nsSel) {
-        if (Object.keys(nsSel).some(k => k !== 'matchLabels')) return null
-        const ml = nsSel.matchLabels as Record<string, string> | undefined
-        if (ml) {
-          const mlKeys = Object.keys(ml)
-          if (mlKeys.length !== 1 || mlKeys[0] !== 'kubernetes.io/metadata.name') return null
-        }
-      }
-    }
-
-    const ns = (mr?.namespaceSelector as { matchLabels?: Record<string, string> } | undefined)
-      ?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
+    const ns = spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
     return {
       name: meta?.name ?? '',
       policyName: spec?.policyName ?? '',
