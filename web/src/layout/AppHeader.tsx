@@ -90,7 +90,7 @@ export function AppHeader({ onLogout }: Props) {
     mode === 'Protect' ? 'destructive' : mode === 'Mixed' ? 'secondary' : 'outline'
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 w-full shrink-0 items-center gap-2 border-b bg-background px-4">
+    <header className="sticky top-0 z-50 flex h-14 w-full shrink-0 items-center gap-2 border-b bg-background px-4">
       <SidebarTrigger className="-ml-1" />
 
       <Breadcrumb>
