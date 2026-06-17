@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'image'
+type PolicyRuleType = 'label' | 'image' | 'replica'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 
 interface LabelRule {
@@ -43,8 +43,14 @@ interface ImageRule {
   message: string
 }
 
+interface ReplicaRule {
+  maxReplicas: number
+  message: string
+}
+
 const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
 const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', message: '' })
+const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, message: '' })
 
 // Policy builder ---------------------------------------------------------------
 
@@ -102,18 +108,57 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
   ]
 }
 
+function autoReplicaMessage(rule: ReplicaRule): string {
+  const max = rule.maxReplicas > 0 ? rule.maxReplicas : 5
+  return `Deployment replicas must not exceed ${max}`
+}
+
+function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
+  const max = rule.maxReplicas > 0 ? rule.maxReplicas : 5
+  const m = escapeYaml(rule.message.trim() || autoReplicaMessage(rule))
+  return [
+    `    - expression: "object.spec.replicas <= ${max}"`,
+    `      message: "${m}"`,
+    '      reason: Forbidden',
+  ]
+}
+
 function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
+  replicaRules: ReplicaRule[],
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
   if (ruleType === 'label') {
     const active = labelRules.filter(r => r.key.trim() && r.value.trim())
     validationLines = active.length ? active.flatMap(ruleToYamlLines) : ruleToYamlLines(emptyRule())
-  } else {
+  } else if (ruleType === 'image') {
     const active = imageRules.filter(r => r.type === 'no-latest' || r.registry.trim())
     validationLines = active.length ? active.flatMap(imageRuleToYamlLines) : imageRuleToYamlLines(emptyImageRule())
+  } else {
+    const active = replicaRules.filter(r => r.maxReplicas > 0)
+    validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
   }
+
+  const resourceRuleLines = ruleType === 'replica'
+    ? [
+        '    resourceRules:',
+        '    - apiGroups: ["apps"]',
+        '      apiVersions: ["v1"]',
+        '      operations: [CREATE, UPDATE]',
+        '      resources: ["deployments"]',
+        '    - apiGroups: ["apps"]',
+        '      apiVersions: ["v1"]',
+        '      operations: [UPDATE]',
+        '      resources: ["deployments/scale"]',
+      ]
+    : [
+        '    resourceRules:',
+        '      - apiGroups: ["*"]',
+        '        apiVersions: ["*"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["*"]',
+      ]
 
   return [
     'apiVersion: admissionregistration.k8s.io/v1',
@@ -125,11 +170,7 @@ function generatePolicyYaml(
     'spec:',
     '  failurePolicy: Fail',
     '  matchConstraints:',
-    '    resourceRules:',
-    '      - apiGroups: ["*"]',
-    '        apiVersions: ["*"]',
-    '        operations: [CREATE, UPDATE]',
-    '        resources: ["*"]',
+    ...resourceRuleLines,
     '  validations:',
     ...validationLines,
   ].join('\n')
@@ -189,8 +230,15 @@ function parseExpressionToImageRule(expr: string, msg: string): ImageRule | null
   return null
 }
 
+function parseExpressionToReplicaRule(expr: string, msg: string): ReplicaRule | null {
+  const m = expr.trim().match(/^object\.spec\.replicas\s*<=\s*(\d+)$/)
+  if (m) return { maxReplicas: parseInt(m[1], 10), message: msg }
+  return null
+}
+
 function tryParseBuilderPolicy(rawYaml: string): {
-  name: string; ruleType: PolicyRuleType; labelRules: LabelRule[]; imageRules: ImageRule[]
+  name: string; ruleType: PolicyRuleType
+  labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -202,17 +250,21 @@ function tryParseBuilderPolicy(rawYaml: string): {
 
     const labelRules: LabelRule[] = []
     const imageRules: ImageRule[] = []
+    const replicaRules: ReplicaRule[] = []
     for (const v of spec.validations) {
       const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
       if (lr) { labelRules.push(lr); continue }
       const ir = parseExpressionToImageRule(v.expression ?? '', v.message ?? '')
       if (ir) { imageRules.push(ir); continue }
+      const rr = parseExpressionToReplicaRule(v.expression ?? '', v.message ?? '')
+      if (rr) { replicaRules.push(rr); continue }
       return null  // unknown expression type — fall through to YAML editor
     }
     // All rules must be the same type
-    if (labelRules.length > 0 && imageRules.length > 0) return null
-    const ruleType: PolicyRuleType = imageRules.length > 0 ? 'image' : 'label'
-    return { name: meta?.name ?? '', ruleType, labelRules, imageRules }
+    const typesUsed = [labelRules.length > 0, imageRules.length > 0, replicaRules.length > 0].filter(Boolean).length
+    if (typesUsed > 1) return null
+    const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica' : imageRules.length > 0 ? 'image' : 'label'
+    return { name: meta?.name ?? '', ruleType, labelRules, imageRules, replicaRules }
   } catch { return null }
 }
 
@@ -275,6 +327,7 @@ export function VAPPage() {
   const [builderRuleType, setBuilderRuleType] = useState<PolicyRuleType>('label')
   const [labelRules, setLabelRules] = useState<LabelRule[]>([emptyRule()])
   const [imageRules, setImageRules] = useState<ImageRule[]>([emptyImageRule()])
+  const [replicaRules, setReplicaRules] = useState<ReplicaRule[]>([emptyReplicaRule()])
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -287,12 +340,18 @@ export function VAPPage() {
   const addImageRule = () => setImageRules(prev => [...prev, emptyImageRule()])
   const removeImageRule = (i: number) => setImageRules(prev => prev.filter((_, idx) => idx !== i))
 
+  const updateReplicaRule = (i: number, field: keyof ReplicaRule, val: string | number) =>
+    setReplicaRules(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  const addReplicaRule = () => setReplicaRules(prev => [...prev, emptyReplicaRule()])
+  const removeReplicaRule = (i: number) => setReplicaRules(prev => prev.filter((_, idx) => idx !== i))
+
   const resetBuilderForm = () => {
     setBuilderEditName(undefined)
     setBuilderName('')
     setBuilderRuleType('label')
     setLabelRules([emptyRule()])
     setImageRules([emptyImageRule()])
+    setReplicaRules([emptyReplicaRule()])
   }
 
   // Binding builder state
@@ -332,6 +391,7 @@ export function VAPPage() {
         setBuilderRuleType(parsed.ruleType)
         setLabelRules(parsed.labelRules.length ? parsed.labelRules : [emptyRule()])
         setImageRules(parsed.imageRules.length ? parsed.imageRules : [emptyImageRule()])
+        setReplicaRules(parsed.replicaRules.length ? parsed.replicaRules : [emptyReplicaRule()])
         setShowBuilder(true)
         return
       }
@@ -389,11 +449,13 @@ export function VAPPage() {
     const nameOk = builderName.trim()
     const rulesOk = builderRuleType === 'label'
       ? labelRules.some(r => r.key.trim() && r.value.trim())
-      : imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+      : builderRuleType === 'image'
+      ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+      : replicaRules.some(r => r.maxReplicas > 0)
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -431,10 +493,12 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules)
     const rulesOk = builderRuleType === 'label'
       ? labelRules.some(r => r.key.trim() && r.value.trim())
-      : imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+      : builderRuleType === 'image'
+      ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
+      : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
     return (
       <>
@@ -481,6 +545,7 @@ export function VAPPage() {
                     <SelectGroup>
                       <SelectItem value="label">Label Check</SelectItem>
                       <SelectItem value="image">Image Policy</SelectItem>
+                      <SelectItem value="replica">Replica Limit</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -615,6 +680,60 @@ export function VAPPage() {
                       Each rule is evaluated independently — a request is denied if any rule fails.
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* ── Replica Limit rules ── */}
+              {builderRuleType === 'replica' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Replica Rules</Label>
+                    <Button variant="outline" size="sm" onClick={addReplicaRule}>+ Add Rule</Button>
+                  </div>
+
+                  {replicaRules.map((rule, i) => (
+                    <div key={i} className="flex flex-col gap-3 rounded-lg border p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
+                        {replicaRules.length > 1 && (
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => removeReplicaRule(i)}>
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Max Replicas</span>
+                        <Input
+                          type="number" min={1}
+                          value={rule.maxReplicas}
+                          onChange={e => updateReplicaRule(i, 'maxReplicas', Math.max(1, parseInt(e.target.value) || 1))}
+                          className="h-8 text-sm w-32"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                        <Input value={rule.message} onChange={e => updateReplicaRule(i, 'message', e.target.value)}
+                          placeholder={autoReplicaMessage(rule)} className="h-8 text-sm" />
+                      </div>
+
+                      <div className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                        {`object.spec.replicas <= ${rule.maxReplicas || 5}`}
+                      </div>
+                    </div>
+                  ))}
+
+                  {replicaRules.length > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      Each rule is evaluated independently — a request is denied if any rule fails.
+                    </p>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    Applies to <span className="font-medium">apps/v1 Deployments</span> (CREATE/UPDATE) and <span className="font-medium">deployments/scale</span> (UPDATE).
+                  </p>
                 </div>
               )}
             </CardContent>
