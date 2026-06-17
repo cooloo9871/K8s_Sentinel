@@ -39,6 +39,10 @@ const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', messa
 
 // Policy builder ---------------------------------------------------------------
 
+function escapeYaml(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 function autoMessage(key: string, cond: LabelCondition, value: string): string {
   if (!key.trim() || !value.trim()) return 'Label policy validation failed'
   return cond === '=='
@@ -64,7 +68,7 @@ function ruleToYamlLines(rule: LabelRule): string[] {
   return [
     '    - expression: >-',
     ...exprLines,
-    `      message: "${m}"`,
+    `      message: "${escapeYaml(m)}"`,
     '      reason: Forbidden',
   ]
 }
@@ -170,9 +174,19 @@ function tryParseBuilderBinding(rawYaml: string): {
     const spec = doc.spec as {
       policyName?: string
       validationActions?: string[]
-      matchResources?: { namespaceSelector?: { matchLabels?: Record<string, string> } }
+      matchResources?: Record<string, unknown>
     }
-    const ns = spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
+    // Only accept builder-compatible matchResources: absent OR only namespaceSelector.matchLabels
+    // Any other structure (resourceRules, objectSelector, matchExpressions) means the binding
+    // was later hand-edited and re-opening in the builder would silently drop those fields.
+    const mr = spec?.matchResources
+    if (mr) {
+      if (Object.keys(mr).some(k => k !== 'namespaceSelector')) return null
+      const nsSel = mr.namespaceSelector as Record<string, unknown> | undefined
+      if (nsSel && Object.keys(nsSel).some(k => k !== 'matchLabels')) return null
+    }
+    const ns = (mr?.namespaceSelector as { matchLabels?: Record<string, string> } | undefined)
+      ?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
     return {
       name: meta?.name ?? '',
       policyName: spec?.policyName ?? '',
@@ -356,7 +370,7 @@ export function VAPPage() {
             <p className="text-sm text-muted-foreground">Configure the policy rules below, then click Apply.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowBuilder(false); setBuilderEditName(undefined) }}>← Back</Button>
+            <Button variant="outline" onClick={() => { setShowBuilder(false); setBuilderEditName(undefined); setBuilderName(''); setLabelRules([emptyRule()]) }}>← Back</Button>
             {isAdmin && (
               <Button onClick={handleBuilderApply} disabled={!canApply || builderSaving}>
                 {builderSaving ? 'Applying...' : 'Apply'}
@@ -371,7 +385,8 @@ export function VAPPage() {
             <CardContent className="flex flex-col gap-5 p-6">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="builder-name">Policy Name</Label>
-                <Input id="builder-name" value={builderName} onChange={e => setBuilderName(e.target.value)} />
+                <Input id="builder-name" value={builderName} onChange={e => setBuilderName(e.target.value)}
+                  readOnly={!!builderEditName} className={builderEditName ? 'opacity-60 cursor-default' : ''} />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -481,7 +496,7 @@ export function VAPPage() {
             <p className="text-sm text-muted-foreground">Bind a policy to a scope and choose validation actions.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowBindingBuilder(false); setBindingEditName(undefined) }}>← Back</Button>
+            <Button variant="outline" onClick={() => { setShowBindingBuilder(false); setBindingEditName(undefined); setBindingName(''); setBindingPolicy(''); setBindingNamespace(''); setBindingActions(new Set(['Deny'])) }}>← Back</Button>
             {isAdmin && (
               <Button onClick={handleBindingBuilderApply} disabled={!canApply || bindingBuilderSaving}>
                 {bindingBuilderSaving ? 'Applying...' : 'Apply'}
@@ -496,27 +511,24 @@ export function VAPPage() {
             <CardContent className="flex flex-col gap-5 p-6">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="binding-name">Binding Name</Label>
-                <Input id="binding-name" value={bindingName} onChange={e => setBindingName(e.target.value)} />
+                <Input id="binding-name" value={bindingName} onChange={e => setBindingName(e.target.value)}
+                  readOnly={!!bindingEditName} className={bindingEditName ? 'opacity-60 cursor-default' : ''} />
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <Label>Policy</Label>
-                {policies.length > 0 ? (
-                  <Select value={bindingPolicy} onValueChange={setBindingPolicy}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a policy..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {policies.map(p => (
-                          <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input value={bindingPolicy} onChange={e => setBindingPolicy(e.target.value)} />
-                )}
+                <Select value={bindingPolicy} onValueChange={setBindingPolicy} disabled={loading}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={loading ? 'Loading...' : 'Select a policy...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {policies.map(p => (
+                        <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex flex-col gap-1.5">
