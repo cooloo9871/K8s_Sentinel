@@ -29,6 +29,10 @@ type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
 type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica'
 type ImagePolicyType = 'no-latest' | 'required-registry'
+type LabelApplyTo =
+  | 'all' | 'workloads'
+  | 'pods' | 'deployments' | 'statefulsets' | 'daemonsets' | 'jobs' | 'cronjobs'
+  | 'configmaps' | 'secrets' | 'persistentvolumeclaims' | 'services' | 'namespaces'
 
 interface LabelRule {
   key: string
@@ -56,6 +60,37 @@ const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', mess
 const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'deployments', message: '' })
 
 // Policy builder ---------------------------------------------------------------
+
+function applyToResourceRuleLines(applyTo: LabelApplyTo): string[] {
+  const core = (resources: string) => [
+    '      - apiGroups: [""]', '        apiVersions: ["v1"]',
+    '        operations: [CREATE, UPDATE]', `        resources: ["${resources}"]`,
+  ]
+  const apps = (resources: string) => [
+    '      - apiGroups: ["apps"]', '        apiVersions: ["v1"]',
+    '        operations: [CREATE, UPDATE]', `        resources: [${resources}]`,
+  ]
+  const batch = (resources: string) => [
+    '      - apiGroups: ["batch"]', '        apiVersions: ["v1"]',
+    '        operations: [CREATE, UPDATE]', `        resources: [${resources}]`,
+  ]
+  const prefix = '    resourceRules:'
+  switch (applyTo) {
+    case 'workloads': return [prefix, ...core('pods'), ...apps('"deployments", "statefulsets", "daemonsets", "replicasets"'), ...batch('"jobs", "cronjobs"')]
+    case 'pods':                    return [prefix, ...core('pods')]
+    case 'deployments':             return [prefix, ...apps('"deployments"')]
+    case 'statefulsets':            return [prefix, ...apps('"statefulsets"')]
+    case 'daemonsets':              return [prefix, ...apps('"daemonsets"')]
+    case 'jobs':                    return [prefix, ...batch('"jobs"')]
+    case 'cronjobs':                return [prefix, ...batch('"cronjobs"')]
+    case 'configmaps':              return [prefix, ...core('configmaps')]
+    case 'secrets':                 return [prefix, ...core('secrets')]
+    case 'persistentvolumeclaims':  return [prefix, ...core('persistentvolumeclaims')]
+    case 'services':                return [prefix, ...core('services')]
+    case 'namespaces':              return [prefix, ...core('namespaces')]
+    default: return [prefix, '      - apiGroups: ["*"]', '        apiVersions: ["*"]', '        operations: [CREATE, UPDATE]', '        resources: ["*"]']
+  }
+}
 
 function escapeYaml(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
@@ -179,7 +214,7 @@ function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
 
 function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
-  replicaRules: ReplicaRule[],
+  replicaRules: ReplicaRule[], applyTo: LabelApplyTo = 'all',
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
@@ -225,13 +260,7 @@ function generatePolicyYaml(
         '        operations: [CREATE, UPDATE]',
         '        resources: ["jobs", "cronjobs"]',
       ]
-    : [
-        '    resourceRules:',
-        '      - apiGroups: ["*"]',
-        '        apiVersions: ["*"]',
-        '        operations: [CREATE, UPDATE]',
-        '        resources: ["*"]',
-      ]
+    : applyToResourceRuleLines(applyTo)
 
   return [
     'apiVersion: admissionregistration.k8s.io/v1',
@@ -411,6 +440,7 @@ export function VAPPage() {
   const [builderEditName, setBuilderEditName] = useState<string | undefined>()
   const [builderName, setBuilderName] = useState('')
   const [builderRuleType, setBuilderRuleType] = useState<PolicyRuleType>('label')
+  const [builderApplyTo, setBuilderApplyTo] = useState<LabelApplyTo>('all')
   const [labelRules, setLabelRules] = useState<LabelRule[]>([emptyRule()])
   const [imageRules, setImageRules] = useState<ImageRule[]>([emptyImageRule()])
   const [replicaRules, setReplicaRules] = useState<ReplicaRule[]>([emptyReplicaRule()])
@@ -435,6 +465,7 @@ export function VAPPage() {
     setBuilderEditName(undefined)
     setBuilderName('')
     setBuilderRuleType('label')
+    setBuilderApplyTo('all')
     setLabelRules([emptyRule()])
     setImageRules([emptyImageRule()])
     setReplicaRules([emptyReplicaRule()])
@@ -541,7 +572,7 @@ export function VAPPage() {
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -638,6 +669,37 @@ export function VAPPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* ── Apply To (label / annotation only) ── */}
+              {(builderRuleType === 'label' || builderRuleType === 'annotation') && (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Apply To</Label>
+                  <Select value={builderApplyTo} onValueChange={v => setBuilderApplyTo(v as LabelApplyTo)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="all">All Resources</SelectItem>
+                        <SelectItem value="workloads">All Workloads (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs)</SelectItem>
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectItem value="pods">Pods</SelectItem>
+                        <SelectItem value="deployments">Deployments</SelectItem>
+                        <SelectItem value="statefulsets">StatefulSets</SelectItem>
+                        <SelectItem value="daemonsets">DaemonSets</SelectItem>
+                        <SelectItem value="jobs">Jobs</SelectItem>
+                        <SelectItem value="cronjobs">CronJobs</SelectItem>
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectItem value="configmaps">ConfigMaps</SelectItem>
+                        <SelectItem value="secrets">Secrets</SelectItem>
+                        <SelectItem value="persistentvolumeclaims">PersistentVolumeClaims (PVC)</SelectItem>
+                        <SelectItem value="services">Services</SelectItem>
+                        <SelectItem value="namespaces">Namespaces</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* ── Label / Annotation Check rules ── */}
               {(builderRuleType === 'label' || builderRuleType === 'annotation') && (
