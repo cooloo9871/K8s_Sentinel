@@ -63,18 +63,18 @@ interface ResourceLimitRule {
   message: string
 }
 
+type SecurityContextCheckType = 'no-privileged' | 'run-as-non-root' | 'both'
+
 interface SecurityContextRule {
-  noPrivileged: boolean
-  runAsNonRoot: boolean
-  noPrivilegedMessage: string
-  runAsNonRootMessage: string
+  checkType: SecurityContextCheckType
+  message: string
 }
 
 const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
 const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', message: '' })
 const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'deployments', message: '' })
 const emptyResourceLimitRule = (): ResourceLimitRule => ({ limitType: 'both', message: '' })
-const emptySecurityContextRule = (): SecurityContextRule => ({ noPrivileged: true, runAsNonRoot: false, noPrivilegedMessage: '', runAsNonRootMessage: '' })
+const emptySecurityContextRule = (): SecurityContextRule => ({ checkType: 'no-privileged', message: '' })
 
 // Policy builder ---------------------------------------------------------------
 
@@ -211,10 +211,18 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
   ]
 }
 
+function autoSecurityContextMessage(rule: SecurityContextRule): string {
+  if (rule.checkType === 'no-privileged') return 'Privileged containers are not allowed'
+  if (rule.checkType === 'run-as-non-root') return 'Workloads must set runAsNonRoot: true in pod securityContext'
+  return 'Containers must not be privileged and must run as non-root'
+}
+
 function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
   const lines: string[] = []
-  if (rule.noPrivileged) {
-    const m = escapeYaml(rule.noPrivilegedMessage.trim() || 'Privileged containers are not allowed')
+  const m = escapeYaml(rule.message.trim() || autoSecurityContextMessage(rule))
+  const noPriv = rule.checkType === 'no-privileged' || rule.checkType === 'both'
+  const nonRoot = rule.checkType === 'run-as-non-root' || rule.checkType === 'both'
+  if (noPriv) {
     const check = `all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || c.securityContext.privileged == false)`
     lines.push(
       '    - expression: >-',
@@ -228,8 +236,7 @@ function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
       '      reason: Forbidden',
     )
   }
-  if (rule.runAsNonRoot) {
-    const m = escapeYaml(rule.runAsNonRootMessage.trim() || 'Workloads must set runAsNonRoot: true in pod securityContext')
+  if (nonRoot) {
     lines.push(
       '    - expression: >-',
       `        object.spec.?securityContext.?runAsNonRoot.orValue(false) == true ||`,
@@ -496,11 +503,13 @@ function tryParseBuilderPolicy(rawYaml: string): {
       return null  // unknown expression type — fall through to YAML editor
     }
     // Build security context rule from parts
+    const hasNoPriv = scParts.some(p => p.part === 'no-privileged')
+    const hasNonRoot = scParts.some(p => p.part === 'run-as-non-root')
+    const checkType: SecurityContextCheckType = hasNoPriv && hasNonRoot ? 'both'
+      : hasNonRoot ? 'run-as-non-root' : 'no-privileged'
     const securityContextRule: SecurityContextRule = {
-      noPrivileged: scParts.some(p => p.part === 'no-privileged'),
-      runAsNonRoot: scParts.some(p => p.part === 'run-as-non-root'),
-      noPrivilegedMessage: scParts.find(p => p.part === 'no-privileged')?.message ?? '',
-      runAsNonRootMessage: scParts.find(p => p.part === 'run-as-non-root')?.message ?? '',
+      checkType,
+      message: scParts[0]?.message ?? '',
     }
     // All rules must be the same type
     const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0].filter(Boolean).length
@@ -704,7 +713,7 @@ export function VAPPage() {
       : builderRuleType === 'resource-limits'
       ? true
       : builderRuleType === 'security-context'
-      ? (securityContextRule.noPrivileged || securityContextRule.runAsNonRoot)
+      ? true
       : replicaRules.some(r => r.maxReplicas > 0)
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
@@ -755,7 +764,7 @@ export function VAPPage() {
       : builderRuleType === 'resource-limits'
       ? true
       : builderRuleType === 'security-context'
-      ? (securityContextRule.noPrivileged || securityContextRule.runAsNonRoot)
+      ? true
       : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
     return (
@@ -1049,57 +1058,29 @@ export function VAPPage() {
               {/* ── Security Context rules ── */}
               {builderRuleType === 'security-context' && (
                 <div className="flex flex-col gap-3">
-                  <Label>Security Context Checks</Label>
-                  <div className="flex flex-col gap-4 rounded-lg border p-4">
-
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="sc-no-privileged"
-                          checked={securityContextRule.noPrivileged}
-                          onCheckedChange={v => setSecurityContextRule(r => ({ ...r, noPrivileged: !!v }))}
-                        />
-                        <label htmlFor="sc-no-privileged" className="cursor-pointer text-sm">
-                          <span className="font-medium">No Privileged Containers</span>
-                          <span className="ml-2 text-xs text-muted-foreground">— deny containers with privileged: true</span>
-                        </label>
-                      </div>
-                      {securityContextRule.noPrivileged && (
-                        <div className="flex flex-col gap-1 pl-6">
-                          <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
-                          <Input
-                            value={securityContextRule.noPrivilegedMessage}
-                            onChange={e => setSecurityContextRule(r => ({ ...r, noPrivilegedMessage: e.target.value }))}
-                            placeholder="Privileged containers are not allowed"
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      )}
+                  <Label>Security Context Rule</Label>
+                  <div className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Check Type</span>
+                      <Select value={securityContextRule.checkType} onValueChange={v => setSecurityContextRule(r => ({ ...r, checkType: v as SecurityContextCheckType }))}>
+                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="no-privileged">No Privileged Containers — deny containers with privileged: true</SelectItem>
+                            <SelectItem value="run-as-non-root">Run as Non-Root — require runAsNonRoot: true in pod securityContext</SelectItem>
+                            <SelectItem value="both">Both</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </div>
-
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="sc-run-as-non-root"
-                          checked={securityContextRule.runAsNonRoot}
-                          onCheckedChange={v => setSecurityContextRule(r => ({ ...r, runAsNonRoot: !!v }))}
-                        />
-                        <label htmlFor="sc-run-as-non-root" className="cursor-pointer text-sm">
-                          <span className="font-medium">Run as Non-Root</span>
-                          <span className="ml-2 text-xs text-muted-foreground">— require runAsNonRoot: true in pod securityContext</span>
-                        </label>
-                      </div>
-                      {securityContextRule.runAsNonRoot && (
-                        <div className="flex flex-col gap-1 pl-6">
-                          <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
-                          <Input
-                            value={securityContextRule.runAsNonRootMessage}
-                            onChange={e => setSecurityContextRule(r => ({ ...r, runAsNonRootMessage: e.target.value }))}
-                            placeholder="Workloads must set runAsNonRoot: true in pod securityContext"
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      )}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                      <Input
+                        value={securityContextRule.message}
+                        onChange={e => setSecurityContextRule(r => ({ ...r, message: e.target.value }))}
+                        placeholder={autoSecurityContextMessage(securityContextRule)}
+                        className="h-8 text-sm"
+                      />
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
