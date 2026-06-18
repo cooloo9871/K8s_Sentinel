@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { formatTWTime } from '../utils/time'
+import { IconChevronDown, IconChevronRight } from '@tabler/icons-react'
 
 function RelativeTime({ iso }: { iso: string }) {
   if (!iso) return <span className="text-muted-foreground">—</span>
@@ -166,8 +167,10 @@ export function AdmissionEventsPage() {
                       className={`cursor-pointer ${e.severity === 'critical' ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
                       onClick={() => toggle(e.id)}
                     >
-                      <TableCell className="py-2 pl-3 pr-0 text-muted-foreground text-xs">
-                        {expanded.has(e.id) ? '▾' : '▸'}
+                      <TableCell className="py-2 pl-3 pr-0">
+                        {expanded.has(e.id)
+                          ? <IconChevronDown size={14} className="text-muted-foreground" />
+                          : <IconChevronRight size={14} className="text-muted-foreground" />}
                       </TableCell>
                       <TableCell>
                         {e.severity === 'critical'
@@ -180,7 +183,7 @@ export function AdmissionEventsPage() {
                           {e.source === 'audit' ? 'audit log' : 'k8s event'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{e.namespace || '—'}</TableCell>
+                      <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
                       <TableCell className="text-sm">
                         {e.source === 'audit' ? (
                           <div className="truncate" title={`${e.resource} / ${e.name || '—'}`}>
@@ -198,10 +201,10 @@ export function AdmissionEventsPage() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-mono text-xs max-w-[180px] truncate block" title={e.policyName}>
-                          {e.policyName || '—'}
-                        </Badge>
+                      <TableCell className="max-w-[180px]">
+                        {e.policyName
+                          ? <Badge variant="outline" className="font-mono text-xs max-w-full truncate block" title={e.policyName}>{e.policyName}</Badge>
+                          : '—'}
                       </TableCell>
                       <TableCell><RelativeTime iso={e.time} /></TableCell>
                     </TableRow>
