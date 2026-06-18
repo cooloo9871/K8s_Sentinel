@@ -92,7 +92,14 @@ export function DashboardPage() {
     admissionApi.list().then(setAdmissionEvents).catch(() => {})
   }
 
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+    // Refresh admission events count every 30 seconds to stay roughly in sync with SSE
+    const timer = setInterval(() => {
+      admissionApi.list().then(setAdmissionEvents).catch(() => {})
+    }, 30_000)
+    return () => clearInterval(timer)
+  }, [])
 
   const protectCount = policies.filter((p) => p.mode === 'Protect').length
   const recent = policies.slice(0, 8)

@@ -130,6 +130,10 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 			return
 		}
+		// Subscribe first to avoid missing events between List and Subscribe.
+		ch, unsub := store.Subscribe()
+		defer unsub()
+
 		// Send oldest-first so the frontend's prepend logic results in newest-first display
 		initial := store.List()
 		for i := len(initial) - 1; i >= 0; i-- {
@@ -137,9 +141,6 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 			fmt.Fprintf(w, "data: %s\n\n", data)
 		}
 		flusher.Flush()
-
-		ch, unsub := store.Subscribe()
-		defer unsub()
 		for {
 			select {
 			case <-r.Context().Done():

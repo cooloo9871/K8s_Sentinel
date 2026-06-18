@@ -120,6 +120,24 @@ func NewDispatcher(store *Store, k8s *k8s.Store, admStore *admission.Store) *Dis
 	}
 }
 
+// purgeCooldowns removes expired cooldown entries to prevent unbounded map growth.
+func (d *Dispatcher) purgeCooldowns(rules []AlertRule) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	maxCooldown := 0
+	for _, r := range rules {
+		if r.CooldownMin > maxCooldown {
+			maxCooldown = r.CooldownMin
+		}
+	}
+	cutoff := time.Duration(maxCooldown+1) * time.Minute
+	for k, t := range d.last {
+		if time.Since(t) > cutoff {
+			delete(d.last, k)
+		}
+	}
+}
+
 // Run streams Tetragon events and dispatches alerts. Reconnects automatically.
 func (d *Dispatcher) Run(ctx context.Context) {
 	go d.runAdmission(ctx)
@@ -131,6 +149,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		d.purgeCooldowns(d.store.EnabledRules())
 		select {
 		case <-ctx.Done():
 			return

@@ -46,9 +46,16 @@ func sameViolation(a, b Event) bool {
 		a.Source == b.Source
 }
 
+func parseTime(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, s)
+}
+
 func timeDiffSecs(t1, t2 string) float64 {
-	d1, err1 := time.Parse(time.RFC3339, t1)
-	d2, err2 := time.Parse(time.RFC3339, t2)
+	d1, err1 := parseTime(t1)
+	d2, err2 := parseTime(t2)
 	if err1 != nil || err2 != nil {
 		return 9999
 	}

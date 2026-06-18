@@ -72,6 +72,13 @@ func (s *Store) flush() {
 	}
 }
 
+func (s *Store) Get(id string) (Config, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	c, ok := s.configs[id]
+	return c, ok
+}
+
 func (s *Store) List() []Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

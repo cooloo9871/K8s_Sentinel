@@ -124,11 +124,15 @@ function escapeCel(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 }
 
-function autoMessage(key: string, cond: LabelCondition, value: string): string {
-  if (!key.trim() || !value.trim()) return 'Label policy validation failed'
+function buildAutoMessage(kind: 'label' | 'annotation', key: string, cond: LabelCondition, value: string): string {
+  if (!key.trim() || !value.trim()) return `${kind === 'label' ? 'Label' : 'Annotation'} policy validation failed`
   return cond === '=='
-    ? `Resources with label ${key}=${value} are not allowed`
-    : `Resources must have label ${key}=${value}`
+    ? `Resources with ${kind} ${key}=${value} are not allowed`
+    : `Resources must have ${kind} ${key}=${value}`
+}
+
+function autoMessage(key: string, cond: LabelCondition, value: string): string {
+  return buildAutoMessage('label', key, cond, value)
 }
 
 function ruleToYamlLines(rule: LabelRule): string[] {
@@ -155,10 +159,7 @@ function ruleToYamlLines(rule: LabelRule): string[] {
 }
 
 function autoAnnotationMessage(key: string, cond: LabelCondition, value: string): string {
-  if (!key.trim() || !value.trim()) return 'Annotation policy validation failed'
-  return cond === '=='
-    ? `Resources with annotation ${key}=${value} are not allowed`
-    : `Resources must have annotation ${key}=${value}`
+  return buildAutoMessage('annotation', key, cond, value)
 }
 
 function annotationRuleToYamlLines(rule: LabelRule): string[] {
@@ -367,6 +368,10 @@ function generatePolicyYaml(
       ]
     : applyToResourceRuleLines(applyTo)
 
+  const applyToAnnotation = (ruleType === 'label' || ruleType === 'annotation')
+    ? [`    sentinel.io/apply-to: "${applyTo}"`]
+    : []
+
   return [
     'apiVersion: admissionregistration.k8s.io/v1',
     'kind: ValidatingAdmissionPolicy',
@@ -374,6 +379,7 @@ function generatePolicyYaml(
     `  name: "${safeName}"`,
     '  annotations:',
     '    sentinel.io/builder: "true"',
+    ...applyToAnnotation,
     'spec:',
     '  failurePolicy: Fail',
     '  matchConstraints:',
@@ -438,7 +444,7 @@ function parseExpressionToImageRule(expr: string, msg: string): ImageRule | null
 }
 
 function parseExpressionToReplicaRule(expr: string, msg: string): ReplicaRule | null {
-  const e = expr.trim()
+  const e = expr.replace(/\s+/g, ' ').trim()
   let m = e.match(/^object\.kind != 'Deployment' \|\| object\.spec\.replicas <= (\d+)$/)
   if (m) return { maxReplicas: parseInt(m[1], 10), resourceType: 'deployments', message: msg }
   m = e.match(/^object\.kind != 'StatefulSet' \|\| object\.spec\.replicas <= (\d+)$/)
@@ -477,7 +483,7 @@ function parseExpressionToSecurityContextPart(expr: string): SecurityContextPart
 }
 
 function tryParseBuilderPolicy(rawYaml: string): {
-  name: string; ruleType: PolicyRuleType
+  name: string; ruleType: PolicyRuleType; applyTo: LabelApplyTo
   labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
   resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
 } | null {
@@ -528,7 +534,8 @@ function tryParseBuilderPolicy(rawYaml: string): {
       : resourceLimitRules.length > 0 ? 'resource-limits'
       : scParts.length > 0 ? 'security-context'
       : 'label'
-    return { name: meta?.name ?? '', ruleType, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule }
+    const applyTo = (String(meta?.annotations?.['sentinel.io/apply-to']) as LabelApplyTo) || 'workloads'
+    return { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule }
   } catch { return null }
 }
 
@@ -654,6 +661,7 @@ export function VAPPage() {
         setBuilderEditName(name)
         setBuilderName(parsed.name)
         setBuilderRuleType(parsed.ruleType)
+        setBuilderApplyTo(parsed.applyTo)
         setLabelRules(parsed.labelRules.length ? parsed.labelRules : [emptyRule()])
         setImageRules(parsed.imageRules.length ? parsed.imageRules : [emptyImageRule()])
         setReplicaRules(parsed.replicaRules.length ? parsed.replicaRules : [emptyReplicaRule()])

@@ -111,7 +111,7 @@ export function AdmissionEventsPage() {
             </SelectGroup>
           </SelectContent>
         </Select>
-        <Select value={sourceFilter} onValueChange={v => setSourceFilter(v as SourceFilter)}>
+        <Select value={sourceFilter} onValueChange={v => { setSourceFilter(v as SourceFilter); setNsFilter('all') }}>
           <SelectTrigger className="h-8 w-36">
             <SelectValue />
           </SelectTrigger>

@@ -85,7 +85,14 @@ func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if w, ok := d.writers[cfg.ID]; ok {
-		return w, nil
+		// Invalidate cached writer if connection parameters have changed.
+		if stored, found := d.store.Get(cfg.ID); found &&
+			(stored.Host != cfg.Host || stored.Port != cfg.Port || stored.Protocol != cfg.Protocol) {
+			w.Close()
+			delete(d.writers, cfg.ID)
+		} else {
+			return w, nil
+		}
 	}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
