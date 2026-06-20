@@ -161,10 +161,14 @@ func (d *Dispatcher) Run(ctx context.Context) {
 func (d *Dispatcher) runAdmission(ctx context.Context) {
 	ch, unsub := d.admStore.Subscribe()
 	defer unsub()
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			d.purgeCooldowns(d.store.EnabledRules())
 		case evt := <-ch:
 			d.dispatchAdmission(evt)
 		}

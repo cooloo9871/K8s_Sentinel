@@ -122,13 +122,13 @@ func sortEventsDesc(events []Event) {
 	// Simple insertion sort (list is typically nearly sorted)
 	for i := 1; i < len(events); i++ {
 		key := events[i]
-		keyT, err := time.Parse(time.RFC3339, key.Time)
+		keyT, err := parseTime(key.Time)
 		if err != nil {
 			continue
 		}
 		j := i - 1
 		for j >= 0 {
-			jT, err2 := time.Parse(time.RFC3339, events[j].Time)
+			jT, err2 := parseTime(events[j].Time)
 			if err2 != nil || !keyT.After(jT) {
 				break
 			}
@@ -141,13 +141,13 @@ func sortEventsDesc(events []Event) {
 
 // insertSorted inserts evt into s.events maintaining newest-first order.
 func (s *Store) insertSorted(evt Event) {
-	evtT, err := time.Parse(time.RFC3339, evt.Time)
+	evtT, err := parseTime(evt.Time)
 	if err != nil {
 		s.events = append([]Event{evt}, s.events...)
 		return
 	}
 	for i, existing := range s.events {
-		exT, err2 := time.Parse(time.RFC3339, existing.Time)
+		exT, err2 := parseTime(existing.Time)
 		if err2 != nil || !evtT.Before(exT) {
 			// Insert at position i
 			s.events = append(s.events, Event{})

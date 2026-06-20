@@ -534,7 +534,7 @@ function tryParseBuilderPolicy(rawYaml: string): {
       : resourceLimitRules.length > 0 ? 'resource-limits'
       : scParts.length > 0 ? 'security-context'
       : 'label'
-    const applyTo = (String(meta?.annotations?.['sentinel.io/apply-to']) as LabelApplyTo) || 'workloads'
+    const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
     return { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule }
   } catch { return null }
 }
