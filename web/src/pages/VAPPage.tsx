@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import {
+  IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
+  IconShieldLock, IconServer,
+} from '@tabler/icons-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -889,34 +893,57 @@ export function VAPPage() {
 
               <div className="flex flex-col gap-1.5">
                 <Label>Rule Type</Label>
-                <Select
-                  value={builderRuleType}
-                  onValueChange={v => {
-                    setBuilderRuleType(v as PolicyRuleType)
-                    setLabelRules([emptyRule()])
-                    setImageRules([emptyImageRule()])
-                    setReplicaRules([emptyReplicaRule()])
-                    setResourceLimitRules([emptyResourceLimitRule()])
-                    setSecurityContextRule(emptySecurityContextRule())
-                    setHostAccessRule(emptyHostAccessRule())
-                  }}
-                  disabled={!!builderEditName}
-                >
-                  <SelectTrigger className={builderEditName ? 'opacity-60 cursor-default' : ''}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="label">Label Check</SelectItem>
-                      <SelectItem value="annotation">Annotation Check</SelectItem>
-                      <SelectItem value="image">Image Policy</SelectItem>
-                      <SelectItem value="replica">Replica Limit</SelectItem>
-                      <SelectItem value="resource-limits">Resource Limits</SelectItem>
-                      <SelectItem value="security-context">Security Context</SelectItem>
-                      <SelectItem value="host-access">Host Access</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                {builderEditName ? (
+                  <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground opacity-60">
+                    {([
+                      { value: 'label', label: 'Label Check' },
+                      { value: 'annotation', label: 'Annotation Check' },
+                      { value: 'image', label: 'Image Policy' },
+                      { value: 'replica', label: 'Replica Limit' },
+                      { value: 'resource-limits', label: 'Resource Limits' },
+                      { value: 'security-context', label: 'Security Context' },
+                      { value: 'host-access', label: 'Host Access' },
+                    ] as { value: PolicyRuleType; label: string }[]).find(t => t.value === builderRuleType)?.label}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {([
+                      { value: 'label',            icon: <IconTag size={20} />,          label: 'Label',      desc: 'Label key=value check' },
+                      { value: 'annotation',        icon: <IconNotes size={20} />,        label: 'Annotation', desc: 'Annotation key=value check' },
+                      { value: 'image',             icon: <IconBrandDocker size={20} />,  label: 'Image',      desc: 'Registry & tag policy' },
+                      { value: 'replica',           icon: <IconCopy size={20} />,         label: 'Replica',    desc: 'Max replica count' },
+                      { value: 'resource-limits',   icon: <IconCpu size={20} />,          label: 'Resources',  desc: 'CPU / memory limits' },
+                      { value: 'security-context',  icon: <IconShieldLock size={20} />,   label: 'Security',   desc: 'Privileged & non-root' },
+                      { value: 'host-access',       icon: <IconServer size={20} />,       label: 'Host',       desc: 'hostNetwork / PID / IPC' },
+                    ] as { value: PolicyRuleType; icon: React.ReactNode; label: string; desc: string }[]).map(t => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => {
+                          setBuilderRuleType(t.value)
+                          setLabelRules([emptyRule()])
+                          setImageRules([emptyImageRule()])
+                          setReplicaRules([emptyReplicaRule()])
+                          setResourceLimitRules([emptyResourceLimitRule()])
+                          setSecurityContextRule(emptySecurityContextRule())
+                          setHostAccessRule(emptyHostAccessRule())
+                        }}
+                        className={[
+                          'flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors',
+                          builderRuleType === t.value
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border hover:border-primary/40 hover:bg-muted/40 text-muted-foreground',
+                        ].join(' ')}
+                      >
+                        <span className={builderRuleType === t.value ? 'text-primary' : 'text-muted-foreground'}>
+                          {t.icon}
+                        </span>
+                        <span className="text-xs font-medium leading-tight">{t.label}</span>
+                        <span className="text-[10px] leading-tight opacity-70">{t.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* ── Apply To (label / annotation only) ── */}
