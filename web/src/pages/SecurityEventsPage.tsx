@@ -119,7 +119,18 @@ export function SecurityEventsPage() {
   const [events, setEvents] = useState<DisplayEvent[]>([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
+  const [paused, setPaused] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
   const esRef = useRef<EventSource | null>(null)
+  const pausedRef = useRef(false)
+  const pendingRef = useRef<DisplayEvent[]>([])
+
+  const applyEvent = (evt: DisplayEvent, prev: DisplayEvent[]): DisplayEvent[] => {
+    if (prev.some(x => x.id === evt.id)) {
+      return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
+    }
+    return [evt, ...prev]
+  }
 
   const reconnect = () => {
     esRef.current?.close()
@@ -130,16 +141,30 @@ export function SecurityEventsPage() {
     es.onmessage = (e) => {
       try {
         const evt: DisplayEvent = JSON.parse(e.data)
-        setEvents(prev => {
-          if (prev.some(x => x.id === evt.id)) {
-            return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
-          }
-          return [evt, ...prev]
-        })
+        if (pausedRef.current) {
+          pendingRef.current = applyEvent(evt, pendingRef.current)
+          setPendingCount(pendingRef.current.length)
+        } else {
+          setEvents(prev => applyEvent(evt, prev))
+        }
       } catch { /* ignore */ }
     }
     es.addEventListener('stream-error', (e: MessageEvent) => { setError(e.data); setConnected(false); es.close() })
     es.onerror = () => setConnected(false)
+  }
+
+  const togglePause = () => {
+    setPaused(prev => {
+      const nowPaused = !prev
+      pausedRef.current = nowPaused
+      if (!nowPaused && pendingRef.current.length > 0) {
+        const pending = pendingRef.current
+        pendingRef.current = []
+        setPendingCount(0)
+        setEvents(prev => pending.reduce((acc, e) => applyEvent(e, acc), prev))
+      }
+      return nowPaused
+    })
   }
 
   useEffect(() => {
@@ -195,6 +220,20 @@ export function SecurityEventsPage() {
               <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
             )}
           </div>
+
+          <Button
+            variant={paused ? 'default' : 'outline'}
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={togglePause}
+          >
+            {paused ? '▶ Resume' : '⏸ Pause'}
+            {paused && pendingCount > 0 && (
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
+                +{pendingCount}
+              </span>
+            )}
+          </Button>
 
           <Button variant="outline" size="sm" className="h-9"
             onClick={() => exportCSV(filtered)}>
