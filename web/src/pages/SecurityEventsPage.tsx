@@ -211,7 +211,8 @@ export function SecurityEventsPage() {
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-between">
+      {/* Row 1: title + actions */}
+      <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Security Events</h4>
           <p className="text-sm text-muted-foreground">
@@ -231,7 +232,7 @@ export function SecurityEventsPage() {
           <Button
             variant={paused ? 'default' : 'outline'}
             size="sm"
-            className="h-9 gap-1.5"
+            className="h-8 gap-1.5"
             onClick={togglePause}
           >
             {paused ? '▶ Resume' : '⏸ Pause'}
@@ -242,45 +243,49 @@ export function SecurityEventsPage() {
             )}
           </Button>
 
-          <Button variant="outline" size="sm" className="h-9"
+          <Button variant="outline" size="sm" className="h-8"
             onClick={() => exportCSV(filtered)}>
             Export CSV
           </Button>
-
-          <Select value={nsFilter} onValueChange={setNsFilter}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">All Namespaces</SelectItem>
-                {namespaces.map(ns => (
-                  <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-
-          <Input
-            placeholder="Search pod name..."
-            value={podSearch}
-            onChange={(e) => setPodSearch(e.target.value)}
-            className="h-9 w-44"
-          />
-
-          <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">All Events</SelectItem>
-                <SelectItem value="warning">Warning Only</SelectItem>
-                <SelectItem value="critical">Critical Only</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
         </div>
+      </div>
+
+      {/* Row 2: filters — pod search leftmost */}
+      <div className="mb-4 flex items-center gap-2">
+        <Input
+          placeholder="Search pod name..."
+          value={podSearch}
+          onChange={(e) => setPodSearch(e.target.value)}
+          className="h-8 w-48 text-sm"
+        />
+        <Select value={nsFilter} onValueChange={setNsFilter}>
+          <SelectTrigger className="h-8 w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All Namespaces</SelectItem>
+              {namespaces.map(ns => (
+                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+          <SelectTrigger className="h-8 w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All Events</SelectItem>
+              <SelectItem value="warning">Warning Only</SelectItem>
+              <SelectItem value="critical">Critical Only</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {filtered.length} event{filtered.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {error && (
