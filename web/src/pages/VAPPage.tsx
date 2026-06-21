@@ -532,14 +532,17 @@ function parseExpressionToSecurityContextPart(expr: string): SecurityContextPart
 
 function parseExpressionToHostAccessPart(expr: string): HostAccessCheckType | null {
   const e = expr.replace(/\s+/g, ' ').trim()
-  if (!e.includes('hostNetwork') && !e.includes('hostPID') && !e.includes('hostIPC')) return null
   const hasNet = e.includes('hostNetwork')
   const hasPid = e.includes('hostPID')
   const hasIpc = e.includes('hostIPC')
+  // Only accept expressions that match exactly one of the four generated shapes.
+  // Partial combinations (e.g. hasNet && hasPid && !hasIpc) come from hand-edited
+  // YAML — silently losing those constraints would corrupt the policy on re-save,
+  // so fall through to the YAML editor instead.
   if (hasNet && hasPid && hasIpc) return 'all'
-  if (hasNet) return 'no-host-network'
-  if (hasPid) return 'no-host-pid'
-  if (hasIpc) return 'no-host-ipc'
+  if (hasNet && !hasPid && !hasIpc) return 'no-host-network'
+  if (!hasNet && hasPid && !hasIpc) return 'no-host-pid'
+  if (!hasNet && !hasPid && hasIpc) return 'no-host-ipc'
   return null
 }
 
@@ -842,7 +845,7 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule)
     const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
