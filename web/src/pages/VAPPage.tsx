@@ -93,13 +93,13 @@ const emptyHostAccessRule = (): HostAccessRule => ({ checkType: 'all', message: 
 // Module-level constant — single source of truth for both the card grid and
 // the readonly display. Avoids the two lists drifting when a new rule type is added.
 const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; label: string; desc: string; readonlyLabel: string }[] = [
-  { value: 'label',           icon: <IconTag size={20} />,         label: 'Label',      desc: 'Label key=value check',      readonlyLabel: 'Label Check' },
-  { value: 'annotation',      icon: <IconNotes size={20} />,       label: 'Annotation', desc: 'Annotation key=value check', readonlyLabel: 'Annotation Check' },
-  { value: 'image',           icon: <IconBrandDocker size={20} />, label: 'Image',      desc: 'Registry & tag policy',      readonlyLabel: 'Image Policy' },
-  { value: 'replica',         icon: <IconCopy size={20} />,        label: 'Replica',    desc: 'Max replica count',          readonlyLabel: 'Replica Limit' },
-  { value: 'resource-limits', icon: <IconCpu size={20} />,         label: 'Resources',  desc: 'CPU / memory limits',        readonlyLabel: 'Resource Limits' },
-  { value: 'security-context',icon: <IconShieldLock size={20} />,  label: 'Security',   desc: 'Privileged & non-root',      readonlyLabel: 'Security Context' },
-  { value: 'host-access',     icon: <IconServer size={20} />,      label: 'Host',       desc: 'hostNetwork / PID / IPC',    readonlyLabel: 'Host Access' },
+  { value: 'label',           icon: <IconTag size={14} />,         label: 'Label',      desc: 'Require or deny resources with specific label key=value',      readonlyLabel: 'Label Check' },
+  { value: 'annotation',      icon: <IconNotes size={14} />,       label: 'Annotation', desc: 'Require or deny resources with specific annotation key=value', readonlyLabel: 'Annotation Check' },
+  { value: 'image',           icon: <IconBrandDocker size={14} />, label: 'Image',      desc: 'Enforce image registry source and tag format',                readonlyLabel: 'Image Policy' },
+  { value: 'replica',         icon: <IconCopy size={14} />,        label: 'Replica',    desc: 'Limit maximum replica count for Deployments or StatefulSets', readonlyLabel: 'Replica Limit' },
+  { value: 'resource-limits', icon: <IconCpu size={14} />,         label: 'Resources',  desc: 'Require containers to set CPU and/or memory limits',          readonlyLabel: 'Resource Limits' },
+  { value: 'security-context',icon: <IconShieldLock size={14} />,  label: 'Security',   desc: 'Deny privileged containers or require runAsNonRoot',          readonlyLabel: 'Security Context' },
+  { value: 'host-access',     icon: <IconServer size={14} />,      label: 'Host',       desc: 'Deny hostNetwork, hostPID, and/or hostIPC access',            readonlyLabel: 'Host Access' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -911,39 +911,47 @@ export function VAPPage() {
                     {RULE_TYPE_CARDS.find(t => t.value === builderRuleType)?.readonlyLabel ?? builderRuleType}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Rule Type">
-                    {RULE_TYPE_CARDS.map(t => (
-                      <button
-                        key={t.value}
-                        type="button"
-                        role="radio"
-                        aria-pressed={builderRuleType === t.value}
-                        aria-label={t.readonlyLabel}
-                        onClick={() => {
-                          setBuilderRuleType(t.value)
-                          setLabelRules([emptyRule()])
-                          // Clear registry when switching away from required-registry
-                          setImageRules([emptyImageRule()])
-                          setReplicaRules([emptyReplicaRule()])
-                          setResourceLimitRules([emptyResourceLimitRule()])
-                          setSecurityContextRule(emptySecurityContextRule())
-                          setHostAccessRule(emptyHostAccessRule())
-                        }}
-                        className={[
-                          'flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors',
-                          builderRuleType === t.value
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-border hover:border-primary/40 hover:bg-muted/40 text-muted-foreground',
-                        ].join(' ')}
-                      >
-                        <span className={builderRuleType === t.value ? 'text-primary' : 'text-muted-foreground'}>
-                          {t.icon}
-                        </span>
-                        <span className="text-xs font-medium leading-tight">{t.label}</span>
-                        <span className="text-[10px] leading-tight opacity-70">{t.desc}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Rule Type">
+                      {RULE_TYPE_CARDS.map(t => {
+                        const selected = builderRuleType === t.value
+                        return (
+                          <button
+                            key={t.value}
+                            type="button"
+                            role="radio"
+                            aria-pressed={selected}
+                            aria-label={t.readonlyLabel}
+                            onClick={() => {
+                              setBuilderRuleType(t.value)
+                              setLabelRules([emptyRule()])
+                              setImageRules([emptyImageRule()])
+                              setReplicaRules([emptyReplicaRule()])
+                              setResourceLimitRules([emptyResourceLimitRule()])
+                              setSecurityContextRule(emptySecurityContextRule())
+                              setHostAccessRule(emptyHostAccessRule())
+                            }}
+                            className={[
+                              'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                              selected
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground',
+                            ].join(' ')}
+                          >
+                            <span className="shrink-0">{t.icon}</span>
+                            {t.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* Selected type description */}
+                    {(() => {
+                      const card = RULE_TYPE_CARDS.find(t => t.value === builderRuleType)
+                      return card ? (
+                        <p className="text-xs text-muted-foreground">{card.desc}</p>
+                      ) : null
+                    })()}
+                  </>
                 )}
               </div>
 
