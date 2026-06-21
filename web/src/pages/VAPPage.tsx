@@ -920,7 +920,7 @@ export function VAPPage() {
                             key={t.value}
                             type="button"
                             role="radio"
-                            aria-pressed={selected}
+                            aria-checked={selected}
                             aria-label={t.readonlyLabel}
                             onClick={() => {
                               setBuilderRuleType(t.value)
@@ -944,13 +944,9 @@ export function VAPPage() {
                         )
                       })}
                     </div>
-                    {/* Selected type description */}
-                    {(() => {
-                      const card = RULE_TYPE_CARDS.find(t => t.value === builderRuleType)
-                      return card ? (
-                        <p className="text-xs text-muted-foreground">{card.desc}</p>
-                      ) : null
-                    })()}
+                    <p className="text-xs text-muted-foreground">
+                      {RULE_TYPE_CARDS.find(t => t.value === builderRuleType)?.desc}
+                    </p>
                   </>
                 )}
               </div>
