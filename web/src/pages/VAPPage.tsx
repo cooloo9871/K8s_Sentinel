@@ -963,7 +963,7 @@ export function VAPPage() {
                           <SelectContent>
                             <SelectGroup>
                               <SelectItem value="no-latest">No Latest Tag — deny images using :latest or no tag</SelectItem>
-                              <SelectItem value="required-registry">Required Registry — deny images not from the specified registry</SelectItem>
+                              <SelectItem value="required-registry">Required Registry</SelectItem>
                             </SelectGroup>
                           </SelectContent>
                         </Select>
