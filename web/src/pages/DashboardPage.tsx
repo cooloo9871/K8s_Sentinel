@@ -77,12 +77,12 @@ export function DashboardPage() {
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [loading, setLoading] = useState(true)
 
-  const load = () => {
-    setLoading(true)
+  const load = (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
     Promise.all([policyApi.list(), modeApi.get()])
       .then(([p, m]) => { setPolicies(p); setMode(m) })
       .catch(() => toast.error('Failed to load dashboard'))
-      .finally(() => setLoading(false))
+      .finally(() => { if (showSpinner) setLoading(false) })
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
@@ -90,7 +90,7 @@ export function DashboardPage() {
   }
 
   useEffect(() => {
-    load()
+    load(policies.length === 0)
     const timer = setInterval(() => {
       admissionApi.list().then(setAdmissionEvents).catch(() => {})
     }, 30_000)
@@ -128,7 +128,7 @@ export function DashboardPage() {
             Kubernetes security management — Tetragon runtime monitoring &amp; Admission control
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load}>
+        <Button variant="outline" size="sm" onClick={() => load(true)}>
           <IconRefresh className="mr-2 size-4" />
           Refresh
         </Button>

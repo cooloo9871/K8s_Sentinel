@@ -49,19 +49,19 @@ export function PolicyListPage() {
   const nextGlobalMode: 'Monitoring' | 'Protect' =
     globalMode === 'Protect' ? 'Monitoring' : 'Protect'
 
-  const fetchPolicies = async () => {
-    setLoading(true)
+  const fetchPolicies = async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
     try {
       setPolicies(await policyApi.list())
     } catch {
       toast.error('Failed to load policies')
     } finally {
-      setLoading(false)
+      if (showSpinner) setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchPolicies()
+    fetchPolicies(policies.length === 0)
     modeApi.get().then(setGlobalMode).catch(() => {})
   }, [])
 
