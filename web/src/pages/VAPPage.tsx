@@ -1051,8 +1051,16 @@ export function VAPPage() {
                       {rule.type === 'required-registry' && (
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-muted-foreground">Registry</span>
-                          <Input value={rule.registry} onChange={e => updateImageRule(i, 'registry', e.target.value)}
-                            placeholder="e.g. registry.example.com" className="h-8 text-sm" />
+                          <Input
+                            value={rule.registry}
+                            onChange={e => updateImageRule(i, 'registry', e.target.value)}
+                            onBlur={e => {
+                              const v = e.target.value.trim()
+                              if (v && !v.endsWith('/')) updateImageRule(i, 'registry', v + '/')
+                            }}
+                            placeholder="e.g. registry.example.com/"
+                            className="h-8 text-sm"
+                          />
                         </div>
                       )}
 
