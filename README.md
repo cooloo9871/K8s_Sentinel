@@ -12,6 +12,7 @@
 
 ### Policies — 策略管理
 
+#### Tracing Policy
 - 建立、編輯、刪除 **Tracing Policy**（cluster-wide 或 namespace-scoped）
 - 依 namespace、scope 篩選策略清單
 - **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
@@ -24,7 +25,23 @@
   - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
   - **Monitor All File Access**：監控敏感檔案讀寫（`security_file_permission`、`security_mmap_file`、`security_path_truncate`）
   - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外的行為；Pod CIDR、Service CIDR、Node IP 自動從叢集偵測
-- **Admission Policy**（ValidatingAdmissionPolicy）：管理 K8s 原生 VAP 資源，支援 YAML 編輯器建立/修改 Policy 與 Binding
+
+#### Admission Policy（ValidatingAdmissionPolicy）
+- 管理 K8s 原生 VAP 資源，支援 YAML 編輯器建立/修改 Policy 與 Binding
+- **UI Policy Builder**：不需手寫 YAML，透過表單建立常見安全策略，右側即時預覽生成的 YAML
+
+  | Rule Type | 說明 |
+  |---|---|
+  | **Label Check** | 要求/禁止資源帶有特定 label key=value；支援多條規則；可指定套用資源範圍 |
+  | **Annotation Check** | 要求/禁止資源帶有特定 annotation key=value；可指定套用資源範圍 |
+  | **Image Policy** | 禁止 `:latest` tag；要求 image 必須來自指定 registry（自動加 `/` 防 subdomain 繞過）；涵蓋 Pod、Deployment、StatefulSet、DaemonSet、Job、CronJob 及其 initContainers |
+  | **Replica Limit** | 限制 Deployment / StatefulSet / Both 的最大 replica 數 |
+  | **Resource Limits** | 要求 container 設定 CPU / Memory / Both limits；涵蓋所有 workload 類型及 initContainers |
+  | **Security Context** | 禁止 privileged container；要求 runAsNonRoot（正確繼承 pod/container 層級）；可選 No Privileged / Run as Non-Root / Both |
+  | **Host Access** | 禁止 hostNetwork / hostPID / hostIPC；涵蓋 Pod 及所有 template-based workload |
+
+- **UI Binding Builder**：選擇 Policy、Namespace、Validation Actions（Deny / Audit / Warn）
+- 透過 UI 建立的資源標記 `sentinel.io/builder: "true"`，點 Edit 自動回到 UI 表單；手寫 YAML apply 的資源則開 YAML 編輯器
 
 ### Behavior Discovery — 行為探索
 
@@ -35,13 +52,14 @@
 ### Notifications — 安全通知
 
 #### Security Events
-- 即時串流叢集所有 Tetragon kprobe 事件；重新整理後不消失（7 天 TTL）
-- Warning / Critical 嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，30 秒去重
+- 即時串流叢集所有 Tetragon kprobe 事件；**後端持久化至 `/data/sentinel/security-events.json`**，重啟不消失（7 天 TTL）
+- Warning / Critical 嚴重程度分類；Warning 最多 500 條、Critical 最多 300 條，30 秒 content-based 去重
 - 點擊展開詳情：觸發檔案路徑與操作類型、網路連線目的地與來源、執行 user（UID）、Policy 名稱等
-- **Pause / Resume**、**Export CSV**
+- **Pause / Resume**：凍結畫面閱讀事件，暫存新進事件並顯示待讀計數
+- **Export CSV**
 
 #### Admission Events
-- 記錄 ValidatingAdmissionPolicy 違規事件；依 namespace、severity 篩選
+- 記錄 ValidatingAdmissionPolicy 違規事件；依 source、namespace、severity 篩選
 - **Critical**（`Deny` action，請求被阻擋）/ **Warning**（`Audit` action，請求放行但記錄）
 - 來源：K8s Warning Events（controller 資源，免設定）或 **kube-apiserver audit webhook**（完整覆蓋，需設定）
 - Audit webhook 設定：`POST /api/admission-events/webhook`（kube-apiserver 直接呼叫）
@@ -54,7 +72,7 @@
 
 ### Dashboard — 總覽
 
-- Policy 數量、Namespace 數量、Global Protect Mode 狀態一覽
+- Tracing Policy 數量（Protect 模式）、Security Events 統計（Critical / Warning）、Admission Events 統計、Global Protect Mode 狀態
 - **Tracing Policy** 與 **Admission Policy** 清單快覽
 
 ### Settings — 設定
@@ -103,7 +121,7 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 
 ### 持久化儲存（PV）
 
-Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定將會消失：
+Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定與事件記錄將會消失：
 
 | 檔案 | 說明 |
 |---|---|
@@ -113,6 +131,7 @@ Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 Persi
 | `alerts.json` | Webhook 告警規則 |
 | `rsyslog.json` | Syslog 轉送設定 |
 | `admission-events.json` | Admission Events 記錄（最多 500 筆）|
+| `security-events.json` | Security Events 記錄（最多 800 筆，7 天 TTL）|
 
 ```yaml
 volumeMounts:
@@ -128,7 +147,7 @@ volumes:
 
 ### Admission Events — Audit Webhook 設定
 
-kube-apiserver audit webhook 可讓 Sentinel 接收完整的 VAP 違規記錄：
+kube-apiserver audit webhook 可讓 Sentinel 接收完整的 VAP 違規記錄（包含直接 `kubectl apply` 被拒絕的情況）：
 
 ```yaml
 # /etc/kubernetes/audit-policy.yaml
@@ -168,6 +187,17 @@ kube-apiserver 加上：
 | 變數 | 預設值 | 說明 |
 |---|---|---|
 | `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace |
+
+---
+
+## 資源需求
+
+| | requests | limits |
+|---|---|---|
+| CPU | 200m | 500m |
+| Memory | 128Mi | 256Mi |
+
+> 叢集節點數較多（> 5 個 Tetragon pod）或 TracingPolicy 規則密集時，建議將 CPU limit 調高至 750m。
 
 ---
 
