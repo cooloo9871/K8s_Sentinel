@@ -49,7 +49,8 @@ func severityOf(evt k8s.TetragonEvent) string {
 }
 
 func sameEvent(a Event, b k8s.TetragonEvent) bool {
-	return a.Binary == b.Binary &&
+	return a.Namespace == b.Namespace &&
+		a.Binary == b.Binary &&
 		a.Pod == b.Pod &&
 		a.Function == b.Function &&
 		a.PolicyName == b.PolicyName &&
@@ -64,10 +65,11 @@ type eventFile struct {
 
 // Store holds Tetragon kprobe events with file persistence and SSE fanout.
 type Store struct {
-	mu   sync.RWMutex
-	evts []Event // newest-first
-	subs map[chan Event]struct{}
-	path string
+	mu        sync.RWMutex
+	evts      []Event // newest-first
+	subs      map[chan Event]struct{}
+	path      string
+	flushGen  uint64 // incremented each flush; goroutine skips write if stale
 }
 
 func NewStore(path string) *Store {
@@ -97,7 +99,7 @@ func (s *Store) load() {
 		}
 		s.evts = append(s.evts, e)
 	}
-	s.evts = cap(s.evts)
+	s.evts = capBySeverity(s.evts)
 }
 
 func parseTime(s string) (time.Time, error) {
@@ -107,8 +109,8 @@ func parseTime(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, s)
 }
 
-// cap enforces per-severity maximums, keeping newest events.
-func cap(evts []Event) []Event {
+// capBySeverity enforces per-severity maximums, keeping newest events.
+func capBySeverity(evts []Event) []Event {
 	warnSlots, critSlots := maxWarnings, maxCriticals
 	out := make([]Event, 0, len(evts))
 	for _, e := range evts {
@@ -124,12 +126,22 @@ func cap(evts []Event) []Event {
 }
 
 func (s *Store) flush() {
+	// Increment generation under the lock (caller holds s.mu.Lock).
+	s.flushGen++
+	gen := s.flushGen
 	snapshot := make([]Event, len(s.evts))
 	copy(snapshot, s.evts)
 	go func() {
 		data, err := json.Marshal(eventFile{Events: snapshot})
 		if err != nil {
 			log.Printf("security-store: flush marshal: %v", err)
+			return
+		}
+		// Only write if no newer flush has been issued since this goroutine started.
+		s.mu.RLock()
+		stale := s.flushGen != gen
+		s.mu.RUnlock()
+		if stale {
 			return
 		}
 		tmp := s.path + ".tmp"
@@ -194,7 +206,7 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 		NetDest:    raw.NetDest,
 		NetSrc:     raw.NetSrc,
 	}
-	s.evts = cap(append([]Event{newEvt}, s.evts...))
+	s.evts = capBySeverity(append([]Event{newEvt}, s.evts...))
 
 	// Expire events older than TTL
 	cutoff := time.Now().UTC().AddDate(0, 0, -ttlDays)
