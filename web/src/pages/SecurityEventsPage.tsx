@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -10,8 +10,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { useSecurityEvents, type Severity } from '../layout/SecurityEventsProvider'
-import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import type { DisplayEvent, Severity } from '../layout/SecurityEventsProvider'
 import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
 
@@ -117,7 +116,36 @@ function DetailRow({ e }: { e: DisplayEvent }) {
 }
 
 export function SecurityEventsPage() {
-  const { events, connected, error, reconnect } = useSecurityEvents()
+  const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const esRef = useRef<EventSource | null>(null)
+
+  const reconnect = () => {
+    esRef.current?.close()
+    setError('')
+    const es = new EventSource('/api/security-events/stream')
+    esRef.current = es
+    es.onopen = () => setConnected(true)
+    es.onmessage = (e) => {
+      try {
+        const evt: DisplayEvent = JSON.parse(e.data)
+        setEvents(prev => {
+          if (prev.some(x => x.id === evt.id)) {
+            return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
+          }
+          return [evt, ...prev]
+        })
+      } catch { /* ignore */ }
+    }
+    es.addEventListener('stream-error', (e: MessageEvent) => { setError(e.data); setConnected(false); es.close() })
+    es.onerror = () => setConnected(false)
+  }
+
+  useEffect(() => {
+    reconnect()
+    return () => esRef.current?.close()
+  }, [])
   const [filter, setFilter] = useState<FilterType>('all')
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')

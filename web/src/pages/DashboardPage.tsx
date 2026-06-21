@@ -16,10 +16,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, modeApi, vapApi, admissionApi, securityEventsApi, type VAPRecord, type VAPBindingRecord, type AdmissionEvent } from '../api/client'
+import { policyApi, modeApi, vapApi, admissionApi, type VAPRecord, type VAPBindingRecord, type AdmissionEvent } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
-import type { DisplayEvent } from '../layout/SecurityEventsProvider'
+import { useSecurityEvents } from '../layout/SecurityEventsProvider'
 import type { PolicyRecord, Mode } from '../api/types'
 
 interface StatProps {
@@ -69,36 +69,30 @@ export function DashboardPage() {
   const toast = useToast()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const { events: secEvents } = useSecurityEvents()
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [vapPolicies, setVapPolicies] = useState<VAPRecord[]>([])
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
   const [admissionEvents, setAdmissionEvents] = useState<AdmissionEvent[]>([])
-  const [secEvents, setSecEvents] = useState<DisplayEvent[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [loading, setLoading] = useState(true)
 
   const load = () => {
     setLoading(true)
-    // Core data — failure shows an error
     Promise.all([policyApi.list(), modeApi.get()])
       .then(([p, m]) => { setPolicies(p); setMode(m) })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
-    // VAP data — loaded independently
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
-    // Event counts from backend
     admissionApi.list().then(setAdmissionEvents).catch(() => {})
-    securityEventsApi.list().then(setSecEvents).catch(() => {})
   }
 
   useEffect(() => {
     load()
-    // Refresh event counts every 30 seconds
     const timer = setInterval(() => {
       admissionApi.list().then(setAdmissionEvents).catch(() => {})
-      securityEventsApi.list().then(setSecEvents).catch(() => {})
     }, 30_000)
     return () => clearInterval(timer)
   }, [])

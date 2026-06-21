@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 
 export type Severity = 'warning' | 'critical'
 
@@ -26,17 +26,9 @@ export interface DisplayEvent {
 
 interface SecurityEventsContextValue {
   events: DisplayEvent[]
-  connected: boolean
-  error: string
-  reconnect: () => void
 }
 
-const SecurityEventsContext = createContext<SecurityEventsContextValue>({
-  events: [],
-  connected: false,
-  error: '',
-  reconnect: () => {},
-})
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({ events: [] })
 
 export function useSecurityEvents() {
   return useContext(SecurityEventsContext)
@@ -44,44 +36,23 @@ export function useSecurityEvents() {
 
 export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<DisplayEvent[]>([])
-  const [connected, setConnected] = useState(false)
-  const [error, setError] = useState('')
-  const esRef = useRef<EventSource | null>(null)
 
-  const connect = useCallback(() => {
-    esRef.current?.close()
-    setError('')
-
-    const es = new EventSource('/api/security-events/stream')
-    esRef.current = es
-
-    es.onopen = () => setConnected(true)
-
-    es.onmessage = (e) => {
-      try {
-        const evt: DisplayEvent = JSON.parse(e.data)
-        setEvents(prev => {
-          if (prev.some(x => x.id === evt.id)) {
-            // update count on dedup
-            return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
-          }
-          return [evt, ...prev]
-        })
-      } catch { /* ignore */ }
-    }
-
-    es.onerror = () => {
-      setConnected(false)
-    }
+  const fetchEvents = useCallback(() => {
+    fetch('/api/security-events', { credentials: 'include' })
+      .then(r => r.json())
+      .then((data: DisplayEvent[]) => setEvents(data ?? []))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
-    connect()
-    return () => esRef.current?.close()
-  }, [connect])
+    fetchEvents()
+    // Refresh every 30s to pick up new events without SSE overhead in global context
+    const timer = setInterval(fetchEvents, 30_000)
+    return () => clearInterval(timer)
+  }, [fetchEvents])
 
   return (
-    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
+    <SecurityEventsContext.Provider value={{ events }}>
       {children}
     </SecurityEventsContext.Provider>
   )
