@@ -1086,7 +1086,7 @@ export function VAPPage() {
 
                       {rule.type === 'required-registry' && (
                         <div className="flex flex-col gap-1">
-                          <span className="text-xs text-muted-foreground">Registry</span>
+                          <span className="text-xs text-muted-foreground">Allowed Registry</span>
                           <Input
                             value={rule.registry}
                             onChange={e => updateImageRule(i, 'registry', e.target.value)}
@@ -1097,6 +1097,9 @@ export function VAPPage() {
                             placeholder="e.g. registry.example.com/"
                             className="h-8 text-sm"
                           />
+                          <span className="text-[11px] text-muted-foreground">
+                            Only images from this registry are allowed. Images from any other registry will be denied.
+                          </span>
                         </div>
                       )}
 
