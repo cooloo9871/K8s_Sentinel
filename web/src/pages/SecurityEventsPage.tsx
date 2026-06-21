@@ -125,11 +125,20 @@ export function SecurityEventsPage() {
   const pausedRef = useRef(false)
   const pendingRef = useRef<DisplayEvent[]>([])
 
+  const capBySeverity = (evts: DisplayEvent[]): DisplayEvent[] => {
+    let warn = 0, crit = 0
+    return evts.filter(e => {
+      if (e.severity === 'critical' && crit < 300) { crit++; return true }
+      if (e.severity === 'warning'  && warn < 500) { warn++; return true }
+      return false
+    })
+  }
+
   const applyEvent = (evt: DisplayEvent, prev: DisplayEvent[]): DisplayEvent[] => {
     if (prev.some(x => x.id === evt.id)) {
       return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
     }
-    return [evt, ...prev]
+    return capBySeverity([evt, ...prev])
   }
 
   const reconnect = () => {
