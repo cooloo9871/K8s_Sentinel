@@ -38,6 +38,8 @@ export function AdmissionEventsPage() {
 
   const sourceVisible = sourceFilter === 'all' ? events : events.filter(e => e.source === sourceFilter)
   const namespaces = [...new Set(sourceVisible.map(e => e.namespace).filter(Boolean))].sort()
+  const warningCount = events.filter(e => e.severity === 'warning').length
+  const criticalCount = events.filter(e => e.severity === 'critical').length
 
   useEffect(() => {
     const es = new EventSource('/api/admission-events/stream')
@@ -124,12 +126,22 @@ export function AdmissionEventsPage() {
             </SelectGroup>
           </SelectContent>
         </Select>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} event{filtered.length !== 1 ? 's' : ''}
-        </span>
       </div>
 
       <Card className="overflow-x-hidden">
+        <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length} events{(severityFilter !== 'all' || sourceFilter !== 'audit' || nsFilter !== 'all' || search) ? ' (filtered)' : ''}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-400" />
+            <span className="text-amber-700">{warningCount} warning</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-destructive" />
+            <span className="text-destructive">{criticalCount} critical</span>
+          </div>
+        </div>
         <CardContent className="p-0">
           {filtered.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">

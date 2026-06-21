@@ -283,9 +283,6 @@ export function SecurityEventsPage() {
             </SelectGroup>
           </SelectContent>
         </Select>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} event{filtered.length !== 1 ? 's' : ''}
-        </span>
       </div>
 
       {error && (
