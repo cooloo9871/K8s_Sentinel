@@ -117,7 +117,7 @@ function DetailRow({ e }: { e: DisplayEvent }) {
 }
 
 export function SecurityEventsPage() {
-  const { events, connected, error, reconnect, paused, pendingCount, togglePause } = useSecurityEvents()
+  const { events, connected, error, reconnect } = useSecurityEvents()
   const [filter, setFilter] = useState<FilterType>('all')
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
@@ -167,20 +167,6 @@ export function SecurityEventsPage() {
               <><IconWifiOff size={16} className="text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
             )}
           </div>
-
-          <Button
-            variant={paused ? 'default' : 'outline'}
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={togglePause}
-          >
-            {paused ? '▶ Resume' : '⏸ Pause'}
-            {paused && pendingCount > 0 && (
-              <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold">
-                +{pendingCount}
-              </span>
-            )}
-          </Button>
 
           <Button variant="outline" size="sm" className="h-9"
             onClick={() => exportCSV(filtered)}>
@@ -290,7 +276,7 @@ export function SecurityEventsPage() {
                       </TableCell>
                       <TableCell className="overflow-hidden">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <RuleTypeBadge fn={e.function} />
+                          <RuleTypeBadge fn={e.function ?? ''} />
                           <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
                             {e.binary ? e.binary.split('/').pop() : '—'}
                           </span>

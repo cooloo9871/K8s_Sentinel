@@ -1,87 +1,27 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import type { TetragonEvent } from '../api/types'
-
-const MAX_WARNINGS  = 500
-const MAX_CRITICALS = 300
-const DEDUP_WINDOW_MS = 30000
-
-/** Apply per-severity caps: keep newest MAX_WARNINGS warnings and MAX_CRITICALS criticals. */
-function capBySeverity(events: DisplayEvent[]): DisplayEvent[] {
-  // events is sorted newest-first; slicing keeps the newest within each severity.
-  const warnIds = new Set(
-    events.filter(e => e.severity === 'warning').slice(0, MAX_WARNINGS).map(e => e.id)
-  )
-  const critIds = new Set(
-    events.filter(e => e.severity === 'critical').slice(0, MAX_CRITICALS).map(e => e.id)
-  )
-  return events.filter(e =>
-    (e.severity === 'warning' && warnIds.has(e.id)) ||
-    (e.severity === 'critical' && critIds.has(e.id))
-  )
-}
-const STORAGE_KEY = 'sentinel_security_events'
 
 export type Severity = 'warning' | 'critical'
 
-export interface DisplayEvent extends TetragonEvent {
-  id: string   // stable unique ID set on creation, never changed on dedup
+export interface DisplayEvent {
+  id: string
+  time: string
   count: number
   severity: Severity
-}
-
-const TTL_DAYS = 7
-const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000
-
-function loadFromStorage(): DisplayEvent[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const cutoff = Date.now() - TTL_MS
-      const data = JSON.parse(raw) as any[]
-      const mapped = data
-        .filter((e) => e.type === 'kprobe' && e.policyName)
-        .filter((e) => !e.time || new Date(e.time).getTime() >= cutoff)
-        .map((e) => ({
-          ...e,
-          id: e.id ?? `${e.time}-${e.pod}-${e.binary}-${Math.random()}`,
-          count: e.count ?? 1,
-          severity: e.severity ?? (e.action === 'kill' ? 'critical' : 'warning'),
-        })) as DisplayEvent[]
-      return capBySeverity(mapped)
-    }
-  } catch {}
-  return []
-}
-
-function saveToStorage(events: DisplayEvent[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
-  } catch {}
-}
-
-function isSameEvent(a: DisplayEvent, b: TetragonEvent): boolean {
-  return (
-    a.binary    === b.binary    &&
-    a.pod       === b.pod       &&
-    a.function  === b.function  &&
-    a.policyName === b.policyName &&
-    a.action    === b.action    &&
-    a.filePath  === b.filePath  &&
-    a.fileOp    === b.fileOp
-  )
-}
-
-function dedupInsert(list: DisplayEvent[], newEvt: DisplayEvent): DisplayEvent[] {
-  const bTime = new Date(newEvt.time).getTime()
-  const idx = list.findIndex(e =>
-    isSameEvent(e, newEvt) &&
-    Math.abs(new Date(e.time).getTime() - bTime) < DEDUP_WINDOW_MS
-  )
-  if (idx !== -1) {
-    const updated = { ...list[idx], count: list[idx].count + 1, time: newEvt.time }
-    return [updated, ...list.filter((_, i) => i !== idx)]
-  }
-  return [newEvt, ...list]
+  namespace: string
+  pod: string
+  container?: string
+  nodeName?: string
+  binary?: string
+  arguments?: string
+  parentBin?: string
+  function?: string
+  policyName?: string
+  action?: string
+  processUid?: number
+  filePath?: string
+  fileOp?: string
+  netDest?: string
+  netSrc?: string
 }
 
 interface SecurityEventsContextValue {
@@ -89,9 +29,6 @@ interface SecurityEventsContextValue {
   connected: boolean
   error: string
   reconnect: () => void
-  paused: boolean
-  pendingCount: number
-  togglePause: () => void
 }
 
 const SecurityEventsContext = createContext<SecurityEventsContextValue>({
@@ -99,9 +36,6 @@ const SecurityEventsContext = createContext<SecurityEventsContextValue>({
   connected: false,
   error: '',
   reconnect: () => {},
-  paused: false,
-  pendingCount: 0,
-  togglePause: () => {},
 })
 
 export function useSecurityEvents() {
@@ -109,86 +43,45 @@ export function useSecurityEvents() {
 }
 
 export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
-  const [events, setEvents] = useState<DisplayEvent[]>(() => loadFromStorage())
+  const [events, setEvents] = useState<DisplayEvent[]>([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
-  const [paused, setPaused] = useState(false)
-  const pausedRef = useRef(false)
-  const pendingRef = useRef<DisplayEvent[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
   const esRef = useRef<EventSource | null>(null)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const eventsRef = useRef<DisplayEvent[]>(events)
 
   const connect = useCallback(() => {
     esRef.current?.close()
     setError('')
 
-    const es = new EventSource('/api/events/stream')
+    const es = new EventSource('/api/security-events/stream')
     esRef.current = es
 
     es.onopen = () => setConnected(true)
 
     es.onmessage = (e) => {
       try {
-        const evt: TetragonEvent = JSON.parse(e.data)
-        // Only store kprobe events that belong to a named user-defined TracingPolicy.
-        if (evt.type !== 'kprobe' || !evt.policyName) return
-        const severity: Severity = evt.action === 'kill' ? 'critical' : 'warning'
-        const id = `${evt.time}-${evt.pod}-${evt.binary}-${evt.policyName}-${Math.random().toString(36).slice(2)}`
-        const newEvt: DisplayEvent = { ...evt, id, count: 1, severity }
-
-        if (pausedRef.current) {
-          pendingRef.current = dedupInsert(pendingRef.current, newEvt).slice(0, MAX_WARNINGS + MAX_CRITICALS)
-          setPendingCount(pendingRef.current.length)
-          return
-        }
-
-        setEvents((prev) => capBySeverity(dedupInsert(prev, newEvt)))
-      } catch {}
+        const evt: DisplayEvent = JSON.parse(e.data)
+        setEvents(prev => {
+          if (prev.some(x => x.id === evt.id)) {
+            // update count on dedup
+            return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
+          }
+          return [evt, ...prev]
+        })
+      } catch { /* ignore */ }
     }
 
-    es.addEventListener('stream-error', (e: MessageEvent) => {
-      setError(e.data)
+    es.onerror = () => {
       setConnected(false)
-      es.close()
-    })
-
-    es.onerror = () => setConnected(false)
-  }, [])
-
-  useEffect(() => { eventsRef.current = events }, [events])
-
-  useEffect(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => saveToStorage(events), 2000)
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [events])
-
-  useEffect(() => { return () => { saveToStorage(eventsRef.current) } }, [])
-
-  const togglePause = useCallback(() => {
-    setPaused(prev => {
-      const nowPaused = !prev
-      pausedRef.current = nowPaused
-      if (!nowPaused && pendingRef.current.length > 0) {
-        // Resume: flush buffered events into the main list.
-        const pending = pendingRef.current
-        pendingRef.current = []
-        setPendingCount(0)
-        setEvents(prev => capBySeverity([...pending, ...prev]))
-      }
-      return nowPaused
-    })
+    }
   }, [])
 
   useEffect(() => {
     connect()
     return () => esRef.current?.close()
-  }, [])
+  }, [connect])
 
   return (
-    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect, paused, pendingCount, togglePause }}>
+    <SecurityEventsContext.Provider value={{ events, connected, error, reconnect: connect }}>
       {children}
     </SecurityEventsContext.Provider>
   )

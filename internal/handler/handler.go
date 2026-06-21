@@ -12,6 +12,7 @@ import (
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/k8s"
 	"github.com/cooloo9871/sentinel/internal/rsyslog"
+	"github.com/cooloo9871/sentinel/internal/security"
 )
 
 // Config holds dependencies for all handlers.
@@ -24,6 +25,7 @@ type Config struct {
 	Rsyslog         *rsyslog.Store
 	RsyslogDispatch *rsyslog.Dispatcher
 	Admission       *admission.Store
+	Security        *security.Store
 }
 
 // New builds the HTTP handler tree.
@@ -61,6 +63,8 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/alerts", listAlerts(cfg.Alerts))
 		r.Get("/api/admission-events", listAdmissionEvents(cfg.Admission))
 		r.Get("/api/admission-events/stream", streamAdmissionEvents(cfg.Admission))
+		r.Get("/api/security-events", listSecurityEvents(cfg.Security))
+		r.Get("/api/security-events/stream", streamSecurityEvents(cfg.Security))
 		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
 		r.Get("/api/vap", listVAP(cfg.Store))
 		r.Get("/api/vap/{name}", getVAP(cfg.Store))

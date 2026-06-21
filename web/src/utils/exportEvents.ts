@@ -20,17 +20,17 @@ function toRow(e: DisplayEvent): string[] {
   return [
     e.time,
     e.severity.toUpperCase(),
-    ruleType(e.function),
+    ruleType(e.function ?? ''),
     e.namespace,
     e.pod + (e.container ? ` / ${e.container}` : ''),
-    e.binary,
-    e.policyName,
-    e.nodeName,
+    e.binary ?? '',
+    e.policyName ?? '',
+    e.nodeName ?? '',
     userLabel(e.processUid),
-    e.fileOp,
-    e.filePath,
-    e.netDest,
-    e.netSrc,
+    e.fileOp ?? '',
+    e.filePath ?? '',
+    e.netDest ?? '',
+    e.netSrc ?? '',
   ]
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/cooloo9871/sentinel/internal/auth"
 	"github.com/cooloo9871/sentinel/internal/handler"
 	"github.com/cooloo9871/sentinel/internal/rsyslog"
+	"github.com/cooloo9871/sentinel/internal/security"
 	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
 	sentinelweb "github.com/cooloo9871/sentinel/web"
 )
@@ -33,6 +34,9 @@ func main() {
 	admissionStore := admission.NewStore("/data/sentinel/admission-events.json")
 	go admissionStore.Run(context.Background(), typedClient)
 
+	securityStore := security.NewStore("/data/sentinel/security-events.json")
+	go securityStore.Run(context.Background(), store)
+
 	alerts := alert.NewStore("/data/sentinel/alerts.json")
 	dispatcher := alert.NewDispatcher(alerts, store, admissionStore)
 	go dispatcher.Run(context.Background())
@@ -50,6 +54,7 @@ func main() {
 		Rsyslog:         rsyslogs,
 		RsyslogDispatch: rsyslogDispatch,
 		Admission:       admissionStore,
+		Security:        securityStore,
 	}
 
 	mux := http.NewServeMux()
