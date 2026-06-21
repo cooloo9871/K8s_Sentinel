@@ -233,13 +233,25 @@ function hostAccessRuleToYamlLines(rule: HostAccessRule): string[] {
   const noNet = rule.checkType === 'no-host-network' || rule.checkType === 'all'
   const noPid = rule.checkType === 'no-host-pid'     || rule.checkType === 'all'
   const noIpc = rule.checkType === 'no-host-ipc'     || rule.checkType === 'all'
+
+  // Check all three nesting paths: Pod (spec), template-based (spec.template.spec),
+  // and CronJob (spec.jobTemplate.spec.template.spec).
+  function pathCheck(field: string): string {
+    return [
+      `!object.spec.?${field}.orValue(false)`,
+      `!object.spec.?template.?spec.?${field}.orValue(false)`,
+      `!object.spec.?jobTemplate.?spec.?template.?spec.?${field}.orValue(false)`,
+    ].join(' && ')
+  }
+
   const parts: string[] = []
-  if (noNet) parts.push('!object.spec.?hostNetwork.orValue(false)')
-  if (noPid) parts.push('!object.spec.?hostPID.orValue(false)')
-  if (noIpc) parts.push('!object.spec.?hostIPC.orValue(false)')
+  if (noNet) parts.push(pathCheck('hostNetwork'))
+  if (noPid) parts.push(pathCheck('hostPID'))
+  if (noIpc) parts.push(pathCheck('hostIPC'))
   const expr = parts.join(' && ')
   return [
-    `    - expression: "${expr}"`,
+    '    - expression: >-',
+    `        ${expr}`,
     `      message: "${m}"`,
     '      reason: Forbidden',
   ]
