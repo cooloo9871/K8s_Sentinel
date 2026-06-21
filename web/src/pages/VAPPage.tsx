@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
@@ -75,6 +75,15 @@ const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', mess
 const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'deployments', message: '' })
 const emptyResourceLimitRule = (): ResourceLimitRule => ({ limitType: 'both', message: '' })
 const emptySecurityContextRule = (): SecurityContextRule => ({ checkType: 'no-privileged', message: '' })
+
+type HostAccessCheckType = 'no-host-network' | 'no-host-pid' | 'no-host-ipc' | 'all'
+
+interface HostAccessRule {
+  checkType: HostAccessCheckType
+  message: string
+}
+
+const emptyHostAccessRule = (): HostAccessRule => ({ checkType: 'all', message: '' })
 
 // Policy builder ---------------------------------------------------------------
 
@@ -212,6 +221,30 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
   ]
 }
 
+function autoHostAccessMessage(rule: HostAccessRule): string {
+  if (rule.checkType === 'no-host-network') return 'hostNetwork is not allowed'
+  if (rule.checkType === 'no-host-pid') return 'hostPID is not allowed'
+  if (rule.checkType === 'no-host-ipc') return 'hostIPC is not allowed'
+  return 'hostNetwork, hostPID, and hostIPC are not allowed'
+}
+
+function hostAccessRuleToYamlLines(rule: HostAccessRule): string[] {
+  const m = escapeYaml(rule.message.trim() || autoHostAccessMessage(rule))
+  const noNet = rule.checkType === 'no-host-network' || rule.checkType === 'all'
+  const noPid = rule.checkType === 'no-host-pid'     || rule.checkType === 'all'
+  const noIpc = rule.checkType === 'no-host-ipc'     || rule.checkType === 'all'
+  const parts: string[] = []
+  if (noNet) parts.push('!object.spec.?hostNetwork.orValue(false)')
+  if (noPid) parts.push('!object.spec.?hostPID.orValue(false)')
+  if (noIpc) parts.push('!object.spec.?hostIPC.orValue(false)')
+  const expr = parts.join(' && ')
+  return [
+    `    - expression: "${expr}"`,
+    `      message: "${m}"`,
+    '      reason: Forbidden',
+  ]
+}
+
 function autoSecurityContextMessage(rule: SecurityContextRule): string {
   if (rule.checkType === 'no-privileged') return 'Privileged containers are not allowed'
   if (rule.checkType === 'run-as-non-root') return 'Workloads must set runAsNonRoot: true in pod securityContext'
@@ -317,6 +350,7 @@ function generatePolicyYaml(
   replicaRules: ReplicaRule[], applyTo: LabelApplyTo = 'all',
   resourceLimitRules: ResourceLimitRule[] = [],
   securityContextRule: SecurityContextRule = emptySecurityContextRule(),
+  hostAccessRule: HostAccessRule = emptyHostAccessRule(),
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
@@ -333,6 +367,8 @@ function generatePolicyYaml(
     validationLines = resourceLimitRules.length ? resourceLimitRules.flatMap(resourceLimitRuleToYamlLines) : resourceLimitRuleToYamlLines(emptyResourceLimitRule())
   } else if (ruleType === 'security-context') {
     validationLines = securityContextRuleToYamlLines(securityContextRule)
+  } else if (ruleType === 'host-access') {
+    validationLines = hostAccessRuleToYamlLines(hostAccessRule)
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -350,7 +386,7 @@ function generatePolicyYaml(
         '      operations: [UPDATE]',
         '      resources: ["deployments/scale", "statefulsets/scale"]',
       ]
-    : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context')
+    : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context' || ruleType === 'host-access')
     ? [
         '    resourceRules:',
         '      - apiGroups: [""]',
@@ -482,10 +518,24 @@ function parseExpressionToSecurityContextPart(expr: string): SecurityContextPart
   return null
 }
 
+function parseExpressionToHostAccessPart(expr: string): HostAccessCheckType | null {
+  const e = expr.replace(/\s+/g, ' ').trim()
+  if (!e.includes('hostNetwork') && !e.includes('hostPID') && !e.includes('hostIPC')) return null
+  const hasNet = e.includes('hostNetwork')
+  const hasPid = e.includes('hostPID')
+  const hasIpc = e.includes('hostIPC')
+  if (hasNet && hasPid && hasIpc) return 'all'
+  if (hasNet) return 'no-host-network'
+  if (hasPid) return 'no-host-pid'
+  if (hasIpc) return 'no-host-ipc'
+  return null
+}
+
 function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType; applyTo: LabelApplyTo
   labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
   resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
+  hostAccessRule: HostAccessRule
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -501,6 +551,7 @@ function tryParseBuilderPolicy(rawYaml: string): {
     const annotationRules: LabelRule[] = []
     const resourceLimitRules: ResourceLimitRule[] = []
     const scParts: { part: SecurityContextPart; message: string }[] = []
+    let hostAccessParsed: HostAccessRule | null = null
     for (const v of spec.validations) {
       const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
       if (lr) { labelRules.push(lr); continue }
@@ -514,6 +565,8 @@ function tryParseBuilderPolicy(rawYaml: string): {
       if (rlr) { resourceLimitRules.push(rlr); continue }
       const scp = parseExpressionToSecurityContextPart(v.expression ?? '')
       if (scp) { scParts.push({ part: scp, message: v.message ?? '' }); continue }
+      const hap = parseExpressionToHostAccessPart(v.expression ?? '')
+      if (hap) { hostAccessParsed = { checkType: hap, message: v.message ?? '' }; continue }
       return null  // unknown expression type — fall through to YAML editor
     }
     // Build security context rule from parts
@@ -525,17 +578,19 @@ function tryParseBuilderPolicy(rawYaml: string): {
       checkType,
       message: scParts[0]?.message ?? '',
     }
+    const hostAccessRule: HostAccessRule = hostAccessParsed ?? emptyHostAccessRule()
     // All rules must be the same type
-    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0].filter(Boolean).length
+    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0, hostAccessParsed !== null].filter(Boolean).length
     if (typesUsed > 1) return null
     const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica'
       : imageRules.length > 0 ? 'image'
       : annotationRules.length > 0 ? 'annotation'
       : resourceLimitRules.length > 0 ? 'resource-limits'
       : scParts.length > 0 ? 'security-context'
+      : hostAccessParsed !== null ? 'host-access'
       : 'label'
     const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
-    return { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule }
+    return { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule }
   } catch { return null }
 }
 
@@ -594,6 +649,7 @@ export function VAPPage() {
   const [replicaRules, setReplicaRules] = useState<ReplicaRule[]>([emptyReplicaRule()])
   const [resourceLimitRules, setResourceLimitRules] = useState<ResourceLimitRule[]>([emptyResourceLimitRule()])
   const [securityContextRule, setSecurityContextRule] = useState<SecurityContextRule>(emptySecurityContextRule())
+  const [hostAccessRule, setHostAccessRule] = useState<HostAccessRule>(emptyHostAccessRule())
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -624,6 +680,7 @@ export function VAPPage() {
     setReplicaRules([emptyReplicaRule()])
     setResourceLimitRules([emptyResourceLimitRule()])
     setSecurityContextRule(emptySecurityContextRule())
+    setHostAccessRule(emptyHostAccessRule())
   }
 
   // Binding builder state
@@ -667,6 +724,7 @@ export function VAPPage() {
         setReplicaRules(parsed.replicaRules.length ? parsed.replicaRules : [emptyReplicaRule()])
         setResourceLimitRules(parsed.resourceLimitRules.length ? parsed.resourceLimitRules : [emptyResourceLimitRule()])
         setSecurityContextRule(parsed.securityContextRule)
+        setHostAccessRule(parsed.hostAccessRule)
         setShowBuilder(true)
         return
       }
@@ -728,13 +786,13 @@ export function VAPPage() {
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
       ? true
-      : builderRuleType === 'security-context'
+      : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
       ? true
       : replicaRules.some(r => r.maxReplicas > 0)
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -779,7 +837,7 @@ export function VAPPage() {
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
       ? true
-      : builderRuleType === 'security-context'
+      : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
       ? true
       : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
@@ -821,6 +879,7 @@ export function VAPPage() {
                     setReplicaRules([emptyReplicaRule()])
                     setResourceLimitRules([emptyResourceLimitRule()])
                     setSecurityContextRule(emptySecurityContextRule())
+                    setHostAccessRule(emptyHostAccessRule())
                   }}
                   disabled={!!builderEditName}
                 >
@@ -835,6 +894,7 @@ export function VAPPage() {
                       <SelectItem value="replica">Replica Limit</SelectItem>
                       <SelectItem value="resource-limits">Resource Limits</SelectItem>
                       <SelectItem value="security-context">Security Context</SelectItem>
+                      <SelectItem value="host-access">Host Access</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -1095,6 +1155,41 @@ export function VAPPage() {
                         value={securityContextRule.message}
                         onChange={e => setSecurityContextRule(r => ({ ...r, message: e.target.value }))}
                         placeholder={autoSecurityContextMessage(securityContextRule)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
+                  </p>
+                </div>
+              )}
+
+              {/* ── Host Access rules ── */}
+              {builderRuleType === 'host-access' && (
+                <div className="flex flex-col gap-3">
+                  <Label>Host Access Rule</Label>
+                  <div className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Check Type</span>
+                      <Select value={hostAccessRule.checkType} onValueChange={v => setHostAccessRule(r => ({ ...r, checkType: v as HostAccessCheckType }))}>
+                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="all">All — deny hostNetwork, hostPID, and hostIPC</SelectItem>
+                            <SelectItem value="no-host-network">No Host Network</SelectItem>
+                            <SelectItem value="no-host-pid">No Host PID</SelectItem>
+                            <SelectItem value="no-host-ipc">No Host IPC</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                      <Input
+                        value={hostAccessRule.message}
+                        onChange={e => setHostAccessRule(r => ({ ...r, message: e.target.value }))}
+                        placeholder={autoHostAccessMessage(hostAccessRule)}
                         className="h-8 text-sm"
                       />
                     </div>
