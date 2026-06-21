@@ -38,8 +38,8 @@ export function AdmissionEventsPage() {
 
   const sourceVisible = sourceFilter === 'all' ? events : events.filter(e => e.source === sourceFilter)
   const namespaces = [...new Set(sourceVisible.map(e => e.namespace).filter(Boolean))].sort()
-  const warningCount = events.filter(e => e.severity === 'warning').length
-  const criticalCount = events.filter(e => e.severity === 'critical').length
+
+
 
   useEffect(() => {
     const es = new EventSource('/api/admission-events/stream')
@@ -75,6 +75,10 @@ export function AdmissionEventsPage() {
     }
     return true
   })
+
+  const warningCount = filtered.filter(e => e.severity === 'warning').length
+  const criticalCount = filtered.filter(e => e.severity === 'critical').length
+  const isFiltered = severityFilter !== 'all' || sourceFilter !== 'audit' || nsFilter !== 'all' || search.trim() !== ''
 
   return (
     <>
@@ -131,7 +135,7 @@ export function AdmissionEventsPage() {
       <Card className="overflow-x-hidden">
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
           <span className="text-muted-foreground">
-            {filtered.length} events{(severityFilter !== 'all' || sourceFilter !== 'audit' || nsFilter !== 'all' || search) ? ' (filtered)' : ''}
+            {filtered.length} events{isFiltered ? ' (filtered)' : ''}
           </span>
           <div className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-amber-400" />

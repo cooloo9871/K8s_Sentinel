@@ -199,8 +199,9 @@ export function SecurityEventsPage() {
     return true
   })
 
-  const warningCount = events.filter(e => e.severity === 'warning').length
-  const criticalCount = events.filter(e => e.severity === 'critical').length
+  const warningCount = filtered.filter(e => e.severity === 'warning').length
+  const criticalCount = filtered.filter(e => e.severity === 'critical').length
+  const isFiltered = filter !== 'all' || nsFilter !== 'all' || podSearch.trim() !== ''
 
   const toggle = (key: string) =>
     setExpanded(prev => {
@@ -297,7 +298,7 @@ export function SecurityEventsPage() {
       <Card className="overflow-x-hidden">
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
           <span className="text-muted-foreground">
-            {filtered.length} events{(filter !== 'all' || podSearch) ? ' (filtered)' : ''}
+            {filtered.length} events{isFiltered ? ' (filtered)' : ''}
           </span>
           <div className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-amber-400" />
