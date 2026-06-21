@@ -3,6 +3,7 @@ import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
   IconShieldLock, IconServer,
 } from '@tabler/icons-react'
+import React from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -88,6 +89,18 @@ interface HostAccessRule {
 }
 
 const emptyHostAccessRule = (): HostAccessRule => ({ checkType: 'all', message: '' })
+
+// Module-level constant — single source of truth for both the card grid and
+// the readonly display. Avoids the two lists drifting when a new rule type is added.
+const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; label: string; desc: string; readonlyLabel: string }[] = [
+  { value: 'label',           icon: <IconTag size={20} />,         label: 'Label',      desc: 'Label key=value check',      readonlyLabel: 'Label Check' },
+  { value: 'annotation',      icon: <IconNotes size={20} />,       label: 'Annotation', desc: 'Annotation key=value check', readonlyLabel: 'Annotation Check' },
+  { value: 'image',           icon: <IconBrandDocker size={20} />, label: 'Image',      desc: 'Registry & tag policy',      readonlyLabel: 'Image Policy' },
+  { value: 'replica',         icon: <IconCopy size={20} />,        label: 'Replica',    desc: 'Max replica count',          readonlyLabel: 'Replica Limit' },
+  { value: 'resource-limits', icon: <IconCpu size={20} />,         label: 'Resources',  desc: 'CPU / memory limits',        readonlyLabel: 'Resource Limits' },
+  { value: 'security-context',icon: <IconShieldLock size={20} />,  label: 'Security',   desc: 'Privileged & non-root',      readonlyLabel: 'Security Context' },
+  { value: 'host-access',     icon: <IconServer size={20} />,      label: 'Host',       desc: 'hostNetwork / PID / IPC',    readonlyLabel: 'Host Access' },
+]
 
 // Policy builder ---------------------------------------------------------------
 
@@ -895,33 +908,21 @@ export function VAPPage() {
                 <Label>Rule Type</Label>
                 {builderEditName ? (
                   <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground opacity-60">
-                    {([
-                      { value: 'label', label: 'Label Check' },
-                      { value: 'annotation', label: 'Annotation Check' },
-                      { value: 'image', label: 'Image Policy' },
-                      { value: 'replica', label: 'Replica Limit' },
-                      { value: 'resource-limits', label: 'Resource Limits' },
-                      { value: 'security-context', label: 'Security Context' },
-                      { value: 'host-access', label: 'Host Access' },
-                    ] as { value: PolicyRuleType; label: string }[]).find(t => t.value === builderRuleType)?.label}
+                    {RULE_TYPE_CARDS.find(t => t.value === builderRuleType)?.readonlyLabel ?? builderRuleType}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-2">
-                    {([
-                      { value: 'label',            icon: <IconTag size={20} />,          label: 'Label',      desc: 'Label key=value check' },
-                      { value: 'annotation',        icon: <IconNotes size={20} />,        label: 'Annotation', desc: 'Annotation key=value check' },
-                      { value: 'image',             icon: <IconBrandDocker size={20} />,  label: 'Image',      desc: 'Registry & tag policy' },
-                      { value: 'replica',           icon: <IconCopy size={20} />,         label: 'Replica',    desc: 'Max replica count' },
-                      { value: 'resource-limits',   icon: <IconCpu size={20} />,          label: 'Resources',  desc: 'CPU / memory limits' },
-                      { value: 'security-context',  icon: <IconShieldLock size={20} />,   label: 'Security',   desc: 'Privileged & non-root' },
-                      { value: 'host-access',       icon: <IconServer size={20} />,       label: 'Host',       desc: 'hostNetwork / PID / IPC' },
-                    ] as { value: PolicyRuleType; icon: React.ReactNode; label: string; desc: string }[]).map(t => (
+                  <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Rule Type">
+                    {RULE_TYPE_CARDS.map(t => (
                       <button
                         key={t.value}
                         type="button"
+                        role="radio"
+                        aria-pressed={builderRuleType === t.value}
+                        aria-label={t.readonlyLabel}
                         onClick={() => {
                           setBuilderRuleType(t.value)
                           setLabelRules([emptyRule()])
+                          // Clear registry when switching away from required-registry
                           setImageRules([emptyImageRule()])
                           setReplicaRules([emptyReplicaRule()])
                           setResourceLimitRules([emptyResourceLimitRule()])
