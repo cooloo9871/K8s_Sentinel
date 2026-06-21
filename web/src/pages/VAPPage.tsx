@@ -707,17 +707,18 @@ export function VAPPage() {
   const [bindingActions, setBindingActions] = useState<Set<ValidationAction>>(new Set(['Deny']))
   const [bindingBuilderSaving, setBindingBuilderSaving] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
     try {
       const [p, b] = await Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       setPolicies(p)
       setBindings(b)
     } catch { /* ignore */ }
-    finally { setLoading(false) }
+    finally { if (showSpinner) setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  // Show spinner only on first load; subsequent navigations silently refresh in background
+  useEffect(() => { load(policies.length === 0 && bindings.length === 0) }, [load])
 
   const openNew = (kind: 'policy' | 'binding') => {
     setEditorYaml('')
