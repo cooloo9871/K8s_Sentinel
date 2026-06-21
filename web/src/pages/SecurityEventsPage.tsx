@@ -163,17 +163,15 @@ export function SecurityEventsPage() {
   }
 
   const togglePause = () => {
-    setPaused(prev => {
-      const nowPaused = !prev
-      pausedRef.current = nowPaused
-      if (!nowPaused && pendingRef.current.length > 0) {
-        const pending = pendingRef.current
-        pendingRef.current = []
-        setPendingCount(0)
-        setEvents(prev => pending.reduce((acc, e) => applyEvent(e, acc), prev))
-      }
-      return nowPaused
-    })
+    const nowPaused = !pausedRef.current
+    pausedRef.current = nowPaused
+    setPaused(nowPaused)
+    if (!nowPaused && pendingRef.current.length > 0) {
+      const pending = pendingRef.current
+      pendingRef.current = []
+      setPendingCount(0)
+      setEvents(prev => pending.reduce((acc, e) => applyEvent(e, acc), prev))
+    }
   }
 
   useEffect(() => {

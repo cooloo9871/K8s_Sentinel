@@ -636,6 +636,8 @@ function tryParseBuilderBinding(rawYaml: string): {
 
 // Page -------------------------------------------------------------------------
 
+const _vapCache = { loaded: false }
+
 export function VAPPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
@@ -643,7 +645,7 @@ export function VAPPage() {
 
   const [policies, setPolicies] = useState<VAPRecord[]>([])
   const [bindings, setBindings] = useState<VAPBindingRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!_vapCache.loaded)
   const [editor, setEditor] = useState<EditTarget | null>(null)
   const [editorYaml, setEditorYaml] = useState('')
   const [editorValid, setEditorValid] = useState(true)
@@ -713,12 +715,13 @@ export function VAPPage() {
       const [p, b] = await Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       setPolicies(p)
       setBindings(b)
+      _vapCache.loaded = true
     } catch { /* ignore */ }
-    finally { if (showSpinner) setLoading(false) }
+    finally { setLoading(false) }
   }, [])
 
   // Show spinner only on first load; subsequent navigations silently refresh in background
-  useEffect(() => { load(policies.length === 0 && bindings.length === 0) }, [load])
+  useEffect(() => { load(!_vapCache.loaded) }, [load])
 
   const openNew = (kind: 'policy' | 'binding') => {
     setEditorYaml('')

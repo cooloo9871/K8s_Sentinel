@@ -27,13 +27,15 @@ const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
   Mixed: 'outline',
 }
 
+const _policyCache = { loaded: false }
+
 export function PolicyListPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!_policyCache.loaded)
   const [search, setSearch] = useState('')
   const [scopeFilter, setScopeFilter] = useState('all')
   const [nsFilter, setNsFilter] = useState('all')
@@ -53,15 +55,16 @@ export function PolicyListPage() {
     if (showSpinner) setLoading(true)
     try {
       setPolicies(await policyApi.list())
+      _policyCache.loaded = true
     } catch {
       toast.error('Failed to load policies')
     } finally {
-      if (showSpinner) setLoading(false)
+      setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchPolicies(policies.length === 0)
+    fetchPolicies(!_policyCache.loaded)
     modeApi.get().then(setGlobalMode).catch(() => {})
   }, [])
 

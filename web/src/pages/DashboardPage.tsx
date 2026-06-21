@@ -64,6 +64,9 @@ function RelativeTime({ iso }: { iso: string }) {
   return <span title={d.toLocaleString()}>{label}</span>
 }
 
+// Module-level cache survives navigation unmounts so spinner is skipped on revisit
+const _dashCache = { loaded: false }
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const toast = useToast()
@@ -75,14 +78,14 @@ export function DashboardPage() {
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
   const [admissionEvents, setAdmissionEvents] = useState<AdmissionEvent[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!_dashCache.loaded)
 
   const load = (showSpinner = false) => {
     if (showSpinner) setLoading(true)
     Promise.all([policyApi.list(), modeApi.get()])
-      .then(([p, m]) => { setPolicies(p); setMode(m) })
+      .then(([p, m]) => { setPolicies(p); setMode(m); _dashCache.loaded = true })
       .catch(() => toast.error('Failed to load dashboard'))
-      .finally(() => { if (showSpinner) setLoading(false) })
+      .finally(() => setLoading(false))
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
@@ -90,7 +93,7 @@ export function DashboardPage() {
   }
 
   useEffect(() => {
-    load(policies.length === 0)
+    load(!_dashCache.loaded)
     const timer = setInterval(() => {
       admissionApi.list().then(setAdmissionEvents).catch(() => {})
     }, 30_000)
