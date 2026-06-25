@@ -24,8 +24,8 @@ export function AppSidebar() {
     <Sidebar collapsible="offcanvas">
       <SidebarHeader>
         <div className="flex items-center gap-2.5 px-2 py-3">
-          <img src={logoUrl} alt="Sentinel" className="size-8 shrink-0" />
-          <span className="text-base font-bold text-sidebar-foreground">Sentinel</span>
+          <img src={logoUrl} alt="K8s Sentinel" className="size-8 shrink-0" />
+          <span className="text-base font-bold text-sidebar-foreground">K8s Sentinel</span>
         </div>
       </SidebarHeader>
 

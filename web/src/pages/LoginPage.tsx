@@ -34,7 +34,7 @@ export function LoginPage({ onLogin }: Props) {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="w-full max-w-md">
         <CardHeader className="flex items-center px-8 pt-8 pb-4">
-          <img src={logoUrl} alt="Sentinel" className="w-full" />
+          <img src={logoUrl} alt="K8s Sentinel" className="w-full" />
         </CardHeader>
         <CardContent className="px-8 pb-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">

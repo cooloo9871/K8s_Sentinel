@@ -1,10 +1,10 @@
-# Sentinel
+# K8s Sentinel
 
 <p align="center">
-  <img src="assets/sentinel-lockup-light.svg" alt="Sentinel" width="320" />
+  <img src="assets/sentinel-lockup-light.svg" alt="K8s Sentinel" width="340" />
 </p>
 
-**Sentinel** 是一個部署在 Kubernetes 叢集內的 **K8s 安全管理 console**，整合 Cilium Tetragon 執行期監控與 ValidatingAdmissionPolicy 控制，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 Tracing Policy、Admission Policy、監控安全事件、推送告警、視覺化叢集網路流量，全面掌握 K8s workload 的零信任安全防線。
+**K8s Sentinel** 是一個部署在 Kubernetes 叢集內的 **K8s 安全管理 console**，整合 Cilium Tetragon 執行期監控與 ValidatingAdmissionPolicy 控制，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 Tracing Policy、Admission Policy、監控安全事件、推送告警、視覺化叢集網路流量，全面掌握 K8s workload 的零信任安全防線。
 
 ---
 
@@ -131,7 +131,7 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 
 ### 持久化儲存（PV）
 
-Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定與事件記錄將會消失：
+K8s Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定與事件記錄將會消失：
 
 | 檔案 | 說明 |
 |---|---|
@@ -157,7 +157,7 @@ volumes:
 
 ### Admission Events — Audit Webhook 設定
 
-kube-apiserver audit webhook 可讓 Sentinel 接收完整的 VAP 違規記錄（包含直接 `kubectl apply` 被拒絕的情況）：
+kube-apiserver audit webhook 可讓 K8s Sentinel 接收完整的 VAP 違規記錄（包含直接 `kubectl apply` 被拒絕的情況）：
 
 ```yaml
 # /etc/kubernetes/audit-policy.yaml

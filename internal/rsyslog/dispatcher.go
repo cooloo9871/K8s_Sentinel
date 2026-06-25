@@ -136,7 +136,7 @@ func (d *Dispatcher) TestSend(cfg Config) error {
 			return
 		}
 		defer w.Close()
-		ch <- result{w.Notice("sentinel test message from Sentinel dashboard")}
+		ch <- result{w.Notice("k8s sentinel test message from K8s Sentinel dashboard")}
 	}()
 	select {
 	case r := <-ch:

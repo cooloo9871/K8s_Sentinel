@@ -153,7 +153,7 @@ export function AdmissionEventsPage() {
                 <>
                   <p>No admission violation events yet.</p>
                   <p className="text-xs max-w-lg">
-                    To see violations here, configure the Kubernetes audit webhook to send events to Sentinel:
+                    To see violations here, configure the Kubernetes audit webhook to send events to K8s Sentinel:
                   </p>
                   <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
                     POST /api/admission-events/webhook

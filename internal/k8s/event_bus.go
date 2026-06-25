@@ -18,7 +18,7 @@ import (
 // continuously streams new process_exec events from Tetragon.
 // A secondary goroutine refreshes workload info periodically so newly
 // created pods (e.g. scaled-up replicas) get their Deployment/DaemonSet
-// label assigned without waiting for a Sentinel restart.
+// label assigned without waiting for a K8s Sentinel restart.
 func (s *Store) StartDiscoveryLoop(ctx context.Context) {
 	// Primary: seed + stream events.
 	go func() {
@@ -72,7 +72,7 @@ func (s *Store) runDiscoveryOnce(ctx context.Context) {
 
 // scanRunningProcesses execs "tetra dump process-cache" in each Tetragon pod.
 // tetra connects to the local Unix socket and dumps ALL processes Tetragon
-// has tracked (including those running before Sentinel started).
+// has tracked (including those running before K8s Sentinel started).
 // Falls back to pod-spec seeding if the command is unavailable.
 func (s *Store) scanRunningProcesses(ctx context.Context) {
 	if s.typed == nil || s.restConfig == nil {

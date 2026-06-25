@@ -1,7 +1,7 @@
 {
   "name": "web",
   "version": "1.0.0",
-  "description": "Sentinel Kubernetes Dashboard Frontend",
+  "description": "K8s Sentinel Kubernetes Dashboard Frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",

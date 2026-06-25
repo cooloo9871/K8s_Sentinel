@@ -418,7 +418,7 @@ export function NetworkTopologyPage() {
           <CardContent className="flex items-center gap-3 p-3">
             <IconAlertTriangle size={16} className="shrink-0 text-yellow-600" />
             <p className="text-xs text-yellow-700">
-              IP name resolution is degraded — some cluster IPs could not be resolved to pod/service names and appear as External nodes. Check Sentinel RBAC permissions (requires <code className="font-mono">services list</code>).
+              IP name resolution is degraded — some cluster IPs could not be resolved to pod/service names and appear as External nodes. Check K8s Sentinel RBAC permissions (requires <code className="font-mono">services list</code>).
             </p>
           </CardContent>
         </Card>

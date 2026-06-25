@@ -1,4 +1,4 @@
-# Sentinel installer Job
+# K8s Sentinel installer Job
 # Usage: kubectl apply -f deploy/install-job.yaml
 # Logs:  kubectl logs -n kube-system job/sentinel-installer -f
 # Clean: kubectl delete -f deploy/install-job.yaml
@@ -62,7 +62,7 @@ spec:
               fi
 
               # ── Clone repo ──────────────────────────────────────────
-              echo "[2/4] Cloning Sentinel repository"
+              echo "[2/4] Cloning K8s Sentinel repository"
               git clone --depth=1 https://github.com/cooloo9871/Sentinel.git /tmp/sentinel
 
               # ── Namespace ───────────────────────────────────────────
@@ -70,12 +70,12 @@ spec:
               kubectl create namespace sentinel-system \
                 --dry-run=client -o yaml | kubectl apply -f -
 
-              # ── Sentinel ────────────────────────────────────────────
-              echo "[4/4] Deploying Sentinel"
+              # ── K8s Sentinel ──────────────────────────────────────────────
+              echo "[4/4] Deploying K8s Sentinel"
               kubectl apply -k /tmp/sentinel/deploy/base/
               kubectl rollout status deployment/sentinel \
                 -n sentinel-system --timeout=120s
 
               echo ""
-              echo "Done. Access Sentinel:"
+              echo "Done. Access K8s Sentinel:"
               echo "  kubectl port-forward -n sentinel-system svc/sentinel 8080:80"

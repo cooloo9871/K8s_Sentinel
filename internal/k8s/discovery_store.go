@@ -6,7 +6,7 @@ import (
 )
 
 // PodProfile accumulates process binaries observed for a single pod.
-// Data lives in memory for the lifetime of the Sentinel process and is
+// Data lives in memory for the lifetime of the K8s Sentinel process and is
 // intentionally lost on pod restart — no file persistence.
 type PodProfile struct {
 	Namespace    string   `json:"namespace"`
