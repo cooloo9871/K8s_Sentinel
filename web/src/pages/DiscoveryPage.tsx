@@ -175,7 +175,7 @@ export function DiscoveryPage() {
         <div>
           <h4 className="text-xl font-semibold">Behavior Discovery</h4>
           <p className="text-sm text-muted-foreground">
-            Process behaviors learned from the Tetragon base sensor. No policy required.
+            Process behaviors learned from the Tetragon base sensor.
           </p>
         </div>
         {isAdmin && (
