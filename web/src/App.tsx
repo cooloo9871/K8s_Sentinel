@@ -3,6 +3,7 @@ import { AppLayout } from './layout/AppLayout'
 import { AppToaster } from './layout/AppToaster'
 import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
 import { DiscoveryProvider } from './layout/DiscoveryProvider'
+import { AdmissionRetentionProvider } from './layout/AdmissionRetentionContext'
 import { AuthProvider, useAuth } from './layout/AuthContext'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -36,6 +37,7 @@ function AppRoutes() {
 
   return (
     <SecurityEventsProvider>
+    <AdmissionRetentionProvider>
     <DiscoveryProvider>
       <Routes>
         <Route element={<AppLayout onLogout={logout} />}>
@@ -63,6 +65,7 @@ function AppRoutes() {
         </Route>
       </Routes>
     </DiscoveryProvider>
+    </AdmissionRetentionProvider>
     </SecurityEventsProvider>
   )
 }

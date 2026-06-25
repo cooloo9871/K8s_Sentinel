@@ -11,22 +11,30 @@ import {
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import { useAdmissionRetention } from '../layout/AdmissionRetentionContext'
 
 export function SecurityRetentionPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const { applyRetention } = useSecurityEvents()
+  const { applyRetention: applyAdmissionRetention } = useAdmissionRetention()
 
   const [security, setSecurity] = useState<SecurityRetention | null>(null)
   const [admission, setAdmission] = useState<AdmissionRetention | null>(null)
+  const [secError, setSecError] = useState(false)
+  const [admError, setAdmError] = useState(false)
   const [savingSec, setSavingSec] = useState(false)
   const [savingAdm, setSavingAdm] = useState(false)
 
-  useEffect(() => {
-    securityRetentionApi.get().then(setSecurity).catch(() => {})
-    admissionRetentionApi.get().then(setAdmission).catch(() => {})
-  }, [])
+  const fetchAll = () => {
+    setSecError(false)
+    setAdmError(false)
+    securityRetentionApi.get().then(setSecurity).catch(() => setSecError(true))
+    admissionRetentionApi.get().then(setAdmission).catch(() => setAdmError(true))
+  }
+
+  useEffect(() => { fetchAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveSecurity = async () => {
     if (!security) return
@@ -49,6 +57,7 @@ export function SecurityRetentionPage() {
     try {
       const updated = await admissionRetentionApi.set(admission)
       setAdmission(updated)
+      applyAdmissionRetention(updated.maxEvents)
       toast.success('Admission Events retention updated.')
     } catch {
       toast.error('Failed to update Admission Events retention.')
@@ -78,7 +87,12 @@ export function SecurityRetentionPage() {
               <CardTitle className="text-sm font-medium">Security Events Retention</CardTitle>
             </CardHeader>
             <CardContent className="pt-5 flex flex-col gap-5">
-              {!security ? (
+              {secError ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-destructive">Failed to load retention settings.</p>
+                  <Button size="sm" variant="outline" className="w-fit" onClick={fetchAll}>Retry</Button>
+                </div>
+              ) : !security ? (
                 <div className="text-sm text-muted-foreground">Loading…</div>
               ) : (<>
                 <div className="flex flex-col gap-1.5">
@@ -149,7 +163,12 @@ export function SecurityRetentionPage() {
               <CardTitle className="text-sm font-medium">Admission Events Retention</CardTitle>
             </CardHeader>
             <CardContent className="pt-5 flex flex-col gap-5">
-              {!admission ? (
+              {admError ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-destructive">Failed to load retention settings.</p>
+                  <Button size="sm" variant="outline" className="w-fit" onClick={fetchAll}>Retry</Button>
+                </div>
+              ) : !admission ? (
                 <div className="text-sm text-muted-foreground">Loading…</div>
               ) : (<>
                 <div className="flex flex-col gap-1.5">

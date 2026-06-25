@@ -78,7 +78,8 @@ type Store struct {
 	evts      []Event // newest-first
 	subs      map[chan Event]struct{}
 	path      string
-	flushGen  uint64 // incremented each flush; goroutine skips write if stale
+	flushGen  uint64     // incremented each flush; goroutine skips write if stale
+	flushMu   sync.Mutex // serialises the stale-check + rename to eliminate TOCTOU
 	cfg       RetentionConfig
 }
 
@@ -169,21 +170,26 @@ func (s *Store) flush() {
 			log.Printf("security-store: flush marshal: %v", err)
 			return
 		}
-		// Only write if no newer flush has been issued since this goroutine started.
-		s.mu.RLock()
-		stale := s.flushGen != gen
-		s.mu.RUnlock()
-		if stale {
-			return
-		}
 		tmp := s.path + ".tmp"
 		if err := os.WriteFile(tmp, data, 0600); err != nil {
 			log.Printf("security-store: flush write: %v", err)
 			return
 		}
+		// Hold flushMu around the stale-check + rename so no newer goroutine
+		// can interleave and have its rename overwritten by this one.
+		s.flushMu.Lock()
+		s.mu.RLock()
+		stale := s.flushGen != gen
+		s.mu.RUnlock()
+		if stale {
+			s.flushMu.Unlock()
+			_ = os.Remove(tmp)
+			return
+		}
 		if err := os.Rename(tmp, s.path); err != nil {
 			log.Printf("security-store: flush rename: %v", err)
 		}
+		s.flushMu.Unlock()
 	}()
 }
 

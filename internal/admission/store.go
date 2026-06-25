@@ -112,8 +112,8 @@ func (s *Store) SetRetention(cfg RetentionConfig) {
 			delete(s.seen, old.ID)
 		}
 		s.events = s.events[:cfg.MaxEvents]
-		s.flushLocked()
 	}
+	s.flushLocked() // always persist cfg, even when no truncation needed
 	s.mu.Unlock()
 }
 

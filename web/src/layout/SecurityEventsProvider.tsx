@@ -92,11 +92,18 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   }, [startSSE])
 
   // applyRetention: called by SecurityRetentionPage after a successful save.
-  // The caller already has the confirmed new values — no extra fetch needed.
+  // Trims in-place — no SSE reconnect needed, avoids visible flash.
   const applyRetention = useCallback((maxWarnings: number, maxCriticals: number) => {
     capRef.current = { maxWarnings, maxCriticals }
-    startSSE()
-  }, [startSSE])
+    setEvents(prev => {
+      let warn = 0, crit = 0
+      return prev.filter(e => {
+        if (e.severity === 'critical' && crit < maxCriticals) { crit++; return true }
+        if (e.severity === 'warning'  && warn < maxWarnings)  { warn++; return true }
+        return false
+      })
+    })
+  }, [])
 
   // Initial mount: fetch retention first, then start SSE
   useEffect(() => {

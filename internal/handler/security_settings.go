@@ -34,7 +34,7 @@ func setSecurityRetention(store *security.Store) http.HandlerFunc {
 			return
 		}
 		store.SetRetention(cfg)
-		writeJSON(w, http.StatusOK, store.GetRetention())
+		writeJSON(w, http.StatusOK, cfg) // echo back validated cfg directly
 	}
 }
 
@@ -56,6 +56,6 @@ func setAdmissionRetention(store *admission.Store) http.HandlerFunc {
 			return
 		}
 		store.SetRetention(cfg)
-		writeJSON(w, http.StatusOK, store.GetRetention())
+		writeJSON(w, http.StatusOK, cfg) // echo back validated cfg directly
 	}
 }

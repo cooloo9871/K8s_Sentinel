@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { useAdmissionRetention } from '../layout/AdmissionRetentionContext'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -35,6 +36,14 @@ export function AdmissionEventsPage() {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('audit')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const esRef = useRef<EventSource | null>(null)
+  const { maxEvents } = useAdmissionRetention()
+  // Keep a ref in sync so the SSE closure always reads the latest cap.
+  const maxEventsRef = useRef(maxEvents)
+  useEffect(() => {
+    maxEventsRef.current = maxEvents
+    // Trim existing events if cap decreased.
+    setEvents(prev => prev.length > maxEvents ? prev.slice(0, maxEvents) : prev)
+  }, [maxEvents])
 
   const sourceVisible = sourceFilter === 'all' ? events : events.filter(e => e.source === sourceFilter)
   const namespaces = [...new Set(sourceVisible.map(e => e.namespace).filter(Boolean))].sort()
@@ -49,7 +58,7 @@ export function AdmissionEventsPage() {
         const evt: AdmissionEvent = JSON.parse(e.data)
         setEvents(prev => {
           if (prev.some(x => x.id === evt.id)) return prev
-          return [evt, ...prev].slice(0, 500)
+          return [evt, ...prev].slice(0, maxEventsRef.current)
         })
       } catch { /* ignore */ }
     }
