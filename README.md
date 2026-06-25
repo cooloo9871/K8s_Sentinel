@@ -24,7 +24,7 @@
 - **Policy Templates**：內建範本與自訂範本；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
   - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
   - **Monitor All File Access**：監控敏感檔案讀寫
-  - **Monitor All Network (Outside Cluster)**：偵測 Pod 連線到叢集外；CIDR 自動偵測
+  - **Monitor External Network (Outside Cluster)**：偵測 Pod 連線到叢集外；CIDR 自動偵測
   - **Monitor Internal Network (Inside Cluster)**：監控 Pod 之間及 Pod 到 Service 的連線；供 Network Topology 使用
 
 #### Admission Policy（ValidatingAdmissionPolicy）
@@ -53,19 +53,20 @@
 ### Network Topology — 網路拓樸
 
 - 以圖形化方式顯示叢集內 Pod 的 TCP 連線關係，資料來源為 Tetragon kprobe 事件
-- **節點類型**：Pod（紫色）、Service（綠色）、Node host process（灰色）、External IP（橘色）
+- **節點類型**：Pod（紫色）、Service（綠色）、External IP（橘色）
 - **連線類型**：
   - 彩色實線 — 允許的連線（紫 = pod-to-pod、綠 = pod-to-service、橘 = 出叢集）
-  - 紅色虛線 — 被 Protect 模式攔截的連線
-- **Auto Layout**：一鍵使用 Dagre 演算法自動排版，減少連線交叉
+  - 紅色虛線 — 被 Protect 模式攔截的連線；**即使 retention 設很小，被拒絕的連線也會持續顯示**（獨立的 topology buffer，以 TTL 為基準而非事件數量）
+- **Auto Layout**：一鍵使用 Dagre 演算法自動排版
 - 點擊節點或連線查看詳情（IP、port、連線次數）
 - 依 Namespace / Pod 名稱 / Service 名稱篩選
-- 需先套用 **Monitor Internal Network** 或 **Monitor All Network** 範本才能收集資料
+- 每 30 秒自動刷新
+- 需先套用 **Monitor Internal Network** 範本才能收集資料
 
 ### Notifications — 安全通知
 
 #### Security Events
-- 即時串流叢集所有 Tetragon kprobe 事件；**後端持久化至 `/data/sentinel/security-events.json`**，重啟不消失
+- 即時串流叢集所有 Tetragon kprobe 事件；後端持久化，重啟不消失
 - Warning / Critical 嚴重程度分類；30 秒 content-based 去重
 - 點擊展開詳情：觸發檔案路徑、網路連線目的地、執行 user（UID）、Policy 名稱等
 - **Pause / Resume**：凍結畫面閱讀事件，暫存新進事件並顯示待讀計數
@@ -76,18 +77,19 @@
 - 記錄 ValidatingAdmissionPolicy 違規事件；依 source、namespace、severity 篩選
 - **Critical**（`Deny` action，請求被阻擋）/ **Warning**（`Audit` action，請求放行但記錄）
 - 來源：K8s Warning Events（免設定）或 **kube-apiserver audit webhook**（完整覆蓋，需設定）
-- **30 秒去重**：相同 policy + namespace + 物件在 30 秒內只顯示一筆
-- 最多保留 500 筆，**自動持久化**至 `/data/sentinel/admission-events.json`
+- 30 秒去重；自動持久化；預設最多 500 筆，TTL 30 天（可在 Settings 調整）
 
 ### Dashboard — 總覽
 
-- Tracing Policy 數量（Protect 模式）、Security Events 統計（Critical / Warning）、Admission Events 統計、Global Protect Mode 狀態
+- Tracing Policy 數量（Protect 模式）、Security Events 統計（Critical / Warning）、Admission Events 統計、Global Protect Mode 狀態（即時更新，無輪詢延遲）
 - **Tracing Policy** 與 **Admission Policy** 清單快覽
 
 ### Settings — 設定
 
-- **Users（使用者管理）**：本地帳號登入（JWT）、Admin / Viewer 角色、Session Timeout 設定
-- **Security Events Retention**：可調整 Warning/Critical 最大筆數（1–5000/1–2000）及 TTL（1–90 天）
+- **Users（使用者管理）**：本地帳號登入（JWT + token 主動撤銷）、Admin / Viewer 角色、Session Timeout 設定
+- **Event Retention**：
+  - Security Events：Warning/Critical 最大筆數（1–5000/1–2000）及 TTL（1–90 天）
+  - Admission Events：最大筆數（1–5000）及 TTL（1–365 天）
 - **Alerts（Webhook 告警）**：將 Security Events 和 Admission Events 推送到 Slack、Teams、Discord 等
 - **Syslog 轉送**：將事件轉送至 rsyslog/syslog server（UDP 或 TCP）
 
@@ -99,6 +101,7 @@
 
 - Kubernetes 1.26+
 - `kubectl` 已設定 kubeconfig
+- Cilium Tetragon 已安裝於叢集
 
 ### 步驟
 
@@ -131,7 +134,7 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 
 ### 持久化儲存（PV）
 
-K8s Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定與事件記錄將會消失：
+K8s Sentinel 將以下資料存放於 `/data/sentinel/`（可透過 `DATA_DIR` 環境變數修改），**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定與事件記錄將會消失：
 
 | 檔案 | 說明 |
 |---|---|
@@ -140,8 +143,8 @@ K8s Sentinel 將以下資料存放於 `/data/sentinel/`，**強烈建議掛載 P
 | `templates.json` | 自訂 Policy Templates |
 | `alerts.json` | Webhook 告警規則 |
 | `rsyslog.json` | Syslog 轉送設定 |
-| `admission-events.json` | Admission Events 記錄（最多 500 筆）|
-| `security-events.json` | Security Events 記錄（預設最多 800 筆，7 天 TTL；可在 Settings 調整）|
+| `admission-events.json` | Admission Events 記錄（預設最多 500 筆，30 天 TTL）|
+| `security-events.json` | Security Events 記錄（預設最多 800 筆，7 天 TTL）|
 
 ```yaml
 volumeMounts:
@@ -196,6 +199,7 @@ kube-apiserver 加上：
 
 | 變數 | 預設值 | 說明 |
 |---|---|---|
+| `DATA_DIR` | `/data/sentinel` | 資料目錄路徑；啟動時若無法寫入會印出警告 |
 | `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace |
 
 ---
