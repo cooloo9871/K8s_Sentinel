@@ -222,7 +222,9 @@ func (s *Store) flushLocked() {
 		s.mu.RUnlock()
 		if stale {
 			s.flushMu.Unlock()
-			_ = os.Remove(tmp)
+			// Do NOT remove tmp here — a newer goroutine may have written
+			// its data to the same .tmp path. Removing it would cause that
+			// goroutine's subsequent Rename to fail with ENOENT.
 			return
 		}
 		if err := os.Rename(tmp, s.path); err != nil {
