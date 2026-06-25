@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap,
   type Edge, type NodeTypes,
@@ -8,7 +8,8 @@ import '@xyflow/react/dist/style.css'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { IconRefresh, IconNetwork, IconAlertTriangle } from '@tabler/icons-react'
+import { Input } from '@/components/ui/input'
+import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch } from '@tabler/icons-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,12 @@ export function NetworkTopologyPage() {
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
+  const [nsSearch, setNsSearch] = useState('')
+  const [podSearch, setPodSearch] = useState('')
+
+  // Raw data from API — source of truth for filtering
+  const [rawNodes, setRawNodes] = useState<TopologyNode[]>([])
+  const [rawEdges, setRawEdges] = useState<TopologyEdge[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -105,16 +112,51 @@ export function NetworkTopologyPage() {
       const res = await fetch('/api/network-topology', { credentials: 'include' })
       const data: TopologyResponse = await res.json()
       setHasNetworkEvents(data.hasNetworkEvents)
-      setNodes(layoutNodes(data.nodes))
-      setEdges(layoutEdges(data.edges))
+      setRawNodes(data.nodes)
+      setRawEdges(data.edges)
     } catch {
       setHasNetworkEvents(false)
     } finally {
       setLoading(false)
     }
-  }, [setNodes, setEdges])
+  }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Apply search filters and re-layout
+  useEffect(() => {
+    const nsQ = nsSearch.trim().toLowerCase()
+    const podQ = podSearch.trim().toLowerCase()
+
+    const filteredNodes = rawNodes.filter(n => {
+      if (n.kind === 'external') return true // always show external IPs
+      if (nsQ && !n.namespace.toLowerCase().includes(nsQ)) return false
+      if (podQ && !n.pod.toLowerCase().includes(podQ)) return false
+      return true
+    })
+
+    const filteredIds = new Set(filteredNodes.map(n => n.id))
+    const filteredEdges = rawEdges.filter(e =>
+      filteredIds.has(e.source) && filteredIds.has(e.target)
+    )
+
+    // Remove external nodes that have no connections after pod filter
+    const connectedIds = new Set(filteredEdges.flatMap(e => [e.source, e.target]))
+    const visibleNodes = filteredNodes.filter(n => n.kind === 'pod' || connectedIds.has(n.id))
+
+    setNodes(layoutNodes(visibleNodes))
+    setEdges(layoutEdges(filteredEdges))
+  }, [rawNodes, rawEdges, nsSearch, podSearch, setNodes, setEdges])
+
+  const matchCount = useMemo(() => {
+    const nsQ = nsSearch.trim().toLowerCase()
+    const podQ = podSearch.trim().toLowerCase()
+    if (!nsQ && !podQ) return null
+    return rawNodes.filter(n => n.kind === 'pod' &&
+      (!nsQ || n.namespace.toLowerCase().includes(nsQ)) &&
+      (!podQ || n.pod.toLowerCase().includes(podQ))
+    ).length
+  }, [rawNodes, nsSearch, podSearch])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
@@ -134,6 +176,39 @@ export function NetworkTopologyPage() {
           <IconRefresh size={14} className="mr-1.5" />
           Refresh
         </Button>
+      </div>
+
+      {/* Search bar */}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Namespace..."
+            value={nsSearch}
+            onChange={e => setNsSearch(e.target.value)}
+            className="h-8 w-40 pl-8 text-sm"
+          />
+        </div>
+        <div className="relative">
+          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Pod name..."
+            value={podSearch}
+            onChange={e => setPodSearch(e.target.value)}
+            className="h-8 w-44 pl-8 text-sm"
+          />
+        </div>
+        {matchCount !== null && (
+          <span className="text-xs text-muted-foreground">
+            {matchCount} pod{matchCount !== 1 ? 's' : ''} matched
+          </span>
+        )}
+        {(nsSearch || podSearch) && (
+          <Button variant="ghost" size="sm" className="h-8 text-xs"
+            onClick={() => { setNsSearch(''); setPodSearch('') }}>
+            Clear
+          </Button>
+        )}
       </div>
 
       {/* No network events — guide user */}
