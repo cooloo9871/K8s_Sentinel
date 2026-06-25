@@ -181,7 +181,7 @@ export function SecurityEventsPage() {
         <div>
           <h4 className="text-xl font-semibold">Security Events</h4>
           <p className="text-sm text-muted-foreground">
-            Policy-triggered kprobe events from your TracingPolicies
+            Policy-triggered kprobe events from your Tracing Policy.
           </p>
         </div>
 
