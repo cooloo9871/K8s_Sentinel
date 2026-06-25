@@ -31,6 +31,8 @@ const ROUTE_LABELS: Record<string, string> = {
   mode: 'Mode Control',
   namespaces: 'Namespaces',
   tetragon: 'Tetragon Agents',
+  network: 'Network',
+  topology: 'Network Topology',
 }
 
 // Override the full breadcrumb trail for paths whose URL segments don't match

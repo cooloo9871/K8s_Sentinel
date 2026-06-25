@@ -20,6 +20,7 @@ import { AlertsPage } from './pages/AlertsPage'
 import { AdmissionEventsPage } from './pages/AdmissionEventsPage'
 import { VAPPage } from './pages/VAPPage'
 import { RsyslogPage } from './pages/RsyslogPage'
+import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
 
 function AppRoutes() {
   const { user, loading, logout } = useAuth()
@@ -55,6 +56,7 @@ function AppRoutes() {
           <Route path="/security/rsyslog" element={<RsyslogPage />} />
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
           <Route path="/policies/admission" element={<VAPPage />} />
+          <Route path="/network/topology" element={<NetworkTopologyPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

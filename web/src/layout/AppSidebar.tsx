@@ -93,10 +93,14 @@ export function AppSidebar() {
           <SidebarGroupLabel>Cluster</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/cluster/tetragon')}>
                   <NavLink to="/cluster/tetragon">Tetragon Agents</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/network/topology')}>
+                  <NavLink to="/network/topology">Network Topology</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
