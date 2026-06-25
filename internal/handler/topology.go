@@ -51,7 +51,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		debugEnabled := r.URL.Query().Get("debug") == "1"
 
 		for _, e := range events {
-			if e.NetDest == "" {
+			if e.NetDest == "" || e.Pod == "" {
 				continue
 			}
 
