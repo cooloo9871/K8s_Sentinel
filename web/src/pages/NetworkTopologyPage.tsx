@@ -434,7 +434,7 @@ export function NetworkTopologyPage() {
                 Apply a network monitoring template from Tracing Policy → Templates:
               </p>
               <ul className="text-xs text-amber-600 list-disc ml-4 mt-0.5 space-y-0.5">
-                <li><span className="font-semibold">Monitor Internal Network (Inside Cluster)</span> — pod-to-pod and pod-to-service connections</li>
+                <li><span className="font-semibold">Monitor Internal Network (Inside Cluster)</span> — pod-to-pod, pod-to-service, and node host-process connections (requires re-applying the template if applied before v2)</li>
                 <li><span className="font-semibold">Monitor All Network (Outside Cluster)</span> — connections leaving the cluster</li>
               </ul>
             </div>

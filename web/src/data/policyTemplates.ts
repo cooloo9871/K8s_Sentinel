@@ -62,14 +62,13 @@ spec:
   {
     id: 'monitor-internal-network',
     name: 'Monitor Internal Network (Inside Cluster)',
-    description: 'Capture TCP connections between pods within the cluster (Pod CIDR and Service CIDR). Required for Network Topology internal traffic view. CIDRs are auto-detected.',
+    description: 'Capture TCP connections within the cluster (Pod CIDR, Service CIDR, and Node IPs). Covers both pod-to-pod/svc and node-level host processes (kubelet, kube-proxy, etc.). Required for Network Topology. CIDRs are auto-detected. Note: omits podSelector so host-level processes are included — re-apply if you previously used an older version of this template.',
     tags: ['cluster-wide', 'network', 'monitoring'],
     yaml: `apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
   name: monitor-internal-network
 spec:
-  podSelector: {}
   kprobes:
   - call: "tcp_connect"
     syscall: false
