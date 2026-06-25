@@ -56,7 +56,9 @@ func sameEvent(a Event, b k8s.TetragonEvent) bool {
 		a.PolicyName == b.PolicyName &&
 		a.Action == b.Action &&
 		a.FilePath == b.FilePath &&
-		a.FileOp == b.FileOp
+		a.FileOp == b.FileOp &&
+		a.NetDest == b.NetDest &&
+		a.NetSrc == b.NetSrc
 }
 
 type eventFile struct {

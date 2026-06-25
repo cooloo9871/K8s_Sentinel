@@ -191,6 +191,8 @@ export function NetworkTopologyPage() {
     setNodes(layoutNodes(visibleNodes))
     const nodeMap = Object.fromEntries(visibleNodes.map(n => [n.id, n]))
     setEdges(layoutEdges(filteredEdges, nodeMap))
+    // Clear selectedNode if it's no longer visible after filter change
+    setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
   }, [rawNodes, rawEdges, nsFilter, podSearch, setNodes, setEdges])
 
   const matchCount = useMemo(() => {
@@ -385,11 +387,10 @@ export function NetworkTopologyPage() {
                     </div>
                   )}
                   <div className="pt-1 text-[11px] text-muted-foreground">
-                    {edges.filter(e =>
-                      e.source === selectedNode.id || e.target === selectedNode.id
-                    ).length} connection{edges.filter(e =>
-                      e.source === selectedNode.id || e.target === selectedNode.id
-                    ).length !== 1 ? 's' : ''}
+                    {(() => {
+                      const n = edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length
+                      return `${n} connection${n !== 1 ? 's' : ''}`
+                    })()}
                   </div>
                 </div>
               </CardContent>

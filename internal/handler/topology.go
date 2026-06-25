@@ -37,11 +37,16 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 		// Resolve cluster IPs to pod/service names
 		ipMap := map[string]k8s.IPInfo{}
+		ipMapPartial := false
 		if k8sStore != nil {
-			if m, err := k8sStore.ListClusterIPs(r.Context()); err == nil {
+			m, err := k8sStore.ListClusterIPs(r.Context())
+			if err != nil {
+				ipMapPartial = true
+			} else {
 				ipMap = m
 			}
 		}
+		_ = ipMapPartial // surface in future if needed
 
 		type edgeKey struct{ src, dst, port string; blocked bool }
 		edgeCounts := make(map[edgeKey]int)

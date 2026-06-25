@@ -282,8 +282,8 @@ type IPInfo struct {
 func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 	result := make(map[string]IPInfo)
 
-	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err == nil {
+	pods, podErr := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if podErr == nil {
 		for _, p := range pods.Items {
 			if p.Status.PodIP != "" {
 				result[p.Status.PodIP] = IPInfo{
@@ -296,8 +296,8 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 		}
 	}
 
-	svcs, err := s.typed.CoreV1().Services("").List(ctx, metav1.ListOptions{})
-	if err == nil {
+	svcs, svcErr := s.typed.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+	if svcErr == nil {
 		for _, svc := range svcs.Items {
 			if svc.Spec.ClusterIP != "" && svc.Spec.ClusterIP != "None" {
 				result[svc.Spec.ClusterIP] = IPInfo{
@@ -308,6 +308,10 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 				}
 			}
 		}
+	}
+
+	if podErr != nil && svcErr != nil {
+		return nil, fmt.Errorf("list cluster IPs: pods: %v; services: %v", podErr, svcErr)
 	}
 
 	return result, nil
