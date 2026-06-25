@@ -216,8 +216,18 @@ export function NetworkTopologyPage() {
     // Include ALL edges where at least one end is a primary node.
     // This expands the view to show the complete connection path,
     // even if the other end is in a different namespace.
-    const filteredEdges = rawEdges.filter(e =>
+    const candidateEdges = rawEdges.filter(e =>
       primaryIds.has(e.source) || primaryIds.has(e.target)
+    )
+
+    // If the same (source, target, port) has both a blocked and an allowed edge,
+    // keep only the blocked one — it's more informative and the allowed events
+    // likely predate when the policy was set to Protect mode.
+    const blockedKeys = new Set(
+      candidateEdges.filter(e => e.blocked).map(e => `${e.source}|${e.target}|${e.port}`)
+    )
+    const filteredEdges = candidateEdges.filter(e =>
+      e.blocked || !blockedKeys.has(`${e.source}|${e.target}|${e.port}`)
     )
 
     // Collect every node referenced by the filtered edges
