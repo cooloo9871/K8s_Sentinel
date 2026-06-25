@@ -30,6 +30,7 @@ interface TopologyEdge {
   target: string
   port?: string
   count: number
+  blocked: boolean
 }
 
 interface TopologyResponse {
@@ -98,10 +99,23 @@ function layoutNodes(apiNodes: TopologyNode[]): any[] {
 
 function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyNode>): Edge[] {
   return apiEdges.map(e => {
+    if (e.blocked) {
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        label: e.port ? `${e.port} ×${e.count} ✕` : `×${e.count} ✕`,
+        animated: false,
+        style: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 3' },
+        labelStyle: { fontSize: 10, fill: '#ef4444', fontWeight: 600 },
+        labelBgStyle: { fill: '#fef2f2', borderRadius: 4 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#ef4444', width: 18, height: 18 },
+      }
+    }
     const targetKind = nodeMap[e.target]?.kind ?? 'external'
-    const color = targetKind === 'external' ? '#f59e0b'    // amber  — out of cluster
-                : targetKind === 'service'  ? '#22c55e'    // green  — to service
-                : '#6366f1'                                // indigo — pod to pod
+    const color = targetKind === 'external' ? '#f59e0b'
+                : targetKind === 'service'  ? '#22c55e'
+                : '#6366f1'
     return {
       id: e.id,
       source: e.source,
@@ -111,12 +125,7 @@ function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyN
       style: { stroke: color, strokeWidth: 1.5 },
       labelStyle: { fontSize: 10, fill: '#6b7280' },
       labelBgStyle: { fill: '#f9fafb', borderRadius: 4 },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color,
-        width: 18,
-        height: 18,
-      },
+      markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
     }
   })
 }
@@ -272,6 +281,10 @@ export function NetworkTopologyPage() {
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#f59e0b" /></svg>
             → External
+          </span>
+          <span className="flex items-center gap-1">
+            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 3" /><polygon points="22,1 28,4 22,7" fill="#ef4444" /></svg>
+            Blocked
           </span>
         </div>
       </div>

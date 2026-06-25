@@ -18,11 +18,12 @@ type TopologyNode struct {
 }
 
 type TopologyEdge struct {
-	ID     string `json:"id"`
-	Source string `json:"source"`
-	Target string `json:"target"`
-	Port   string `json:"port,omitempty"`
-	Count  int    `json:"count"`
+	ID      string `json:"id"`
+	Source  string `json:"source"`
+	Target  string `json:"target"`
+	Port    string `json:"port,omitempty"`
+	Count   int    `json:"count"`
+	Blocked bool   `json:"blocked"` // true when action="kill"
 }
 
 type TopologyResponse struct {
@@ -44,7 +45,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			}
 		}
 
-		type edgeKey struct{ src, dst, port string }
+		type edgeKey struct{ src, dst, port string; blocked bool }
 		edgeCounts := make(map[edgeKey]int)
 		nodeSet := make(map[string]TopologyNode)
 		debugLines := []string{}
@@ -130,7 +131,8 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				nodeSet[dstID] = dstNode
 			}
 
-			edgeCounts[edgeKey{srcID, dstID, port}]++
+			blocked := e.Action == "kill"
+			edgeCounts[edgeKey{srcID, dstID, port, blocked}]++
 		}
 
 		nodes := make([]TopologyNode, 0, len(nodeSet))
@@ -140,12 +142,17 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 		edges := make([]TopologyEdge, 0, len(edgeCounts))
 		for k, count := range edgeCounts {
+			suffix := ""
+			if k.blocked {
+				suffix = ":blocked"
+			}
 			edges = append(edges, TopologyEdge{
-				ID:     k.src + "->" + k.dst + ":" + k.port,
-				Source: k.src,
-				Target: k.dst,
-				Port:   k.port,
-				Count:  count,
+				ID:      k.src + "->" + k.dst + ":" + k.port + suffix,
+				Source:  k.src,
+				Target:  k.dst,
+				Port:    k.port,
+				Count:   count,
+				Blocked: k.blocked,
 			})
 		}
 
