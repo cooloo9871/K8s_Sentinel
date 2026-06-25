@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap,
-  type Edge, type NodeTypes,
+  type Edge, type NodeTypes, MarkerType,
   Handle, Position, useNodesState, useEdgesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -78,16 +78,26 @@ function layoutNodes(apiNodes: TopologyNode[]): any[] {
 }
 
 function layoutEdges(apiEdges: TopologyEdge[]): Edge[] {
-  return apiEdges.map(e => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    label: e.port ? `${e.port} ×${e.count}` : `×${e.count}`,
-    animated: true,
-    style: { stroke: '#6366f1' },
-    labelStyle: { fontSize: 10, fill: '#6b7280' },
-    labelBgStyle: { fill: '#f9fafb' },
-  }))
+  return apiEdges.map(e => {
+    const isOutgoing = e.source.includes('/') && e.target.startsWith('ext:')
+    const color = isOutgoing ? '#f59e0b' : '#6366f1' // amber=out, indigo=in
+    return {
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      label: e.port ? `${e.port} ×${e.count}` : `×${e.count}`,
+      animated: true,
+      style: { stroke: color, strokeWidth: 1.5 },
+      labelStyle: { fontSize: 10, fill: '#6b7280' },
+      labelBgStyle: { fill: '#f9fafb', borderRadius: 4 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color,
+        width: 18,
+        height: 18,
+      },
+    }
+  })
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
@@ -209,6 +219,16 @@ export function NetworkTopologyPage() {
             Clear
           </Button>
         )}
+        <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <svg width="24" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="18,1 24,4 18,7" fill="#f59e0b" /></svg>
+            Outbound
+          </span>
+          <span className="flex items-center gap-1">
+            <svg width="24" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#6366f1" strokeWidth="1.5" /><polygon points="18,1 24,4 18,7" fill="#6366f1" /></svg>
+            Inbound
+          </span>
+        </div>
       </div>
 
       {/* No network events — guide user */}
