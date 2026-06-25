@@ -79,7 +79,7 @@ func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   isSecureRequest(r),
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   users.GetSessionTTL(),
 		})
@@ -121,7 +121,7 @@ func logoutHandler(users *auth.UserStore) http.HandlerFunc {
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   isSecureRequest(r),
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   -1,
 		})
@@ -217,4 +217,12 @@ func changePasswordHandler(users *auth.UserStore) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// isSecureRequest returns true when the request arrived over HTTPS —
+// either directly (r.TLS != nil) or via a TLS-terminating proxy
+// (X-Forwarded-Proto: https). Cookie Secure flag is only set for HTTPS
+// so that HTTP access (e.g. kubectl port-forward) continues to work.
+func isSecureRequest(r *http.Request) bool {
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 }
