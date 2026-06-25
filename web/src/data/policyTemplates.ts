@@ -33,7 +33,7 @@ spec:
   },
   {
     id: 'monitor-all-network',
-    name: 'Monitor All Network (Outside Cluster)',
+    name: 'Monitor External Network (Outside Cluster)',
     description: 'Alert when any pod connects to an address outside the cluster CIDR ranges. Pod and Service CIDRs are auto-detected from the cluster.',
     tags: ['cluster-wide', 'network', 'monitoring'],
     yaml: `apiVersion: cilium.io/v1alpha1
