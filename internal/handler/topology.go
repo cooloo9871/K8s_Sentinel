@@ -14,12 +14,14 @@ type TopologyNode struct {
 	Pod       string `json:"pod"`
 	Namespace string `json:"namespace"`
 	Kind      string `json:"kind"` // "pod" | "service" | "external"
+	IP        string `json:"ip,omitempty"`
 }
 
 type TopologyEdge struct {
 	ID      string `json:"id"`
 	Source  string `json:"source"`
 	Target  string `json:"target"`
+	DestIP  string `json:"destIp,omitempty"`  // raw destination IP
 	Port    string `json:"port,omitempty"`
 	Count   int    `json:"count"`
 	Blocked bool   `json:"blocked"` // true when action="kill"
@@ -48,7 +50,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		}
 		_ = ipMapPartial // surface in future if needed
 
-		type edgeKey struct{ src, dst, port string; blocked bool }
+		type edgeKey struct{ src, dst, destIP, port string; blocked bool }
 		edgeCounts := make(map[edgeKey]int)
 		nodeSet := make(map[string]TopologyNode)
 
@@ -59,12 +61,17 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 			srcID := e.Namespace + "/" + e.Pod
 			if _, ok := nodeSet[srcID]; !ok {
+				srcIP := ""
+				if info, ok2 := ipMap[e.NetSrc]; ok2 {
+					srcIP = info.IP
+				}
 				nodeSet[srcID] = TopologyNode{
 					ID:        srcID,
 					Label:     e.Pod,
 					Pod:       e.Pod,
 					Namespace: e.Namespace,
 					Kind:      "pod",
+					IP:        srcIP,
 				}
 			}
 
@@ -104,6 +111,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 						Pod:       info.Name,
 						Namespace: info.Namespace,
 						Kind:      "pod",
+						IP:        info.IP,
 					}
 				} else {
 					dstID = info.Namespace + "/svc/" + info.Name
@@ -113,6 +121,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 						Pod:       info.Name,
 						Namespace: info.Namespace,
 						Kind:      "service",
+						IP:        info.IP,
 					}
 				}
 			} else {
@@ -121,6 +130,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 					ID:    dstID,
 					Label: destRaw,
 					Kind:  "external",
+					IP:    destRaw,
 				}
 			}
 
@@ -129,7 +139,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			}
 
 			blocked := e.Action == "kill"
-			edgeCounts[edgeKey{srcID, dstID, port, blocked}]++
+			edgeCounts[edgeKey{srcID, dstID, destRaw, port, blocked}]++
 		}
 
 		nodes := make([]TopologyNode, 0, len(nodeSet))
@@ -147,6 +157,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				ID:      k.src + "->" + k.dst + ":" + k.port + suffix,
 				Source:  k.src,
 				Target:  k.dst,
+				DestIP:  k.destIP,
 				Port:    k.port,
 				Count:   count,
 				Blocked: k.blocked,

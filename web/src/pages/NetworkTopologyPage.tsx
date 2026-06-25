@@ -22,12 +22,14 @@ interface TopologyNode {
   pod: string
   namespace: string
   kind: 'pod' | 'service' | 'external'
+  ip?: string
 }
 
 interface TopologyEdge {
   id: string
   source: string
   target: string
+  destIp?: string
   port?: string
   count: number
   blocked: boolean
@@ -104,7 +106,7 @@ function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyN
         id: e.id,
         source: e.source,
         target: e.target,
-        label: e.port ? `${e.port} ×${e.count} ✕` : `×${e.count} ✕`,
+        label: `×${e.count} ✕`,
         animated: false,
         style: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 3' },
         labelStyle: { fontSize: 10, fill: '#ef4444', fontWeight: 600 },
@@ -120,7 +122,7 @@ function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyN
       id: e.id,
       source: e.source,
       target: e.target,
-      label: e.port ? `${e.port} ×${e.count}` : `×${e.count}`,
+      label: `×${e.count}`,
       animated: true,
       style: { stroke: color, strokeWidth: 1.5 },
       labelStyle: { fontSize: 10, fill: '#6b7280' },
@@ -139,6 +141,7 @@ export function NetworkTopologyPage() {
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
+  const [selectedEdge, setSelectedEdge] = useState<TopologyEdge | null>(null)
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
 
@@ -217,8 +220,15 @@ export function NetworkTopologyPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
+    setSelectedEdge(null)
     setSelectedNode(node.data as TopologyNode)
   }, [])
+
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: any) => {
+    setSelectedNode(null)
+    const raw = rawEdges.find(e => e.id === edge.id)
+    setSelectedEdge(raw ?? null)
+  }, [rawEdges])
 
   return (
     <>
@@ -341,6 +351,7 @@ export function NetworkTopologyPage() {
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeClick={onNodeClick}
+              onEdgeClick={onEdgeClick}
               nodeTypes={nodeTypes}
               fitView
               fitViewOptions={{ padding: 0.2 }}
@@ -352,58 +363,96 @@ export function NetworkTopologyPage() {
           )}
         </div>
 
-        {/* Side panel */}
-        {selectedNode && (
+        {/* Side panel — node or edge detail */}
+        {(selectedNode || selectedEdge) && (
           <div className="w-64 shrink-0">
             <Card className="h-full">
               <CardContent className="p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-semibold">Node Detail</span>
+                  <span className="text-sm font-semibold">
+                    {selectedEdge ? 'Connection Detail'
+                      : selectedNode?.kind === 'service' ? 'Service Detail'
+                      : selectedNode?.kind === 'external' ? 'External IP'
+                      : 'Pod Detail'}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => setSelectedNode(null)}
+                    onClick={() => { setSelectedNode(null); setSelectedEdge(null) }}
                     className="text-xs text-muted-foreground hover:text-foreground"
                   >
                     ✕
                   </button>
                 </div>
-                <div className="flex flex-col gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Type</span>
-                    <div className="mt-0.5">
-                      <Badge
-                        variant={selectedNode.kind === 'external' ? 'secondary' : 'default'}
-                        className="text-[10px]"
-                      >
-                        {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'service' ? 'Service' : 'Pod'}
-                      </Badge>
-                    </div>
-                  </div>
-                  {(selectedNode.kind === 'pod' || selectedNode.kind === 'service') && (
-                    <>
-                      <div>
-                        <span className="text-muted-foreground">{selectedNode.kind === 'service' ? 'Service' : 'Pod'}</span>
-                        <div className="mt-0.5 font-mono font-medium break-all">{selectedNode.label}</div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Namespace</span>
-                        <div className="mt-0.5 font-mono">{selectedNode.namespace}</div>
-                      </div>
-                    </>
-                  )}
-                  {selectedNode.kind === 'external' && (
+
+                {selectedNode && (
+                  <div className="flex flex-col gap-2 text-xs">
                     <div>
-                      <span className="text-muted-foreground">IP Address</span>
-                      <div className="mt-0.5 font-mono font-medium">{selectedNode.label}</div>
+                      <span className="text-muted-foreground">Type</span>
+                      <div className="mt-0.5">
+                        <Badge variant={selectedNode.kind === 'external' ? 'secondary' : 'default'} className="text-[10px]">
+                          {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'service' ? 'Service' : 'Pod'}
+                        </Badge>
+                      </div>
                     </div>
-                  )}
-                  <div className="pt-1 text-[11px] text-muted-foreground">
-                    {(() => {
-                      const n = edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length
-                      return `${n} connection${n !== 1 ? 's' : ''}`
-                    })()}
+                    {(selectedNode.kind === 'pod' || selectedNode.kind === 'service') && (
+                      <>
+                        <div>
+                          <span className="text-muted-foreground">{selectedNode.kind === 'service' ? 'Service' : 'Pod'}</span>
+                          <div className="mt-0.5 font-mono font-medium break-all">{selectedNode.label}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Namespace</span>
+                          <div className="mt-0.5 font-mono">{selectedNode.namespace}</div>
+                        </div>
+                        {selectedNode.ip && (
+                          <div>
+                            <span className="text-muted-foreground">IP</span>
+                            <div className="mt-0.5 font-mono">{selectedNode.ip}</div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {selectedNode.kind === 'external' && (
+                      <div>
+                        <span className="text-muted-foreground">IP Address</span>
+                        <div className="mt-0.5 font-mono font-medium">{selectedNode.label}</div>
+                      </div>
+                    )}
+                    <div className="pt-1 text-[11px] text-muted-foreground">
+                      {(() => {
+                        const n = edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length
+                        return `${n} connection${n !== 1 ? 's' : ''}`
+                      })()}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {selectedEdge && (() => {
+                  const srcNode = rawNodes.find(n => n.id === selectedEdge.source)
+                  return (
+                    <div className="flex flex-col gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">From</span>
+                        <div className="mt-0.5 font-mono font-medium break-all">{srcNode?.label ?? selectedEdge.source}</div>
+                        {srcNode?.ip && <div className="font-mono text-muted-foreground">{srcNode.ip}</div>}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">To</span>
+                        <div className="mt-0.5 font-mono font-medium">{selectedEdge.destIp ?? selectedEdge.target}</div>
+                        {selectedEdge.port && <div className="font-mono text-muted-foreground">Port: {selectedEdge.port}</div>}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Count</span>
+                        <div className="mt-0.5">{selectedEdge.count} connection{selectedEdge.count !== 1 ? 's' : ''}</div>
+                      </div>
+                      {selectedEdge.blocked && (
+                        <div className="mt-1 rounded bg-red-50 px-2 py-1 text-[11px] font-medium text-red-600">
+                          ✕ Blocked by policy
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </div>

@@ -1,0 +1,368 @@
+[ 1428123ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1430118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1432117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1434117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1436118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1438117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1440117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1440117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1442117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1444117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1446117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1448117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1450117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1452117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1454117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1456117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1458117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1460117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1462117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1464117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1466118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1468117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1470117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1470117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1472117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1474117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1476117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1478117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1480117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1482117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1484117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1486117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1488117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1490117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1492117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1494117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1496117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1498117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1500117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1500117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1502117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1504117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1506117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1508117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1510118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1512117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1514117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1516117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1518117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1520117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1522117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1524117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1526117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1528117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1530117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1530117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1532117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1534117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1536117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1538117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1540117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1542118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1544117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1546117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1548117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1550117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1552117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1554117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1556117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1558117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1560117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1560117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1562117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1564117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1566117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1568117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1570117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1572117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1574117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1576118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1578117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1580117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1582118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1584117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1586117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1588118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1590117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1590117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1592117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1594117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1596117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1598117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1600117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1602117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1604117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1606117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1608117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1610117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1612117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1614117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1616117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1618117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1620117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1620117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1622117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1624117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1626117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1628117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1630117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1632117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1634117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1636117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1638117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1640117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1642117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1644117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1646117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1648117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1650117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1650117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1652117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1654117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1656117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1658117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1660117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1662117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1664117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1666117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1668117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1670117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1672117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1674117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1676117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1678117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1680117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1680117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1682117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1684117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1686117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1688117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1690117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1692117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1694117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1696117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1698117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1700117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1702117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1704117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1706117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1708117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1710117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1710117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1712117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1714117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1716117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1718117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1720117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1722117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1724117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1726117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1728117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1730118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1732117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1734117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1736117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1738117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1740117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1740117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1742117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1744117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1746117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1748117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1750117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1752117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1754117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1756117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1758117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1760117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1762117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1764117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1766118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1768117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1770117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1770117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1772117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1774117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1776117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1778117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1780117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1782117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1784117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1786117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1788118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1790117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1792117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1794117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1796117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1798117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1800117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1800117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1802117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1804117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1806117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1808117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1810118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1812117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1814117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1816117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1818117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1820117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1822117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1824117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1826118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1828118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1830118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1830118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1832117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1834117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1836117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1838117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1840117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1842117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1844117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1846117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1848117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1850117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1852117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1854117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1856117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1858117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1860117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1860117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1862117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1864117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1866117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1868117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1870117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1872117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1874117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1876117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1878117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1880117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1882117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1884117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1886117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1888117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1890117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1890117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1892117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1894117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1896117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1898118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1900117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1902117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1904117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1906117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1908117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1910117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1912117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1914117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1916117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1918117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1920117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1920118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1922117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1924117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1926117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1928117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1930117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1932117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1934117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1936117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1938117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1940117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1942117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1944117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1946117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1948117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1950117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1950117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1952117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1954117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1956117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1958117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1960117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1962117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1964117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1966117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1968117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1970117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1972117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1974117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1976117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1978117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1980117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1980117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/security-events:0
+[ 1982117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1984117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1986117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1988117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1990118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1992117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1994117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1996117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 1998120ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2000117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2002117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2004116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2006117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2008116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2010118ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2010119ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/security-events:0
+[ 2012117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2014116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2016117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2018116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2020117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2022117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2024116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2026119ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2028116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2030117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2032119ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2034116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2036117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2038116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2040116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2040118ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/security-events:0
+[ 2042117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2044116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2046116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2048116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2050117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2052118ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2054116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2056118ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2058116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2060117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2062117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2064116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2066119ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2068116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2070117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2070119ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/security-events:0
+[ 2072117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2074116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2076117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2078116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2080116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2082117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2084116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2086117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2088117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2090116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2092118ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2094118ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2096116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2098116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2100117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/security-events:0
+[ 2100119ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2102118ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2104117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2106116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2108116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2110117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2112117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2114116ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
+[ 2116117ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.20.7.100:8080/api/discovery/profiles:0
