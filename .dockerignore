@@ -1,0 +1,24 @@
+# Node dependencies — installed inside the frontend stage, not needed by Go build
+web/node_modules/
+
+# Frontend build output — copied from frontend stage explicitly
+web/dist/
+
+# Development / tooling
+.git/
+.github/
+.claude/
+.agents/
+.superpowers/
+docs/
+*.md
+!README.md
+
+# Local config / secrets
+.env
+.env.*
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
