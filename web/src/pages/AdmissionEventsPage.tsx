@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react' // useRef kept for esRef
 import { useAdmissionRetention } from '../layout/AdmissionRetentionContext'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -36,12 +36,9 @@ export function AdmissionEventsPage() {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('audit')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const esRef = useRef<EventSource | null>(null)
-  const { maxEvents } = useAdmissionRetention()
-  // Keep a ref in sync so the SSE closure always reads the latest cap.
-  const maxEventsRef = useRef(maxEvents)
+  const { maxEvents, maxEventsRef, loaded } = useAdmissionRetention()
+  // Trim existing events whenever the cap decreases.
   useEffect(() => {
-    maxEventsRef.current = maxEvents
-    // Trim existing events if cap decreased.
     setEvents(prev => prev.length > maxEvents ? prev.slice(0, maxEvents) : prev)
   }, [maxEvents])
 
@@ -50,7 +47,9 @@ export function AdmissionEventsPage() {
 
 
 
+  // Wait for retention fetch before opening SSE so the cap is correct from the first message.
   useEffect(() => {
+    if (!loaded) return
     const es = new EventSource('/api/admission-events/stream')
     esRef.current = es
     es.onmessage = (e) => {
@@ -63,7 +62,7 @@ export function AdmissionEventsPage() {
       } catch { /* ignore */ }
     }
     return () => es.close()
-  }, [])
+  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: string) =>
     setExpanded(prev => {

@@ -55,7 +55,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		nodeSet := make(map[string]TopologyNode)
 
 		for _, e := range events {
-			if e.NetDest == "" || e.Pod == "" {
+			if e.Pod == "" {
 				continue
 			}
 

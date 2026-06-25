@@ -262,7 +262,7 @@ export function NetworkTopologyPage() {
     const connectedIds = new Set(filteredEdges.flatMap(e => [e.source, e.target]))
 
     // Visible = anything reachable via filtered edges
-    // (external and node nodes appear only when they have a connection)
+    // (external nodes appear only when they have a connection)
     const visibleNodes = rawNodes.filter(n => connectedIds.has(n.id))
 
     // Use dagre by default for proper edge routing; fall back to column layout if dagre fails
@@ -366,10 +366,6 @@ export function NetworkTopologyPage() {
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded border border-primary/40 bg-primary/10 inline-block" />
             Pod
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-slate-500/40 bg-slate-500/10 inline-block" />
-            Node
           </span>
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded border border-green-500/40 bg-green-500/10 inline-block" />
