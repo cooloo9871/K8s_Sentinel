@@ -152,7 +152,7 @@ export function PolicyListPage() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h4 className="text-xl font-semibold">Tracing Policy</h4>
-          <p className="text-sm text-muted-foreground">eBPF runtime policies — process, file, and network rules via Cilium Tetragon.</p>
+          <p className="text-sm text-muted-foreground">Manage Tracing Policy.</p>
         </div>
         {isAdmin && <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>}
       </div>
