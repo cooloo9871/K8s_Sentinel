@@ -13,7 +13,7 @@ type TopologyNode struct {
 	Label     string `json:"label"`
 	Pod       string `json:"pod"`
 	Namespace string `json:"namespace"`
-	Kind      string `json:"kind"` // "pod" | "service" | "external" | "node"
+	Kind      string `json:"kind"` // "pod" | "service" | "external"
 	IP        string `json:"ip,omitempty"`
 }
 
@@ -55,50 +55,33 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		nodeSet := make(map[string]TopologyNode)
 
 		for _, e := range events {
-			if e.NetDest == "" {
-				continue
-			}
-			// Skip if neither pod nor node is identified
-			if e.Pod == "" && e.NodeName == "" {
+			if e.NetDest == "" || e.Pod == "" {
 				continue
 			}
 
-			// Determine source: prefer pod, fall back to node
-			var srcID string
-			if e.Pod != "" {
-				srcID = e.Namespace + "/" + e.Pod
-				if _, ok := nodeSet[srcID]; !ok {
-					// NetSrc is "ip:port"; strip the port before ipMap lookup
-					srcAddrRaw := e.NetSrc
-					if strings.HasPrefix(srcAddrRaw, "[") {
-						if end := strings.Index(srcAddrRaw, "]"); end != -1 {
-							srcAddrRaw = strings.TrimPrefix(srcAddrRaw[1:end], "::ffff:")
-						}
-					} else if idx := strings.LastIndex(srcAddrRaw, ":"); idx != -1 {
-						srcAddrRaw = strings.TrimPrefix(srcAddrRaw[:idx], "::ffff:")
+			// Source is always a pod (e.Pod == "" is skipped above)
+			srcID := e.Namespace + "/" + e.Pod
+			if _, ok := nodeSet[srcID]; !ok {
+				// NetSrc is "ip:port"; strip the port before ipMap lookup
+				srcAddrRaw := e.NetSrc
+				if strings.HasPrefix(srcAddrRaw, "[") {
+					if end := strings.Index(srcAddrRaw, "]"); end != -1 {
+						srcAddrRaw = strings.TrimPrefix(srcAddrRaw[1:end], "::ffff:")
 					}
-					srcIP := ""
-					if info, ok2 := ipMap[srcAddrRaw]; ok2 {
-						srcIP = info.IP
-					}
-					nodeSet[srcID] = TopologyNode{
-						ID:        srcID,
-						Label:     e.Pod,
-						Pod:       e.Pod,
-						Namespace: e.Namespace,
-						Kind:      "pod",
-						IP:        srcIP,
-					}
+				} else if idx := strings.LastIndex(srcAddrRaw, ":"); idx != -1 {
+					srcAddrRaw = strings.TrimPrefix(srcAddrRaw[:idx], "::ffff:")
 				}
-			} else {
-				// Node-level process (not in a pod)
-				srcID = "node/" + e.NodeName
-				if _, ok := nodeSet[srcID]; !ok {
-					nodeSet[srcID] = TopologyNode{
-						ID:    srcID,
-						Label: e.NodeName,
-						Kind:  "node",
-					}
+				srcIP := ""
+				if info, ok2 := ipMap[srcAddrRaw]; ok2 {
+					srcIP = info.IP
+				}
+				nodeSet[srcID] = TopologyNode{
+					ID:        srcID,
+					Label:     e.Pod,
+					Pod:       e.Pod,
+					Namespace: e.Namespace,
+					Kind:      "pod",
+					IP:        srcIP,
 				}
 			}
 
