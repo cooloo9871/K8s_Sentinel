@@ -83,6 +83,7 @@ spec:
         values:
         - "\${PODCIDR}"
         - "\${SVCCIDR}"
+        - "\${NODEIPS}"
 `,
   },
   {
