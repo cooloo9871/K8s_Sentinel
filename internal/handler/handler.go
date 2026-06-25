@@ -65,6 +65,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/admission-events/stream", streamAdmissionEvents(cfg.Admission))
 		r.Get("/api/security-events", listSecurityEvents(cfg.Security))
 		r.Get("/api/security-events/stream", streamSecurityEvents(cfg.Security))
+		r.Get("/api/security-events/retention", getSecurityRetention(cfg.Security))
 		r.Get("/api/network-topology", getNetworkTopology(cfg.Security, cfg.Store))
 		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
 		r.Get("/api/vap", listVAP(cfg.Store))
@@ -103,6 +104,7 @@ func New(cfg Config) http.Handler {
 			r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
 			r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
 			r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))
+			r.Put("/api/security-events/retention", setSecurityRetention(cfg.Security))
 		})
 	})
 

@@ -252,6 +252,19 @@ export const settingsApi = {
     api.put('/settings/session-ttl', { sessionTTL: seconds }),
 }
 
+export interface SecurityRetention {
+  maxWarnings: number
+  maxCriticals: number
+  ttlDays: number
+}
+
+export const securityRetentionApi = {
+  get: (): Promise<SecurityRetention> =>
+    api.get('/security-events/retention').then((r) => r.data),
+  set: (cfg: SecurityRetention): Promise<SecurityRetention> =>
+    api.put('/security-events/retention', cfg).then((r) => r.data),
+}
+
 export const templateApi = {
   list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
     api.get('/templates').then((r) => r.data),

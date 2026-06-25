@@ -8,7 +8,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { userApi, settingsApi, type UserRecord } from '../api/client'
+import { userApi, settingsApi, securityRetentionApi, type UserRecord, type SecurityRetention } from '../api/client'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 
@@ -30,6 +30,10 @@ export function UsersPage() {
   const [, setSessionTTL] = useState<number>(3600)
   const [ttlInput, setTtlInput] = useState<string>('3600')
 
+  // Security Events Retention
+  const [retention, setRetention] = useState<SecurityRetention>({ maxWarnings: 500, maxCriticals: 300, ttlDays: 7 })
+  const [retentionSaving, setRetentionSaving] = useState(false)
+
   const load = useCallback(async () => {
     try { setUsers(await userApi.list()) } catch { /* ignore */ }
   }, [])
@@ -40,7 +44,18 @@ export function UsersPage() {
       setSessionTTL(ttl)
       setTtlInput(String(ttl))
     }).catch(() => {})
+    securityRetentionApi.get().then(setRetention).catch(() => {})
   }, [load])
+
+  const handleSaveRetention = async () => {
+    setRetentionSaving(true)
+    try {
+      const updated = await securityRetentionApi.set(retention)
+      setRetention(updated)
+      toast.success('Security Events retention updated.')
+    } catch { toast.error('Failed to update retention') }
+    finally { setRetentionSaving(false) }
+  }
 
   const handleSaveTTL = async () => {
     const val = parseInt(ttlInput, 10)
@@ -178,6 +193,48 @@ export function UsersPage() {
             )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">Changes take effect on the next login. Active sessions are not affected.</p>
+        </CardContent>
+      </Card>
+
+      {/* Security Events Retention */}
+      <Card className="mt-6">
+        <CardHeader className="border-b pb-3">
+          <CardTitle className="text-sm font-medium">Security Events Retention</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4 flex flex-col gap-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Max Warning Events</Label>
+              <Input className="h-8 text-sm" type="number" min={1} max={5000}
+                value={retention.maxWarnings}
+                onChange={e => setRetention(r => ({ ...r, maxWarnings: Math.max(1, parseInt(e.target.value) || 1) }))}
+                disabled={me?.role !== 'admin'} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Max Critical Events</Label>
+              <Input className="h-8 text-sm" type="number" min={1} max={2000}
+                value={retention.maxCriticals}
+                onChange={e => setRetention(r => ({ ...r, maxCriticals: Math.max(1, parseInt(e.target.value) || 1) }))}
+                disabled={me?.role !== 'admin'} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">TTL (days)</Label>
+              <Input className="h-8 text-sm" type="number" min={1} max={90}
+                value={retention.ttlDays}
+                onChange={e => setRetention(r => ({ ...r, ttlDays: Math.max(1, parseInt(e.target.value) || 1) }))}
+                disabled={me?.role !== 'admin'} />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Total capacity: {retention.maxWarnings + retention.maxCriticals} events · Data older than {retention.ttlDays} day{retention.ttlDays !== 1 ? 's' : ''} is purged automatically.
+            </p>
+            {me?.role === 'admin' && (
+              <Button size="sm" onClick={handleSaveRetention} disabled={retentionSaving}>
+                {retentionSaving ? 'Saving...' : 'Save'}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

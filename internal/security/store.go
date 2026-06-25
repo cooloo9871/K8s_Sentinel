@@ -11,12 +11,7 @@ import (
 	"github.com/cooloo9871/sentinel/internal/k8s"
 )
 
-const (
-	maxWarnings     = 500
-	maxCriticals    = 300
-	dedupWindowSecs = 30
-	ttlDays         = 7
-)
+const dedupWindowSecs = 30 // dedup window is fixed by design
 
 // Event is a persisted, deduplicated Tetragon kprobe event.
 type Event struct {
@@ -65,6 +60,17 @@ type eventFile struct {
 	Events []Event `json:"events"`
 }
 
+// RetentionConfig holds configurable retention limits for security events.
+type RetentionConfig struct {
+	MaxWarnings  int `json:"maxWarnings"`
+	MaxCriticals int `json:"maxCriticals"`
+	TTLDays      int `json:"ttlDays"`
+}
+
+func DefaultRetentionConfig() RetentionConfig {
+	return RetentionConfig{MaxWarnings: 500, MaxCriticals: 300, TTLDays: 7}
+}
+
 // Store holds Tetragon kprobe events with file persistence and SSE fanout.
 type Store struct {
 	mu        sync.RWMutex
@@ -72,16 +78,35 @@ type Store struct {
 	subs      map[chan Event]struct{}
 	path      string
 	flushGen  uint64 // incremented each flush; goroutine skips write if stale
+	cfg       RetentionConfig
 }
 
 func NewStore(path string) *Store {
+	cfg := DefaultRetentionConfig()
 	s := &Store{
-		evts: make([]Event, 0, maxWarnings+maxCriticals),
+		evts: make([]Event, 0, cfg.MaxWarnings+cfg.MaxCriticals),
 		subs: make(map[chan Event]struct{}),
 		path: path,
+		cfg:  cfg,
 	}
 	s.load()
 	return s
+}
+
+// SetRetention updates the retention config and reapplies caps immediately.
+func (s *Store) SetRetention(cfg RetentionConfig) {
+	s.mu.Lock()
+	s.cfg = cfg
+	s.evts = s.capBySeverity(s.evts)
+	s.flush()
+	s.mu.Unlock()
+}
+
+// GetRetention returns the current retention config.
+func (s *Store) GetRetention() RetentionConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg
 }
 
 func (s *Store) load() {
@@ -93,7 +118,7 @@ func (s *Store) load() {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return
 	}
-	cutoff := time.Now().UTC().AddDate(0, 0, -ttlDays)
+	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
 	for _, e := range f.Events {
 		t, err := parseTime(e.Time)
 		if err != nil || t.Before(cutoff) {
@@ -101,7 +126,7 @@ func (s *Store) load() {
 		}
 		s.evts = append(s.evts, e)
 	}
-	s.evts = capBySeverity(s.evts)
+	s.evts = s.capBySeverity(s.evts)
 }
 
 func parseTime(s string) (time.Time, error) {
@@ -112,8 +137,8 @@ func parseTime(s string) (time.Time, error) {
 }
 
 // capBySeverity enforces per-severity maximums, keeping newest events.
-func capBySeverity(evts []Event) []Event {
-	warnSlots, critSlots := maxWarnings, maxCriticals
+func (s *Store) capBySeverity(evts []Event) []Event {
+	warnSlots, critSlots := s.cfg.MaxWarnings, s.cfg.MaxCriticals
 	out := make([]Event, 0, len(evts))
 	for _, e := range evts {
 		if e.Severity == "critical" && critSlots > 0 {
@@ -208,10 +233,10 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 		NetDest:    raw.NetDest,
 		NetSrc:     raw.NetSrc,
 	}
-	s.evts = capBySeverity(append([]Event{newEvt}, s.evts...))
+	s.evts = s.capBySeverity(append([]Event{newEvt}, s.evts...))
 
 	// Expire events older than TTL
-	cutoff := time.Now().UTC().AddDate(0, 0, -ttlDays)
+	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
 	filtered := s.evts[:0]
 	for _, e := range s.evts {
 		if et, err2 := parseTime(e.Time); err2 == nil && et.After(cutoff) {
