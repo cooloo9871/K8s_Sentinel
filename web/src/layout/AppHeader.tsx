@@ -58,6 +58,9 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
     { label: 'Notifications' },
     { label: 'Admission Events' },
   ],
+  '/network/topology': [
+    { label: 'Network Topology' },
+  ],
 }
 
 function useBreadcrumbs() {
