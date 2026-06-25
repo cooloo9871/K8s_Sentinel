@@ -31,6 +31,7 @@ const ROUTE_LABELS: Record<string, string> = {
   mode: 'Mode Control',
   namespaces: 'Namespaces',
   tetragon: 'Tetragon Agents',
+  retention: 'Event Retention',
   network: 'Network',
   topology: 'Network Topology',
 }

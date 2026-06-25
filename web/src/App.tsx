@@ -20,6 +20,7 @@ import { AlertsPage } from './pages/AlertsPage'
 import { AdmissionEventsPage } from './pages/AdmissionEventsPage'
 import { VAPPage } from './pages/VAPPage'
 import { RsyslogPage } from './pages/RsyslogPage'
+import { SecurityRetentionPage } from './pages/SecurityRetentionPage'
 import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
 
 function AppRoutes() {
@@ -54,6 +55,7 @@ function AppRoutes() {
           <Route path="/settings/users" element={<UsersPage />} />
           <Route path="/security/alerts" element={<AlertsPage />} />
           <Route path="/security/rsyslog" element={<RsyslogPage />} />
+          <Route path="/settings/retention" element={<SecurityRetentionPage />} />
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
           <Route path="/policies/admission" element={<VAPPage />} />
           <Route path="/network/topology" element={<NetworkTopologyPage />} />

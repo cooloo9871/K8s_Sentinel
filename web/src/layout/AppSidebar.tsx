@@ -126,6 +126,11 @@ export function AppSidebar() {
                     <NavLink to="/security/rsyslog">Syslog</NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/settings/retention')}>
+                    <NavLink to="/settings/retention">Event Retention</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
