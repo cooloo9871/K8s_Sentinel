@@ -117,7 +117,7 @@ export function DashboardPage() {
         <div>
           <h2 className="text-2xl font-bold">Overview</h2>
           <p className="mt-1 text-base text-muted-foreground">
-            Kubernetes security management — Tetragon runtime monitoring &amp; Admission control
+            Kubernetes security management
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => load(true)}>
