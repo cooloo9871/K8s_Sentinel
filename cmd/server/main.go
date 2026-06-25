@@ -35,23 +35,41 @@ func main() {
 	// dispatchers all subscribe to this rather than opening independent streams.
 	store.StartTetragonBroadcast(ctx)
 
-	users := auth.NewUserStore("/data/sentinel/users.json")
-	secret, err := auth.LoadOrCreateSecret("/data/sentinel/.jwt-secret")
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "/data/sentinel"
+	}
+	// Warn early if the data directory is not writable — events would silently
+	// exist only in memory and be lost on restart without this notice.
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		log.Printf("WARNING: cannot create data directory %s: %v — data will not be persisted", dataDir, err)
+	} else {
+		probe := dataDir + "/.write-probe"
+		if err := os.WriteFile(probe, []byte{}, 0600); err != nil {
+			log.Printf("WARNING: data directory %s is not writable: %v — data will not be persisted", dataDir, err)
+		} else {
+			_ = os.Remove(probe)
+		}
+	}
+	data := func(name string) string { return dataDir + "/" + name }
+
+	users := auth.NewUserStore(data("users.json"))
+	secret, err := auth.LoadOrCreateSecret(data(".jwt-secret"))
 	if err != nil {
 		log.Fatalf("jwt secret: %v", err)
 	}
 
-	admissionStore := admission.NewStore("/data/sentinel/admission-events.json")
+	admissionStore := admission.NewStore(data("admission-events.json"))
 	go admissionStore.Run(ctx, typedClient)
 
-	securityStore := security.NewStore("/data/sentinel/security-events.json")
+	securityStore := security.NewStore(data("security-events.json"))
 	go securityStore.Run(ctx, store)
 
-	alerts := alert.NewStore("/data/sentinel/alerts.json")
+	alerts := alert.NewStore(data("alerts.json"))
 	dispatcher := alert.NewDispatcher(alerts, store, admissionStore)
 	go dispatcher.Run(ctx)
 
-	rsyslogs := rsyslog.NewStore("/data/sentinel/rsyslog.json")
+	rsyslogs := rsyslog.NewStore(data("rsyslog.json"))
 	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store, admissionStore)
 	go rsyslogDispatch.Run(ctx)
 

@@ -13,6 +13,7 @@ import {
 import { useSecurityEvents, type DisplayEvent, type Severity } from '../layout/SecurityEventsProvider'
 import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
+import { RelativeTime } from '../components/RelativeTime'
 
 type FilterType = 'all' | 'warning' | 'critical'
 
@@ -48,18 +49,6 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   )
 }
 
-function RelativeTime({ iso }: { iso: string }) {
-  if (!iso) return <span className="text-muted-foreground">—</span>
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
-  const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
-  const label = diff < 5 ? 'just now'
-    : diff < 60 ? `${diff}s ago`
-    : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
-    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
-    : `${Math.floor(diff / 86400)}d ago`
-  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
-}
 
 function DetailRow({ e }: { e: DisplayEvent }) {
   const items: { label: string; value: string }[] = []
@@ -122,7 +111,6 @@ export function SecurityEventsPage() {
   // Pause/Resume: buffer incoming events locally while paused
   const [paused, setPaused] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
-  const pausedRef = useRef(false)
   const pendingRef = useRef<DisplayEvent[]>([])
   const prevLengthRef = useRef(allEvents.length)
   const [displayEvents, setDisplayEvents] = useState<DisplayEvent[]>([])
@@ -146,8 +134,7 @@ export function SecurityEventsPage() {
   const events = paused ? displayEvents : allEvents
 
   const togglePause = () => {
-    const nowPaused = !pausedRef.current
-    pausedRef.current = nowPaused
+    const nowPaused = !paused
     setPaused(nowPaused)
     if (!nowPaused) {
       pendingRef.current = []

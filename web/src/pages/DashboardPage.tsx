@@ -16,10 +16,12 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, modeApi, vapApi, admissionApi, type VAPRecord, type VAPBindingRecord, type AdmissionEvent } from '../api/client'
+import { policyApi, modeApi, vapApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import { useSecurityEvents } from '../layout/SecurityEventsProvider'
+import { useAdmissionEvents } from '../layout/AdmissionEventsProvider'
+import { RelativeTime } from '../components/RelativeTime'
 import type { PolicyRecord, Mode } from '../api/types'
 
 interface StatProps {
@@ -52,39 +54,25 @@ function StatCard({ icon, label, value, sub, accent = '#2d7dd2' }: StatProps) {
   )
 }
 
-function RelativeTime({ iso }: { iso: string }) {
-  if (!iso) return <span className="text-muted-foreground">—</span>
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return <span>{iso}</span>
-  const diff = Math.floor((Date.now() - d.getTime()) / 60000)
-  let label = diff < 1 ? 'just now'
-    : diff < 60 ? `${diff}m ago`
-    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
-    : `${Math.floor(diff / 1440)}d ago`
-  return <span title={d.toLocaleString()}>{label}</span>
-}
-
 export function DashboardPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const { events: secEvents } = useSecurityEvents()
+  const { events: admissionEvents } = useAdmissionEvents()
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [vapPolicies, setVapPolicies] = useState<VAPRecord[]>([])
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
-  const [admissionEvents, setAdmissionEvents] = useState<AdmissionEvent[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
-  // useRef-based cache: survives navigation, resets on logout (component tree remount)
   const hasLoaded = useRef(false)
   const [loading, setLoading] = useState(!hasLoaded.current)
 
   const load = (showSpinner = false) => {
     if (showSpinner) setLoading(true)
-    // All data loaded together for consistent freshness
-    Promise.all([policyApi.list(), modeApi.get(), admissionApi.list()])
-      .then(([p, m, adm]) => {
-        setPolicies(p); setMode(m as Mode); setAdmissionEvents(adm)
+    Promise.all([policyApi.list(), modeApi.get()])
+      .then(([p, m]) => {
+        setPolicies(p); setMode(m as Mode)
         hasLoaded.current = true
       })
       .catch(() => toast.error('Failed to load dashboard'))

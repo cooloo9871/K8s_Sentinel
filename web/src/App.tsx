@@ -2,8 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './layout/AppLayout'
 import { AppToaster } from './layout/AppToaster'
 import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
+import { AdmissionEventsProvider } from './layout/AdmissionEventsProvider'
 import { DiscoveryProvider } from './layout/DiscoveryProvider'
-import { AdmissionRetentionProvider } from './layout/AdmissionRetentionContext'
 import { AuthProvider, useAuth } from './layout/AuthContext'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -37,7 +37,7 @@ function AppRoutes() {
 
   return (
     <SecurityEventsProvider>
-    <AdmissionRetentionProvider>
+    <AdmissionEventsProvider>
     <DiscoveryProvider>
       <Routes>
         <Route element={<AppLayout onLogout={logout} />}>
@@ -65,7 +65,7 @@ function AppRoutes() {
         </Route>
       </Routes>
     </DiscoveryProvider>
-    </AdmissionRetentionProvider>
+    </AdmissionEventsProvider>
     </SecurityEventsProvider>
   )
 }

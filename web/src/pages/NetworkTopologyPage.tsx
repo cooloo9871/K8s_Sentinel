@@ -206,7 +206,12 @@ export function NetworkTopologyPage() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    // Auto-refresh every 30s so new connections appear without manual reload
+    const timer = setInterval(() => load(), 30_000)
+    return () => clearInterval(timer)
+  }, [load])
 
   // Namespaces available for filter
   const namespaces = useMemo(() =>

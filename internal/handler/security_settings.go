@@ -52,10 +52,14 @@ func setAdmissionRetention(store *admission.Store) http.HandlerFunc {
 			return
 		}
 		if cfg.MaxEvents < 1 || cfg.MaxEvents > 5000 {
-			http.Error(w, "maxEvents must be 1–5000", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "maxEvents must be 1–5000")
+			return
+		}
+		if cfg.TTLDays < 1 || cfg.TTLDays > 365 {
+			writeError(w, http.StatusBadRequest, "ttlDays must be 1–365")
 			return
 		}
 		store.SetRetention(cfg)
-		writeJSON(w, http.StatusOK, cfg) // echo back validated cfg directly
+		writeJSON(w, http.StatusOK, cfg)
 	}
 }

@@ -20,7 +20,7 @@ func claimsFromCtx(r *http.Request) *auth.Claims {
 	return c
 }
 
-func authMiddleware(secret []byte) func(http.Handler) http.Handler {
+func authMiddleware(secret []byte, users *auth.UserStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("sentinel_token")
@@ -30,6 +30,10 @@ func authMiddleware(secret []byte) func(http.Handler) http.Handler {
 			}
 			claims, err := auth.ParseToken(secret, cookie.Value)
 			if err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if users.IsTokenRevoked(claims.ID) {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -75,6 +79,7 @@ func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   true,
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   users.GetSessionTTL(),
 		})
@@ -105,13 +110,18 @@ func setSessionTTLHandler(users *auth.UserStore) http.HandlerFunc {
 	}
 }
 
-func logoutHandler() http.HandlerFunc {
+func logoutHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Revoke the current token so it cannot be reused after logout
+		if claims := claimsFromCtx(r); claims != nil && claims.ID != "" && claims.ExpiresAt != nil {
+			users.RevokeToken(claims.ID, claims.ExpiresAt.Time)
+		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sentinel_token",
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   true,
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   -1,
 		})

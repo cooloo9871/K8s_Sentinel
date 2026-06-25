@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,8 +18,12 @@ type Claims struct {
 
 func LoadOrCreateSecret(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
-	if err == nil && len(data) == 32 {
-		return data, nil
+	// Trim trailing whitespace/newlines that editors may append
+	if err == nil {
+		trimmed := []byte(strings.TrimRight(string(data), " \t\r\n"))
+		if len(trimmed) == 32 {
+			return trimmed, nil
+		}
 	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
@@ -35,10 +40,15 @@ func LoadOrCreateSecret(path string) ([]byte, error) {
 }
 
 func SignToken(secret []byte, u User, expiry time.Duration) (string, error) {
+	jti := make([]byte, 16)
+	if _, err := rand.Read(jti); err != nil {
+		return "", err
+	}
 	claims := Claims{
 		Username: u.Username,
 		Role:     u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        fmt.Sprintf("%x", jti),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},

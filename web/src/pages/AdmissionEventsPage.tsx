@@ -1,68 +1,31 @@
-import { Fragment, useEffect, useRef, useState } from 'react' // useRef kept for esRef
-import { useAdmissionRetention } from '../layout/AdmissionRetentionContext'
+import { Fragment, useState } from 'react'
+import { useAdmissionEvents } from '../layout/AdmissionEventsProvider'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { type AdmissionEvent } from '../api/client'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { RelativeTime } from '../components/RelativeTime'
 import { formatTWTime } from '../utils/time'
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react'
-
-function RelativeTime({ iso }: { iso: string }) {
-  if (!iso) return <span className="text-muted-foreground">—</span>
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return <span className="font-mono text-xs">{iso}</span>
-  const diff = Math.floor((Date.now() - d.getTime()) / 60000)
-  const label = diff < 1 ? 'just now'
-    : diff < 60 ? `${diff}m ago`
-    : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
-    : `${Math.floor(diff / 1440)}d ago`
-  return <span className="font-mono text-xs" title={formatTWTime(iso)}>{label}</span>
-}
 
 type SeverityFilter = 'all' | 'warning' | 'critical'
 type SourceFilter = 'all' | 'audit' | 'k8s-event'
 
 export function AdmissionEventsPage() {
-  const [events, setEvents] = useState<AdmissionEvent[]>([])
+  const { events } = useAdmissionEvents()
   const [search, setSearch] = useState('')
   const [nsFilter, setNsFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('audit')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const esRef = useRef<EventSource | null>(null)
-  const { maxEvents, maxEventsRef, loaded } = useAdmissionRetention()
-  // Trim existing events whenever the cap decreases.
-  useEffect(() => {
-    setEvents(prev => prev.length > maxEvents ? prev.slice(0, maxEvents) : prev)
-  }, [maxEvents])
 
   const sourceVisible = sourceFilter === 'all' ? events : events.filter(e => e.source === sourceFilter)
   const namespaces = [...new Set(sourceVisible.map(e => e.namespace).filter(Boolean))].sort()
-
-
-
-  // Wait for retention fetch before opening SSE so the cap is correct from the first message.
-  useEffect(() => {
-    if (!loaded) return
-    const es = new EventSource('/api/admission-events/stream')
-    esRef.current = es
-    es.onmessage = (e) => {
-      try {
-        const evt: AdmissionEvent = JSON.parse(e.data)
-        setEvents(prev => {
-          if (prev.some(x => x.id === evt.id)) return prev
-          return [evt, ...prev].slice(0, maxEventsRef.current)
-        })
-      } catch { /* ignore */ }
-    }
-    return () => es.close()
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: string) =>
     setExpanded(prev => {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -39,11 +40,11 @@ func New(cfg Config) http.Handler {
 
 	// Public auth
 	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
-	r.Post("/api/auth/logout", logoutHandler())
+	r.Post("/api/auth/logout", logoutHandler(cfg.Users))
 
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
-		r.Use(authMiddleware(cfg.Secret))
+		r.Use(authMiddleware(cfg.Secret, cfg.Users))
 
 		// Viewer + Admin (read-only)
 		r.Get("/api/auth/me", meHandler())
@@ -116,5 +117,13 @@ func New(cfg Config) http.Handler {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("writeJSON encode error: %v", err)
+	}
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }

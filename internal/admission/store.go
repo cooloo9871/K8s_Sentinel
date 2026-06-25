@@ -74,20 +74,23 @@ type eventFile struct {
 // RetentionConfig holds configurable retention for admission events.
 type RetentionConfig struct {
 	MaxEvents int `json:"maxEvents"`
+	TTLDays   int `json:"ttlDays"`
 }
 
 func DefaultRetentionConfig() RetentionConfig {
-	return RetentionConfig{MaxEvents: 500}
+	return RetentionConfig{MaxEvents: 500, TTLDays: 30}
 }
 
 // Store holds VAP violation events in a ring buffer with file persistence.
 type Store struct {
-	mu     sync.RWMutex
-	events []Event
-	seen   map[string]struct{}    // deduplicate by event ID
-	subs   map[chan Event]struct{} // per-subscriber channels for fanout
-	path   string                 // file path for persistence
-	cfg    RetentionConfig
+	mu       sync.RWMutex
+	events   []Event
+	seen     map[string]struct{}    // deduplicate by event ID
+	subs     map[chan Event]struct{} // per-subscriber channels for fanout
+	path     string                 // file path for persistence
+	cfg      RetentionConfig
+	flushGen uint64     // incremented each flush; goroutine skips write if stale
+	flushMu  sync.Mutex // serialises stale-check + rename to eliminate TOCTOU
 }
 
 func NewStore(path string) *Store {
@@ -103,17 +106,12 @@ func NewStore(path string) *Store {
 	return s
 }
 
-// SetRetention updates the retention config and truncates immediately if needed.
+// SetRetention updates the retention config and reapplies limits immediately.
 func (s *Store) SetRetention(cfg RetentionConfig) {
 	s.mu.Lock()
 	s.cfg = cfg
-	if len(s.events) > cfg.MaxEvents {
-		for _, old := range s.events[cfg.MaxEvents:] {
-			delete(s.seen, old.ID)
-		}
-		s.events = s.events[:cfg.MaxEvents]
-	}
-	s.flushLocked() // always persist cfg, even when no truncation needed
+	s.applyRetentionLocked()
+	s.flushLocked()
 	s.mu.Unlock()
 }
 
@@ -136,11 +134,17 @@ func (s *Store) load() {
 	if f.Retention != nil {
 		s.cfg = *f.Retention
 	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
 	for _, e := range f.Events {
-		if _, exists := s.seen[e.ID]; !exists {
-			s.seen[e.ID] = struct{}{}
-			s.events = append(s.events, e)
+		if _, exists := s.seen[e.ID]; exists {
+			continue
 		}
+		// Skip TTL-expired events
+		if t, err2 := parseTime(e.Time); err2 == nil && t.Before(cutoff) {
+			continue
+		}
+		s.seen[e.ID] = struct{}{}
+		s.events = append(s.events, e)
 	}
 	if len(s.events) > s.cfg.MaxEvents {
 		for _, old := range s.events[s.cfg.MaxEvents:] {
@@ -148,7 +152,6 @@ func (s *Store) load() {
 		}
 		s.events = s.events[:s.cfg.MaxEvents]
 	}
-	// Ensure newest-first order after loading
 	sortEventsDesc(s.events)
 }
 
@@ -197,11 +200,11 @@ func (s *Store) insertSorted(evt Event) {
 // flushLocked snapshots events while the lock is held, then writes to disk
 // after releasing the lock to avoid blocking concurrent reads during I/O.
 func (s *Store) flushLocked() {
-	// Snapshot under lock (caller must hold s.mu)
+	s.flushGen++
+	gen := s.flushGen
 	snapshot := make([]Event, len(s.events))
 	copy(snapshot, s.events)
 	cfgSnap := s.cfg
-	// Disk write happens after caller releases the lock
 	go func() {
 		data, err := json.Marshal(eventFile{Events: snapshot, Retention: &cfgSnap})
 		if err != nil {
@@ -213,9 +216,19 @@ func (s *Store) flushLocked() {
 			log.Printf("admission-store: flush write error: %v", err)
 			return
 		}
+		s.flushMu.Lock()
+		s.mu.RLock()
+		stale := s.flushGen != gen
+		s.mu.RUnlock()
+		if stale {
+			s.flushMu.Unlock()
+			_ = os.Remove(tmp)
+			return
+		}
 		if err := os.Rename(tmp, s.path); err != nil {
 			log.Printf("admission-store: flush rename error: %v", err)
 		}
+		s.flushMu.Unlock()
 	}()
 }
 
@@ -339,12 +352,7 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	}
 
 	s.insertSorted(evt)
-	if len(s.events) > s.cfg.MaxEvents {
-		for _, old := range s.events[s.cfg.MaxEvents:] {
-			delete(s.seen, old.ID)
-		}
-		s.events = s.events[:s.cfg.MaxEvents]
-	}
+	s.applyRetentionLocked()
 	s.flushLocked()
 	s.mu.Unlock()
 
@@ -380,15 +388,31 @@ func (s *Store) Add(e Event) {
 	}
 	s.seen[e.ID] = struct{}{}
 	s.insertSorted(e)
+	s.applyRetentionLocked()
+	s.flushLocked()
+	s.mu.Unlock()
+	s.broadcast(e)
+}
+
+// applyRetentionLocked applies TTL and MaxEvents caps. Caller must hold s.mu.Lock().
+func (s *Store) applyRetentionLocked() {
+	// TTL eviction first, then count cap
+	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
+	kept := s.events[:0]
+	for _, e := range s.events {
+		if t, err := parseTime(e.Time); err != nil || t.Before(cutoff) {
+			delete(s.seen, e.ID)
+			continue
+		}
+		kept = append(kept, e)
+	}
+	s.events = kept
 	if len(s.events) > s.cfg.MaxEvents {
 		for _, old := range s.events[s.cfg.MaxEvents:] {
 			delete(s.seen, old.ID)
 		}
 		s.events = s.events[:s.cfg.MaxEvents]
 	}
-	s.flushLocked()
-	s.mu.Unlock()
-	s.broadcast(e)
 }
 
 // List returns all stored events (newest first).

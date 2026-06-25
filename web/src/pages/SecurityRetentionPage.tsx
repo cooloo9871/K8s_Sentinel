@@ -11,14 +11,14 @@ import {
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 import { useSecurityEvents } from '../layout/SecurityEventsProvider'
-import { useAdmissionRetention } from '../layout/AdmissionRetentionContext'
+import { useAdmissionEvents } from '../layout/AdmissionEventsProvider'
 
 export function SecurityRetentionPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const { applyRetention } = useSecurityEvents()
-  const { applyRetention: applyAdmissionRetention } = useAdmissionRetention()
+  const { applyRetention: applyAdmissionRetention } = useAdmissionEvents()
 
   const [security, setSecurity] = useState<SecurityRetention | null>(null)
   const [admission, setAdmission] = useState<AdmissionRetention | null>(null)
@@ -57,7 +57,7 @@ export function SecurityRetentionPage() {
     try {
       const updated = await admissionRetentionApi.set(admission)
       setAdmission(updated)
-      applyAdmissionRetention(updated.maxEvents)
+      applyAdmissionRetention(updated.maxEvents, updated.ttlDays)
       toast.success('Admission Events retention updated.')
     } catch {
       toast.error('Failed to update Admission Events retention.')
@@ -177,7 +177,7 @@ export function SecurityRetentionPage() {
                     <Input
                       type="number" min={1} max={5000}
                       value={admission.maxEvents}
-                      onChange={e => setAdmission({ maxEvents: Math.max(1, parseInt(e.target.value) || 1) })}
+                      onChange={e => setAdmission(r => r && ({ ...r, maxEvents: Math.max(1, parseInt(e.target.value) || 1) }))}
                       className="h-8 w-36 text-sm"
                       disabled={!isAdmin}
                     />
@@ -185,9 +185,26 @@ export function SecurityRetentionPage() {
                   </div>
                 </div>
 
+                <div className="flex flex-col gap-1.5">
+                  <Label>TTL (days)</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number" min={1} max={365}
+                      value={admission.ttlDays}
+                      onChange={e => setAdmission(r => r && ({ ...r, ttlDays: Math.max(1, parseInt(e.target.value) || 1) }))}
+                      className="h-8 w-36 text-sm"
+                      disabled={!isAdmin}
+                    />
+                    <span className="text-xs text-muted-foreground">1 – 365 days</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Events older than this are removed automatically.</p>
+                </div>
+
                 <div className="rounded-md bg-muted/40 px-4 py-3 text-sm">
                   <span className="font-medium">Total capacity:</span>{' '}
                   {admission.maxEvents} events
+                  {' '}·{' '}
+                  <span className="font-medium">TTL:</span> {admission.ttlDays} day{admission.ttlDays !== 1 ? 's' : ''}
                 </div>
 
                 {isAdmin && (

@@ -37,15 +37,51 @@ type UserStore struct {
 	users      map[string]User
 	sessionTTL int
 	path       string
+	// In-memory token blocklist: JTI → expiry time.
+	// Entries are pruned lazily on RevokeToken calls.
+	revokedTokens map[string]time.Time
 }
 
 func NewUserStore(path string) *UserStore {
-	s := &UserStore{path: path, users: make(map[string]User), sessionTTL: DefaultSessionTTL}
+	s := &UserStore{
+		path:          path,
+		users:         make(map[string]User),
+		sessionTTL:    DefaultSessionTTL,
+		revokedTokens: make(map[string]time.Time),
+	}
 	s.load()
 	if len(s.users) == 0 {
 		s.bootstrap()
 	}
 	return s
+}
+
+// RevokeToken adds a JTI to the blocklist until expiry.
+func (s *UserStore) RevokeToken(jti string, expiry time.Time) {
+	if jti == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revokedTokens[jti] = expiry
+	// Prune expired entries opportunistically
+	now := time.Now()
+	for id, exp := range s.revokedTokens {
+		if now.After(exp) {
+			delete(s.revokedTokens, id)
+		}
+	}
+}
+
+// IsTokenRevoked returns true if the JTI has been explicitly revoked.
+func (s *UserStore) IsTokenRevoked(jti string) bool {
+	if jti == "" {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	exp, ok := s.revokedTokens[jti]
+	return ok && time.Now().Before(exp)
 }
 
 func (s *UserStore) load() {

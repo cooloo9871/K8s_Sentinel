@@ -279,17 +279,16 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 		NetDest:    raw.NetDest,
 		NetSrc:     raw.NetSrc,
 	}
-	s.evts = s.capBySeverity(append([]Event{newEvt}, s.evts...))
-
-	// Expire events older than TTL
+	// Expire events older than TTL first, then cap — so cap sees only valid events
 	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
-	filtered := s.evts[:0]
-	for _, e := range s.evts {
+	withNew := append([]Event{newEvt}, s.evts...)
+	filtered := withNew[:0]
+	for _, e := range withNew {
 		if et, err2 := parseTime(e.Time); err2 == nil && et.After(cutoff) {
 			filtered = append(filtered, e)
 		}
 	}
-	s.evts = filtered
+	s.evts = s.capBySeverity(filtered)
 
 	// Update topology buffer — independent of event-count retention.
 	s.updateTopoBuf(newEvt, t)

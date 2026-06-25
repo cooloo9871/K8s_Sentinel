@@ -125,6 +125,7 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -145,7 +146,10 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 			select {
 			case <-r.Context().Done():
 				return
-			case e := <-ch:
+			case e, ok := <-ch:
+				if !ok {
+					return
+				}
 				data, _ := json.Marshal(e)
 				fmt.Fprintf(w, "data: %s\n\n", data)
 				flusher.Flush()

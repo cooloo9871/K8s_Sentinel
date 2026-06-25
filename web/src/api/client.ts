@@ -185,37 +185,6 @@ export const admissionApi = {
 }
 
 
-export interface AdmissionRule {
-  id: string
-  name: string
-  description?: string
-  enabled: boolean
-  createdAt: string
-  spec: {
-    matchConstraints: {
-      resourceRules: Array<{
-        apiGroups: string[]
-        apiVersions: string[]
-        operations: string[]
-        resources: string[]
-      }>
-    }
-    validations: Array<{ expression: string; message: string }>
-  }
-}
-
-export const admissionRulesApi = {
-  list: (): Promise<AdmissionRule[]> =>
-    api.get('/admission-rules').then((r) => r.data ?? []),
-  create: (payload: object): Promise<AdmissionRule> =>
-    api.post('/admission-rules', payload).then((r) => r.data),
-  update: (id: string, payload: object): Promise<AdmissionRule> =>
-    api.put(`/admission-rules/${id}`, payload).then((r) => r.data),
-  toggle: (id: string, enabled: boolean): Promise<void> =>
-    api.patch(`/admission-rules/${id}/toggle?enabled=${enabled}`),
-  delete: (id: string): Promise<void> =>
-    api.delete(`/admission-rules/${id}`),
-}
 
 export const vapApi = {
   listPolicies: (): Promise<VAPRecord[]> =>
@@ -267,6 +236,7 @@ export const securityRetentionApi = {
 
 export interface AdmissionRetention {
   maxEvents: number
+  ttlDays: number
 }
 
 export const admissionRetentionApi = {
