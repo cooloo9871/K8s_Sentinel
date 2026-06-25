@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   IconShieldCheck,
-  IconShieldLock,
   IconShieldX,
   IconActivity,
   IconLock,
   IconArrowRight,
   IconRefresh,
+  IconServer,
 } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -65,6 +65,8 @@ export function DashboardPage() {
   const [vapPolicies, setVapPolicies] = useState<VAPRecord[]>([])
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
+  const [agentTotal, setAgentTotal] = useState<number | null>(null)
+  const [agentReady, setAgentReady] = useState<number | null>(null)
   const hasLoaded = useRef(false)
   const [loading, setLoading] = useState(!hasLoaded.current)
 
@@ -80,6 +82,14 @@ export function DashboardPage() {
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
+    fetch('/api/tetragon/agents')
+      .then(r => r.json())
+      .then((d: { agents: { ready: boolean }[] }) => {
+        const list = d.agents ?? []
+        setAgentTotal(list.length)
+        setAgentReady(list.filter(a => a.ready).length)
+      })
+      .catch(() => {})
   }
 
   useEffect(() => {
@@ -89,7 +99,6 @@ export function DashboardPage() {
     return () => clearInterval(timer)
   }, [])
 
-  const protectCount = policies.filter((p) => p.mode === 'Protect').length
   const recent = policies.slice(0, 8)
   const secWarning = secEvents.filter(e => e.severity === 'warning').length
   const secCritical = secEvents.filter(e => e.severity === 'critical').length
@@ -129,11 +138,11 @@ export function DashboardPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
-          icon={<IconShieldLock size={26} />}
-          label="Tracing Policy — Protect"
-          value={protectCount}
-          sub={`${policies.length - protectCount} monitoring`}
-          accent="#dc3545"
+          icon={<IconServer size={26} />}
+          label="Tetragon Agents"
+          value={agentTotal === null ? '—' : `${agentReady} / ${agentTotal}`}
+          sub={agentTotal === null ? 'Loading…' : agentReady === agentTotal && agentTotal > 0 ? 'All nodes online' : agentTotal === 0 ? 'No agents found' : `${agentTotal - (agentReady ?? 0)} not ready`}
+          accent={agentTotal === null ? '#6b7280' : agentReady === agentTotal && agentTotal > 0 ? '#28a745' : '#dc3545'}
         />
         <StatCard
           icon={<IconActivity size={26} />}
