@@ -16,7 +16,7 @@ export function SecurityRetentionPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
-  const { reconnect } = useSecurityEvents()
+  const { applyRetention } = useSecurityEvents()
 
   const [security, setSecurity] = useState<SecurityRetention>({
     maxWarnings: 500,
@@ -37,7 +37,7 @@ export function SecurityRetentionPage() {
     try {
       const updated = await securityRetentionApi.set(security)
       setSecurity(updated)
-      reconnect()
+      applyRetention(updated.maxWarnings, updated.maxCriticals)
       toast.success('Security Events retention updated.')
     } catch {
       toast.error('Failed to update Security Events retention.')

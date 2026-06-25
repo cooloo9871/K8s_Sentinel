@@ -29,12 +29,14 @@ interface SecurityEventsContextValue {
   events: DisplayEvent[]
   connected: boolean
   reconnect: () => void
+  applyRetention: (maxWarnings: number, maxCriticals: number) => void
 }
 
 const SecurityEventsContext = createContext<SecurityEventsContextValue>({
   events: [],
   connected: false,
   reconnect: () => {},
+  applyRetention: () => {},
 })
 
 export function useSecurityEvents() {
@@ -45,51 +47,68 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
   const [events, setEvents] = useState<DisplayEvent[]>([])
   const [connected, setConnected] = useState(false)
   const esRef = useRef<EventSource | null>(null)
+  // capRef is always up-to-date before SSE starts — no async race
   const capRef = useRef({ maxWarnings: 500, maxCriticals: 300 })
 
-  function applyEvent(evt: DisplayEvent, prev: DisplayEvent[]): DisplayEvent[] {
-    if (prev.some(x => x.id === evt.id)) {
-      return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
-    }
-    const { maxWarnings, maxCriticals } = capRef.current
-    let warn = 0, crit = 0
-    return [evt, ...prev].filter(e => {
-      if (e.severity === 'critical' && crit < maxCriticals) { crit++; return true }
-      if (e.severity === 'warning'  && warn < maxWarnings)  { warn++; return true }
-      return false
-    })
-  }
-
-  const connect = useCallback(() => {
+  // startSSE: clears events, then opens a fresh SSE connection.
+  // capRef must already be updated before calling.
+  const startSSE = useCallback(() => {
     esRef.current?.close()
+    setEvents([])
     setConnected(false)
-
-    securityRetentionApi.get()
-      .then(r => { capRef.current = { maxWarnings: r.maxWarnings, maxCriticals: r.maxCriticals } })
-      .catch(() => {})
 
     const es = new EventSource('/api/security-events/stream')
     esRef.current = es
 
     es.onopen = () => setConnected(true)
-
-    es.onmessage = (e) => {
+    es.onmessage = (raw) => {
       try {
-        const evt: DisplayEvent = JSON.parse(e.data)
-        setEvents(prev => applyEvent(evt, prev))
-      } catch { /* ignore */ }
+        const evt: DisplayEvent = JSON.parse(raw.data)
+        setEvents(prev => {
+          // Update existing event (dedup / count increment)
+          if (prev.some(x => x.id === evt.id)) {
+            return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
+          }
+          // New event: prepend then cap — capRef is always current here
+          const { maxWarnings, maxCriticals } = capRef.current
+          let warn = 0, crit = 0
+          return [evt, ...prev].filter(e => {
+            if (e.severity === 'critical' && crit < maxCriticals) { crit++; return true }
+            if (e.severity === 'warning'  && warn < maxWarnings)  { warn++; return true }
+            return false
+          })
+        })
+      } catch { /* ignore malformed */ }
     }
-
     es.onerror = () => setConnected(false)
+  }, [])
+
+  // reconnect: re-fetch retention then start SSE (used by error recovery / manual trigger)
+  const reconnect = useCallback(() => {
+    securityRetentionApi.get()
+      .then(r => { capRef.current = { maxWarnings: r.maxWarnings, maxCriticals: r.maxCriticals } })
+      .catch(() => {})
+      .finally(() => startSSE())
+  }, [startSSE])
+
+  // applyRetention: called by SecurityRetentionPage after a successful save.
+  // The caller already has the confirmed new values — no extra fetch needed.
+  const applyRetention = useCallback((maxWarnings: number, maxCriticals: number) => {
+    capRef.current = { maxWarnings, maxCriticals }
+    startSSE()
+  }, [startSSE])
+
+  // Initial mount: fetch retention first, then start SSE
+  useEffect(() => {
+    securityRetentionApi.get()
+      .then(r => { capRef.current = { maxWarnings: r.maxWarnings, maxCriticals: r.maxCriticals } })
+      .catch(() => {})
+      .finally(() => startSSE())
+    return () => esRef.current?.close()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    connect()
-    return () => esRef.current?.close()
-  }, [connect])
-
   return (
-    <SecurityEventsContext.Provider value={{ events, connected, reconnect: connect }}>
+    <SecurityEventsContext.Provider value={{ events, connected, reconnect, applyRetention }}>
       {children}
     </SecurityEventsContext.Provider>
   )
