@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -30,7 +29,6 @@ type TopologyResponse struct {
 	Nodes            []TopologyNode `json:"nodes"`
 	Edges            []TopologyEdge `json:"edges"`
 	HasNetworkEvents bool           `json:"hasNetworkEvents"`
-	Debug            []string       `json:"debug,omitempty"`
 }
 
 func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.HandlerFunc {
@@ -48,8 +46,6 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		type edgeKey struct{ src, dst, port string; blocked bool }
 		edgeCounts := make(map[edgeKey]int)
 		nodeSet := make(map[string]TopologyNode)
-		debugLines := []string{}
-		debugEnabled := r.URL.Query().Get("debug") == "1"
 
 		for _, e := range events {
 			if e.NetDest == "" || e.Pod == "" {
@@ -89,10 +85,6 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				destRaw = destRaw[:idx]
 				// Strip IPv4-mapped IPv6 prefix if present
 				destRaw = strings.TrimPrefix(destRaw, "::ffff:")
-			}
-
-			if debugEnabled {
-				debugLines = append(debugLines, fmt.Sprintf("netDest=%q → destRaw=%q port=%q resolved=%v", e.NetDest, destRaw, port, ipMap[destRaw].Name != ""))
 			}
 
 			// Try to resolve destination IP to pod/service
@@ -156,15 +148,10 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			})
 		}
 
-		var dbg []string
-		if debugEnabled {
-			dbg = debugLines
-		}
 		writeJSON(w, http.StatusOK, TopologyResponse{
 			Nodes:            nodes,
 			Edges:            edges,
 			HasNetworkEvents: len(edges) > 0,
-			Debug:            dbg,
 		})
 	}
 }
