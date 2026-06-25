@@ -189,32 +189,42 @@ export function NetworkTopologyPage() {
   useEffect(() => {
     const podQ = podSearch.trim().toLowerCase()
 
-    const filteredNodes = rawNodes.filter(n => {
-      if (n.kind === 'external' || n.kind === 'node') return true // always show
+    // "Primary" nodes: pods/services/nodes matching the filter criteria.
+    // external and node kinds are never seeds — they're pulled in by connections.
+    const isPrimary = (n: TopologyNode): boolean => {
+      if (n.kind === 'external' || n.kind === 'node') return false
       if (nsFilter !== 'all' && n.namespace !== nsFilter) return false
-      if (podQ && !n.pod.toLowerCase().includes(podQ)) return false
+      if (podQ) {
+        // Search both pod name and service label
+        const nameMatch =
+          n.pod.toLowerCase().includes(podQ) ||
+          n.label.toLowerCase().includes(podQ)
+        if (!nameMatch) return false
+      }
       return true
-    })
+    }
 
-    const filteredIds = new Set(filteredNodes.map(n => n.id))
+    // When no filter is active, all pods/services are primary
+    const noFilter = nsFilter === 'all' && !podQ
+    const primaryIds = new Set(
+      noFilter
+        ? rawNodes.filter(n => n.kind !== 'external').map(n => n.id)
+        : rawNodes.filter(isPrimary).map(n => n.id)
+    )
+
+    // Include ALL edges where at least one end is a primary node.
+    // This expands the view to show the complete connection path,
+    // even if the other end is in a different namespace.
     const filteredEdges = rawEdges.filter(e =>
-      filteredIds.has(e.source) &&
-      // Blocked edges: show as long as source is visible, even if target is filtered out
-      (filteredIds.has(e.target) || e.blocked)
+      primaryIds.has(e.source) || primaryIds.has(e.target)
     )
 
-    // Collect all target nodes needed by blocked edges that aren't in filteredNodes
-    const extraNodeIds = new Set(
-      filteredEdges.filter(e => e.blocked && !filteredIds.has(e.target)).map(e => e.target)
-    )
-    const extraNodes = rawNodes.filter(n => extraNodeIds.has(n.id))
-
-    // Remove external/service nodes that have no connections after pod filter
+    // Collect every node referenced by the filtered edges
     const connectedIds = new Set(filteredEdges.flatMap(e => [e.source, e.target]))
-    const visibleNodes = [
-      ...filteredNodes.filter(n => n.kind === 'pod' || connectedIds.has(n.id)),
-      ...extraNodes.filter(n => !filteredIds.has(n.id)),
-    ]
+
+    // Visible = anything reachable via filtered edges
+    // (external and node nodes appear only when they have a connection)
+    const visibleNodes = rawNodes.filter(n => connectedIds.has(n.id))
 
     setNodes(layoutNodes(visibleNodes))
     const nodeMap = Object.fromEntries(visibleNodes.map(n => [n.id, n]))
@@ -226,9 +236,10 @@ export function NetworkTopologyPage() {
   const matchCount = useMemo(() => {
     const podQ = podSearch.trim().toLowerCase()
     if (nsFilter === 'all' && !podQ) return null
-    return rawNodes.filter(n => n.kind === 'pod' &&
+    return rawNodes.filter(n =>
+      (n.kind === 'pod' || n.kind === 'service') &&
       (nsFilter === 'all' || n.namespace === nsFilter) &&
-      (!podQ || n.pod.toLowerCase().includes(podQ))
+      (!podQ || n.pod.toLowerCase().includes(podQ) || n.label.toLowerCase().includes(podQ))
     ).length
   }, [rawNodes, nsFilter, podSearch])
 
@@ -277,7 +288,7 @@ export function NetworkTopologyPage() {
         <div className="relative">
           <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Pod name..."
+            placeholder="Pod / Service name..."
             value={podSearch}
             onChange={e => setPodSearch(e.target.value)}
             className="h-8 w-44 pl-8 text-sm"
