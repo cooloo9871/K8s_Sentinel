@@ -81,7 +81,8 @@
 
 ### Dashboard — 總覽
 
-- Tracing Policy 數量（Protect 模式）、Security Events 統計（Critical / Warning）、Admission Events 統計、Global Protect Mode 狀態（即時更新，無輪詢延遲）
+- **Tetragon Agents**：各節點 agent 就緒狀態（ready / total）；未全數就緒時以紅色標示
+- Security Events 統計（Critical / Warning）、Admission Events 統計（即時更新）、Global Protect Mode 狀態
 - **Tracing Policy** 與 **Admission Policy** 清單快覽
 
 ### Settings — 設定
