@@ -96,10 +96,12 @@ function layoutNodes(apiNodes: TopologyNode[]): any[] {
   ]
 }
 
-function layoutEdges(apiEdges: TopologyEdge[]): Edge[] {
+function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyNode>): Edge[] {
   return apiEdges.map(e => {
-    const isOutgoing = e.source.includes('/') && e.target.startsWith('ext:')
-    const color = isOutgoing ? '#f59e0b' : '#6366f1' // amber=out, indigo=in
+    const targetKind = nodeMap[e.target]?.kind ?? 'external'
+    const color = targetKind === 'external' ? '#f59e0b'    // amber  — out of cluster
+                : targetKind === 'service'  ? '#22c55e'    // green  — to service
+                : '#6366f1'                                // indigo — pod to pod
     return {
       id: e.id,
       source: e.source,
@@ -178,7 +180,8 @@ export function NetworkTopologyPage() {
     const visibleNodes = filteredNodes.filter(n => n.kind === 'pod' || connectedIds.has(n.id))
 
     setNodes(layoutNodes(visibleNodes))
-    setEdges(layoutEdges(filteredEdges))
+    const nodeMap = Object.fromEntries(visibleNodes.map(n => [n.id, n]))
+    setEdges(layoutEdges(filteredEdges, nodeMap))
   }, [rawNodes, rawEdges, nsFilter, podSearch, setNodes, setEdges])
 
   const matchCount = useMemo(() => {
@@ -259,12 +262,16 @@ export function NetworkTopologyPage() {
             External
           </span>
           <span className="flex items-center gap-1">
-            <svg width="24" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="18,1 24,4 18,7" fill="#f59e0b" /></svg>
-            Outbound
+            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#6366f1" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#6366f1" /></svg>
+            → Pod
           </span>
           <span className="flex items-center gap-1">
-            <svg width="24" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#6366f1" strokeWidth="1.5" /><polygon points="18,1 24,4 18,7" fill="#6366f1" /></svg>
-            Inbound
+            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#22c55e" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#22c55e" /></svg>
+            → Service
+          </span>
+          <span className="flex items-center gap-1">
+            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#f59e0b" /></svg>
+            → External
           </span>
         </div>
       </div>
