@@ -40,20 +40,11 @@ export function useSecurityEvents() {
   return useContext(SecurityEventsContext)
 }
 
-function capBySeverity(evts: DisplayEvent[]): DisplayEvent[] {
-  let warn = 0, crit = 0
-  return evts.filter(e => {
-    if (e.severity === 'critical' && crit < 300) { crit++; return true }
-    if (e.severity === 'warning'  && warn < 500) { warn++; return true }
-    return false
-  })
-}
-
 function applyEvent(evt: DisplayEvent, prev: DisplayEvent[]): DisplayEvent[] {
   if (prev.some(x => x.id === evt.id)) {
     return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
   }
-  return capBySeverity([evt, ...prev])
+  return [evt, ...prev]
 }
 
 export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {

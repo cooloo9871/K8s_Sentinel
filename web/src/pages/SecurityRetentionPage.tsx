@@ -10,11 +10,13 @@ import {
 } from '../api/client'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
+import { useSecurityEvents } from '../layout/SecurityEventsProvider'
 
 export function SecurityRetentionPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
+  const { reconnect } = useSecurityEvents()
 
   const [security, setSecurity] = useState<SecurityRetention>({
     maxWarnings: 500,
@@ -35,6 +37,7 @@ export function SecurityRetentionPage() {
     try {
       const updated = await securityRetentionApi.set(security)
       setSecurity(updated)
+      reconnect()
       toast.success('Security Events retention updated.')
     } catch {
       toast.error('Failed to update Security Events retention.')
