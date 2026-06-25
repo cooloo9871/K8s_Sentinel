@@ -70,7 +70,14 @@ type eventFile struct {
 	Events []Event `json:"events"`
 }
 
-const maxEvents = 500
+// RetentionConfig holds configurable retention for admission events.
+type RetentionConfig struct {
+	MaxEvents int `json:"maxEvents"`
+}
+
+func DefaultRetentionConfig() RetentionConfig {
+	return RetentionConfig{MaxEvents: 500}
+}
 
 // Store holds VAP violation events in a ring buffer with file persistence.
 type Store struct {
@@ -79,17 +86,41 @@ type Store struct {
 	seen   map[string]struct{}    // deduplicate by event ID
 	subs   map[chan Event]struct{} // per-subscriber channels for fanout
 	path   string                 // file path for persistence
+	cfg    RetentionConfig
 }
 
 func NewStore(path string) *Store {
+	cfg := DefaultRetentionConfig()
 	s := &Store{
-		events: make([]Event, 0, maxEvents),
+		events: make([]Event, 0, cfg.MaxEvents),
 		seen:   make(map[string]struct{}),
 		subs:   make(map[chan Event]struct{}),
 		path:   path,
+		cfg:    cfg,
 	}
 	s.load()
 	return s
+}
+
+// SetRetention updates the retention config and truncates immediately if needed.
+func (s *Store) SetRetention(cfg RetentionConfig) {
+	s.mu.Lock()
+	s.cfg = cfg
+	if len(s.events) > cfg.MaxEvents {
+		for _, old := range s.events[cfg.MaxEvents:] {
+			delete(s.seen, old.ID)
+		}
+		s.events = s.events[:cfg.MaxEvents]
+		s.flushLocked()
+	}
+	s.mu.Unlock()
+}
+
+// GetRetention returns the current retention config.
+func (s *Store) GetRetention() RetentionConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg
 }
 
 func (s *Store) load() {
@@ -107,11 +138,11 @@ func (s *Store) load() {
 			s.events = append(s.events, e)
 		}
 	}
-	if len(s.events) > maxEvents {
-		for _, old := range s.events[maxEvents:] {
+	if len(s.events) > s.cfg.MaxEvents {
+		for _, old := range s.events[s.cfg.MaxEvents:] {
 			delete(s.seen, old.ID)
 		}
-		s.events = s.events[:maxEvents]
+		s.events = s.events[:s.cfg.MaxEvents]
 	}
 	// Ensure newest-first order after loading
 	sortEventsDesc(s.events)
@@ -303,11 +334,11 @@ func (s *Store) addFromK8sEvent(e *corev1.Event) {
 	}
 
 	s.insertSorted(evt)
-	if len(s.events) > maxEvents {
-		for _, old := range s.events[maxEvents:] {
+	if len(s.events) > s.cfg.MaxEvents {
+		for _, old := range s.events[s.cfg.MaxEvents:] {
 			delete(s.seen, old.ID)
 		}
-		s.events = s.events[:maxEvents]
+		s.events = s.events[:s.cfg.MaxEvents]
 	}
 	s.flushLocked()
 	s.mu.Unlock()
@@ -344,11 +375,11 @@ func (s *Store) Add(e Event) {
 	}
 	s.seen[e.ID] = struct{}{}
 	s.insertSorted(e)
-	if len(s.events) > maxEvents {
-		for _, old := range s.events[maxEvents:] {
+	if len(s.events) > s.cfg.MaxEvents {
+		for _, old := range s.events[s.cfg.MaxEvents:] {
 			delete(s.seen, old.ID)
 		}
-		s.events = s.events[:maxEvents]
+		s.events = s.events[:s.cfg.MaxEvents]
 	}
 	s.flushLocked()
 	s.mu.Unlock()

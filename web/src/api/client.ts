@@ -265,6 +265,17 @@ export const securityRetentionApi = {
     api.put('/security-events/retention', cfg).then((r) => r.data),
 }
 
+export interface AdmissionRetention {
+  maxEvents: number
+}
+
+export const admissionRetentionApi = {
+  get: (): Promise<AdmissionRetention> =>
+    api.get('/admission-events/retention').then((r) => r.data),
+  set: (cfg: AdmissionRetention): Promise<AdmissionRetention> =>
+    api.put('/admission-events/retention', cfg).then((r) => r.data),
+}
+
 export const templateApi = {
   list: (): Promise<{ templates: CustomTemplatePayload[] }> =>
     api.get('/templates').then((r) => r.data),

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/cooloo9871/sentinel/internal/admission"
 	"github.com/cooloo9871/sentinel/internal/security"
 )
 
@@ -30,6 +31,28 @@ func setSecurityRetention(store *security.Store) http.HandlerFunc {
 		}
 		if cfg.TTLDays < 1 || cfg.TTLDays > 90 {
 			http.Error(w, "ttlDays must be 1–90", http.StatusBadRequest)
+			return
+		}
+		store.SetRetention(cfg)
+		writeJSON(w, http.StatusOK, store.GetRetention())
+	}
+}
+
+func getAdmissionRetention(store *admission.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.GetRetention())
+	}
+}
+
+func setAdmissionRetention(store *admission.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cfg admission.RetentionConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if cfg.MaxEvents < 1 || cfg.MaxEvents > 5000 {
+			http.Error(w, "maxEvents must be 1–5000", http.StatusBadRequest)
 			return
 		}
 		store.SetRetention(cfg)
