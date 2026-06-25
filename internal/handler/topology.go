@@ -68,8 +68,17 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			if e.Pod != "" {
 				srcID = e.Namespace + "/" + e.Pod
 				if _, ok := nodeSet[srcID]; !ok {
+					// NetSrc is "ip:port"; strip the port before ipMap lookup
+					srcAddrRaw := e.NetSrc
+					if strings.HasPrefix(srcAddrRaw, "[") {
+						if end := strings.Index(srcAddrRaw, "]"); end != -1 {
+							srcAddrRaw = strings.TrimPrefix(srcAddrRaw[1:end], "::ffff:")
+						}
+					} else if idx := strings.LastIndex(srcAddrRaw, ":"); idx != -1 {
+						srcAddrRaw = strings.TrimPrefix(srcAddrRaw[:idx], "::ffff:")
+					}
 					srcIP := ""
-					if info, ok2 := ipMap[e.NetSrc]; ok2 {
+					if info, ok2 := ipMap[srcAddrRaw]; ok2 {
 						srcIP = info.IP
 					}
 					nodeSet[srcID] = TopologyNode{
@@ -172,7 +181,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				suffix = ":blocked"
 			}
 			edges = append(edges, TopologyEdge{
-				ID:      k.src + "->" + k.dst + ":" + k.port + suffix,
+				ID:      k.src + "->" + k.dst + ":" + k.destIP + ":" + k.port + suffix,
 				Source:  k.src,
 				Target:  k.dst,
 				DestIP:  k.destIP,

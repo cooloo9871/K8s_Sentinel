@@ -72,7 +72,6 @@ function ServiceNode({ data }: { data: TopologyNode }) {
 function NodeHostNode({ data }: { data: TopologyNode }) {
   return (
     <div className="rounded-lg border border-slate-500/40 bg-slate-500/5 px-3 py-2 shadow-sm min-w-[120px] text-center">
-      <Handle type="target" position={Position.Left} className="!bg-slate-500" />
       <div className="text-[10px] text-slate-500 mb-0.5">Node</div>
       <div className="text-xs font-medium truncate max-w-[140px]" title={data.label}>{data.label}</div>
       <Handle type="source" position={Position.Right} className="!bg-slate-500" />
@@ -182,7 +181,7 @@ export function NetworkTopologyPage() {
 
   // Namespaces available for filter
   const namespaces = useMemo(() =>
-    [...new Set(rawNodes.filter(n => n.kind === 'pod').map(n => n.namespace).filter(Boolean))].sort()
+    [...new Set(rawNodes.filter(n => n.kind === 'pod' || n.kind === 'service').map(n => n.namespace).filter(Boolean))].sort()
   , [rawNodes])
 
   // Apply search filters and re-layout
@@ -190,9 +189,11 @@ export function NetworkTopologyPage() {
     const podQ = podSearch.trim().toLowerCase()
 
     // "Primary" nodes: pods/services/nodes matching the filter criteria.
-    // external and node kinds are never seeds — they're pulled in by connections.
+    // external kind is never a seed — pulled in by connections.
+    // node kind is always primary (host processes aren't namespaced).
     const isPrimary = (n: TopologyNode): boolean => {
-      if (n.kind === 'external' || n.kind === 'node') return false
+      if (n.kind === 'external') return false
+      if (n.kind === 'node') return true
       if (nsFilter !== 'all' && n.namespace !== nsFilter) return false
       if (podQ) {
         // Search both pod name and service label
@@ -296,7 +297,7 @@ export function NetworkTopologyPage() {
         </div>
         {matchCount !== null && (
           <span className="text-xs text-muted-foreground">
-            {matchCount} pod{matchCount !== 1 ? 's' : ''} matched
+            {matchCount} match{matchCount !== 1 ? 'es' : ''}
           </span>
         )}
         {(nsFilter !== 'all' || podSearch) && (
@@ -456,7 +457,7 @@ export function NetworkTopologyPage() {
                     )}
                     <div className="pt-1 text-[11px] text-muted-foreground">
                       {(() => {
-                        const n = edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length
+                        const n = rawEdges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length
                         return `${n} connection${n !== 1 ? 's' : ''}`
                       })()}
                     </div>
