@@ -181,12 +181,23 @@ export function NetworkTopologyPage() {
 
     const filteredIds = new Set(filteredNodes.map(n => n.id))
     const filteredEdges = rawEdges.filter(e =>
-      filteredIds.has(e.source) && filteredIds.has(e.target)
+      filteredIds.has(e.source) &&
+      // Blocked edges: show as long as source is visible, even if target is filtered out
+      (filteredIds.has(e.target) || e.blocked)
     )
 
-    // Remove external nodes that have no connections after pod filter
+    // Collect all target nodes needed by blocked edges that aren't in filteredNodes
+    const extraNodeIds = new Set(
+      filteredEdges.filter(e => e.blocked && !filteredIds.has(e.target)).map(e => e.target)
+    )
+    const extraNodes = rawNodes.filter(n => extraNodeIds.has(n.id))
+
+    // Remove external/service nodes that have no connections after pod filter
     const connectedIds = new Set(filteredEdges.flatMap(e => [e.source, e.target]))
-    const visibleNodes = filteredNodes.filter(n => n.kind === 'pod' || connectedIds.has(n.id))
+    const visibleNodes = [
+      ...filteredNodes.filter(n => n.kind === 'pod' || connectedIds.has(n.id)),
+      ...extraNodes.filter(n => !filteredIds.has(n.id)),
+    ]
 
     setNodes(layoutNodes(visibleNodes))
     const nodeMap = Object.fromEntries(visibleNodes.map(n => [n.id, n]))
@@ -274,15 +285,15 @@ export function NetworkTopologyPage() {
           </span>
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#6366f1" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#6366f1" /></svg>
-            → Pod
+            Pod
           </span>
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#22c55e" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#22c55e" /></svg>
-            → Service
+            Service
           </span>
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#f59e0b" /></svg>
-            → External
+            External
           </span>
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 3" /><polygon points="22,1 28,4 22,7" fill="#ef4444" /></svg>
