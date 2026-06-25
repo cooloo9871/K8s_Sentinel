@@ -184,10 +184,6 @@ export const admissionApi = {
     api.get('/admission-events').then((r) => r.data ?? []),
 }
 
-export const securityEventsApi = {
-  list: (): Promise<import('../layout/SecurityEventsProvider').DisplayEvent[]> =>
-    api.get('/security-events').then((r) => r.data ?? []),
-}
 
 export interface AdmissionRule {
   id: string

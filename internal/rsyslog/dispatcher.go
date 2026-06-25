@@ -33,35 +33,25 @@ func NewDispatcher(store *Store, k8s *k8s.Store, admStore *admission.Store) *Dis
 
 func (d *Dispatcher) Run(ctx context.Context) {
 	go d.runAdmission(ctx)
+	go d.runTetragon(ctx)
+}
+
+func (d *Dispatcher) runTetragon(ctx context.Context) {
+	ch, unsub := d.k8s.SubscribeTetragon()
+	defer unsub()
 	for {
-		if ctx.Err() != nil {
-			return
-		}
-		d.runOnce(ctx)
-		if ctx.Err() != nil {
-			return
-		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(10 * time.Second):
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			if evt.Type != "kprobe" || evt.PolicyName == "" {
+				continue
+			}
+			d.dispatch(evt)
 		}
-	}
-}
-
-func (d *Dispatcher) runOnce(ctx context.Context) {
-	events := make(chan k8s.TetragonEvent, 256)
-	go func() {
-		defer close(events)
-		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
-			log.Printf("rsyslog-dispatcher: stream error: %v", err)
-		}
-	}()
-	for evt := range events {
-		if evt.Type != "kprobe" || evt.PolicyName == "" {
-			continue
-		}
-		d.dispatch(evt)
 	}
 }
 

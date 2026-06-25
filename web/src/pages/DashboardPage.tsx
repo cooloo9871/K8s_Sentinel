@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   IconShieldCheck,
@@ -64,9 +64,6 @@ function RelativeTime({ iso }: { iso: string }) {
   return <span title={d.toLocaleString()}>{label}</span>
 }
 
-// Module-level cache survives navigation unmounts so spinner is skipped on revisit
-const _dashCache = { loaded: false }
-
 export function DashboardPage() {
   const navigate = useNavigate()
   const toast = useToast()
@@ -78,25 +75,29 @@ export function DashboardPage() {
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
   const [admissionEvents, setAdmissionEvents] = useState<AdmissionEvent[]>([])
   const [mode, setMode] = useState<Mode>('Monitoring')
-  const [loading, setLoading] = useState(!_dashCache.loaded)
+  // useRef-based cache: survives navigation, resets on logout (component tree remount)
+  const hasLoaded = useRef(false)
+  const [loading, setLoading] = useState(!hasLoaded.current)
 
   const load = (showSpinner = false) => {
     if (showSpinner) setLoading(true)
-    Promise.all([policyApi.list(), modeApi.get()])
-      .then(([p, m]) => { setPolicies(p); setMode(m); _dashCache.loaded = true })
+    // All data loaded together for consistent freshness
+    Promise.all([policyApi.list(), modeApi.get(), admissionApi.list()])
+      .then(([p, m, adm]) => {
+        setPolicies(p); setMode(m as Mode); setAdmissionEvents(adm)
+        hasLoaded.current = true
+      })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
-    admissionApi.list().then(setAdmissionEvents).catch(() => {})
   }
 
   useEffect(() => {
-    load(!_dashCache.loaded)
-    const timer = setInterval(() => {
-      admissionApi.list().then(setAdmissionEvents).catch(() => {})
-    }, 30_000)
+    load(!hasLoaded.current)
+    // Refresh all dashboard data on the same 30s cadence for consistency
+    const timer = setInterval(() => load(false), 30_000)
     return () => clearInterval(timer)
   }, [])
 

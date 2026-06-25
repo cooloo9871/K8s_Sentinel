@@ -257,29 +257,19 @@ func (s *Store) broadcast(e Event) {
 	}
 }
 
-// Run streams Tetragon events into the store. Reconnects automatically.
+// Run consumes Tetragon events from the shared broadcast.
 func (s *Store) Run(ctx context.Context, k8sStore *k8s.Store) {
+	ch, unsub := k8sStore.SubscribeTetragon()
+	defer unsub()
 	for {
-		if ctx.Err() != nil {
-			return
-		}
-		events := make(chan k8s.TetragonEvent, 256)
-		go func() {
-			defer close(events)
-			if err := k8sStore.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
-				log.Printf("security-store: stream error: %v", err)
-			}
-		}()
-		for evt := range events {
-			s.Add(evt)
-		}
-		if ctx.Err() != nil {
-			return
-		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(10 * time.Second):
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			s.Add(evt)
 		}
 	}
 }

@@ -31,24 +31,24 @@ type TopologyResponse struct {
 	Nodes            []TopologyNode `json:"nodes"`
 	Edges            []TopologyEdge `json:"edges"`
 	HasNetworkEvents bool           `json:"hasNetworkEvents"`
+	PartialResolution bool          `json:"partialResolution"` // true when IP→name lookup failed
 }
 
 func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		events := store.List()
 
-		// Resolve cluster IPs to pod/service names
+		// Resolve cluster IPs using TTL-cached lookup
 		ipMap := map[string]k8s.IPInfo{}
-		ipMapPartial := false
+		partialResolution := false
 		if k8sStore != nil {
-			m, err := k8sStore.ListClusterIPs(r.Context())
+			m, err := k8sStore.CachedClusterIPs(r.Context())
 			if err != nil {
-				ipMapPartial = true
+				partialResolution = true
 			} else {
 				ipMap = m
 			}
 		}
-		_ = ipMapPartial // surface in future if needed
 
 		type edgeKey struct{ src, dst, destIP, port string; blocked bool }
 		edgeCounts := make(map[edgeKey]int)
@@ -192,9 +192,10 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		}
 
 		writeJSON(w, http.StatusOK, TopologyResponse{
-			Nodes:            nodes,
-			Edges:            edges,
-			HasNetworkEvents: len(edges) > 0,
+			Nodes:             nodes,
+			Edges:             edges,
+			HasNetworkEvents:  len(edges) > 0,
+			PartialResolution: partialResolution,
 		})
 	}
 }

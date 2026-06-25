@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import type { DisplayEvent, Severity } from '../layout/SecurityEventsProvider'
+import { useSecurityEvents, type DisplayEvent, type Severity } from '../layout/SecurityEventsProvider'
 import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
 
@@ -116,68 +116,45 @@ function DetailRow({ e }: { e: DisplayEvent }) {
 }
 
 export function SecurityEventsPage() {
-  const [events, setEvents] = useState<DisplayEvent[]>([])
-  const [connected, setConnected] = useState(false)
-  const [error, setError] = useState('')
+  // Use the shared SSE provider — single connection for all consumers
+  const { events: allEvents, connected, reconnect } = useSecurityEvents()
+
+  // Pause/Resume: buffer incoming events locally while paused
   const [paused, setPaused] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
-  const esRef = useRef<EventSource | null>(null)
   const pausedRef = useRef(false)
   const pendingRef = useRef<DisplayEvent[]>([])
+  const prevLengthRef = useRef(allEvents.length)
+  const [displayEvents, setDisplayEvents] = useState<DisplayEvent[]>([])
+  const error = ''
 
-  const capBySeverity = (evts: DisplayEvent[]): DisplayEvent[] => {
-    let warn = 0, crit = 0
-    return evts.filter(e => {
-      if (e.severity === 'critical' && crit < 300) { crit++; return true }
-      if (e.severity === 'warning'  && warn < 500) { warn++; return true }
-      return false
-    })
-  }
-
-  const applyEvent = (evt: DisplayEvent, prev: DisplayEvent[]): DisplayEvent[] => {
-    if (prev.some(x => x.id === evt.id)) {
-      return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
+  useEffect(() => {
+    if (paused) {
+      // Accumulate new events as pending
+      if (allEvents.length !== prevLengthRef.current) {
+        const newOnes = allEvents.filter(e => !displayEvents.some(d => d.id === e.id))
+        pendingRef.current = [...newOnes, ...pendingRef.current]
+        setPendingCount(pendingRef.current.length)
+        prevLengthRef.current = allEvents.length
+      }
+    } else {
+      setDisplayEvents(allEvents)
+      prevLengthRef.current = allEvents.length
     }
-    return capBySeverity([evt, ...prev])
-  }
+  }, [allEvents, paused])
 
-  const reconnect = () => {
-    esRef.current?.close()
-    setError('')
-    const es = new EventSource('/api/security-events/stream')
-    esRef.current = es
-    es.onopen = () => setConnected(true)
-    es.onmessage = (e) => {
-      try {
-        const evt: DisplayEvent = JSON.parse(e.data)
-        if (pausedRef.current) {
-          pendingRef.current = applyEvent(evt, pendingRef.current)
-          setPendingCount(pendingRef.current.length)
-        } else {
-          setEvents(prev => applyEvent(evt, prev))
-        }
-      } catch { /* ignore */ }
-    }
-    es.addEventListener('stream-error', (e: MessageEvent) => { setError(e.data); setConnected(false); es.close() })
-    es.onerror = () => setConnected(false)
-  }
+  const events = paused ? displayEvents : allEvents
 
   const togglePause = () => {
     const nowPaused = !pausedRef.current
     pausedRef.current = nowPaused
     setPaused(nowPaused)
-    if (!nowPaused && pendingRef.current.length > 0) {
-      const pending = pendingRef.current
+    if (!nowPaused) {
       pendingRef.current = []
       setPendingCount(0)
-      setEvents(prev => pending.reduce((acc, e) => applyEvent(e, acc), prev))
+      setDisplayEvents(allEvents)
     }
   }
-
-  useEffect(() => {
-    reconnect()
-    return () => esRef.current?.close()
-  }, [])
   const [filter, setFilter] = useState<FilterType>('all')
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')

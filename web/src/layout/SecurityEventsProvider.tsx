@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 export type Severity = 'warning' | 'critical'
 
@@ -26,33 +26,67 @@ export interface DisplayEvent {
 
 interface SecurityEventsContextValue {
   events: DisplayEvent[]
+  connected: boolean
+  reconnect: () => void
 }
 
-const SecurityEventsContext = createContext<SecurityEventsContextValue>({ events: [] })
+const SecurityEventsContext = createContext<SecurityEventsContextValue>({
+  events: [],
+  connected: false,
+  reconnect: () => {},
+})
 
 export function useSecurityEvents() {
   return useContext(SecurityEventsContext)
 }
 
+function capBySeverity(evts: DisplayEvent[]): DisplayEvent[] {
+  let warn = 0, crit = 0
+  return evts.filter(e => {
+    if (e.severity === 'critical' && crit < 300) { crit++; return true }
+    if (e.severity === 'warning'  && warn < 500) { warn++; return true }
+    return false
+  })
+}
+
+function applyEvent(evt: DisplayEvent, prev: DisplayEvent[]): DisplayEvent[] {
+  if (prev.some(x => x.id === evt.id)) {
+    return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
+  }
+  return capBySeverity([evt, ...prev])
+}
+
 export function SecurityEventsProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<DisplayEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const esRef = useRef<EventSource | null>(null)
 
-  const fetchEvents = useCallback(() => {
-    fetch('/api/security-events', { credentials: 'include' })
-      .then(r => r.json())
-      .then((data: DisplayEvent[]) => setEvents(data ?? []))
-      .catch(() => {})
+  const connect = useCallback(() => {
+    esRef.current?.close()
+    setConnected(false)
+
+    const es = new EventSource('/api/security-events/stream')
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    es.onmessage = (e) => {
+      try {
+        const evt: DisplayEvent = JSON.parse(e.data)
+        setEvents(prev => applyEvent(evt, prev))
+      } catch { /* ignore */ }
+    }
+
+    es.onerror = () => setConnected(false)
   }, [])
 
   useEffect(() => {
-    fetchEvents()
-    // Refresh every 30s to pick up new events without SSE overhead in global context
-    const timer = setInterval(fetchEvents, 30_000)
-    return () => clearInterval(timer)
-  }, [fetchEvents])
+    connect()
+    return () => esRef.current?.close()
+  }, [connect])
 
   return (
-    <SecurityEventsContext.Provider value={{ events }}>
+    <SecurityEventsContext.Provider value={{ events, connected, reconnect: connect }}>
       {children}
     </SecurityEventsContext.Provider>
   )

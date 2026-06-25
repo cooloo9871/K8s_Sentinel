@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatTWTime } from '../utils/time'
 import {
@@ -27,15 +27,14 @@ const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
   Mixed: 'outline',
 }
 
-const _policyCache = { loaded: false }
-
 export function PolicyListPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
+  const hasLoaded = useRef(false)
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
-  const [loading, setLoading] = useState(!_policyCache.loaded)
+  const [loading, setLoading] = useState(!hasLoaded.current)
   const [search, setSearch] = useState('')
   const [scopeFilter, setScopeFilter] = useState('all')
   const [nsFilter, setNsFilter] = useState('all')
@@ -55,7 +54,7 @@ export function PolicyListPage() {
     if (showSpinner) setLoading(true)
     try {
       setPolicies(await policyApi.list())
-      _policyCache.loaded = true
+      hasLoaded.current = true
     } catch {
       toast.error('Failed to load policies')
     } finally {
@@ -64,7 +63,7 @@ export function PolicyListPage() {
   }
 
   useEffect(() => {
-    fetchPolicies(!_policyCache.loaded)
+    fetchPolicies(!hasLoaded.current)
     modeApi.get().then(setGlobalMode).catch(() => {})
   }, [])
 

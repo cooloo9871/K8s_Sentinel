@@ -138,22 +138,31 @@ func (d *Dispatcher) purgeCooldowns(rules []AlertRule) {
 	}
 }
 
-// Run streams Tetragon events and dispatches alerts. Reconnects automatically.
+// Run consumes Tetragon events from the shared broadcast and dispatches alerts.
 func (d *Dispatcher) Run(ctx context.Context) {
 	go d.runAdmission(ctx)
+	go d.runTetragon(ctx)
+}
+
+func (d *Dispatcher) runTetragon(ctx context.Context) {
+	ch, unsub := d.k8s.SubscribeTetragon()
+	defer unsub()
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
 	for {
-		if ctx.Err() != nil {
-			return
-		}
-		d.runOnce(ctx)
-		if ctx.Err() != nil {
-			return
-		}
-		d.purgeCooldowns(d.store.EnabledRules())
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(10 * time.Second):
+		case <-ticker.C:
+			d.purgeCooldowns(d.store.EnabledRules())
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			if evt.Type != "kprobe" || evt.PolicyName == "" {
+				continue
+			}
+			d.dispatch(evt)
 		}
 	}
 }
@@ -278,21 +287,6 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity
 	}
 }
 
-func (d *Dispatcher) runOnce(ctx context.Context) {
-	events := make(chan k8s.TetragonEvent, 256)
-	go func() {
-		defer close(events)
-		if err := d.k8s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
-			log.Printf("alert-dispatcher: stream error: %v", err)
-		}
-	}()
-	for evt := range events {
-		if evt.Type != "kprobe" || evt.PolicyName == "" {
-			continue
-		}
-		d.dispatch(evt)
-	}
-}
 
 func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
 	severity := "warning"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
   IconShieldLock, IconServer,
@@ -653,7 +653,6 @@ function tryParseBuilderBinding(rawYaml: string): {
 
 // Page -------------------------------------------------------------------------
 
-const _vapCache = { loaded: false }
 
 export function VAPPage() {
   const { user } = useAuth()
@@ -662,7 +661,8 @@ export function VAPPage() {
 
   const [policies, setPolicies] = useState<VAPRecord[]>([])
   const [bindings, setBindings] = useState<VAPBindingRecord[]>([])
-  const [loading, setLoading] = useState(!_vapCache.loaded)
+  const hasLoaded = useRef(false)
+  const [loading, setLoading] = useState(!hasLoaded.current)
   const [editor, setEditor] = useState<EditTarget | null>(null)
   const [editorYaml, setEditorYaml] = useState('')
   const [editorValid, setEditorValid] = useState(true)
@@ -732,13 +732,13 @@ export function VAPPage() {
       const [p, b] = await Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       setPolicies(p)
       setBindings(b)
-      _vapCache.loaded = true
+      hasLoaded.current = true
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }, [])
 
   // Show spinner only on first load; subsequent navigations silently refresh in background
-  useEffect(() => { load(!_vapCache.loaded) }, [load])
+  useEffect(() => { load(!hasLoaded.current) }, [load])
 
   const openNew = (kind: 'policy' | 'binding') => {
     setEditorYaml('')

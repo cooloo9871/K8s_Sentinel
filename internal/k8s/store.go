@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,20 +44,122 @@ type Store struct {
 	Discovery  *DiscoveryProfileStore
 	Templates  *TemplateStore
 	containers *containerResolver
+
+	// Tetragon fan-out broadcast — single stream shared by all consumers
+	tetragonMu   sync.RWMutex
+	tetragonSubs map[chan TetragonEvent]struct{}
+
+	// ListClusterIPs cache
+	ipCacheMu      sync.RWMutex
+	ipCacheData    map[string]IPInfo
+	ipCacheExpiry  time.Time
+	ipCacheTTL     time.Duration
 }
 
 // NewStore creates a Store wrapping the given clients.
 func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
 	templatesFile := "/data/sentinel/templates.json"
 	return &Store{
-		client:     client,
-		typed:      typed,
-		restConfig: cfg,
-		globalMode: "Monitoring",
-		Discovery:  NewDiscoveryProfileStore(),
-		Templates:  NewTemplateStore(templatesFile),
-		containers: newContainerResolver(),
+		client:       client,
+		typed:        typed,
+		restConfig:   cfg,
+		globalMode:   "Monitoring",
+		Discovery:    NewDiscoveryProfileStore(),
+		Templates:    NewTemplateStore(templatesFile),
+		containers:   newContainerResolver(),
+		tetragonSubs: make(map[chan TetragonEvent]struct{}),
+		ipCacheTTL:   30 * time.Second,
 	}
+}
+
+// ── Tetragon fan-out ────────────────────────────────────────────────────────
+
+// SubscribeTetragon returns a channel that receives Tetragon events and an
+// unsubscribe function. All subscribers share a single stream to Tetragon.
+func (s *Store) SubscribeTetragon() (<-chan TetragonEvent, func()) {
+	ch := make(chan TetragonEvent, 256)
+	s.tetragonMu.Lock()
+	s.tetragonSubs[ch] = struct{}{}
+	s.tetragonMu.Unlock()
+	return ch, func() {
+		s.tetragonMu.Lock()
+		delete(s.tetragonSubs, ch)
+		s.tetragonMu.Unlock()
+		close(ch)
+	}
+}
+
+func (s *Store) broadcastTetragon(e TetragonEvent) {
+	s.tetragonMu.RLock()
+	defer s.tetragonMu.RUnlock()
+	for ch := range s.tetragonSubs {
+		select {
+		case ch <- e:
+		default:
+		}
+	}
+}
+
+// StartTetragonBroadcast starts a single Tetragon event stream and fans out
+// to all subscribers. Reconnects automatically on error.
+func (s *Store) StartTetragonBroadcast(ctx context.Context) {
+	go func() {
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			events := make(chan TetragonEvent, 512)
+			go func() {
+				defer close(events)
+				if err := s.StreamTetragonEvents(ctx, events); err != nil && ctx.Err() == nil {
+					log.Printf("tetragon-broadcast: stream error: %v", err)
+				}
+			}()
+			for evt := range events {
+				s.broadcastTetragon(evt)
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(10 * time.Second):
+			}
+		}
+	}()
+}
+
+// ── ListClusterIPs with TTL cache ──────────────────────────────────────────
+
+// CachedClusterIPs returns IP→IPInfo, refreshing at most every ipCacheTTL.
+func (s *Store) CachedClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
+	s.ipCacheMu.RLock()
+	if s.ipCacheData != nil && time.Now().Before(s.ipCacheExpiry) {
+		data := s.ipCacheData
+		s.ipCacheMu.RUnlock()
+		return data, nil
+	}
+	s.ipCacheMu.RUnlock()
+
+	// Cache miss — refresh
+	fresh, err := s.ListClusterIPs(ctx)
+	if err != nil {
+		// Return stale data if available
+		s.ipCacheMu.RLock()
+		stale := s.ipCacheData
+		s.ipCacheMu.RUnlock()
+		if stale != nil {
+			return stale, nil
+		}
+		return nil, err
+	}
+
+	s.ipCacheMu.Lock()
+	s.ipCacheData = fresh
+	s.ipCacheExpiry = time.Now().Add(s.ipCacheTTL)
+	s.ipCacheMu.Unlock()
+	return fresh, nil
 }
 
 // List returns all cluster-wide and namespaced policies.

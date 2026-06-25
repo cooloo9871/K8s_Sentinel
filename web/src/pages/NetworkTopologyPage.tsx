@@ -40,6 +40,7 @@ interface TopologyResponse {
   nodes: TopologyNode[]
   edges: TopologyEdge[]
   hasNetworkEvents: boolean
+  partialResolution?: boolean
 }
 
 // ── Custom node: pod ───────────────────────────────────────────────────────
@@ -191,6 +192,7 @@ export function NetworkTopologyPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([])
   const reactFlowRef = useRef<{ fitView: () => void } | null>(null)
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
+  const [partialResolution, setPartialResolution] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<TopologyEdge | null>(null)
@@ -207,6 +209,7 @@ export function NetworkTopologyPage() {
       const res = await fetch('/api/network-topology', { credentials: 'include' })
       const data: TopologyResponse = await res.json()
       setHasNetworkEvents(data.hasNetworkEvents)
+      setPartialResolution(!!data.partialResolution)
       setRawNodes(data.nodes)
       setRawEdges(data.edges)
     } catch {
@@ -276,7 +279,10 @@ export function NetworkTopologyPage() {
     // (external and node nodes appear only when they have a connection)
     const visibleNodes = rawNodes.filter(n => connectedIds.has(n.id))
 
-    setNodes(layoutNodes(visibleNodes))
+    // Use dagre by default for proper edge routing; fall back to column layout if dagre fails
+    const baseNodes = layoutNodes(visibleNodes)
+    const laidOut = visibleNodes.length > 0 ? applyDagreLayout(baseNodes, filteredEdges) : baseNodes
+    setNodes(laidOut)
     const nodeMap = Object.fromEntries(visibleNodes.map(n => [n.id, n]))
     setEdges(layoutEdges(filteredEdges, nodeMap))
     // Clear selectedNode if it's no longer visible after filter change
@@ -407,6 +413,17 @@ export function NetworkTopologyPage() {
       </div>
 
       {/* No network events — guide user */}
+      {partialResolution && (
+        <Card className="mb-4 border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="flex items-center gap-3 p-3">
+            <IconAlertTriangle size={16} className="shrink-0 text-yellow-600" />
+            <p className="text-xs text-yellow-700">
+              IP name resolution is degraded — some cluster IPs could not be resolved to pod/service names and appear as External nodes. Check Sentinel RBAC permissions (requires <code className="font-mono">services list</code>).
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {!loading && hasNetworkEvents === false && (
         <Card className="mb-4 border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex items-start gap-3 p-4">
