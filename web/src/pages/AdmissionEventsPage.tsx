@@ -151,13 +151,13 @@ export function AdmissionEventsPage() {
             <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
               {events.length === 0 ? (
                 <>
-                  <p>No admission violation events.</p>
+                  <p>No admission violation events yet.</p>
                   <p className="text-xs max-w-lg">
-                    Only controller-managed resource denials (e.g. Pods) appear without audit log.
-                    For complete coverage including direct <code className="font-mono">kubectl apply</code> denials,
-                    configure the kube-apiserver audit webhook to POST to{' '}
-                    <code className="font-mono">/api/admission-events/webhook</code>.
+                    To see violations here, configure the Kubernetes audit webhook to send events to Sentinel:
                   </p>
+                  <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                    POST /api/admission-events/webhook
+                  </code>
                 </>
               ) : (
                 <p>No events match the current filters.</p>
