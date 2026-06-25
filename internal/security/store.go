@@ -57,7 +57,8 @@ func sameEvent(a Event, b k8s.TetragonEvent) bool {
 }
 
 type eventFile struct {
-	Events []Event `json:"events"`
+	Events    []Event        `json:"events"`
+	Retention *RetentionConfig `json:"retention,omitempty"`
 }
 
 // RetentionConfig holds configurable retention limits for security events.
@@ -118,6 +119,9 @@ func (s *Store) load() {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return
 	}
+	if f.Retention != nil {
+		s.cfg = *f.Retention
+	}
 	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
 	for _, e := range f.Events {
 		t, err := parseTime(e.Time)
@@ -158,8 +162,9 @@ func (s *Store) flush() {
 	gen := s.flushGen
 	snapshot := make([]Event, len(s.evts))
 	copy(snapshot, s.evts)
+	cfgSnap := s.cfg
 	go func() {
-		data, err := json.Marshal(eventFile{Events: snapshot})
+		data, err := json.Marshal(eventFile{Events: snapshot, Retention: &cfgSnap})
 		if err != nil {
 			log.Printf("security-store: flush marshal: %v", err)
 			return

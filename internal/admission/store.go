@@ -67,7 +67,8 @@ func timeDiffSecs(t1, t2 string) float64 {
 }
 
 type eventFile struct {
-	Events []Event `json:"events"`
+	Events    []Event          `json:"events"`
+	Retention *RetentionConfig `json:"retention,omitempty"`
 }
 
 // RetentionConfig holds configurable retention for admission events.
@@ -131,6 +132,9 @@ func (s *Store) load() {
 	var f eventFile
 	if err := json.Unmarshal(data, &f); err != nil {
 		return
+	}
+	if f.Retention != nil {
+		s.cfg = *f.Retention
 	}
 	for _, e := range f.Events {
 		if _, exists := s.seen[e.ID]; !exists {
@@ -196,9 +200,10 @@ func (s *Store) flushLocked() {
 	// Snapshot under lock (caller must hold s.mu)
 	snapshot := make([]Event, len(s.events))
 	copy(snapshot, s.events)
+	cfgSnap := s.cfg
 	// Disk write happens after caller releases the lock
 	go func() {
-		data, err := json.Marshal(eventFile{Events: snapshot})
+		data, err := json.Marshal(eventFile{Events: snapshot, Retention: &cfgSnap})
 		if err != nil {
 			log.Printf("admission-store: flush marshal error: %v", err)
 			return
