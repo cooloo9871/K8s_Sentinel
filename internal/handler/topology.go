@@ -36,7 +36,7 @@ type TopologyResponse struct {
 
 func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		events := store.List()
+		events := store.ListTopologyEvents()
 
 		// Resolve cluster IPs using TTL-cached lookup
 		ipMap := map[string]k8s.IPInfo{}
