@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap,
   type Edge, type NodeTypes, MarkerType,
   Handle, Position, useNodesState, useEdgesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import dagre from 'dagre'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch } from '@tabler/icons-react'
+import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid } from '@tabler/icons-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -145,12 +146,50 @@ function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyN
   })
 }
 
+// ── Dagre auto-layout ──────────────────────────────────────────────────────
+
+const NODE_WIDTH  = 160
+const NODE_HEIGHT = 60
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyDagreLayout(nodes: any[], edges: any[]): any[] {
+  const g = new dagre.graphlib.Graph()
+  g.setDefaultEdgeLabel(() => ({}))
+  g.setGraph({
+    rankdir: 'LR',   // left → right flow
+    nodesep: 50,     // vertical gap between nodes in the same rank
+    ranksep: 120,    // horizontal gap between ranks
+    marginx: 40,
+    marginy: 40,
+  })
+
+  nodes.forEach(n => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }))
+  edges.forEach(e => {
+    // dagre ignores duplicate edges; just register source→target
+    if (e.source !== e.target) g.setEdge(e.source, e.target)
+  })
+
+  dagre.layout(g)
+
+  return nodes.map(n => {
+    const pos = g.node(n.id)
+    return {
+      ...n,
+      position: {
+        x: pos.x - NODE_WIDTH  / 2,
+        y: pos.y - NODE_HEIGHT / 2,
+      },
+    }
+  })
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export function NetworkTopologyPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([])
+  const reactFlowRef = useRef<{ fitView: () => void } | null>(null)
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
@@ -266,6 +305,15 @@ export function NetworkTopologyPage() {
     setSelectedEdge(raw ?? null)
   }, [rawEdges])
 
+  const autoLayout = useCallback(() => {
+    setNodes(prev => {
+      const laid = applyDagreLayout(prev, edges)
+      return laid
+    })
+    // fitView after layout settles
+    setTimeout(() => reactFlowRef.current?.fitView(), 50)
+  }, [edges, setNodes])
+
   return (
     <>
       <div className="mb-4 flex items-start justify-between">
@@ -275,10 +323,16 @@ export function NetworkTopologyPage() {
             Pod network connections observed via Tetragon kprobe events
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <IconRefresh size={14} className="mr-1.5" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={autoLayout} disabled={nodes.length === 0}>
+            <IconLayoutGrid size={14} className="mr-1.5" />
+            Auto Layout
+          </Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <IconRefresh size={14} className="mr-1.5" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -392,6 +446,7 @@ export function NetworkTopologyPage() {
               onEdgesChange={onEdgesChange}
               onNodeClick={onNodeClick}
               onEdgeClick={onEdgeClick}
+              onInit={(instance: any) => { reactFlowRef.current = instance }}
               nodeTypes={nodeTypes}
               fitView
               fitViewOptions={{ padding: 0.2 }}
