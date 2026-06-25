@@ -13,7 +13,7 @@ type TopologyNode struct {
 	Label     string `json:"label"`
 	Pod       string `json:"pod"`
 	Namespace string `json:"namespace"`
-	Kind      string `json:"kind"` // "pod" | "service" | "external"
+	Kind      string `json:"kind"` // "pod" | "service" | "external" | "node"
 	IP        string `json:"ip,omitempty"`
 }
 
@@ -55,23 +55,41 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		nodeSet := make(map[string]TopologyNode)
 
 		for _, e := range events {
-			if e.NetDest == "" || e.Pod == "" {
+			if e.NetDest == "" {
+				continue
+			}
+			// Skip if neither pod nor node is identified
+			if e.Pod == "" && e.NodeName == "" {
 				continue
 			}
 
-			srcID := e.Namespace + "/" + e.Pod
-			if _, ok := nodeSet[srcID]; !ok {
-				srcIP := ""
-				if info, ok2 := ipMap[e.NetSrc]; ok2 {
-					srcIP = info.IP
+			// Determine source: prefer pod, fall back to node
+			var srcID string
+			if e.Pod != "" {
+				srcID = e.Namespace + "/" + e.Pod
+				if _, ok := nodeSet[srcID]; !ok {
+					srcIP := ""
+					if info, ok2 := ipMap[e.NetSrc]; ok2 {
+						srcIP = info.IP
+					}
+					nodeSet[srcID] = TopologyNode{
+						ID:        srcID,
+						Label:     e.Pod,
+						Pod:       e.Pod,
+						Namespace: e.Namespace,
+						Kind:      "pod",
+						IP:        srcIP,
+					}
 				}
-				nodeSet[srcID] = TopologyNode{
-					ID:        srcID,
-					Label:     e.Pod,
-					Pod:       e.Pod,
-					Namespace: e.Namespace,
-					Kind:      "pod",
-					IP:        srcIP,
+			} else {
+				// Node-level process (not in a pod)
+				srcID = "node/" + e.NodeName
+				if _, ok := nodeSet[srcID]; !ok {
+					nodeSet[srcID] = TopologyNode{
+						ID:    srcID,
+						Label: e.NodeName,
+						Kind:  "node",
+					}
 				}
 			}
 

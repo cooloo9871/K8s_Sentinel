@@ -21,7 +21,7 @@ interface TopologyNode {
   label: string
   pod: string
   namespace: string
-  kind: 'pod' | 'service' | 'external'
+  kind: 'pod' | 'service' | 'external' | 'node'
   ip?: string
 }
 
@@ -69,6 +69,17 @@ function ServiceNode({ data }: { data: TopologyNode }) {
 
 // ── Custom node: external IP ───────────────────────────────────────────────
 
+function NodeHostNode({ data }: { data: TopologyNode }) {
+  return (
+    <div className="rounded-lg border border-slate-500/40 bg-slate-500/5 px-3 py-2 shadow-sm min-w-[120px] text-center">
+      <Handle type="target" position={Position.Left} className="!bg-slate-500" />
+      <div className="text-[10px] text-slate-500 mb-0.5">Node</div>
+      <div className="text-xs font-medium truncate max-w-[140px]" title={data.label}>{data.label}</div>
+      <Handle type="source" position={Position.Right} className="!bg-slate-500" />
+    </div>
+  )
+}
+
 function ExternalNode({ data }: { data: TopologyNode }) {
   return (
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 shadow-sm min-w-[110px] text-center">
@@ -82,6 +93,7 @@ function ExternalNode({ data }: { data: TopologyNode }) {
 const nodeTypes: NodeTypes = {
   pod: PodNode as any,
   service: ServiceNode as any,
+  node: NodeHostNode as any,
   external: ExternalNode as any,
 }
 
@@ -90,10 +102,12 @@ const nodeTypes: NodeTypes = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function layoutNodes(apiNodes: TopologyNode[]): any[] {
   const pods = apiNodes.filter(n => n.kind === 'pod')
+  const hostNodes = apiNodes.filter(n => n.kind === 'node')
   const services = apiNodes.filter(n => n.kind === 'service')
   const externals = apiNodes.filter(n => n.kind === 'external')
   return [
     ...pods.map((n, i) => ({ id: n.id, type: 'pod', position: { x: 80, y: 80 + i * 100 }, data: n })),
+    ...hostNodes.map((n, i) => ({ id: n.id, type: 'node', position: { x: 80, y: 80 + (pods.length + i) * 100 }, data: n })),
     ...services.map((n, i) => ({ id: n.id, type: 'service', position: { x: 380, y: 80 + i * 100 }, data: n })),
     ...externals.map((n, i) => ({ id: n.id, type: 'external', position: { x: 680, y: 80 + i * 80 }, data: n })),
   ]
@@ -176,7 +190,7 @@ export function NetworkTopologyPage() {
     const podQ = podSearch.trim().toLowerCase()
 
     const filteredNodes = rawNodes.filter(n => {
-      if (n.kind === 'external') return true // always show external IPs
+      if (n.kind === 'external' || n.kind === 'node') return true // always show
       if (nsFilter !== 'all' && n.namespace !== nsFilter) return false
       if (podQ && !n.pod.toLowerCase().includes(podQ)) return false
       return true
@@ -286,6 +300,10 @@ export function NetworkTopologyPage() {
             Pod
           </span>
           <span className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded border border-slate-500/40 bg-slate-500/10 inline-block" />
+            Node
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded border border-green-500/40 bg-green-500/10 inline-block" />
             Service
           </span>
@@ -358,7 +376,7 @@ export function NetworkTopologyPage() {
             >
               <Background gap={16} size={1} />
               <Controls />
-              <MiniMap nodeColor={n => n.type === 'external' ? '#f59e0b' : n.type === 'service' ? '#22c55e' : '#6366f1'} />
+              <MiniMap nodeColor={n => n.type === 'external' ? '#f59e0b' : n.type === 'service' ? '#22c55e' : n.type === 'node' ? '#64748b' : '#6366f1'} />
             </ReactFlow>
           )}
         </div>
@@ -373,6 +391,7 @@ export function NetworkTopologyPage() {
                     {selectedEdge ? 'Connection Detail'
                       : selectedNode?.kind === 'service' ? 'Service Detail'
                       : selectedNode?.kind === 'external' ? 'External IP'
+                      : selectedNode?.kind === 'node' ? 'Node Detail'
                       : 'Pod Detail'}
                   </span>
                   <button
@@ -389,12 +408,18 @@ export function NetworkTopologyPage() {
                     <div>
                       <span className="text-muted-foreground">Type</span>
                       <div className="mt-0.5">
-                        <Badge variant={selectedNode.kind === 'external' ? 'secondary' : 'default'} className="text-[10px]">
-                          {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'service' ? 'Service' : 'Pod'}
+                        <Badge variant={selectedNode.kind === 'external' || selectedNode.kind === 'node' ? 'secondary' : 'default'} className="text-[10px]">
+                          {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'service' ? 'Service' : selectedNode.kind === 'node' ? 'Node' : 'Pod'}
                         </Badge>
                       </div>
                     </div>
-                    {(selectedNode.kind === 'pod' || selectedNode.kind === 'service') && (
+                    {selectedNode.kind === 'node' && (
+                    <div>
+                      <span className="text-muted-foreground">Node Name</span>
+                      <div className="mt-0.5 font-mono font-medium break-all">{selectedNode.label}</div>
+                    </div>
+                  )}
+                  {(selectedNode.kind === 'pod' || selectedNode.kind === 'service') && (
                       <>
                         <div>
                           <span className="text-muted-foreground">{selectedNode.kind === 'service' ? 'Service' : 'Pod'}</span>
