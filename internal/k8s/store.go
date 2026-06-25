@@ -269,6 +269,50 @@ func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// IPInfo holds the resolved identity for a cluster IP.
+type IPInfo struct {
+	IP        string
+	Name      string
+	Namespace string
+	Kind      string // "pod" | "service"
+}
+
+// ListClusterIPs returns a map of IP → IPInfo for all pods and services in the cluster.
+// Used by the network topology handler to resolve destination IPs to workload names.
+func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
+	result := make(map[string]IPInfo)
+
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, p := range pods.Items {
+			if p.Status.PodIP != "" {
+				result[p.Status.PodIP] = IPInfo{
+					IP:        p.Status.PodIP,
+					Name:      p.Name,
+					Namespace: p.Namespace,
+					Kind:      "pod",
+				}
+			}
+		}
+	}
+
+	svcs, err := s.typed.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, svc := range svcs.Items {
+			if svc.Spec.ClusterIP != "" && svc.Spec.ClusterIP != "None" {
+				result[svc.Spec.ClusterIP] = IPInfo{
+					IP:        svc.Spec.ClusterIP,
+					Name:      svc.Name,
+					Namespace: svc.Namespace,
+					Kind:      "service",
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // GetMode returns the explicitly set global enforcement mode.
 // It never auto-derives the mode from policy actions.
 func (s *Store) GetMode(ctx context.Context) (string, error) {

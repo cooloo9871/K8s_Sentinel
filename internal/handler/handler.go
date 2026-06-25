@@ -65,7 +65,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/admission-events/stream", streamAdmissionEvents(cfg.Admission))
 		r.Get("/api/security-events", listSecurityEvents(cfg.Security))
 		r.Get("/api/security-events/stream", streamSecurityEvents(cfg.Security))
-		r.Get("/api/network-topology", getNetworkTopology(cfg.Security))
+		r.Get("/api/network-topology", getNetworkTopology(cfg.Security, cfg.Store))
 		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
 		r.Get("/api/vap", listVAP(cfg.Store))
 		r.Get("/api/vap/{name}", getVAP(cfg.Store))

@@ -18,7 +18,7 @@ interface TopologyNode {
   label: string
   pod: string
   namespace: string
-  kind: 'pod' | 'external'
+  kind: 'pod' | 'service' | 'external'
 }
 
 interface TopologyEdge {
@@ -48,6 +48,19 @@ function PodNode({ data }: { data: TopologyNode }) {
   )
 }
 
+// ── Custom node: service ──────────────────────────────────────────────────
+
+function ServiceNode({ data }: { data: TopologyNode }) {
+  return (
+    <div className="rounded-lg border border-green-500/40 bg-green-500/5 px-3 py-2 shadow-sm min-w-[120px] text-center">
+      <Handle type="target" position={Position.Left} className="!bg-green-500" />
+      <div className="text-[10px] text-green-700 mb-0.5">{data.namespace} / svc</div>
+      <div className="text-xs font-medium truncate max-w-[140px]" title={data.label}>{data.label}</div>
+      <Handle type="source" position={Position.Right} className="!bg-green-500" />
+    </div>
+  )
+}
+
 // ── Custom node: external IP ───────────────────────────────────────────────
 
 function ExternalNode({ data }: { data: TopologyNode }) {
@@ -62,18 +75,21 @@ function ExternalNode({ data }: { data: TopologyNode }) {
 
 const nodeTypes: NodeTypes = {
   pod: PodNode as any,
+  service: ServiceNode as any,
   external: ExternalNode as any,
 }
 
-// ── Layout helper (simple force-like grid) ─────────────────────────────────
+// ── Layout helper ──────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function layoutNodes(apiNodes: TopologyNode[]): any[] {
   const pods = apiNodes.filter(n => n.kind === 'pod')
+  const services = apiNodes.filter(n => n.kind === 'service')
   const externals = apiNodes.filter(n => n.kind === 'external')
   return [
-    ...pods.map((n, i) => ({ id: n.id, type: 'pod', position: { x: 100, y: 80 + i * 100 }, data: n })),
-    ...externals.map((n, i) => ({ id: n.id, type: 'external', position: { x: 450, y: 80 + i * 80 }, data: n })),
+    ...pods.map((n, i) => ({ id: n.id, type: 'pod', position: { x: 80, y: 80 + i * 100 }, data: n })),
+    ...services.map((n, i) => ({ id: n.id, type: 'service', position: { x: 380, y: 80 + i * 100 }, data: n })),
+    ...externals.map((n, i) => ({ id: n.id, type: 'external', position: { x: 680, y: 80 + i * 80 }, data: n })),
   ]
 }
 
@@ -220,6 +236,18 @@ export function NetworkTopologyPage() {
           </Button>
         )}
         <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded border border-primary/40 bg-primary/10 inline-block" />
+            Pod
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded border border-green-500/40 bg-green-500/10 inline-block" />
+            Service
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded border border-amber-500/40 bg-amber-500/10 inline-block" />
+            External
+          </span>
           <span className="flex items-center gap-1">
             <svg width="24" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="18,1 24,4 18,7" fill="#f59e0b" /></svg>
             Outbound
@@ -239,10 +267,12 @@ export function NetworkTopologyPage() {
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-amber-700">No network connections recorded yet</p>
               <p className="text-xs text-amber-600">
-                Apply the <span className="font-semibold">Monitor All Network (Outside Cluster)</span> template
-                from Tracing Policy → Templates to start collecting TCP connection events.
-                Connections will appear here once events are captured.
+                Apply a network monitoring template from Tracing Policy → Templates:
               </p>
+              <ul className="text-xs text-amber-600 list-disc ml-4 mt-0.5 space-y-0.5">
+                <li><span className="font-semibold">Monitor Internal Network (Inside Cluster)</span> — pod-to-pod and pod-to-service connections</li>
+                <li><span className="font-semibold">Monitor All Network (Outside Cluster)</span> — connections leaving the cluster</li>
+              </ul>
             </div>
           </CardContent>
         </Card>
@@ -274,7 +304,7 @@ export function NetworkTopologyPage() {
             >
               <Background gap={16} size={1} />
               <Controls />
-              <MiniMap nodeColor={n => n.type === 'external' ? '#f59e0b' : '#6366f1'} />
+              <MiniMap nodeColor={n => n.type === 'external' ? '#f59e0b' : n.type === 'service' ? '#22c55e' : '#6366f1'} />
             </ReactFlow>
           )}
         </div>
@@ -298,16 +328,19 @@ export function NetworkTopologyPage() {
                   <div>
                     <span className="text-muted-foreground">Type</span>
                     <div className="mt-0.5">
-                      <Badge variant={selectedNode.kind === 'external' ? 'secondary' : 'default'} className="text-[10px]">
-                        {selectedNode.kind === 'external' ? 'External IP' : 'Pod'}
+                      <Badge
+                        variant={selectedNode.kind === 'external' ? 'secondary' : 'default'}
+                        className="text-[10px]"
+                      >
+                        {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'service' ? 'Service' : 'Pod'}
                       </Badge>
                     </div>
                   </div>
-                  {selectedNode.kind === 'pod' && (
+                  {(selectedNode.kind === 'pod' || selectedNode.kind === 'service') && (
                     <>
                       <div>
-                        <span className="text-muted-foreground">Pod</span>
-                        <div className="mt-0.5 font-mono font-medium break-all">{selectedNode.pod}</div>
+                        <span className="text-muted-foreground">{selectedNode.kind === 'service' ? 'Service' : 'Pod'}</span>
+                        <div className="mt-0.5 font-mono font-medium break-all">{selectedNode.label}</div>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Namespace</span>

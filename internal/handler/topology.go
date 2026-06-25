@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/cooloo9871/sentinel/internal/k8s"
 	"github.com/cooloo9871/sentinel/internal/security"
 )
 
@@ -12,7 +13,7 @@ type TopologyNode struct {
 	Label     string `json:"label"`
 	Pod       string `json:"pod"`
 	Namespace string `json:"namespace"`
-	Kind      string `json:"kind"` // "pod" | "external"
+	Kind      string `json:"kind"` // "pod" | "service" | "external"
 }
 
 type TopologyEdge struct {
@@ -29,11 +30,18 @@ type TopologyResponse struct {
 	HasNetworkEvents bool           `json:"hasNetworkEvents"`
 }
 
-func getNetworkTopology(store *security.Store) http.HandlerFunc {
+func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		events := store.List()
 
-		// Filter to only network events
+		// Resolve cluster IPs to pod/service names
+		ipMap := map[string]k8s.IPInfo{}
+		if k8sStore != nil {
+			if m, err := k8sStore.ListClusterIPs(r.Context()); err == nil {
+				ipMap = m
+			}
+		}
+
 		type edgeKey struct{ src, dst, port string }
 		edgeCounts := make(map[edgeKey]int)
 		nodeSet := make(map[string]TopologyNode)
@@ -55,21 +63,47 @@ func getNetworkTopology(store *security.Store) http.HandlerFunc {
 			}
 
 			// Parse destination: "ip:port" or just "ip"
-			dest := e.NetDest
+			destRaw := e.NetDest
 			port := ""
-			if idx := strings.LastIndex(dest, ":"); idx != -1 {
-				port = dest[idx+1:]
-				dest = dest[:idx]
+			if idx := strings.LastIndex(destRaw, ":"); idx != -1 {
+				port = destRaw[idx+1:]
+				destRaw = destRaw[:idx]
 			}
 
-			// Determine if destination is a pod (cluster IP) or external
-			dstID := "ext:" + dest
-			if _, ok := nodeSet[dstID]; !ok {
-				nodeSet[dstID] = TopologyNode{
+			// Try to resolve destination IP to pod/service
+			var dstID string
+			var dstNode TopologyNode
+			if info, ok := ipMap[destRaw]; ok {
+				if info.Kind == "pod" {
+					dstID = info.Namespace + "/" + info.Name
+					dstNode = TopologyNode{
+						ID:        dstID,
+						Label:     info.Name,
+						Pod:       info.Name,
+						Namespace: info.Namespace,
+						Kind:      "pod",
+					}
+				} else {
+					dstID = info.Namespace + "/svc/" + info.Name
+					dstNode = TopologyNode{
+						ID:        dstID,
+						Label:     info.Name,
+						Pod:       info.Name,
+						Namespace: info.Namespace,
+						Kind:      "service",
+					}
+				}
+			} else {
+				dstID = "ext:" + destRaw
+				dstNode = TopologyNode{
 					ID:    dstID,
-					Label: dest,
+					Label: destRaw,
 					Kind:  "external",
 				}
+			}
+
+			if _, ok := nodeSet[dstID]; !ok {
+				nodeSet[dstID] = dstNode
 			}
 
 			edgeCounts[edgeKey{srcID, dstID, port}]++
@@ -81,7 +115,6 @@ func getNetworkTopology(store *security.Store) http.HandlerFunc {
 		}
 
 		edges := make([]TopologyEdge, 0, len(edgeCounts))
-		i := 0
 		for k, count := range edgeCounts {
 			edges = append(edges, TopologyEdge{
 				ID:     k.src + "->" + k.dst + ":" + k.port,
@@ -90,7 +123,6 @@ func getNetworkTopology(store *security.Store) http.HandlerFunc {
 				Port:   k.port,
 				Count:  count,
 			})
-			i++
 		}
 
 		writeJSON(w, http.StatusOK, TopologyResponse{
