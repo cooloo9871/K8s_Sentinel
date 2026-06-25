@@ -38,6 +38,11 @@ export function AppSidebar() {
                   <NavLink to="/dashboard">Dashboard</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/network/topology')}>
+                  <NavLink to="/network/topology">Network Topology</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -96,11 +101,6 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/cluster/tetragon')}>
                   <NavLink to="/cluster/tetragon">Tetragon Agents</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/network/topology')}>
-                  <NavLink to="/network/topology">Network Topology</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
