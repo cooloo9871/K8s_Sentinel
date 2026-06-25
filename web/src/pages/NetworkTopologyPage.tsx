@@ -9,6 +9,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch } from '@tabler/icons-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -125,7 +128,7 @@ export function NetworkTopologyPage() {
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
-  const [nsSearch, setNsSearch] = useState('')
+  const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
 
   // Raw data from API — source of truth for filtering
@@ -149,14 +152,18 @@ export function NetworkTopologyPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Namespaces available for filter
+  const namespaces = useMemo(() =>
+    [...new Set(rawNodes.filter(n => n.kind === 'pod').map(n => n.namespace).filter(Boolean))].sort()
+  , [rawNodes])
+
   // Apply search filters and re-layout
   useEffect(() => {
-    const nsQ = nsSearch.trim().toLowerCase()
     const podQ = podSearch.trim().toLowerCase()
 
     const filteredNodes = rawNodes.filter(n => {
       if (n.kind === 'external') return true // always show external IPs
-      if (nsQ && !n.namespace.toLowerCase().includes(nsQ)) return false
+      if (nsFilter !== 'all' && n.namespace !== nsFilter) return false
       if (podQ && !n.pod.toLowerCase().includes(podQ)) return false
       return true
     })
@@ -172,17 +179,16 @@ export function NetworkTopologyPage() {
 
     setNodes(layoutNodes(visibleNodes))
     setEdges(layoutEdges(filteredEdges))
-  }, [rawNodes, rawEdges, nsSearch, podSearch, setNodes, setEdges])
+  }, [rawNodes, rawEdges, nsFilter, podSearch, setNodes, setEdges])
 
   const matchCount = useMemo(() => {
-    const nsQ = nsSearch.trim().toLowerCase()
     const podQ = podSearch.trim().toLowerCase()
-    if (!nsQ && !podQ) return null
+    if (nsFilter === 'all' && !podQ) return null
     return rawNodes.filter(n => n.kind === 'pod' &&
-      (!nsQ || n.namespace.toLowerCase().includes(nsQ)) &&
+      (nsFilter === 'all' || n.namespace === nsFilter) &&
       (!podQ || n.pod.toLowerCase().includes(podQ))
     ).length
-  }, [rawNodes, nsSearch, podSearch])
+  }, [rawNodes, nsFilter, podSearch])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
@@ -204,17 +210,21 @@ export function NetworkTopologyPage() {
         </Button>
       </div>
 
-      {/* Search bar */}
+      {/* Filter bar */}
       <div className="mb-4 flex items-center gap-2">
-        <div className="relative">
-          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Namespace..."
-            value={nsSearch}
-            onChange={e => setNsSearch(e.target.value)}
-            className="h-8 w-40 pl-8 text-sm"
-          />
-        </div>
+        <Select value={nsFilter} onValueChange={setNsFilter}>
+          <SelectTrigger className="h-8 w-44">
+            <SelectValue placeholder="All Namespaces" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All Namespaces</SelectItem>
+              {namespaces.map(ns => (
+                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <div className="relative">
           <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -229,9 +239,9 @@ export function NetworkTopologyPage() {
             {matchCount} pod{matchCount !== 1 ? 's' : ''} matched
           </span>
         )}
-        {(nsSearch || podSearch) && (
+        {(nsFilter !== 'all' || podSearch) && (
           <Button variant="ghost" size="sm" className="h-8 text-xs"
-            onClick={() => { setNsSearch(''); setPodSearch('') }}>
+            onClick={() => { setNsFilter('all'); setPodSearch('') }}>
             Clear
           </Button>
         )}

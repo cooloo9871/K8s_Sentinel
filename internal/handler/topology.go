@@ -62,12 +62,28 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				}
 			}
 
-			// Parse destination: "ip:port" or just "ip"
+			// Parse destination: "ip:port", "[::ffff:ip]:port", or just "ip"
 			destRaw := e.NetDest
 			port := ""
-			if idx := strings.LastIndex(destRaw, ":"); idx != -1 {
+			// Handle IPv6 bracket notation: [addr]:port
+			if strings.HasPrefix(destRaw, "[") {
+				if end := strings.Index(destRaw, "]"); end != -1 {
+					inner := destRaw[1:end]
+					// Strip IPv4-mapped IPv6 prefix "::ffff:"
+					inner = strings.TrimPrefix(inner, "::ffff:")
+					destRaw = inner
+					if end+2 < len(e.NetDest) {
+						port = e.NetDest[end+2:]
+					}
+				}
+			} else if idx := strings.LastIndex(destRaw, ":"); idx != -1 {
+				// Plain IPv4: last colon separates addr and port
+				// But check it's not an IPv6 address without brackets
+				// (IPv6 without brackets won't have a port — safe to split)
 				port = destRaw[idx+1:]
 				destRaw = destRaw[:idx]
+				// Strip IPv4-mapped IPv6 prefix if present
+				destRaw = strings.TrimPrefix(destRaw, "::ffff:")
 			}
 
 			// Try to resolve destination IP to pod/service
