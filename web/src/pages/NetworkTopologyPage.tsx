@@ -24,6 +24,7 @@ interface TopologyNode {
   namespace: string
   kind: 'pod' | 'service' | 'external'
   ip?: string
+  backingPods?: string[]
 }
 
 interface TopologyEdge {
@@ -507,6 +508,16 @@ export function NetworkTopologyPage() {
                           <div>
                             <span className="text-muted-foreground">IP</span>
                             <div className="mt-0.5 font-mono">{selectedNode.ip}</div>
+                          </div>
+                        )}
+                        {selectedNode.kind === 'service' && selectedNode.backingPods && selectedNode.backingPods.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Backing Pods</span>
+                            <div className="mt-1 flex flex-col gap-0.5">
+                              {selectedNode.backingPods.map(p => (
+                                <div key={p} className="font-mono text-xs break-all">{p}</div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </>

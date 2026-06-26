@@ -9,12 +9,13 @@ import (
 )
 
 type TopologyNode struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Pod       string `json:"pod"`
-	Namespace string `json:"namespace"`
-	Kind      string `json:"kind"` // "pod" | "service" | "external"
-	IP        string `json:"ip,omitempty"`
+	ID          string   `json:"id"`
+	Label       string   `json:"label"`
+	Pod         string   `json:"pod"`
+	Namespace   string   `json:"namespace"`
+	Kind        string   `json:"kind"` // "pod" | "service" | "external"
+	IP          string   `json:"ip,omitempty"`
+	BackingPods []string `json:"backingPods,omitempty"` // only set for service nodes
 }
 
 type TopologyEdge struct {
@@ -47,6 +48,14 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				partialResolution = true
 			} else {
 				ipMap = m
+			}
+		}
+
+		// Fetch service → backing pod names (best-effort; empty map on error)
+		svcPods := map[string][]string{}
+		if k8sStore != nil {
+			if sp, err := k8sStore.ListServicePodNames(r.Context()); err == nil && sp != nil {
+				svcPods = sp
 			}
 		}
 
@@ -150,6 +159,17 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 			blocked := e.Action == "kill"
 			edgeCounts[edgeKey{srcID, dstID, destRaw, port, blocked}]++
+		}
+
+		// Attach backing pod names to service nodes
+		for id, n := range nodeSet {
+			if n.Kind == "service" {
+				key := n.Namespace + "/" + n.Label
+				if pods := svcPods[key]; len(pods) > 0 {
+					n.BackingPods = pods
+					nodeSet[id] = n
+				}
+			}
 		}
 
 		nodes := make([]TopologyNode, 0, len(nodeSet))

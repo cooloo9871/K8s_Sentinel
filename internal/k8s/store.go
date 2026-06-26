@@ -611,3 +611,31 @@ func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string)
 	}
 	return s.Apply(ctx, tp, "")
 }
+
+// ListServicePodNames returns a map of "namespace/serviceName" → pod names
+// for all services in the cluster, using the Endpoints API.
+func (s *Store) ListServicePodNames(ctx context.Context) (map[string][]string, error) {
+	if s.typed == nil {
+		return nil, nil
+	}
+	list, err := s.typed.CoreV1().Endpoints("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]string, len(list.Items))
+	for _, ep := range list.Items {
+		key := ep.Namespace + "/" + ep.Name
+		var pods []string
+		for _, sub := range ep.Subsets {
+			for _, addr := range sub.Addresses {
+				if addr.TargetRef != nil && addr.TargetRef.Kind == "Pod" {
+					pods = append(pods, addr.TargetRef.Name)
+				}
+			}
+		}
+		if len(pods) > 0 {
+			result[key] = pods
+		}
+	}
+	return result, nil
+}
