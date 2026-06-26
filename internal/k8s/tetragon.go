@@ -228,6 +228,20 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 			evt.FileOp = "truncate"
 		case "tcp_connect":
 			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)
+		case "inet_csk_accept":
+			// kretprobe: return value (accepted socket) may be in args[0]
+			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)
+		}
+	}
+	// For kretprobes Tetragon may put the return value in "return_action" / "returnArgs"
+	if evt.NetDest == "" && evt.Function == "inet_csk_accept" {
+		for _, key := range []string{"return_action", "returnArgs", "return"} {
+			if retArgs, ok := kp[key].([]any); ok {
+				evt.NetDest, evt.NetSrc = sockArgEndpoints(retArgs, 0)
+				if evt.NetDest != "" {
+					break
+				}
+			}
 		}
 	}
 

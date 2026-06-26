@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,6 +87,7 @@ type topoEntry struct {
 	NetSrc    string
 	NetDest   string
 	Action    string
+	Function  string // "tcp_connect" = outbound, "inet_csk_accept" = inbound
 	LastSeen  time.Time
 }
 
@@ -123,8 +125,17 @@ func (s *Store) updateTopoBuf(e Event, lastSeen time.Time) {
 	if e.NetDest == "" {
 		return
 	}
-	k := topoKey{pod: e.Pod, ns: e.Namespace, nodeName: e.NodeName, netDest: e.NetDest, blocked: e.Action == "kill"}
-	s.topoBuf[k] = topoEntry{Pod: e.Pod, Namespace: e.Namespace, NodeName: e.NodeName, NetSrc: e.NetSrc, NetDest: e.NetDest, Action: e.Action, LastSeen: lastSeen}
+	netDestKey := e.NetDest
+	// For inbound accept events the "dest" is the remote client's IP:ephemeralPort.
+	// Strip the ephemeral port so all connections from the same client IP are
+	// de-duplicated to a single topoBuf entry instead of exploding per connection.
+	if e.Function == "inet_csk_accept" {
+		if idx := strings.LastIndex(netDestKey, ":"); idx > 0 {
+			netDestKey = strings.TrimPrefix(netDestKey[:idx], "::ffff:")
+		}
+	}
+	k := topoKey{pod: e.Pod, ns: e.Namespace, nodeName: e.NodeName, netDest: netDestKey, blocked: e.Action == "kill"}
+	s.topoBuf[k] = topoEntry{Pod: e.Pod, Namespace: e.Namespace, NodeName: e.NodeName, NetSrc: e.NetSrc, NetDest: e.NetDest, Action: e.Action, Function: e.Function, LastSeen: lastSeen}
 }
 
 // SetRetention updates the retention config and reapplies caps immediately.
@@ -336,6 +347,7 @@ func (s *Store) ListTopologyEvents() []Event {
 				NetSrc:    entry.NetSrc,
 				NetDest:   entry.NetDest,
 				Action:    entry.Action,
+				Function:  entry.Function,
 			})
 		}
 	}

@@ -68,97 +68,124 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				continue
 			}
 
-			// Source is always a pod (e.Pod == "" is skipped above)
-			srcID := e.Namespace + "/" + e.Pod
-			if _, ok := nodeSet[srcID]; !ok {
-				// NetSrc is "ip:port"; strip the port before ipMap lookup
-				srcAddrRaw := e.NetSrc
-				if strings.HasPrefix(srcAddrRaw, "[") {
-					if end := strings.Index(srcAddrRaw, "]"); end != -1 {
-						srcAddrRaw = strings.TrimPrefix(srcAddrRaw[1:end], "::ffff:")
+			inbound := e.Function == "inet_csk_accept"
+
+			if !inbound {
+				// ── Outbound (tcp_connect): pod → destination ──────────────────
+				srcID := e.Namespace + "/" + e.Pod
+				if _, ok := nodeSet[srcID]; !ok {
+					srcAddrRaw := e.NetSrc
+					if strings.HasPrefix(srcAddrRaw, "[") {
+						if end := strings.Index(srcAddrRaw, "]"); end != -1 {
+							srcAddrRaw = strings.TrimPrefix(srcAddrRaw[1:end], "::ffff:")
+						}
+					} else if idx := strings.LastIndex(srcAddrRaw, ":"); idx != -1 {
+						srcAddrRaw = strings.TrimPrefix(srcAddrRaw[:idx], "::ffff:")
 					}
-				} else if idx := strings.LastIndex(srcAddrRaw, ":"); idx != -1 {
-					srcAddrRaw = strings.TrimPrefix(srcAddrRaw[:idx], "::ffff:")
+					srcIP := ""
+					if info, ok2 := ipMap[srcAddrRaw]; ok2 {
+						srcIP = info.IP
+					}
+					nodeSet[srcID] = TopologyNode{
+						ID:        srcID,
+						Label:     e.Pod,
+						Pod:       e.Pod,
+						Namespace: e.Namespace,
+						Kind:      "pod",
+						IP:        srcIP,
+					}
 				}
-				srcIP := ""
-				if info, ok2 := ipMap[srcAddrRaw]; ok2 {
-					srcIP = info.IP
+
+				destRaw := e.NetDest
+				port := ""
+				if strings.HasPrefix(destRaw, "[") {
+					if end := strings.Index(destRaw, "]"); end != -1 {
+						inner := strings.TrimPrefix(destRaw[1:end], "::ffff:")
+						destRaw = inner
+						if end+2 < len(e.NetDest) {
+							port = e.NetDest[end+2:]
+						}
+					}
+				} else if idx := strings.LastIndex(destRaw, ":"); idx != -1 {
+					port = destRaw[idx+1:]
+					destRaw = strings.TrimPrefix(destRaw[:idx], "::ffff:")
 				}
-				nodeSet[srcID] = TopologyNode{
-					ID:        srcID,
+
+				var dstID string
+				var dstNode TopologyNode
+				if info, ok := ipMap[destRaw]; ok {
+					if info.Kind == "pod" {
+						dstID = info.Namespace + "/" + info.Name
+						dstNode = TopologyNode{ID: dstID, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "pod", IP: info.IP}
+					} else {
+						dstID = info.Namespace + "/svc/" + info.Name
+						dstNode = TopologyNode{ID: dstID, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "service", IP: info.IP}
+					}
+				} else {
+					dstID = "ext:" + destRaw
+					dstNode = TopologyNode{ID: dstID, Label: destRaw, Kind: "external", IP: destRaw}
+				}
+				if _, ok := nodeSet[dstID]; !ok {
+					nodeSet[dstID] = dstNode
+				}
+				blocked := e.Action == "kill"
+				edgeCounts[edgeKey{srcID, dstID, destRaw, port, blocked}]++
+				continue
+			}
+
+			// ── Inbound (inet_csk_accept): client → accepting pod ──────────────
+			// e.NetDest = remote client IP:ephemeralPort
+			// e.NetSrc  = local pod IP:servicePort
+			// Destination node = the accepting pod
+			dstID := e.Namespace + "/" + e.Pod
+			if _, ok := nodeSet[dstID]; !ok {
+				nodeSet[dstID] = TopologyNode{
+					ID:        dstID,
 					Label:     e.Pod,
 					Pod:       e.Pod,
 					Namespace: e.Namespace,
 					Kind:      "pod",
-					IP:        srcIP,
 				}
 			}
 
-			// Parse destination: "ip:port", "[::ffff:ip]:port", or just "ip"
-			destRaw := e.NetDest
-			port := ""
-			// Handle IPv6 bracket notation: [addr]:port
-			if strings.HasPrefix(destRaw, "[") {
-				if end := strings.Index(destRaw, "]"); end != -1 {
-					inner := destRaw[1:end]
-					// Strip IPv4-mapped IPv6 prefix "::ffff:"
-					inner = strings.TrimPrefix(inner, "::ffff:")
-					destRaw = inner
-					if end+2 < len(e.NetDest) {
-						port = e.NetDest[end+2:]
-					}
+			// Source node = the remote client (strip ephemeral port)
+			clientRaw := e.NetDest
+			if strings.HasPrefix(clientRaw, "[") {
+				if end := strings.Index(clientRaw, "]"); end != -1 {
+					clientRaw = strings.TrimPrefix(clientRaw[1:end], "::ffff:")
 				}
-			} else if idx := strings.LastIndex(destRaw, ":"); idx != -1 {
-				// Plain IPv4: last colon separates addr and port
-				// But check it's not an IPv6 address without brackets
-				// (IPv6 without brackets won't have a port — safe to split)
-				port = destRaw[idx+1:]
-				destRaw = destRaw[:idx]
-				// Strip IPv4-mapped IPv6 prefix if present
-				destRaw = strings.TrimPrefix(destRaw, "::ffff:")
+			} else if idx := strings.LastIndex(clientRaw, ":"); idx != -1 {
+				clientRaw = strings.TrimPrefix(clientRaw[:idx], "::ffff:")
 			}
 
-			// Try to resolve destination IP to pod/service
-			var dstID string
-			var dstNode TopologyNode
-			if info, ok := ipMap[destRaw]; ok {
+			// Service port = the local port the pod is listening on
+			svcPort := ""
+			if idx := strings.LastIndex(e.NetSrc, ":"); idx != -1 {
+				svcPort = e.NetSrc[idx+1:]
+			}
+
+			var srcID string
+			if info, ok := ipMap[clientRaw]; ok {
 				if info.Kind == "pod" {
-					dstID = info.Namespace + "/" + info.Name
-					dstNode = TopologyNode{
-						ID:        dstID,
-						Label:     info.Name,
-						Pod:       info.Name,
-						Namespace: info.Namespace,
-						Kind:      "pod",
-						IP:        info.IP,
+					srcID = info.Namespace + "/" + info.Name
+					if _, ok2 := nodeSet[srcID]; !ok2 {
+						nodeSet[srcID] = TopologyNode{ID: srcID, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "pod", IP: info.IP}
 					}
 				} else {
-					dstID = info.Namespace + "/svc/" + info.Name
-					dstNode = TopologyNode{
-						ID:        dstID,
-						Label:     info.Name,
-						Pod:       info.Name,
-						Namespace: info.Namespace,
-						Kind:      "service",
-						IP:        info.IP,
+					srcID = info.Namespace + "/svc/" + info.Name
+					if _, ok2 := nodeSet[srcID]; !ok2 {
+						nodeSet[srcID] = TopologyNode{ID: srcID, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "service", IP: info.IP}
 					}
 				}
 			} else {
-				dstID = "ext:" + destRaw
-				dstNode = TopologyNode{
-					ID:    dstID,
-					Label: destRaw,
-					Kind:  "external",
-					IP:    destRaw,
+				srcID = "ext:" + clientRaw
+				if _, ok2 := nodeSet[srcID]; !ok2 {
+					nodeSet[srcID] = TopologyNode{ID: srcID, Label: clientRaw, Kind: "external", IP: clientRaw}
 				}
 			}
 
-			if _, ok := nodeSet[dstID]; !ok {
-				nodeSet[dstID] = dstNode
-			}
-
 			blocked := e.Action == "kill"
-			edgeCounts[edgeKey{srcID, dstID, destRaw, port, blocked}]++
+			edgeCounts[edgeKey{srcID, dstID, clientRaw, svcPort, blocked}]++
 		}
 
 		// Attach backing pod names to service nodes
