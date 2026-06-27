@@ -256,37 +256,3 @@ export const templateApi = {
   delete: (id: string): Promise<void> =>
     api.delete(`/templates/${id}`),
 }
-
-
-export interface CiliumFlow {
-  time: string
-  verdict: 'allowed' | 'dropped' | 'audit' | string
-  srcIP: string
-  srcPort: number
-  srcPod: string
-  srcNs: string
-  dstIP: string
-  dstPort: number
-  dstPod: string
-  dstNs: string
-  protocol: string
-  l7Type?: string
-  httpMethod?: string
-  httpURL?: string
-  httpStatus?: number
-  dnsQuery?: string
-  dnsRcode?: string
-  nodeName: string
-  isReply: boolean
-}
-
-export interface CiliumStatus {
-  available: boolean
-  ready: boolean
-  message?: string
-}
-
-export const ciliumApi = {
-  status: (): Promise<CiliumStatus> =>
-    api.get('/cilium/status').then((r) => r.data),
-}
