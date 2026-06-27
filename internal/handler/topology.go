@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -22,23 +23,28 @@ type TopologyEdge struct {
 	ID      string `json:"id"`
 	Source  string `json:"source"`
 	Target  string `json:"target"`
-	DestIP  string `json:"destIp,omitempty"`  // raw destination IP
+	DestIP  string `json:"destIp,omitempty"`
 	Port    string `json:"port,omitempty"`
 	Count   int    `json:"count"`
-	Blocked bool   `json:"blocked"` // true when action="kill"
+	Blocked bool   `json:"blocked"`
+	// L7 fields (populated from Cilium/Hubble data)
+	L7Type     string `json:"l7Type,omitempty"`
+	HTTPMethod string `json:"httpMethod,omitempty"`
+	HTTPURL    string `json:"httpURL,omitempty"`
+	HTTPStatus uint32 `json:"httpStatus,omitempty"`
+	DNSQuery   string `json:"dnsQuery,omitempty"`
 }
 
 type TopologyResponse struct {
-	Nodes            []TopologyNode `json:"nodes"`
-	Edges            []TopologyEdge `json:"edges"`
-	HasNetworkEvents bool           `json:"hasNetworkEvents"`
-	PartialResolution bool          `json:"partialResolution"` // true when IP→name lookup failed
+	Nodes             []TopologyNode `json:"nodes"`
+	Edges             []TopologyEdge `json:"edges"`
+	HasNetworkEvents  bool           `json:"hasNetworkEvents"`
+	PartialResolution bool           `json:"partialResolution"`
+	DataSource        string         `json:"dataSource"` // "cilium" | "tetragon"
 }
 
 func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		events := store.ListTopologyEvents()
-
 		// Resolve cluster IPs using TTL-cached lookup
 		ipMap := map[string]k8s.IPInfo{}
 		partialResolution := false
@@ -58,6 +64,15 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				svcPods = sp
 			}
 		}
+
+		// When Cilium data is available, prefer it over Tetragon topoBuf.
+		// Cilium provides pre-NAT IPs, L7 metadata, and all flows regardless of TracingPolicy.
+		if k8sStore != nil && k8sStore.HasCiliumTopoData() {
+			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, svcPods, partialResolution))
+			return
+		}
+
+		events := store.ListTopologyEvents()
 
 		type edgeKey struct{ src, dst, destIP, port string; blocked bool }
 		edgeCounts := make(map[edgeKey]int)
@@ -193,6 +208,140 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			Edges:             edges,
 			HasNetworkEvents:  len(edges) > 0,
 			PartialResolution: partialResolution,
+			DataSource:        "tetragon",
 		})
+	}
+}
+
+// buildCiliumTopology constructs a topology response from Cilium/Hubble flow data.
+// It uses pod names directly from Hubble (no IP lookup needed for known pods).
+func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPods map[string][]string, partialResolution bool) TopologyResponse {
+	entries := k8sStore.ListCiliumTopoEntries()
+	nodeSet := make(map[string]TopologyNode)
+
+	type edgeKey struct{ src, dst, port string; blocked bool }
+	type edgeVal struct {
+		count      int
+		destIP     string
+		l7Type     string
+		httpMethod string
+		httpURL    string
+		httpStatus uint32
+		dnsQuery   string
+	}
+	edgeMap := make(map[edgeKey]*edgeVal)
+
+	resolveID := func(pod, ns, ip string) (string, TopologyNode) {
+		if pod != "" {
+			id := ns + "/" + pod
+			return id, TopologyNode{ID: id, Label: pod, Pod: pod, Namespace: ns, Kind: "pod"}
+		}
+		// Try ipMap for bare IP
+		if info, ok := ipMap[ip]; ok {
+			if info.Kind == "pod" {
+				id := info.Namespace + "/" + info.Name
+				return id, TopologyNode{ID: id, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "pod", IP: info.IP}
+			}
+			id := info.Namespace + "/svc/" + info.Name
+			return id, TopologyNode{ID: id, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "service", IP: info.IP}
+		}
+		id := "ext:" + ip
+		return id, TopologyNode{ID: id, Label: ip, Kind: "external", IP: ip}
+	}
+
+	for _, e := range entries {
+		srcID, srcNode := resolveID(e.SrcPod, e.SrcNs, e.SrcIP)
+		dstID, dstNode := resolveID(e.DstPod, e.DstNs, e.DstIP)
+
+		if _, ok := nodeSet[srcID]; !ok {
+			nodeSet[srcID] = srcNode
+		}
+		if _, ok := nodeSet[dstID]; !ok {
+			nodeSet[dstID] = dstNode
+		}
+
+		// Attach backing pods to service nodes
+		if dstNode.Kind == "service" {
+			if n, ok := nodeSet[dstID]; ok && len(n.BackingPods) == 0 {
+				if pods := svcPods[dstNode.Namespace+"/"+dstNode.Label]; len(pods) > 0 {
+					n.BackingPods = pods
+					nodeSet[dstID] = n
+				}
+			}
+		}
+
+		blocked := e.Verdict == "dropped"
+		key := edgeKey{srcID, dstID, e.Port, blocked}
+		ev := edgeMap[key]
+		if ev == nil {
+			ev = &edgeVal{destIP: e.DstIP}
+			edgeMap[key] = ev
+		}
+		ev.count += e.Count
+		if e.L7Type != "" {
+			ev.l7Type = e.L7Type
+			if e.HTTPMethod != "" {
+				ev.httpMethod = e.HTTPMethod
+			}
+			if e.HTTPURL != "" {
+				ev.httpURL = e.HTTPURL
+			}
+			if e.HTTPStatus > 0 {
+				ev.httpStatus = e.HTTPStatus
+			}
+			if e.DNSQuery != "" {
+				ev.dnsQuery = e.DNSQuery
+			}
+		}
+	}
+
+	// Dedup: blocked supersedes allowed for same src→dst→port
+	blockedKeys := make(map[string]bool)
+	for k := range edgeMap {
+		if k.blocked {
+			blockedKeys[k.src+"|"+k.dst+"|"+k.port] = true
+		}
+	}
+
+	nodes := make([]TopologyNode, 0, len(nodeSet))
+	for _, n := range nodeSet {
+		nodes = append(nodes, n)
+	}
+
+	edges := make([]TopologyEdge, 0, len(edgeMap))
+	for k, ev := range edgeMap {
+		if !k.blocked && blockedKeys[k.src+"|"+k.dst+"|"+k.port] {
+			continue // skip allowed when blocked exists
+		}
+		suffix := ""
+		if k.blocked {
+			suffix = ":blocked"
+		}
+		l7suffix := ""
+		if ev.l7Type != "" {
+			l7suffix = ":" + ev.l7Type
+		}
+		edges = append(edges, TopologyEdge{
+			ID:         fmt.Sprintf("%s->%s:%s:%s%s%s", k.src, k.dst, ev.destIP, k.port, suffix, l7suffix),
+			Source:     k.src,
+			Target:     k.dst,
+			DestIP:     ev.destIP,
+			Port:       k.port,
+			Count:      ev.count,
+			Blocked:    k.blocked,
+			L7Type:     ev.l7Type,
+			HTTPMethod: ev.httpMethod,
+			HTTPURL:    ev.httpURL,
+			HTTPStatus: ev.httpStatus,
+			DNSQuery:   ev.dnsQuery,
+		})
+	}
+
+	return TopologyResponse{
+		Nodes:             nodes,
+		Edges:             edges,
+		HasNetworkEvents:  len(edges) > 0,
+		PartialResolution: partialResolution,
+		DataSource:        "cilium",
 	}
 }

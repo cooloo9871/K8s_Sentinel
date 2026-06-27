@@ -53,6 +53,10 @@ type Store struct {
 	ciliumMu   sync.RWMutex
 	ciliumSubs map[chan CiliumFlow]struct{}
 
+	// Cilium topology buffer — unique connections from Hubble flows (TTL 24h)
+	ciliumTopoMu sync.RWMutex
+	ciliumTopo   map[string]CiliumTopoEntry // key: "srcID|dstID|port"
+
 	// ListClusterIPs cache
 	ipCacheMu      sync.RWMutex
 	ipCacheData    map[string]IPInfo
@@ -73,6 +77,7 @@ func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.C
 		containers:   newContainerResolver(),
 		tetragonSubs: make(map[chan TetragonEvent]struct{}),
 		ciliumSubs:   make(map[chan CiliumFlow]struct{}),
+		ciliumTopo:   make(map[string]CiliumTopoEntry),
 		ipCacheTTL:   30 * time.Second,
 	}
 }
@@ -161,6 +166,81 @@ func (s *Store) broadcastCilium(f CiliumFlow) {
 	}
 }
 
+// updateCiliumTopo merges a flow into the topology buffer.
+func (s *Store) updateCiliumTopo(f CiliumFlow) {
+	if f.IsReply || (f.SrcPod == "" && f.SrcIP == "") {
+		return
+	}
+	srcID := f.SrcNs + "/" + f.SrcPod
+	if f.SrcPod == "" {
+		srcID = "ext:" + f.SrcIP
+	}
+	dstID := f.DstNs + "/" + f.DstPod
+	if f.DstPod == "" {
+		dstID = "ext:" + f.DstIP
+	}
+	port := ""
+	if f.DstPort > 0 {
+		port = fmt.Sprintf("%d", f.DstPort)
+	}
+	key := srcID + "|" + dstID + "|" + port
+
+	s.ciliumTopoMu.Lock()
+	entry := s.ciliumTopo[key]
+	entry.SrcID, entry.DstID = srcID, dstID
+	entry.SrcPod, entry.SrcNs = f.SrcPod, f.SrcNs
+	entry.DstPod, entry.DstNs = f.DstPod, f.DstNs
+	entry.SrcIP, entry.DstIP = f.SrcIP, f.DstIP
+	entry.Port, entry.Protocol = port, f.Protocol
+	entry.Verdict = f.Verdict
+	entry.Count++
+	entry.LastSeen = time.Now()
+	if f.L7Type != "" {
+		entry.L7Type = f.L7Type
+		if f.HTTPMethod != "" {
+			entry.HTTPMethod = f.HTTPMethod
+		}
+		if f.HTTPURL != "" {
+			entry.HTTPURL = f.HTTPURL
+		}
+		if f.HTTPStatus > 0 {
+			entry.HTTPStatus = f.HTTPStatus
+		}
+		if f.DNSQuery != "" {
+			entry.DNSQuery = f.DNSQuery
+		}
+	}
+	s.ciliumTopo[key] = entry
+	s.ciliumTopoMu.Unlock()
+}
+
+// ListCiliumTopoEntries returns all topology entries seen within the last 24h.
+func (s *Store) ListCiliumTopoEntries() []CiliumTopoEntry {
+	cutoff := time.Now().Add(-24 * time.Hour)
+	s.ciliumTopoMu.RLock()
+	defer s.ciliumTopoMu.RUnlock()
+	out := make([]CiliumTopoEntry, 0, len(s.ciliumTopo))
+	for _, e := range s.ciliumTopo {
+		if e.LastSeen.After(cutoff) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// HasCiliumTopoData returns true when there is recent Cilium topology data.
+func (s *Store) HasCiliumTopoData() bool {
+	cutoff := time.Now().Add(-24 * time.Hour)
+	s.ciliumTopoMu.RLock()
+	defer s.ciliumTopoMu.RUnlock()
+	for _, e := range s.ciliumTopo {
+		if e.LastSeen.After(cutoff) {
+			return true
+		}
+	}
+	return false
+}
+
 // StartCiliumBroadcast streams Hubble flows from all cilium-agent pods and
 // fans out to all subscribers. No-op when Cilium is not detected.
 func (s *Store) StartCiliumBroadcast(ctx context.Context) {
@@ -183,6 +263,7 @@ func (s *Store) StartCiliumBroadcast(ctx context.Context) {
 			}()
 			for f := range flows {
 				s.broadcastCilium(f)
+				s.updateCiliumTopo(f)
 			}
 			if ctx.Err() != nil {
 				return

@@ -323,3 +323,24 @@ func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
 	}
 	return HubbleStatus{Available: true, Ready: true}
 }
+
+// ── Cilium Topology Buffer ──────────────────────────────────────────────────
+
+// CiliumTopoEntry tracks a unique directed connection seen in Cilium flows,
+// keyed by (srcID, dstID, port). Accumulates count and L7 info.
+type CiliumTopoEntry struct {
+	SrcID, DstID  string
+	SrcPod, SrcNs string
+	DstPod, DstNs string
+	SrcIP, DstIP  string
+	Port          string
+	Protocol      string
+	Verdict       string // "allowed" | "dropped"
+	L7Type        string
+	HTTPMethod    string
+	HTTPURL       string
+	HTTPStatus    uint32
+	DNSQuery      string
+	Count         int
+	LastSeen      time.Time
+}

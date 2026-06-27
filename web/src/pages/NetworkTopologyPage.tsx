@@ -35,12 +35,19 @@ interface TopologyEdge {
   port?: string
   count: number
   blocked: boolean
+  // L7 (populated from Cilium/Hubble data)
+  l7Type?: string
+  httpMethod?: string
+  httpURL?: string
+  httpStatus?: number
+  dnsQuery?: string
 }
 
 interface TopologyResponse {
   nodes: TopologyNode[]
   edges: TopologyEdge[]
   hasNetworkEvents: boolean
+  dataSource?: string
   partialResolution?: boolean
 }
 
@@ -121,15 +128,17 @@ function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyN
     const color = targetKind === 'external' ? '#f59e0b'
                 : targetKind === 'service'  ? '#22c55e'
                 : '#6366f1'
+    // Show L7 protocol badge in edge label when available
+    const l7badge = e.l7Type ? ` [${e.l7Type}]` : ''
     return {
       id: e.id,
       source: e.source,
       target: e.target,
-      label: `×${e.count}`,
+      label: `×${e.count}${l7badge}`,
       animated: true,
-      style: { stroke: color, strokeWidth: 1.5 },
-      labelStyle: { fontSize: 10, fill: '#6b7280' },
-      labelBgStyle: { fill: '#f9fafb', borderRadius: 4 },
+      style: { stroke: color, strokeWidth: e.l7Type ? 2 : 1.5 },
+      labelStyle: { fontSize: 10, fill: e.l7Type ? '#3b82f6' : '#6b7280', fontWeight: e.l7Type ? 600 : 400 },
+      labelBgStyle: { fill: e.l7Type ? '#eff6ff' : '#f9fafb', borderRadius: 4 },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
     }
   })
@@ -181,6 +190,7 @@ export function NetworkTopologyPage() {
   const reactFlowRef = useRef<{ fitView: () => void } | null>(null)
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
   const [partialResolution, setPartialResolution] = useState(false)
+  const [dataSource, setDataSource] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<TopologyEdge | null>(null)
@@ -198,6 +208,7 @@ export function NetworkTopologyPage() {
       const data: TopologyResponse = await res.json()
       setHasNetworkEvents(data.hasNetworkEvents)
       setPartialResolution(!!data.partialResolution)
+      setDataSource(data.dataSource)
       setRawNodes(data.nodes)
       setRawEdges(data.edges)
     } catch {
@@ -321,7 +332,12 @@ export function NetworkTopologyPage() {
             Pod network connections observed via Tetragon kprobe events
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {dataSource === 'cilium' && (
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-700">
+              Cilium · L7
+            </span>
+          )}
           <Button variant="outline" size="sm" onClick={autoLayout} disabled={nodes.length === 0}>
             <IconLayoutGrid size={14} className="mr-1.5" />
             Auto Layout
@@ -555,6 +571,26 @@ export function NetworkTopologyPage() {
                         <span className="text-muted-foreground">Count</span>
                         <div className="mt-0.5">{selectedEdge.count} connection{selectedEdge.count !== 1 ? 's' : ''}</div>
                       </div>
+                      {selectedEdge.l7Type && (
+                        <div>
+                          <span className="text-muted-foreground">Protocol</span>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">{selectedEdge.l7Type}</span>
+                            {selectedEdge.httpMethod && <span className="font-mono font-medium">{selectedEdge.httpMethod}</span>}
+                          </div>
+                          {selectedEdge.httpURL && (
+                            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground truncate" title={selectedEdge.httpURL}>{selectedEdge.httpURL}</div>
+                          )}
+                          {selectedEdge.httpStatus !== undefined && selectedEdge.httpStatus > 0 && (
+                            <div className={`mt-0.5 text-[10px] font-medium ${selectedEdge.httpStatus >= 400 ? 'text-red-600' : 'text-green-600'}`}>
+                              HTTP {selectedEdge.httpStatus}
+                            </div>
+                          )}
+                          {selectedEdge.dnsQuery && (
+                            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{selectedEdge.dnsQuery}</div>
+                          )}
+                        </div>
+                      )}
                       {selectedEdge.blocked && (
                         <div className="mt-1 rounded bg-red-50 px-2 py-1 text-[11px] font-medium text-red-600">
                           ✕ Blocked by policy
