@@ -548,6 +548,12 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 	pods, podErr := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if podErr == nil {
 		for _, p := range pods.Items {
+			// Skip hostNetwork pods — they share the node IP, which causes
+			// connections to other processes on the same node (e.g. kube-apiserver)
+			// to be misattributed to this pod.
+			if p.Spec.HostNetwork {
+				continue
+			}
 			if p.Status.PodIP != "" {
 				result[p.Status.PodIP] = IPInfo{
 					IP:        p.Status.PodIP,
