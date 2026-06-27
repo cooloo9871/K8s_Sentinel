@@ -77,14 +77,6 @@ spec:
     returnArg:
       index: 0
       type: "sock"
-    selectors:
-    - matchNamespaces:
-      - operator: "NotIn"
-        values:
-        - "kube-system"
-        - "kube-public"
-        - "kube-node-lease"
-        - "sentinel-system"
 `,
   },
   {
