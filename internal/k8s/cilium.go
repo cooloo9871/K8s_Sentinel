@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -199,18 +200,25 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 		return CiliumFlow{}, false
 	}
 	f := env.Flow
-	if f.Verdict == "" && f.IP.Source == "" {
+	if f.Verdict == "" && f.IP.Source == "" && f.IPLower.Source == "" {
 		return CiliumFlow{}, false
 	}
 
-	// Use whichever IP field is populated (Hubble uses "IP" or "ip" depending on version)
-	srcIP := f.IP.Source
-	if srcIP == "" {
-		srcIP = f.IPLower.Source
+	// Use whichever IP field is populated (Hubble uses "IP" or "ip" depending on version).
+	// Strip IPv4-mapped IPv6 prefix "::ffff:" so IPs match the plain IPv4 keys in ipMap.
+	stripIPv4Mapped := func(ip string) string {
+		if strings.HasPrefix(ip, "::ffff:") {
+			return ip[7:]
+		}
+		return ip
 	}
-	dstIP := f.IP.Destination
+	srcIP := stripIPv4Mapped(f.IP.Source)
+	if srcIP == "" {
+		srcIP = stripIPv4Mapped(f.IPLower.Source)
+	}
+	dstIP := stripIPv4Mapped(f.IP.Destination)
 	if dstIP == "" {
-		dstIP = f.IPLower.Destination
+		dstIP = stripIPv4Mapped(f.IPLower.Destination)
 	}
 
 	flow := CiliumFlow{

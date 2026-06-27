@@ -54,8 +54,9 @@ type Store struct {
 	ciliumSubs map[chan CiliumFlow]struct{}
 
 	// Cilium topology buffer — unique connections from Hubble flows (TTL 24h)
-	ciliumTopoMu sync.RWMutex
-	ciliumTopo   map[string]CiliumTopoEntry // key: "srcID|dstID|port"
+	ciliumTopoMu      sync.RWMutex
+	ciliumTopo        map[string]CiliumTopoEntry // key: "srcID|dstID|port"
+	ciliumTopoCleanup uint64                     // triggers lazy eviction every N updates
 
 	// ListClusterIPs cache
 	ipCacheMu      sync.RWMutex
@@ -183,6 +184,9 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	if f.SrcPod == "" && f.SrcIP == "" {
 		return
 	}
+	if f.DstPod == "" && f.DstIP == "" {
+		return
+	}
 	srcID := f.SrcNs + "/" + f.SrcPod
 	if f.SrcPod == "" {
 		srcID = "ext:" + f.SrcIP
@@ -223,6 +227,17 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 		}
 	}
 	s.ciliumTopo[key] = entry
+
+	// Lazy cleanup every 2000 updates — removes entries older than 24h.
+	s.ciliumTopoCleanup++
+	if s.ciliumTopoCleanup%2000 == 0 {
+		cutoff := time.Now().Add(-24 * time.Hour)
+		for k, e := range s.ciliumTopo {
+			if !e.LastSeen.After(cutoff) {
+				delete(s.ciliumTopo, k)
+			}
+		}
+	}
 	s.ciliumTopoMu.Unlock()
 }
 
@@ -274,8 +289,12 @@ func (s *Store) StartCiliumBroadcast(ctx context.Context) {
 				}
 			}()
 			for f := range flows {
-				s.broadcastCilium(f)
 				s.updateCiliumTopo(f)
+				// Only broadcast flows that pass the topology filter so SSE
+				// subscribers don't receive TRACED/TRANSLATED noise.
+				if f.Verdict == "allowed" || f.Verdict == "dropped" {
+					s.broadcastCilium(f)
+				}
 			}
 			if ctx.Err() != nil {
 				return
