@@ -138,6 +138,9 @@ func (s *Store) streamCiliumFromPod(ctx context.Context, podName string, out cha
 // parseCiliumFlow parses one NDJSON line from `hubble observe -o json`.
 func parseCiliumFlow(line string) (CiliumFlow, bool) {
 	// Hubble JSON envelope: {"flow": {...}, "node_name": "...", "time": "..."}
+	// Hubble serialises the IP field as "IP" (uppercase) in some versions
+	// and "ip" (lowercase) in others depending on the protobuf JSON marshaler.
+	// We decode the raw envelope first, then handle both cases.
 	var env struct {
 		NodeName string `json:"node_name"`
 		Time     string `json:"time"`
@@ -158,6 +161,10 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 				Source      string `json:"source"`
 				Destination string `json:"destination"`
 			} `json:"IP"`
+			IPLower struct {
+				Source      string `json:"source"`
+				Destination string `json:"destination"`
+			} `json:"ip"`
 			L4 struct {
 				TCP *struct {
 					SrcPort uint32 `json:"source_port"`
@@ -196,11 +203,21 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 		return CiliumFlow{}, false
 	}
 
+	// Use whichever IP field is populated (Hubble uses "IP" or "ip" depending on version)
+	srcIP := f.IP.Source
+	if srcIP == "" {
+		srcIP = f.IPLower.Source
+	}
+	dstIP := f.IP.Destination
+	if dstIP == "" {
+		dstIP = f.IPLower.Destination
+	}
+
 	flow := CiliumFlow{
 		Time:     f.Time,
 		Verdict:  verdictLabel(f.Verdict),
-		SrcIP:    f.IP.Source,
-		DstIP:    f.IP.Destination,
+		SrcIP:    srcIP,
+		DstIP:    dstIP,
 		SrcPod:   f.Source.PodName,
 		SrcNs:    f.Source.Namespace,
 		DstPod:   f.Destination.PodName,

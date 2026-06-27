@@ -168,6 +168,11 @@ func (s *Store) broadcastCilium(f CiliumFlow) {
 
 // updateCiliumTopo merges a flow into the topology buffer.
 func (s *Store) updateCiliumTopo(f CiliumFlow) {
+	if f.SrcPod == "" {
+		// Log external flows to help debug why they don't appear in topology
+		log.Printf("cilium-topo: ext flow srcIP=%q srcPod=%q dstPod=%q dstNs=%q isReply=%v verdict=%q",
+			f.SrcIP, f.SrcPod, f.DstPod, f.DstNs, f.IsReply, f.Verdict)
+	}
 	if f.IsReply || (f.SrcPod == "" && f.SrcIP == "") {
 		return
 	}
