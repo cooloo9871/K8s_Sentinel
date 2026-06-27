@@ -60,26 +60,6 @@ spec:
 `,
   },
   {
-    id: 'monitor-inbound-traffic',
-    name: 'Monitor Inbound Traffic (Into Cluster)',
-    description: 'Capture connections accepted by pods from outside the cluster. Requires kernel support for inet_csk_accept kretprobe.',
-    tags: ['cluster-wide', 'network', 'monitoring'],
-    yaml: `apiVersion: cilium.io/v1alpha1
-kind: TracingPolicy
-metadata:
-  name: monitor-inbound-traffic
-spec:
-  podSelector: {}
-  kprobes:
-  - call: "inet_csk_accept"
-    syscall: false
-    return: true
-    returnArg:
-      index: 0
-      type: "sock"
-`,
-  },
-  {
     id: 'monitor-internal-network',
     name: 'Monitor Internal Network (Inside Cluster)',
     description: 'Capture TCP connections between pods and services within the cluster. Required for Network Topology. CIDRs are auto-detected.',

@@ -424,7 +424,6 @@ export function NetworkTopologyPage() {
               <ul className="text-xs text-amber-600 list-disc ml-4 mt-0.5 space-y-0.5">
                 <li><span className="font-semibold">Monitor Internal Network (Inside Cluster)</span> — pod-to-pod and pod-to-service connections</li>
                 <li><span className="font-semibold">Monitor External Network (Outside Cluster)</span> — connections leaving the cluster</li>
-                <li><span className="font-semibold">Monitor Inbound Traffic (Into Cluster)</span> — connections arriving from outside</li>
               </ul>
             </div>
           </CardContent>
