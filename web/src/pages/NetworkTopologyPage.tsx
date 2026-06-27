@@ -288,6 +288,9 @@ export function NetworkTopologyPage() {
     setNodes(laidOut)
     const nodeMap = Object.fromEntries(visibleNodes.map(n => [n.id, n]))
     setEdges(layoutEdges(filteredEdges, nodeMap))
+    // Fit view after layout so nodes are always visible (especially on first load
+    // or when switching from Tetragon→Cilium data source)
+    setTimeout(() => reactFlowRef.current?.fitView(), 100)
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
   }, [rawNodes, rawEdges, nsFilter, podSearch, setNodes, setEdges])
