@@ -20,7 +20,7 @@ type FilterType = 'all' | 'warning' | 'critical'
 function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
   if (!fn) return null
   if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
-  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp')) return 'Network'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp') || fn.includes('inet_csk_accept')) return 'Network'
   if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
   return null
 }
@@ -57,8 +57,9 @@ function DetailRow({ e }: { e: DisplayEvent }) {
     const opLabel = e.fileOp ? `File (${e.fileOp})` : 'File'
     items.push({ label: opLabel, value: e.filePath })
   }
-  if (e.netDest)   items.push({ label: 'Destination', value: e.netDest })
-  if (e.netSrc)    items.push({ label: 'Source',      value: e.netSrc })
+  const isInbound = e.function === 'inet_csk_accept'
+  if (e.netDest)   items.push({ label: isInbound ? 'Inbound From' : 'Destination', value: e.netDest })
+  if (e.netSrc)    items.push({ label: isInbound ? 'Service Port' : 'Source',      value: e.netSrc })
   if (e.binary)    items.push({ label: 'Binary',  value: e.binary })
   // When the parent is runc, the "arguments" belong to runc (not to the
   // binary being exec'd), so merge them into the Parent line to avoid confusion.
@@ -328,7 +329,10 @@ export function SecurityEventsPage() {
                           </p>
                         )}
                         {e.netDest && (
-                          <p className="truncate font-mono text-xs text-muted-foreground" title={`→ ${e.netDest}`}>→ {e.netDest}</p>
+                          <p className="truncate font-mono text-xs text-muted-foreground"
+                            title={e.function === 'inet_csk_accept' ? `← ${e.netDest}` : `→ ${e.netDest}`}>
+                            {e.function === 'inet_csk_accept' ? '←' : '→'} {e.netDest}
+                          </p>
                         )}
                       </TableCell>
                       <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
