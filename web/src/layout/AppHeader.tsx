@@ -34,6 +34,7 @@ const ROUTE_LABELS: Record<string, string> = {
   retention: 'Event Retention',
   network: 'Network',
   topology: 'Network Topology',
+  flows: 'Network Flows',
 }
 
 // Override the full breadcrumb trail for paths whose URL segments don't match

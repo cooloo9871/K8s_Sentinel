@@ -34,6 +34,8 @@ func main() {
 	// Single Tetragon broadcast — security store, alert and rsyslog
 	// dispatchers all subscribe to this rather than opening independent streams.
 	store.StartTetragonBroadcast(ctx)
+	// Cilium/Hubble flow broadcast — no-op if Cilium CNI is not detected.
+	store.StartCiliumBroadcast(ctx)
 
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {

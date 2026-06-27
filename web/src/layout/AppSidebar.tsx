@@ -1,4 +1,5 @@
 import { useLocation, NavLink } from 'react-router-dom'
+import { useCilium } from './CiliumProvider'
 import logoUrl from '../assets/sentinel-logo-black.svg'
 import { useAuth } from './AuthContext'
 import {
@@ -16,6 +17,8 @@ import {
 export function AppSidebar() {
   const { pathname } = useLocation()
   const { user } = useAuth()
+  const { status: ciliumStatus } = useCilium()
+  const ciliumAvailable = ciliumStatus?.available && ciliumStatus?.ready
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + '/')
@@ -43,6 +46,13 @@ export function AppSidebar() {
                   <NavLink to="/network/topology">Network Topology</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {ciliumAvailable && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/network/flows')}>
+                    <NavLink to="/network/flows">Network Flows</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

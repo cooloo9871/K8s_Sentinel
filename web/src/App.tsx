@@ -3,6 +3,7 @@ import { AppLayout } from './layout/AppLayout'
 import { AppToaster } from './layout/AppToaster'
 import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
 import { AdmissionEventsProvider } from './layout/AdmissionEventsProvider'
+import { CiliumProvider } from './layout/CiliumProvider'
 import { DiscoveryProvider } from './layout/DiscoveryProvider'
 import { AuthProvider, useAuth } from './layout/AuthContext'
 import { LoginPage } from './pages/LoginPage'
@@ -23,6 +24,7 @@ import { VAPPage } from './pages/VAPPage'
 import { RsyslogPage } from './pages/RsyslogPage'
 import { SecurityRetentionPage } from './pages/SecurityRetentionPage'
 import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
+import { NetworkFlowsPage } from './pages/NetworkFlowsPage'
 
 function AppRoutes() {
   const { user, loading, logout } = useAuth()
@@ -38,6 +40,7 @@ function AppRoutes() {
   return (
     <SecurityEventsProvider>
     <AdmissionEventsProvider>
+    <CiliumProvider>
     <DiscoveryProvider>
       <Routes>
         <Route element={<AppLayout onLogout={logout} />}>
@@ -61,10 +64,12 @@ function AppRoutes() {
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
           <Route path="/policies/admission" element={<VAPPage />} />
           <Route path="/network/topology" element={<NetworkTopologyPage />} />
+          <Route path="/network/flows" element={<NetworkFlowsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
     </DiscoveryProvider>
+    </CiliumProvider>
     </AdmissionEventsProvider>
     </SecurityEventsProvider>
   )

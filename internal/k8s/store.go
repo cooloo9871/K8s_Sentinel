@@ -49,6 +49,10 @@ type Store struct {
 	tetragonMu   sync.RWMutex
 	tetragonSubs map[chan TetragonEvent]struct{}
 
+	// Cilium/Hubble fan-out broadcast
+	ciliumMu   sync.RWMutex
+	ciliumSubs map[chan CiliumFlow]struct{}
+
 	// ListClusterIPs cache
 	ipCacheMu      sync.RWMutex
 	ipCacheData    map[string]IPInfo
@@ -68,6 +72,7 @@ func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.C
 		Templates:    NewTemplateStore(templatesFile),
 		containers:   newContainerResolver(),
 		tetragonSubs: make(map[chan TetragonEvent]struct{}),
+		ciliumSubs:   make(map[chan CiliumFlow]struct{}),
 		ipCacheTTL:   30 * time.Second,
 	}
 }
@@ -125,6 +130,67 @@ func (s *Store) StartTetragonBroadcast(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-time.After(10 * time.Second):
+			}
+		}
+	}()
+}
+
+// ── Cilium fan-out ─────────────────────────────────────────────────────────
+
+func (s *Store) SubscribeCilium() (<-chan CiliumFlow, func()) {
+	ch := make(chan CiliumFlow, 256)
+	s.ciliumMu.Lock()
+	s.ciliumSubs[ch] = struct{}{}
+	s.ciliumMu.Unlock()
+	return ch, func() {
+		s.ciliumMu.Lock()
+		delete(s.ciliumSubs, ch)
+		s.ciliumMu.Unlock()
+		close(ch)
+	}
+}
+
+func (s *Store) broadcastCilium(f CiliumFlow) {
+	s.ciliumMu.RLock()
+	defer s.ciliumMu.RUnlock()
+	for ch := range s.ciliumSubs {
+		select {
+		case ch <- f:
+		default:
+		}
+	}
+}
+
+// StartCiliumBroadcast streams Hubble flows from all cilium-agent pods and
+// fans out to all subscribers. No-op when Cilium is not detected.
+func (s *Store) StartCiliumBroadcast(ctx context.Context) {
+	go func() {
+		if !s.DetectCilium(ctx) {
+			log.Printf("cilium-broadcast: Cilium not detected, skipping")
+			return
+		}
+		log.Printf("cilium-broadcast: Cilium detected, starting flow stream")
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			flows := make(chan CiliumFlow, 512)
+			go func() {
+				defer close(flows)
+				if err := s.StreamCiliumFlows(ctx, flows); err != nil && ctx.Err() == nil {
+					log.Printf("cilium-broadcast: stream error: %v", err)
+				}
+			}()
+			for f := range flows {
+				s.broadcastCilium(f)
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(15 * time.Second):
 			}
 		}
 	}()
