@@ -233,13 +233,21 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 			evt.NetDest, evt.NetSrc = sockArgEndpoints(args, 0)
 		}
 	}
-	// For kretprobes Tetragon may put the return value in "return_action" / "returnArgs"
+	// For kretprobes, Tetragon puts the return value in process_kprobe["return"]
+	// as a single KprobeArgument object (map[string]any), not a slice.
+	// Wrap it in a slice so sockArgEndpoints can process it at index 0.
 	if evt.NetDest == "" && evt.Function == "inet_csk_accept" {
-		for _, key := range []string{"return_action", "returnArgs", "return"} {
-			if retArgs, ok := kp[key].([]any); ok {
-				evt.NetDest, evt.NetSrc = sockArgEndpoints(retArgs, 0)
-				if evt.NetDest != "" {
-					break
+		if retVal, ok := kp["return"]; ok {
+			evt.NetDest, evt.NetSrc = sockArgEndpoints([]any{retVal}, 0)
+		}
+		// Fallback: some versions use an array field
+		if evt.NetDest == "" {
+			for _, key := range []string{"returnArgs", "return_action"} {
+				if retArgs, ok := kp[key].([]any); ok {
+					evt.NetDest, evt.NetSrc = sockArgEndpoints(retArgs, 0)
+					if evt.NetDest != "" {
+						break
+					}
 				}
 			}
 		}
