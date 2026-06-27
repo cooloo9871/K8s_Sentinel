@@ -96,7 +96,7 @@ func (s *Store) streamCiliumFromPod(ctx context.Context, podName string, out cha
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "cilium-agent",
-			Command:   []string{"hubble", "observe", "--follow", "-o", "json", "-n", "all"},
+			Command:   []string{"hubble", "observe", "--follow", "-o", "json", "--all-namespaces"},
 			Stdout:    true,
 			Stderr:    false,
 		}, scheme.ParameterCodec)
@@ -306,7 +306,7 @@ func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "cilium-agent",
-			Command:   []string{"hubble", "observe", "--last", "1", "-o", "json"},
+			Command:   []string{"hubble", "observe", "--last", "1", "-o", "json", "--all-namespaces"},
 			Stdout:    true,
 			Stderr:    true,
 		}, scheme.ParameterCodec)
