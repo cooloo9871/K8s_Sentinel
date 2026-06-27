@@ -168,12 +168,19 @@ func (s *Store) broadcastCilium(f CiliumFlow) {
 
 // updateCiliumTopo merges a flow into the topology buffer.
 func (s *Store) updateCiliumTopo(f CiliumFlow) {
-	if f.SrcPod == "" {
-		// Log external flows to help debug why they don't appear in topology
-		log.Printf("cilium-topo: ext flow srcIP=%q srcPod=%q dstPod=%q dstNs=%q isReply=%v verdict=%q",
-			f.SrcIP, f.SrcPod, f.DstPod, f.DstNs, f.IsReply, f.Verdict)
+	// Only store flows that are actually forwarded or dropped — skip TRACED,
+	// TRANSLATED, ERROR and other intermediate observation-point verdicts.
+	if f.Verdict != "allowed" && f.Verdict != "dropped" {
+		return
 	}
-	if f.IsReply || (f.SrcPod == "" && f.SrcIP == "") {
+	// Filter reply flows only when the source is a pod (pod→external/pod-to-pod
+	// replies). SNAT'd NodePort traffic arrives with is_reply=true but has no
+	// source pod (source is a node IP) — keep those so inbound NodePort
+	// connections appear in the topology.
+	if f.IsReply && f.SrcPod != "" {
+		return
+	}
+	if f.SrcPod == "" && f.SrcIP == "" {
 		return
 	}
 	srcID := f.SrcNs + "/" + f.SrcPod
