@@ -620,7 +620,7 @@ func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
 	if s.typed == nil {
 		return result
 	}
-	nodes, err := s.typed.CoreV1().Nodes("").List(ctx, metav1.ListOptions{})
+	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return result
 	}
