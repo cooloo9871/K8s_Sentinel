@@ -45,6 +45,7 @@ type TopologyResponse struct {
 
 func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		// Resolve cluster IPs using TTL-cached lookup
 		ipMap := map[string]k8s.IPInfo{}
 		partialResolution := false

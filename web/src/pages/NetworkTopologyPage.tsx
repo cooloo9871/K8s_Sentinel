@@ -204,7 +204,7 @@ export function NetworkTopologyPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/network-topology', { credentials: 'include' })
+      const res = await fetch('/api/network-topology', { credentials: 'include', cache: 'no-store' })
       const data: TopologyResponse = await res.json()
       setHasNetworkEvents(data.hasNetworkEvents)
       setPartialResolution(!!data.partialResolution)
