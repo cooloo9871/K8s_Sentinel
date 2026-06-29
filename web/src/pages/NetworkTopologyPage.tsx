@@ -96,9 +96,11 @@ function NodeHostNode({ data }: { data: TopologyNode }) {
 function ExternalNode({ data }: { data: TopologyNode }) {
   return (
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 shadow-sm min-w-[110px] text-center">
+      {/* External can be both a connection target (pod→ext) and a source (ext→pod inbound) */}
       <Handle type="target" position={Position.Left} className="!bg-amber-500" />
       <div className="text-[10px] text-amber-600 mb-0.5">External</div>
       <div className="text-xs font-medium font-mono">{data.label}</div>
+      <Handle type="source" position={Position.Right} className="!bg-amber-500" />
     </div>
   )
 }
