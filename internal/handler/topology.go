@@ -247,6 +247,11 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 		if ip == "" {
 			return "", TopologyNode{}
 		}
+		// Skip per-node internal interface IPs (cilium_host etc.) — these are
+		// node-local network plumbing, not real endpoints.
+		if nodeIPMap.SkipIPs[ip] {
+			return "", TopologyNode{}
+		}
 		// Check if it's a Kubernetes node physical IP → show as "node" kind
 		if nodeName, ok := nodeIPMap.IPToName[ip]; ok {
 			id := "node:" + ip

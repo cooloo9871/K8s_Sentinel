@@ -609,32 +609,70 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 
 // NodeIPMap holds per-node information for topology IP classification.
 type NodeIPMap struct {
-	IPToName map[string]string // nodeIP → nodeName
+	IPToName map[string]string // primary node IP → nodeName (shown as "node")
+	SkipIPs  map[string]bool   // cilium_host / internal interface IPs (hidden)
 	PodCIDRs []string          // all pod CIDRs across all nodes
 }
 
-// ListNodeIPMap returns node physical IPs and pod CIDRs used to distinguish
-// node IPs from external IPs and to identify cilium_host/internal-only IPs.
+// ListNodeIPMap returns node physical IPs, cilium internal IPs, and pod CIDRs
+// used to distinguish node IPs from external IPs and to hide per-node internal
+// interface addresses (e.g. cilium_host) in the topology graph.
 func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
-	result := NodeIPMap{IPToName: make(map[string]string)}
+	result := NodeIPMap{
+		IPToName: make(map[string]string),
+		SkipIPs:  make(map[string]bool),
+	}
 	if s.typed == nil {
 		return result
 	}
 	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return result
-	}
-	for _, node := range nodes.Items {
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP {
-				result.IPToName[addr.Address] = node.Name
+	if err == nil {
+		for _, node := range nodes.Items {
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP {
+					result.IPToName[addr.Address] = node.Name
+				}
 			}
+			if node.Spec.PodCIDR != "" {
+				result.PodCIDRs = append(result.PodCIDRs, node.Spec.PodCIDR)
+			}
+			result.PodCIDRs = append(result.PodCIDRs, node.Spec.PodCIDRs...)
 		}
-		if node.Spec.PodCIDR != "" {
-			result.PodCIDRs = append(result.PodCIDRs, node.Spec.PodCIDR)
-		}
-		for _, cidr := range node.Spec.PodCIDRs {
-			result.PodCIDRs = append(result.PodCIDRs, cidr)
+	}
+
+	// Cilium uses cluster-pool IPAM by default and does NOT populate
+	// node.Spec.PodCIDR. The authoritative per-node pod CIDRs and the
+	// cilium_host (CiliumInternalIP) addresses live in the CiliumNode CR.
+	if s.client != nil {
+		cnList, cnErr := s.client.Resource(ciliumNodeGVR).List(ctx, metav1.ListOptions{})
+		if cnErr == nil {
+			for _, cn := range cnList.Items {
+				spec, _, _ := unstructured.NestedMap(cn.Object, "spec")
+				if spec == nil {
+					continue
+				}
+				// spec.addresses[] — collect CiliumInternalIP as skip targets
+				if addrs, ok := spec["addresses"].([]interface{}); ok {
+					for _, a := range addrs {
+						addr, ok := a.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						ipType, _ := addr["type"].(string)
+						ip, _ := addr["ip"].(string)
+						if ip == "" {
+							continue
+						}
+						if ipType == "CiliumInternalIP" {
+							result.SkipIPs[ip] = true
+						}
+					}
+				}
+				// spec.ipam.podCIDRs[] — authoritative pod CIDRs
+				if podCIDRs, _, _ := unstructured.NestedStringSlice(cn.Object, "spec", "ipam", "podCIDRs"); len(podCIDRs) > 0 {
+					result.PodCIDRs = append(result.PodCIDRs, podCIDRs...)
+				}
+			}
 		}
 	}
 	return result

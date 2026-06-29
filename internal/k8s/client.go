@@ -28,6 +28,11 @@ var (
 		Version:  "v1",
 		Resource: "events",
 	}
+	ciliumNodeGVR = schema.GroupVersionResource{
+		Group:    "cilium.io",
+		Version:  "v2",
+		Resource: "ciliumnodes",
+	}
 )
 
 // NewClients creates dynamic, typed, and raw REST config from in-cluster config.
