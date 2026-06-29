@@ -14,7 +14,7 @@ type TopologyNode struct {
 	Label       string   `json:"label"`
 	Pod         string   `json:"pod"`
 	Namespace   string   `json:"namespace"`
-	Kind        string   `json:"kind"` // "pod" | "service" | "external"
+	Kind        string   `json:"kind"` // "pod" | "service" | "external" | "node"
 	IP          string   `json:"ip,omitempty"`
 	BackingPods []string `json:"backingPods,omitempty"` // only set for service nodes
 }
@@ -69,13 +69,17 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		// When Cilium data is available, prefer it over Tetragon topoBuf.
 		// Cilium provides pre-NAT IPs, L7 metadata, and all flows regardless of TracingPolicy.
 		if k8sStore != nil && k8sStore.HasCiliumTopoData() {
-			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, svcPods, partialResolution))
+			nodeIPMap := k8sStore.ListNodeIPMap(r.Context())
+			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, svcPods, nodeIPMap, partialResolution))
 			return
 		}
 
 		events := store.ListTopologyEvents()
 
-		type edgeKey struct{ src, dst, destIP, port string; blocked bool }
+		type edgeKey struct {
+			src, dst, destIP, port string
+			blocked                bool
+		}
 		edgeCounts := make(map[edgeKey]int)
 		nodeSet := make(map[string]TopologyNode)
 
@@ -216,11 +220,14 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 // buildCiliumTopology constructs a topology response from Cilium/Hubble flow data.
 // It uses pod names directly from Hubble (no IP lookup needed for known pods).
-func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPods map[string][]string, partialResolution bool) TopologyResponse {
+func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPods map[string][]string, nodeIPMap k8s.NodeIPMap, partialResolution bool) TopologyResponse {
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 
-	type edgeKey struct{ src, dst, port string; blocked bool }
+	type edgeKey struct {
+		src, dst, port string
+		blocked        bool
+	}
 	type edgeVal struct {
 		count      int
 		destIP     string
@@ -237,7 +244,19 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 			id := ns + "/" + pod
 			return id, TopologyNode{ID: id, Label: pod, Pod: pod, Namespace: ns, Kind: "pod"}
 		}
-		// Try ipMap for bare IP
+		if ip == "" {
+			return "", TopologyNode{}
+		}
+		// Check if it's a Kubernetes node physical IP → show as "node" kind
+		if nodeName, ok := nodeIPMap.IPToName[ip]; ok {
+			id := "node:" + ip
+			return id, TopologyNode{ID: id, Label: nodeName, Kind: "node", IP: ip}
+		}
+		// Check if it's in pod CIDR but not a known pod (e.g. cilium_host interface) → skip
+		if k8s.IPInCIDRs(ip, nodeIPMap.PodCIDRs) {
+			return "", TopologyNode{}
+		}
+		// Try ipMap for pod/service IPs
 		if info, ok := ipMap[ip]; ok {
 			if info.Kind == "pod" {
 				id := info.Namespace + "/" + info.Name
@@ -252,7 +271,13 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 
 	for _, e := range entries {
 		srcID, srcNode := resolveID(e.SrcPod, e.SrcNs, e.SrcIP)
+		if srcID == "" {
+			continue // skip: node-internal IP (cilium_host etc.)
+		}
 		dstID, dstNode := resolveID(e.DstPod, e.DstNs, e.DstIP)
+		if dstID == "" {
+			continue // skip: node-internal IP
+		}
 
 		if _, ok := nodeSet[srcID]; !ok {
 			nodeSet[srcID] = srcNode

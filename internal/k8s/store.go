@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -27,9 +29,9 @@ const annotationCreatedBy = "sentinel.io/created-by"
 type PolicyRecord struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"`
-	Scope     string `json:"scope"`      // "cluster" or "namespaced"
-	Mode      string `json:"mode"`       // "Monitoring", "Protect", or "Mixed"
-	CreatedBy string `json:"createdBy"`  // sentinel username or "k8s-apply"
+	Scope     string `json:"scope"`     // "cluster" or "namespaced"
+	Mode      string `json:"mode"`      // "Monitoring", "Protect", or "Mixed"
+	CreatedBy string `json:"createdBy"` // sentinel username or "k8s-apply"
 	CreatedAt string `json:"createdAt"`
 	RawYAML   string `json:"rawYaml"`
 }
@@ -59,10 +61,10 @@ type Store struct {
 	ciliumTopoCleanup uint64                     // triggers lazy eviction every N updates
 
 	// ListClusterIPs cache
-	ipCacheMu      sync.RWMutex
-	ipCacheData    map[string]IPInfo
-	ipCacheExpiry  time.Time
-	ipCacheTTL     time.Duration
+	ipCacheMu     sync.RWMutex
+	ipCacheData   map[string]IPInfo
+	ipCacheExpiry time.Time
+	ipCacheTTL    time.Duration
 }
 
 // NewStore creates a Store wrapping the given clients.
@@ -605,6 +607,57 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 	return result, nil
 }
 
+// NodeIPMap holds per-node information for topology IP classification.
+type NodeIPMap struct {
+	IPToName map[string]string // nodeIP → nodeName
+	PodCIDRs []string          // all pod CIDRs across all nodes
+}
+
+// ListNodeIPMap returns node physical IPs and pod CIDRs used to distinguish
+// node IPs from external IPs and to identify cilium_host/internal-only IPs.
+func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
+	result := NodeIPMap{IPToName: make(map[string]string)}
+	if s.typed == nil {
+		return result
+	}
+	nodes, err := s.typed.CoreV1().Nodes("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return result
+	}
+	for _, node := range nodes.Items {
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP {
+				result.IPToName[addr.Address] = node.Name
+			}
+		}
+		if node.Spec.PodCIDR != "" {
+			result.PodCIDRs = append(result.PodCIDRs, node.Spec.PodCIDR)
+		}
+		for _, cidr := range node.Spec.PodCIDRs {
+			result.PodCIDRs = append(result.PodCIDRs, cidr)
+		}
+	}
+	return result
+}
+
+// IPInCIDRs returns true when ip falls within any of the given CIDR ranges.
+func IPInCIDRs(ip string, cidrs []string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, cidr := range cidrs {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
 // GetMode returns the explicitly set global enforcement mode.
 // It never auto-derives the mode from policy actions.
 func (s *Store) GetMode(ctx context.Context) (string, error) {
@@ -755,8 +808,8 @@ func detectMode(rawYAML string) string {
 					kill++
 				case policy.ActionPost:
 					post++
-				// Unknown actions are intentionally ignored — they don't
-				// contribute to either counter, matching GetMode's behaviour.
+					// Unknown actions are intentionally ignored — they don't
+					// contribute to either counter, matching GetMode's behaviour.
 				}
 			}
 		}
