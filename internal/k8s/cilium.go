@@ -15,36 +15,36 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 // CiliumFlow is a normalized Hubble/Cilium network flow.
 type CiliumFlow struct {
-	Time       string `json:"time"`
-	Verdict    string `json:"verdict"` // FORWARDED | DROPPED | AUDIT
+	Time    string `json:"time"`
+	Verdict string `json:"verdict"` // FORWARDED | DROPPED | AUDIT
 	// Source endpoint
-	SrcIP      string `json:"srcIP"`
-	SrcPort    uint32 `json:"srcPort"`
-	SrcPod     string `json:"srcPod"`
-	SrcNs      string `json:"srcNs"`
+	SrcIP   string `json:"srcIP"`
+	SrcPort uint32 `json:"srcPort"`
+	SrcPod  string `json:"srcPod"`
+	SrcNs   string `json:"srcNs"`
 	// Destination endpoint
-	DstIP      string `json:"dstIP"`
-	DstPort    uint32 `json:"dstPort"`
-	DstPod     string `json:"dstPod"`
-	DstNs      string `json:"dstNs"`
+	DstIP   string `json:"dstIP"`
+	DstPort uint32 `json:"dstPort"`
+	DstPod  string `json:"dstPod"`
+	DstNs   string `json:"dstNs"`
 	// Transport
-	Protocol   string `json:"protocol"` // TCP | UDP | ICMP
+	Protocol string `json:"protocol"` // TCP | UDP | ICMP
 	// L7 (only when Cilium proxy is active)
-	L7Type     string `json:"l7Type,omitempty"`   // HTTP | gRPC | DNS | kafka
+	L7Type     string `json:"l7Type,omitempty"` // HTTP | gRPC | DNS | kafka
 	HTTPMethod string `json:"httpMethod,omitempty"`
 	HTTPURL    string `json:"httpURL,omitempty"`
 	HTTPStatus uint32 `json:"httpStatus,omitempty"`
 	DNSQuery   string `json:"dnsQuery,omitempty"`
 	DNSRcode   string `json:"dnsRcode,omitempty"`
 	// Metadata
-	NodeName   string `json:"nodeName"`
-	IsReply    bool   `json:"isReply"`
+	NodeName string `json:"nodeName"`
+	IsReply  bool   `json:"isReply"`
 }
 
 func ciliumNamespace() string {
@@ -185,8 +185,8 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 					Protocol string `json:"protocol"`
 				} `json:"http"`
 				DNS *struct {
-					Query string   `json:"query"`
-					Rcode string   `json:"rcode"`
+					Query  string   `json:"query"`
+					Rcode  string   `json:"rcode"`
 					QTypes []string `json:"qtypes"`
 				} `json:"dns"`
 				Grpc *struct {
