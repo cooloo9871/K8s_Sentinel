@@ -68,7 +68,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/security-events/stream", streamSecurityEvents(cfg.Security))
 		r.Get("/api/security-events/retention", getSecurityRetention(cfg.Security))
 		r.Get("/api/admission-events/retention", getAdmissionRetention(cfg.Admission))
-		r.Get("/api/network-topology", getNetworkTopology(cfg.Security, cfg.Store))
+		r.Get("/api/network-topology", getNetworkTopology(cfg.Store))
 		r.Get("/api/cilium/status", getCiliumStatus(cfg.Store))
 		r.Get("/api/cilium/flows/stream", streamCiliumFlows(cfg.Store))
 		r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))

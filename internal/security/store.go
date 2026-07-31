@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -66,24 +65,6 @@ func DefaultRetentionConfig() RetentionConfig {
 	return RetentionConfig{MaxWarnings: 500, MaxCriticals: 300, TTLDays: 7}
 }
 
-// topoKey uniquely identifies a directed connection for topology display.
-type topoKey struct {
-	pod, ns, nodeName, netDest string
-	blocked                    bool
-}
-
-// topoEntry holds the minimal fields needed by the topology handler.
-type topoEntry struct {
-	Pod       string
-	Namespace string
-	NodeName  string
-	NetSrc    string
-	NetDest   string
-	Action    string
-	Function  string // "tcp_connect" = outbound, "inet_csk_accept" = inbound
-	LastSeen  time.Time
-}
-
 // Store holds Tetragon kprobe events with file persistence and SSE fanout.
 type Store struct {
 	mu       sync.RWMutex
@@ -93,10 +74,6 @@ type Store struct {
 	flushGen uint64     // incremented each flush; goroutine skips write if stale
 	flushMu  sync.Mutex // serialises the stale-check + rename to eliminate TOCTOU
 	cfg      RetentionConfig
-	// topoBuf tracks unique connection pairs by time, independent of event-count retention.
-	// Evicted by TTLDays (same as events), not by MaxWarnings/MaxCriticals.
-	topoBuf     map[topoKey]topoEntry
-	topoCleanup uint64 // counter to trigger lazy cleanup every N adds
 }
 
 func NewStore(path string) *Store {
@@ -106,29 +83,9 @@ func NewStore(path string) *Store {
 		subs:    make(map[chan Event]struct{}),
 		path:    path,
 		cfg:     cfg,
-		topoBuf: make(map[topoKey]topoEntry),
 	}
 	s.load()
 	return s
-}
-
-// updateTopoBuf records a connection into the topology buffer.
-// Must be called while holding s.mu (write lock).
-func (s *Store) updateTopoBuf(e Event, lastSeen time.Time) {
-	if e.NetDest == "" {
-		return
-	}
-	netDestKey := e.NetDest
-	// For inbound accept events the "dest" is the remote client's IP:ephemeralPort.
-	// Strip the ephemeral port so all connections from the same client IP are
-	// de-duplicated to a single topoBuf entry instead of exploding per connection.
-	if e.Function == "inet_csk_accept" {
-		if idx := strings.LastIndex(netDestKey, ":"); idx > 0 {
-			netDestKey = strings.TrimPrefix(netDestKey[:idx], "::ffff:")
-		}
-	}
-	k := topoKey{pod: e.Pod, ns: e.Namespace, nodeName: e.NodeName, netDest: netDestKey, blocked: e.Action == "kill" || e.Action == "deny"}
-	s.topoBuf[k] = topoEntry{Pod: e.Pod, Namespace: e.Namespace, NodeName: e.NodeName, NetSrc: e.NetSrc, NetDest: e.NetDest, Action: e.Action, Function: e.Function, LastSeen: lastSeen}
 }
 
 // SetRetention updates the retention config and reapplies caps immediately.
@@ -166,8 +123,6 @@ func (s *Store) load() {
 			continue
 		}
 		s.evts = append(s.evts, e)
-		// Seed topoBuf from loaded events so topology is correct after restart.
-		s.updateTopoBuf(e, t)
 	}
 	s.evts = s.capBySeverity(s.evts)
 }
@@ -255,7 +210,6 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 				updated.Time = raw.Time
 				s.evts = append(s.evts[:i], s.evts[i+1:]...)
 				s.evts = append([]Event{updated}, s.evts...)
-				s.updateTopoBuf(updated, t)
 				s.flush()
 				s.mu.Unlock()
 				s.broadcast(updated)
@@ -296,19 +250,6 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 	}
 	s.evts = s.capBySeverity(filtered)
 
-	// Update topology buffer — independent of event-count retention.
-	s.updateTopoBuf(newEvt, t)
-
-	// Lazy cleanup of stale topoBuf entries every 1000 adds.
-	s.topoCleanup++
-	if s.topoCleanup%1000 == 0 {
-		for k, entry := range s.topoBuf {
-			if !entry.LastSeen.After(cutoff) {
-				delete(s.topoBuf, k)
-			}
-		}
-	}
-
 	s.flush()
 	s.mu.Unlock()
 	s.broadcast(newEvt)
@@ -322,30 +263,6 @@ func (s *Store) List() []Event {
 	return cp
 }
 
-// ListTopologyEvents returns the minimal event fields needed to build the
-// network topology graph. Unlike List(), this is driven by topoBuf which is
-// bounded by TTLDays (not by MaxWarnings/MaxCriticals), so blocked edges
-// survive even when critical event retention is set very low.
-func (s *Store) ListTopologyEvents() []Event {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
-	out := make([]Event, 0, len(s.topoBuf))
-	for _, entry := range s.topoBuf {
-		if entry.LastSeen.After(cutoff) {
-			out = append(out, Event{
-				Pod:       entry.Pod,
-				Namespace: entry.Namespace,
-				NodeName:  entry.NodeName,
-				NetSrc:    entry.NetSrc,
-				NetDest:   entry.NetDest,
-				Action:    entry.Action,
-				Function:  entry.Function,
-			})
-		}
-	}
-	return out
-}
 
 func (s *Store) Subscribe() (<-chan Event, func()) {
 	ch := make(chan Event, 64)

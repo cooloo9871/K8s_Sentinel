@@ -4,10 +4,8 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/cooloo9871/sentinel/internal/k8s"
-	"github.com/cooloo9871/sentinel/internal/security"
 )
 
 type TopologyNode struct {
@@ -70,183 +68,39 @@ type TopologyResponse struct {
 	DataSource        string         `json:"dataSource"` // "cilium" | "tetragon"
 }
 
-func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.HandlerFunc {
+// getNetworkTopology serves the graph from Cilium/Hubble flows. There is no
+// Tetragon fallback: kprobe-derived topology could only see pod-initiated
+// connections to raw IPs, missed the real source of inbound traffic (the
+// kprobe fires after SNAT) and required a TracingPolicy just to collect data.
+// When no flows have been observed yet the response is empty and the UI
+// explains the Cilium prerequisites.
+func getNetworkTopology(k8sStore *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		// Resolve cluster IPs using TTL-cached lookup
-		ipMap := map[string]k8s.IPInfo{}
-		partialResolution := false
-		if k8sStore != nil {
-			m, err := k8sStore.CachedClusterIPs(r.Context())
-			if err != nil {
-				partialResolution = true
-			} else {
-				ipMap = m
-			}
-		}
 
-		// Static exposure paths (NodePort/LB/Ingress/hostNetwork) per pod
-		exposures := map[string][]k8s.Exposure{}
-		if k8sStore != nil {
-			exposures = k8sStore.CachedPodExposures(r.Context())
-		}
-
-		// When Cilium data is available, prefer it over Tetragon topoBuf.
-		// Cilium provides pre-NAT IPs, L7 metadata, and all flows regardless of TracingPolicy.
-		if k8sStore != nil && k8sStore.HasCiliumTopoData() {
-			nodeIPMap := k8sStore.ListNodeIPMap(r.Context())
-			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, nodeIPMap, exposures, partialResolution))
+		if k8sStore == nil || !k8sStore.HasCiliumTopoData() {
+			writeJSON(w, http.StatusOK, TopologyResponse{
+				Nodes:      []TopologyNode{},
+				Edges:      []TopologyEdge{},
+				DataSource: "cilium",
+			})
 			return
 		}
 
-		events := store.ListTopologyEvents()
-
-		// One edge per (src, dst, blocked) pair; ports aggregated into a breakdown.
-		type edgeKey struct {
-			src, dst string
-			blocked  bool
-		}
-		type edgeAgg struct {
-			count  int
-			destIP string
-			ports  map[string]int
-		}
-		edgeCounts := make(map[edgeKey]*edgeAgg)
-		nodeSet := make(map[string]TopologyNode)
-
-		for _, e := range events {
-			if e.Pod == "" {
-				continue
-			}
-
-			// Source is always the pod initiating the connection
-			srcID := e.Namespace + "/" + e.Pod
-			if _, ok := nodeSet[srcID]; !ok {
-				// NetSrc is "ip:port"; strip the port before ipMap lookup
-				srcAddrRaw := e.NetSrc
-				if strings.HasPrefix(srcAddrRaw, "[") {
-					if end := strings.Index(srcAddrRaw, "]"); end != -1 {
-						srcAddrRaw = strings.TrimPrefix(srcAddrRaw[1:end], "::ffff:")
-					}
-				} else if idx := strings.LastIndex(srcAddrRaw, ":"); idx != -1 {
-					srcAddrRaw = strings.TrimPrefix(srcAddrRaw[:idx], "::ffff:")
-				}
-				srcIP := ""
-				if info, ok2 := ipMap[srcAddrRaw]; ok2 {
-					srcIP = info.IP
-				}
-				nodeSet[srcID] = TopologyNode{
-					ID:        srcID,
-					Label:     e.Pod,
-					Pod:       e.Pod,
-					Namespace: e.Namespace,
-					Kind:      "pod",
-					IP:        srcIP,
-				}
-			}
-
-			// Parse destination: "ip:port", "[::ffff:ip]:port", or just "ip"
-			destRaw := e.NetDest
-			port := ""
-			if strings.HasPrefix(destRaw, "[") {
-				if end := strings.Index(destRaw, "]"); end != -1 {
-					inner := destRaw[1:end]
-					inner = strings.TrimPrefix(inner, "::ffff:")
-					destRaw = inner
-					if end+2 < len(e.NetDest) {
-						port = e.NetDest[end+2:]
-					}
-				}
-			} else if idx := strings.LastIndex(destRaw, ":"); idx != -1 {
-				port = destRaw[idx+1:]
-				destRaw = destRaw[:idx]
-				destRaw = strings.TrimPrefix(destRaw, "::ffff:")
-			}
-
-			// Try to resolve destination IP to a pod. Service ClusterIPs are
-			// intentionally not rendered — the topology shows only real
-			// sources and destinations, and a VIP is neither.
-			var dstID string
-			var dstNode TopologyNode
-			if info, ok := ipMap[destRaw]; ok {
-				if info.Kind != "pod" {
-					continue // service VIP — skip
-				}
-				dstID = info.Namespace + "/" + info.Name
-				dstNode = TopologyNode{
-					ID:        dstID,
-					Label:     info.Name,
-					Pod:       info.Name,
-					Namespace: info.Namespace,
-					Kind:      "pod",
-					IP:        info.IP,
-				}
-			} else {
-				dstID = "ext:" + destRaw
-				dstNode = TopologyNode{
-					ID:    dstID,
-					Label: destRaw,
-					Kind:  "external",
-					IP:    destRaw,
-				}
-			}
-
-			if _, ok := nodeSet[dstID]; !ok {
-				nodeSet[dstID] = dstNode
-			}
-
-			blocked := e.Action == "kill" || e.Action == "deny"
-			key := edgeKey{srcID, dstID, blocked}
-			agg := edgeCounts[key]
-			if agg == nil {
-				agg = &edgeAgg{destIP: destRaw, ports: make(map[string]int)}
-				edgeCounts[key] = agg
-			}
-			agg.count++
-			if port != "" {
-				agg.ports[normalizePort(port)]++
-			}
+		// Resolve cluster IPs using TTL-cached lookup
+		ipMap := map[string]k8s.IPInfo{}
+		partialResolution := false
+		if m, err := k8sStore.CachedClusterIPs(r.Context()); err != nil {
+			partialResolution = true
+		} else {
+			ipMap = m
 		}
 
-		// Attach exposures to pod nodes
-		for id, n := range nodeSet {
-			if n.Kind == "pod" {
-				if exp := exposures[n.ID]; len(exp) > 0 {
-					n.Exposures = exp
-					nodeSet[id] = n
-				}
-			}
-		}
+		// Static exposure paths (NodePort/LB/Ingress/hostNetwork) per pod
+		exposures := k8sStore.CachedPodExposures(r.Context())
+		nodeIPMap := k8sStore.ListNodeIPMap(r.Context())
 
-		nodes := make([]TopologyNode, 0, len(nodeSet))
-		for _, n := range nodeSet {
-			nodes = append(nodes, n)
-		}
-
-		edges := make([]TopologyEdge, 0, len(edgeCounts))
-		for k, agg := range edgeCounts {
-			suffix := ""
-			if k.blocked {
-				suffix = ":blocked"
-			}
-			edges = append(edges, TopologyEdge{
-				ID:      k.src + "->" + k.dst + suffix,
-				Source:  k.src,
-				Target:  k.dst,
-				DestIP:  agg.destIP,
-				Count:   agg.count,
-				Blocked: k.blocked,
-				Ports:   portStats(agg.ports),
-			})
-		}
-
-		writeJSON(w, http.StatusOK, TopologyResponse{
-			Nodes:             nodes,
-			Edges:             edges,
-			HasNetworkEvents:  len(edges) > 0,
-			PartialResolution: partialResolution,
-			DataSource:        "tetragon",
-		})
+		writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, nodeIPMap, exposures, partialResolution))
 	}
 }
 
