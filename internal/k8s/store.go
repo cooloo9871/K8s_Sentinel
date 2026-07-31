@@ -181,11 +181,13 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	if f.Verdict != "allowed" && f.Verdict != "dropped" {
 		return
 	}
-	// Filter reply flows only when the source is a pod (pod→external/pod-to-pod
-	// replies). SNAT'd NodePort traffic arrives with is_reply=true but has no
-	// source pod (source is a node IP) — keep those so inbound NodePort
-	// connections appear in the topology.
-	if f.IsReply && f.SrcPod != "" {
+	// Reply-direction flows never define an edge — an edge's direction is the
+	// connection-initiation direction (conntrack request side). Replies of
+	// pod-initiated egress arrive as ext→pod with no source pod and would
+	// invert the topology: a pod curling an external site appeared to RECEIVE
+	// external traffic, falsely triggering the undeclared-exposure warning.
+	// Genuine inbound requests (world→pod) carry is_reply=false and are kept.
+	if f.IsReply {
 		return
 	}
 	if f.SrcPod == "" && f.SrcIP == "" {
