@@ -65,6 +65,11 @@ type Store struct {
 	ipCacheData   map[string]IPInfo
 	ipCacheExpiry time.Time
 	ipCacheTTL    time.Duration
+
+	// Pod exposure cache (NodePort/LB/Ingress/hostNetwork paths)
+	exposureMu     sync.RWMutex
+	exposureData   map[string][]Exposure
+	exposureExpiry time.Time
 }
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the

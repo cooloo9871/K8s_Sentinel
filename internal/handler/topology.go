@@ -11,13 +11,14 @@ import (
 )
 
 type TopologyNode struct {
-	ID          string   `json:"id"`
-	Label       string   `json:"label"`
-	Pod         string   `json:"pod"`
-	Namespace   string   `json:"namespace"`
-	Kind        string   `json:"kind"` // "pod" | "service" | "external" | "node"
-	IP          string   `json:"ip,omitempty"`
-	BackingPods []string `json:"backingPods,omitempty"` // only set for service nodes
+	ID          string         `json:"id"`
+	Label       string         `json:"label"`
+	Pod         string         `json:"pod"`
+	Namespace   string         `json:"namespace"`
+	Kind        string         `json:"kind"` // "pod" | "service" | "external" | "node"
+	IP          string         `json:"ip,omitempty"`
+	BackingPods []string       `json:"backingPods,omitempty"` // only set for service nodes
+	Exposures   []k8s.Exposure `json:"exposures,omitempty"`   // static attack-surface paths (pod nodes only)
 }
 
 // PortStat is one destination port's share of an aggregated edge.
@@ -93,11 +94,17 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			}
 		}
 
+		// Static exposure paths (NodePort/LB/Ingress/hostNetwork) per pod
+		exposures := map[string][]k8s.Exposure{}
+		if k8sStore != nil {
+			exposures = k8sStore.CachedPodExposures(r.Context())
+		}
+
 		// When Cilium data is available, prefer it over Tetragon topoBuf.
 		// Cilium provides pre-NAT IPs, L7 metadata, and all flows regardless of TracingPolicy.
 		if k8sStore != nil && k8sStore.HasCiliumTopoData() {
 			nodeIPMap := k8sStore.ListNodeIPMap(r.Context())
-			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, svcPods, nodeIPMap, partialResolution))
+			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, svcPods, nodeIPMap, exposures, partialResolution))
 			return
 		}
 
@@ -217,12 +224,18 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			}
 		}
 
-		// Attach backing pod names to service nodes
+		// Attach backing pod names to service nodes and exposures to pod nodes
 		for id, n := range nodeSet {
 			if n.Kind == "service" {
 				key := n.Namespace + "/" + n.Label
 				if pods := svcPods[key]; len(pods) > 0 {
 					n.BackingPods = pods
+					nodeSet[id] = n
+				}
+			}
+			if n.Kind == "pod" {
+				if exp := exposures[n.ID]; len(exp) > 0 {
+					n.Exposures = exp
 					nodeSet[id] = n
 				}
 			}
@@ -262,7 +275,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 // buildCiliumTopology constructs a topology response from Cilium/Hubble flow data.
 // It uses pod names directly from Hubble (no IP lookup needed for known pods).
-func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPods map[string][]string, nodeIPMap k8s.NodeIPMap, partialResolution bool) TopologyResponse {
+func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPods map[string][]string, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, partialResolution bool) TopologyResponse {
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 
@@ -384,6 +397,11 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 
 	nodes := make([]TopologyNode, 0, len(nodeSet))
 	for _, n := range nodeSet {
+		if n.Kind == "pod" {
+			if exp := exposures[n.ID]; len(exp) > 0 {
+				n.Exposures = exp
+			}
+		}
 		nodes = append(nodes, n)
 	}
 

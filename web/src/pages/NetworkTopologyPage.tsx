@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid } from '@tabler/icons-react'
+import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld } from '@tabler/icons-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,10 @@ interface TopologyNode {
   kind: 'pod' | 'service' | 'external' | 'node'
   ip?: string
   backingPods?: string[]
+  // Static attack-surface paths (NodePort/LB/Ingress/hostNetwork), pod nodes only
+  exposures?: { type: string; detail: string }[]
+  // Derived client-side: this pod receives traffic from an ext: source
+  extInbound?: boolean
 }
 
 interface TopologyEdge {
@@ -56,9 +60,17 @@ interface TopologyResponse {
 // ── Custom node: pod ───────────────────────────────────────────────────────
 
 function PodNode({ data }: { data: TopologyNode }) {
+  const exposed = (data.exposures?.length ?? 0) > 0
+  // External traffic arriving at a pod with no declared exposure path is a
+  // security signal (config drift, hostPort bypass, or an active probe).
+  const anomaly = !!data.extInbound && !exposed
+  const border = anomaly ? 'border-red-500/70' : exposed ? 'border-amber-500/60' : 'border-primary/40'
   return (
-    <div className="rounded-lg border border-primary/40 bg-background px-3 py-2 shadow-sm min-w-[120px] text-center">
+    <div className={`relative rounded-lg border ${border} bg-background px-3 py-2 shadow-sm min-w-[120px] text-center`}>
       <Handle type="target" position={Position.Left} className="!bg-primary" />
+      {anomaly
+        ? <IconAlertTriangle size={12} className="absolute right-1 top-1 text-red-500" />
+        : exposed && <IconWorld size={12} className="absolute right-1 top-1 text-amber-500" />}
       <div className="text-[10px] text-muted-foreground mb-0.5">{data.namespace}</div>
       <div className="text-xs font-medium truncate max-w-[140px]" title={data.pod}>{data.pod}</div>
       <Handle type="source" position={Position.Right} className="!bg-primary" />
@@ -240,6 +252,8 @@ export function NetworkTopologyPage() {
   // System namespaces are mostly control-plane noise (coredns, operators);
   // hidden by default, and auto-shown when kube-system is explicitly selected.
   const [hideSystem, setHideSystem] = useState(true)
+  // Show only pods with a declared exposure path (attack-surface audit view)
+  const [exposedOnly, setExposedOnly] = useState(false)
   // Hover focus: highlight the hovered node's edges, dim everything else
   const [hoverId, setHoverId] = useState<string | null>(null)
   const adjacencyRef = useRef<Record<string, Set<string>>>({})
@@ -297,6 +311,7 @@ export function NetworkTopologyPage() {
     const isPrimary = (n: TopologyNode): boolean => {
       if (n.kind === 'external' || n.kind === 'node') return false
       if (nsFilter !== 'all' && n.namespace !== nsFilter) return false
+      if (exposedOnly && !(n.exposures?.length)) return false
       if (podQ) {
         // Search both pod name and service label
         const nameMatch =
@@ -308,7 +323,7 @@ export function NetworkTopologyPage() {
     }
 
     // When no filter is active, all pods/services are primary
-    const noFilter = nsFilter === 'all' && !podQ
+    const noFilter = nsFilter === 'all' && !podQ && !exposedOnly
     const primaryIds = new Set(
       noFilter
         ? scopedNodes.filter(n => n.kind !== 'external' && n.kind !== 'node').map(n => n.id)
@@ -337,7 +352,14 @@ export function NetworkTopologyPage() {
 
     // Visible = anything reachable via filtered edges
     // (external nodes appear only when they have a connection)
-    const visibleNodes = scopedNodes.filter(n => connectedIds.has(n.id))
+    // Mark pods receiving traffic from an ext: source so PodNode can flag
+    // undeclared exposure (ext traffic without any exposure path).
+    const extInboundTargets = new Set(
+      filteredEdges.filter(e => e.source.startsWith('ext:')).map(e => e.target)
+    )
+    const visibleNodes = scopedNodes
+      .filter(n => connectedIds.has(n.id))
+      .map(n => n.kind === 'pod' ? { ...n, extInbound: extInboundTargets.has(n.id) } : n)
 
     // Adjacency map for hover-focus dimming
     const adj: Record<string, Set<string>> = {}
@@ -358,7 +380,7 @@ export function NetworkTopologyPage() {
     setTimeout(() => reactFlowRef.current?.fitView(), 100)
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
-  }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, setNodes, setEdges])
+  }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, exposedOnly, setNodes, setEdges])
 
   // Hover / selection focus: highlight the focused node's edges + neighbors,
   // dim everything else. Labels appear only on focused edges.
@@ -460,6 +482,14 @@ export function NetworkTopologyPage() {
           />
           Hide kube-system
         </label>
+        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+          <Checkbox
+            checked={exposedOnly}
+            onCheckedChange={v => setExposedOnly(v === true)}
+            className="size-3.5"
+          />
+          Exposed only
+        </label>
         {matchCount !== null && (
           <span className="text-xs text-muted-foreground">
             {matchCount} match{matchCount !== 1 ? 'es' : ''}
@@ -487,6 +517,10 @@ export function NetworkTopologyPage() {
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded border border-amber-500/40 bg-amber-500/10 inline-block" />
             External
+          </span>
+          <span className="flex items-center gap-1">
+            <IconWorld size={12} className="text-amber-500" />
+            Exposed
           </span>
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#6366f1" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#6366f1" /></svg>
@@ -628,6 +662,24 @@ export function NetworkTopologyPage() {
                                 <div key={p} className="font-mono text-xs break-all">{p}</div>
                               ))}
                             </div>
+                          </div>
+                        )}
+                        {selectedNode.kind === 'pod' && selectedNode.exposures && selectedNode.exposures.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Exposure</span>
+                            <div className="mt-1 flex flex-col gap-1">
+                              {selectedNode.exposures.map((x, i) => (
+                                <div key={i} className="flex items-start gap-1.5">
+                                  <span className="shrink-0 rounded bg-amber-500/10 px-1 py-0.5 text-[9px] font-medium uppercase text-amber-700">{x.type}</span>
+                                  <span className="break-all font-mono text-[11px]">{x.detail}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {selectedNode.kind === 'pod' && selectedNode.extInbound && !(selectedNode.exposures?.length) && (
+                          <div className="mt-1 rounded bg-red-50 px-2 py-1.5 text-[11px] font-medium text-red-600">
+                            ⚠ Receiving external traffic without any declared exposure path
                           </div>
                         )}
                       </>
