@@ -126,6 +126,16 @@ kubectl logs -n kube-system job/sentinel-installer -f
 bash deploy/install.sh
 ```
 
+### Container image
+
+部署使用 GitHub Container Registry 上的 image：
+
+```
+ghcr.io/cooloo9871/sentinel:latest
+```
+
+各版本的 tag 見 [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases)。生產環境建議在 `deploy/base/deployment.yaml` 改為固定版本（例如 `:v0.2.0`）而非 `:latest`，以確保部署可重現。
+
 ### 存取 UI
 
 ```bash
