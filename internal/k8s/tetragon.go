@@ -33,10 +33,11 @@ type TetragonEvent struct {
 	Action     string  `json:"action"` // "monitor" | "kill" | "deny"
 	PolicyName string  `json:"policyName"`
 	Function   string  `json:"function"`
-	FilePath   string  `json:"filePath"` // file/path from file kprobes
-	FileOp     string  `json:"fileOp"`   // "read", "write", "mmap-read", "mmap-write", "truncate"
-	NetDest    string  `json:"netDest"`  // destination "addr:port" from network kprobes
-	NetSrc     string  `json:"netSrc"`   // source "addr:port" from network kprobes
+	FilePath   string  `json:"filePath"`             // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`               // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`              // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`               // source "addr:port" from network kprobes
+	DropReason string  `json:"dropReason,omitempty"` // Cilium kernel drop reason, e.g. POLICY_DENIED
 	ProcessUID *uint32 `json:"processUid,omitempty"`
 }
 
@@ -60,7 +61,15 @@ func (e TetragonEvent) Blocked() bool {
 // stream (persisted, alerted on, forwarded to syslog) as opposed to the raw
 // process-discovery stream.
 func (e TetragonEvent) IsSecurityEvent() bool {
-	return (e.Type == "kprobe" || e.Type == "policy-deny") && e.PolicyName != ""
+	// A policy denial is inherently policy-driven, so it qualifies even when
+	// Hubble could not name the rule — which is the normal case for
+	// default-deny, where the drop is the absence of an allow rule.
+	if e.Type == "policy-deny" {
+		return true
+	}
+	// Kprobe events without a policy name come from the base sensor and belong
+	// to process discovery, not the security stream.
+	return e.Type == "kprobe" && e.PolicyName != ""
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.

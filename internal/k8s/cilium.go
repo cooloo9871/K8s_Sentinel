@@ -437,14 +437,11 @@ func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
 		return TetragonEvent{}, false // no workload to attribute the denial to
 	}
 
-	// All security-event consumers filter on a non-empty policy name, and users
-	// filter alerts by it, so fall back to a stable identifier when Hubble
-	// policy correlation is disabled and the real name is unavailable.
-	policy := f.PolicyName
-	if policy == "" {
-		policy = "cilium-network-policy"
-	}
-
+	// PolicyName is left empty when Hubble cannot attribute the drop to a rule.
+	// That is the normal case for default-deny: the packet was dropped because
+	// no rule allowed it, so there is no rule to name. Never substitute a
+	// placeholder here — the Policy column must only ever show policies that
+	// actually exist in the cluster.
 	function := "cilium-policy-deny"
 	if f.Direction != "" {
 		function = "cilium-" + f.Direction + "-deny"
@@ -466,11 +463,10 @@ func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
 		Namespace:  ns,
 		Pod:        pod,
 		Action:     "deny",
-		PolicyName: policy,
+		PolicyName: f.PolicyName,
 		Function:   function,
 		NetSrc:     src,
 		NetDest:    dst,
-		// Surfaces the kernel drop reason (e.g. POLICY_DENIED) in event detail
-		Arguments: f.DropReason,
+		DropReason: f.DropReason,
 	}, true
 }

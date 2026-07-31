@@ -86,6 +86,7 @@ function DetailRow({ e }: { e: DisplayEvent }) {
   }
   if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
   if (e.function)   items.push({ label: 'Function',  value: e.function })
+  if (e.dropReason) items.push({ label: 'Drop Reason', value: e.dropReason })
   if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
   items.push({ label: 'Time', value: formatTWTime(e.time) })
 
