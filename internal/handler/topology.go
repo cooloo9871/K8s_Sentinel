@@ -11,14 +11,13 @@ import (
 )
 
 type TopologyNode struct {
-	ID          string         `json:"id"`
-	Label       string         `json:"label"`
-	Pod         string         `json:"pod"`
-	Namespace   string         `json:"namespace"`
-	Kind        string         `json:"kind"` // "pod" | "service" | "external" | "node"
-	IP          string         `json:"ip,omitempty"`
-	BackingPods []string       `json:"backingPods,omitempty"` // only set for service nodes
-	Exposures   []k8s.Exposure `json:"exposures,omitempty"`   // static attack-surface paths (pod nodes only)
+	ID        string         `json:"id"`
+	Label     string         `json:"label"`
+	Pod       string         `json:"pod"`
+	Namespace string         `json:"namespace"`
+	Kind      string         `json:"kind"` // "pod" | "external" | "node"
+	IP        string         `json:"ip,omitempty"`
+	Exposures []k8s.Exposure `json:"exposures,omitempty"` // static attack-surface paths (pod nodes only)
 }
 
 // PortStat is one destination port's share of an aggregated edge.
@@ -86,14 +85,6 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			}
 		}
 
-		// Fetch service → backing pod names (best-effort; empty map on error)
-		svcPods := map[string][]string{}
-		if k8sStore != nil {
-			if sp, err := k8sStore.ListServicePodNames(r.Context()); err == nil && sp != nil {
-				svcPods = sp
-			}
-		}
-
 		// Static exposure paths (NodePort/LB/Ingress/hostNetwork) per pod
 		exposures := map[string][]k8s.Exposure{}
 		if k8sStore != nil {
@@ -104,7 +95,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		// Cilium provides pre-NAT IPs, L7 metadata, and all flows regardless of TracingPolicy.
 		if k8sStore != nil && k8sStore.HasCiliumTopoData() {
 			nodeIPMap := k8sStore.ListNodeIPMap(r.Context())
-			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, svcPods, nodeIPMap, exposures, partialResolution))
+			writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, nodeIPMap, exposures, partialResolution))
 			return
 		}
 
@@ -172,30 +163,23 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				destRaw = strings.TrimPrefix(destRaw, "::ffff:")
 			}
 
-			// Try to resolve destination IP to pod/service
+			// Try to resolve destination IP to a pod. Service ClusterIPs are
+			// intentionally not rendered — the topology shows only real
+			// sources and destinations, and a VIP is neither.
 			var dstID string
 			var dstNode TopologyNode
 			if info, ok := ipMap[destRaw]; ok {
-				if info.Kind == "pod" {
-					dstID = info.Namespace + "/" + info.Name
-					dstNode = TopologyNode{
-						ID:        dstID,
-						Label:     info.Name,
-						Pod:       info.Name,
-						Namespace: info.Namespace,
-						Kind:      "pod",
-						IP:        info.IP,
-					}
-				} else {
-					dstID = info.Namespace + "/svc/" + info.Name
-					dstNode = TopologyNode{
-						ID:        dstID,
-						Label:     info.Name,
-						Pod:       info.Name,
-						Namespace: info.Namespace,
-						Kind:      "service",
-						IP:        info.IP,
-					}
+				if info.Kind != "pod" {
+					continue // service VIP — skip
+				}
+				dstID = info.Namespace + "/" + info.Name
+				dstNode = TopologyNode{
+					ID:        dstID,
+					Label:     info.Name,
+					Pod:       info.Name,
+					Namespace: info.Namespace,
+					Kind:      "pod",
+					IP:        info.IP,
 				}
 			} else {
 				dstID = "ext:" + destRaw
@@ -224,15 +208,8 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			}
 		}
 
-		// Attach backing pod names to service nodes and exposures to pod nodes
+		// Attach exposures to pod nodes
 		for id, n := range nodeSet {
-			if n.Kind == "service" {
-				key := n.Namespace + "/" + n.Label
-				if pods := svcPods[key]; len(pods) > 0 {
-					n.BackingPods = pods
-					nodeSet[id] = n
-				}
-			}
 			if n.Kind == "pod" {
 				if exp := exposures[n.ID]; len(exp) > 0 {
 					n.Exposures = exp
@@ -275,7 +252,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 // buildCiliumTopology constructs a topology response from Cilium/Hubble flow data.
 // It uses pod names directly from Hubble (no IP lookup needed for known pods).
-func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPods map[string][]string, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, partialResolution bool) TopologyResponse {
+func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, partialResolution bool) TopologyResponse {
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 
@@ -319,14 +296,14 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 		if k8s.IPInCIDRs(ip, nodeIPMap.PodCIDRs) {
 			return "", TopologyNode{}
 		}
-		// Try ipMap for pod/service IPs
+		// Try ipMap for pod IPs. Service ClusterIPs are intentionally not
+		// rendered — a VIP is neither a real source nor a real destination.
 		if info, ok := ipMap[ip]; ok {
-			if info.Kind == "pod" {
-				id := info.Namespace + "/" + info.Name
-				return id, TopologyNode{ID: id, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "pod", IP: info.IP}
+			if info.Kind != "pod" {
+				return "", TopologyNode{}
 			}
-			id := info.Namespace + "/svc/" + info.Name
-			return id, TopologyNode{ID: id, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "service", IP: info.IP}
+			id := info.Namespace + "/" + info.Name
+			return id, TopologyNode{ID: id, Label: info.Name, Pod: info.Name, Namespace: info.Namespace, Kind: "pod", IP: info.IP}
 		}
 		id := "ext:" + ip
 		return id, TopologyNode{ID: id, Label: ip, Kind: "external", IP: ip}
@@ -347,16 +324,6 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 		}
 		if _, ok := nodeSet[dstID]; !ok {
 			nodeSet[dstID] = dstNode
-		}
-
-		// Attach backing pods to service nodes
-		if dstNode.Kind == "service" {
-			if n, ok := nodeSet[dstID]; ok && len(n.BackingPods) == 0 {
-				if pods := svcPods[dstNode.Namespace+"/"+dstNode.Label]; len(pods) > 0 {
-					n.BackingPods = pods
-					nodeSet[dstID] = n
-				}
-			}
 		}
 
 		blocked := e.Verdict == "dropped"

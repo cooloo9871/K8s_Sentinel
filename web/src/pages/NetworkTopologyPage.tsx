@@ -23,9 +23,8 @@ interface TopologyNode {
   label: string
   pod: string
   namespace: string
-  kind: 'pod' | 'service' | 'external' | 'node'
+  kind: 'pod' | 'external' | 'node'
   ip?: string
-  backingPods?: string[]
   // Static attack-surface paths (NodePort/LB/Ingress/hostNetwork), pod nodes only
   exposures?: { type: string; detail: string }[]
   // Derived client-side: this pod receives traffic from an ext: source
@@ -78,19 +77,6 @@ function PodNode({ data }: { data: TopologyNode }) {
   )
 }
 
-// ── Custom node: service ──────────────────────────────────────────────────
-
-function ServiceNode({ data }: { data: TopologyNode }) {
-  return (
-    <div className="rounded-lg border border-green-500/40 bg-green-500/5 px-3 py-2 shadow-sm min-w-[120px] text-center">
-      <Handle type="target" position={Position.Left} className="!bg-green-500" />
-      <div className="text-[10px] text-green-700 mb-0.5">{data.namespace} / svc</div>
-      <div className="text-xs font-medium truncate max-w-[140px]" title={data.label}>{data.label}</div>
-      <Handle type="source" position={Position.Right} className="!bg-green-500" />
-    </div>
-  )
-}
-
 // ── Custom node: Kubernetes node ──────────────────────────────────────────
 
 function NodeHostNode({ data }: { data: TopologyNode }) {
@@ -121,7 +107,6 @@ function ExternalNode({ data }: { data: TopologyNode }) {
 
 const nodeTypes: NodeTypes = {
   pod: PodNode as any,
-  service: ServiceNode as any,
   node: NodeHostNode as any,
   external: ExternalNode as any,
 }
@@ -131,13 +116,11 @@ const nodeTypes: NodeTypes = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function layoutNodes(apiNodes: TopologyNode[]): any[] {
   const pods = apiNodes.filter(n => n.kind === 'pod')
-  const services = apiNodes.filter(n => n.kind === 'service')
   const nodes = apiNodes.filter(n => n.kind === 'node')
   const externals = apiNodes.filter(n => n.kind === 'external')
   return [
     ...pods.map((n, i) => ({ id: n.id, type: 'pod', position: { x: 80, y: 80 + i * 100 }, data: n })),
-    ...services.map((n, i) => ({ id: n.id, type: 'service', position: { x: 380, y: 80 + i * 100 }, data: n })),
-    ...nodes.map((n, i) => ({ id: n.id, type: 'node', position: { x: 380, y: 80 + (services.length + i) * 100 }, data: n })),
+    ...nodes.map((n, i) => ({ id: n.id, type: 'node', position: { x: 380, y: 80 + i * 100 }, data: n })),
     ...externals.map((n, i) => ({ id: n.id, type: 'external', position: { x: 680, y: 80 + i * 80 }, data: n })),
   ]
 }
@@ -184,9 +167,7 @@ function edgeVisuals(e: Edge, focusId: string | null): Edge {
 function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyNode>): Edge[] {
   return apiEdges.map(e => {
     const targetKind = nodeMap[e.target]?.kind ?? 'external'
-    const color = targetKind === 'external' ? '#f59e0b'
-                : targetKind === 'service'  ? '#22c55e'
-                : '#6366f1'
+    const color = targetKind === 'external' ? '#f59e0b' : '#6366f1'
     const base: Edge = {
       id: e.id,
       source: e.source,
@@ -288,7 +269,7 @@ export function NetworkTopologyPage() {
 
   // Namespaces available for filter
   const namespaces = useMemo(() =>
-    [...new Set(rawNodes.filter(n => n.kind === 'pod' || n.kind === 'service').map(n => n.namespace).filter(Boolean))].sort()
+    [...new Set(rawNodes.filter(n => n.kind === 'pod').map(n => n.namespace).filter(Boolean))].sort()
   , [rawNodes])
 
   // Apply search filters and re-layout
@@ -305,7 +286,7 @@ export function NetworkTopologyPage() {
       ? rawEdges.filter(e => scopedIds.has(e.source) && scopedIds.has(e.target))
       : rawEdges
 
-    // "Primary" nodes: pods/services matching the filter criteria.
+    // "Primary" nodes: pods matching the filter criteria.
     // external and node kinds are never seeds — they are pulled in by
     // connections to/from primary nodes (they have no namespace).
     const isPrimary = (n: TopologyNode): boolean => {
@@ -313,7 +294,6 @@ export function NetworkTopologyPage() {
       if (nsFilter !== 'all' && n.namespace !== nsFilter) return false
       if (exposedOnly && !(n.exposures?.length)) return false
       if (podQ) {
-        // Search both pod name and service label
         const nameMatch =
           n.pod.toLowerCase().includes(podQ) ||
           n.label.toLowerCase().includes(podQ)
@@ -322,7 +302,7 @@ export function NetworkTopologyPage() {
       return true
     }
 
-    // When no filter is active, all pods/services are primary
+    // When no filter is active, all pods are primary
     const noFilter = nsFilter === 'all' && !podQ && !exposedOnly
     const primaryIds = new Set(
       noFilter
@@ -397,7 +377,7 @@ export function NetworkTopologyPage() {
     const podQ = podSearch.trim().toLowerCase()
     if (nsFilter === 'all' && !podQ) return null
     return rawNodes.filter(n =>
-      (n.kind === 'pod' || n.kind === 'service') &&
+      n.kind === 'pod' &&
       (nsFilter === 'all' || n.namespace === nsFilter) &&
       (!podQ || n.pod.toLowerCase().includes(podQ) || n.label.toLowerCase().includes(podQ))
     ).length
@@ -468,7 +448,7 @@ export function NetworkTopologyPage() {
         <div className="relative">
           <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Pod / Service name..."
+            placeholder="Pod name..."
             value={podSearch}
             onChange={e => setPodSearch(e.target.value)}
             className="h-8 w-44 pl-8 text-sm"
@@ -507,10 +487,6 @@ export function NetworkTopologyPage() {
             Pod
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-green-500/40 bg-green-500/10 inline-block" />
-            Service
-          </span>
-          <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded border border-slate-400/40 bg-slate-400/10 inline-block" />
             Node
           </span>
@@ -525,10 +501,6 @@ export function NetworkTopologyPage() {
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#6366f1" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#6366f1" /></svg>
             Pod
-          </span>
-          <span className="flex items-center gap-1">
-            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#22c55e" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#22c55e" /></svg>
-            Service
           </span>
           <span className="flex items-center gap-1">
             <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#f59e0b" /></svg>
@@ -601,7 +573,7 @@ export function NetworkTopologyPage() {
             >
               <Background gap={16} size={1} />
               <Controls />
-              <MiniMap nodeColor={n => n.type === 'external' ? '#f59e0b' : n.type === 'service' ? '#22c55e' : n.type === 'node' ? '#64748b' : '#6366f1'} />
+              <MiniMap nodeColor={n => n.type === 'external' ? '#f59e0b' : n.type === 'node' ? '#64748b' : '#6366f1'} />
             </ReactFlow>
           )}
         </div>
@@ -614,7 +586,6 @@ export function NetworkTopologyPage() {
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">
                     {selectedEdge ? 'Connection Detail'
-                      : selectedNode?.kind === 'service' ? 'Service Detail'
                       : selectedNode?.kind === 'external' ? 'External IP'
                       : selectedNode?.kind === 'node' ? 'Node Detail'
                       : 'Pod Detail'}
@@ -634,14 +605,14 @@ export function NetworkTopologyPage() {
                       <span className="text-muted-foreground">Type</span>
                       <div className="mt-0.5">
                         <Badge variant={selectedNode.kind === 'external' || selectedNode.kind === 'node' ? 'secondary' : 'default'} className="text-[10px]">
-                          {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'node' ? 'Node' : selectedNode.kind === 'service' ? 'Service' : 'Pod'}
+                          {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'node' ? 'Node' : 'Pod'}
                         </Badge>
                       </div>
                     </div>
-                  {(selectedNode.kind === 'pod' || selectedNode.kind === 'service') && (
+                  {selectedNode.kind === 'pod' && (
                       <>
                         <div>
-                          <span className="text-muted-foreground">{selectedNode.kind === 'service' ? 'Service' : 'Pod'}</span>
+                          <span className="text-muted-foreground">Pod</span>
                           <div className="mt-0.5 font-mono font-medium break-all">{selectedNode.label}</div>
                         </div>
                         <div>
@@ -654,17 +625,7 @@ export function NetworkTopologyPage() {
                             <div className="mt-0.5 font-mono">{selectedNode.ip}</div>
                           </div>
                         )}
-                        {selectedNode.kind === 'service' && selectedNode.backingPods && selectedNode.backingPods.length > 0 && (
-                          <div>
-                            <span className="text-muted-foreground">Backing Pods</span>
-                            <div className="mt-1 flex flex-col gap-0.5">
-                              {selectedNode.backingPods.map(p => (
-                                <div key={p} className="font-mono text-xs break-all">{p}</div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {selectedNode.kind === 'pod' && selectedNode.exposures && selectedNode.exposures.length > 0 && (
+                        {selectedNode.exposures && selectedNode.exposures.length > 0 && (
                           <div>
                             <span className="text-muted-foreground">Exposure</span>
                             <div className="mt-1 flex flex-col gap-1">
@@ -677,7 +638,7 @@ export function NetworkTopologyPage() {
                             </div>
                           </div>
                         )}
-                        {selectedNode.kind === 'pod' && selectedNode.extInbound && !(selectedNode.exposures?.length) && (
+                        {selectedNode.extInbound && !(selectedNode.exposures?.length) && (
                           <div className="mt-1 rounded bg-red-50 px-2 py-1.5 text-[11px] font-medium text-red-600">
                             ⚠ Receiving external traffic without any declared exposure path
                           </div>
