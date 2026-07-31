@@ -23,6 +23,10 @@ RUN addgroup -S -g 10001 sentinel && \
 
 # Stage 3: minimal runtime image
 FROM scratch
+# Links the published package to its source repository on GHCR
+LABEL org.opencontainers.image.source="https://github.com/cooloo9871/K8s_Sentinel"
+LABEL org.opencontainers.image.description="Kubernetes security management console — Tetragon runtime monitoring and ValidatingAdmissionPolicy control"
+LABEL org.opencontainers.image.licenses="MIT"
 COPY --from=backend /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=backend /etc/passwd /etc/passwd
 COPY --from=backend /etc/group /etc/group
