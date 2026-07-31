@@ -8,10 +8,12 @@ export interface FileRule {
   permission?: 'all' | 'read' | 'write' // default 'all'; 'read'=MAY_READ=4, 'write'=MAY_WRITE=2
 }
 
-export interface NetworkRule {
-  address: string  // allowed IP or CIDR, e.g. "127.0.0.1" or "10.0.0.0/8"
-}
-
+// Network access control lives in CiliumNetworkPolicy, not here: CNP selects by
+// identity so it cannot be bypassed by connecting straight to a backend pod IP,
+// it covers ingress as well as egress, and it drops packets rather than killing
+// the process. TracingPolicy keeps what only it can do — process and file rules
+// with full process context. IP/port rules remain expressible via the YAML
+// editor and the process-aware template for cases that need process context.
 export interface PolicyFormInput {
   name: string
   namespace?: string
@@ -20,9 +22,6 @@ export interface PolicyFormInput {
   process?: ProcessRule[]
   fileMode?: 'whitelist' | 'blacklist'     // whitelist = NotPrefix, blacklist = Prefix (default)
   file?: FileRule[]
-  network?: NetworkRule[]
-  networkPorts?: string[]                  // destination ports to restrict (DPort, ANDed with address rule)
-  networkMode?: 'whitelist' | 'blacklist'  // whitelist = NotDAddr, blacklist = DAddr
 }
 
 export interface PolicyRecord {

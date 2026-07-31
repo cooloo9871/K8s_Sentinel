@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
@@ -27,9 +28,6 @@ const EMPTY_FORM: PolicyFormInput = {
   processMode: 'whitelist',
   process: [],
   file: [],
-  network: [],
-  networkPorts: [],
-  networkMode: 'whitelist',
 }
 
 export function PolicyEditPage() {
@@ -60,6 +58,9 @@ export function PolicyEditPage() {
   const [activeTab, setActiveTab] = useState('form')
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(!isNew)
+  // True when the loaded policy uses rules the form cannot represent (network
+  // kprobes). The Form tab is then locked so a save cannot silently drop them.
+  const [formUnsupported, setFormUnsupported] = useState(false)
 
   const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
 
@@ -87,7 +88,12 @@ export function PolicyEditPage() {
           setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
           // Pre-populate form from existing policy YAML
           const parsed = yamlToForm(r.rawYaml)
-          if (parsed) setFormValues(parsed)
+          if (parsed) {
+            setFormValues(parsed)
+          } else {
+            setFormUnsupported(true)
+            setActiveTab('yaml')
+          }
         })
       )
     }
@@ -231,6 +237,8 @@ export function PolicyEditPage() {
         <TabsList variant="line" className="mb-4 w-full justify-start rounded-none border-b bg-transparent p-0">
           <TabsTrigger
             value="form"
+            disabled={formUnsupported}
+            title={formUnsupported ? 'This policy has network rules the form does not manage' : undefined}
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
           >
             Form
@@ -242,6 +250,15 @@ export function PolicyEditPage() {
             YAML
           </TabsTrigger>
         </TabsList>
+        {formUnsupported && (
+          <Alert className="mb-4">
+            <AlertDescription className="text-xs">
+              This policy contains network rules, which are now managed as{' '}
+              <span className="font-medium">CiliumNetworkPolicy</span> rather than in this form.
+              Edit it as YAML here — the form is disabled so a save cannot drop those rules.
+            </AlertDescription>
+          </Alert>
+        )}
         <TabsContent value="form">
           <PolicyForm
             namespaces={namespaces}

@@ -13,9 +13,8 @@ import {
 } from '@/components/ui/select'
 import { ProcessSection } from './ProcessSection'
 import { FileSection } from './FileSection'
-import { NetworkSection } from './NetworkSection'
 import { formToYaml } from '../../utils/formToYaml'
-import type { PolicyFormInput, NetworkRule } from '../../api/types'
+import type { PolicyFormInput } from '../../api/types'
 
 type LabelEntry = { key: string; value: string }
 
@@ -60,9 +59,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
 
   const setFileRules = (rules: typeof fileRules) =>
     onChange({ ...value, file: rules })
-
-  const setNetRules = (rules: NetworkRule[]) =>
-    onChange({ ...value, network: rules })
 
 
   const syncLabelsToParent = (entries: LabelEntry[]) => {
@@ -223,107 +219,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               Blacklist: only the paths you list are blocked. Everything else is allowed.
             </p>
             <FileSection rules={fileRules} onChange={setFileRules} />
-          </CardContent>
-        </Card>
-
-        {/* Network Rules */}
-        <Card>
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">Network Rules</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {/* Mode selector */}
-            <div className="mb-4 flex flex-col gap-1.5">
-              <Label className="text-xs">Mode</Label>
-              <Select
-                value={value.networkMode ?? 'whitelist'}
-                onValueChange={(v) =>
-                  onChange({ ...value, networkMode: v as 'whitelist' | 'blacklist' })
-                }
-              >
-                <SelectTrigger className="h-8 w-64 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="whitelist">
-                      NotDAddr — Whitelist
-                    </SelectItem>
-                    <SelectItem value="blacklist">
-                      DAddr — Blacklist
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {value.networkMode === 'blacklist'
-                  ? 'Blacklist: connections to the listed addresses (and ports, if set) are blocked. Everything else is allowed.'
-                  : 'Whitelist: only connections to the listed addresses (and ports, if set) are allowed. Everything else is blocked.'}
-              </p>
-            </div>
-            {/* Address list */}
-            <p className="mb-1 text-xs font-medium text-foreground">Addresses</p>
-            <NetworkSection
-              rules={value.network ?? []}
-              onChange={setNetRules}
-            />
-
-            {/* Port list */}
-            <div className="mt-4">
-              <p className="mb-1 text-xs font-medium text-foreground">
-                Ports
-                <span className="ml-1 font-normal text-muted-foreground">
-                  (optional — leave empty to match all ports)
-                </span>
-              </p>
-              <p className="mb-2 text-xs text-muted-foreground">
-                DPort: rule triggers only when destination port matches.
-                ANDed with the address condition above.
-              </p>
-              <div className="flex flex-col gap-2">
-                {(value.networkPorts ?? []).map((port, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      placeholder="e.g. 6379"
-                      value={port}
-                      onChange={(e) => {
-                        const next = [...(value.networkPorts ?? [])]
-                        next[i] = e.target.value
-                        onChange({ ...value, networkPorts: next })
-                      }}
-                      className="h-8 w-36 text-sm"
-                      type="number"
-                      min={1}
-                      max={65535}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        onChange({
-                          ...value,
-                          networkPorts: (value.networkPorts ?? []).filter((_, j) => j !== i),
-                        })
-                      }
-                      className="shrink-0 text-muted-foreground hover:text-destructive"
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                ))}
-                <div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      onChange({ ...value, networkPorts: [...(value.networkPorts ?? []), ''] })
-                    }
-                  >
-                    + Add Port
-                  </Button>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
 

@@ -34,8 +34,8 @@ spec:
   {
     id: 'monitor-external-network',
     name: 'Monitor External Network (Outside Cluster)',
-    description: 'Alert when any pod connects to an address outside the cluster CIDR ranges. Pod and Service CIDRs are auto-detected from the cluster.',
-    tags: ['cluster-wide', 'network', 'monitoring'],
+    description: 'Alert when any pod connects to an address outside the cluster CIDR ranges. Pod and Service CIDRs are auto-detected. Only needed on clusters without Cilium — Cilium clusters get this from Hubble automatically.',
+    tags: ['cluster-wide', 'network', 'monitoring', 'non-cilium'],
     yaml: `apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
@@ -62,8 +62,8 @@ spec:
   {
     id: 'monitor-internal-network',
     name: 'Monitor Internal Network (Inside Cluster)',
-    description: 'Capture TCP connections between pods and services within the cluster. Required for Network Topology. CIDRs are auto-detected.',
-    tags: ['cluster-wide', 'network', 'monitoring'],
+    description: 'Capture TCP connections between pods within the cluster to feed Network Topology. CIDRs are auto-detected. Only needed on clusters without Cilium — Cilium clusters get richer data from Hubble automatically.',
+    tags: ['cluster-wide', 'network', 'monitoring', 'non-cilium'],
     yaml: `apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
@@ -265,6 +265,38 @@ spec:
         - "/var/log"
         - "/dev/log"
         - "/root/.ssh"
+`,
+  },
+  {
+    id: 'block-unexpected-egress-binaries',
+    name: 'Block Egress From Unexpected Binaries (Advanced)',
+    description:
+      'Kills processes that open outbound connections unless they are on the allowed binary list. This is the one network control CiliumNetworkPolicy cannot express: CNP decides by workload identity, so it cannot tell a legitimate server process apart from a cryptominer or reverse shell running inside the same pod. Edit matchBinaries and podSelector before applying.',
+    tags: ['network', 'process', 'enforcing', 'advanced'],
+    yaml: `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: block-unexpected-egress-binaries
+spec:
+  podSelector:
+    matchLabels:
+      app: my-app
+  kprobes:
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    # Fires for any binary NOT in this list, then kills that process.
+    # Switch Sigkill to Post first to see what would be killed.
+    - matchBinaries:
+      - operator: "NotIn"
+        values:
+        - "/usr/sbin/nginx"
+        - "/usr/bin/curl"
+      matchActions:
+      - action: Sigkill
 `,
   },
 ]

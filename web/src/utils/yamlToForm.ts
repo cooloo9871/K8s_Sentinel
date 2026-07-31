@@ -27,9 +27,6 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     processMode: 'whitelist',
     process: [],
     file: [],
-    network: [],
-    networkMode: 'whitelist',
-    networkPorts: [],
   }
 
   const kprobes: any[] = doc.spec?.kprobes ?? []
@@ -68,33 +65,12 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
         }
       }
 
-    } else if (call === 'tcp_connect') {
-      for (const sel of selectors) {
-        const args: any[] = sel.matchArgs ?? []
-        const notDAddr = args.find((a: any) => a.operator === 'NotDAddr')
-        const dAddr    = args.find((a: any) => a.operator === 'DAddr')
-        if (notDAddr) {
-          result.networkMode = 'whitelist'
-          for (const addr of notDAddr.values ?? []) {
-            if (addr) result.network!.push({ address: addr })
-          }
-        } else if (dAddr) {
-          result.networkMode = 'blacklist'
-          for (const addr of dAddr.values ?? []) {
-            if (addr) result.network!.push({ address: addr })
-          }
-        }
-        const dPort = args.find((a: any) => a.operator === 'DPort' || a.operator === 'NotDPort')
-        if (dPort) {
-          // DPort without a corresponding DAddr means blacklist (port-only rule).
-          if (dPort.operator === 'DPort' && !dAddr && !notDAddr) {
-            result.networkMode = 'blacklist'
-          }
-          for (const port of dPort.values ?? []) {
-            if (port) result.networkPorts!.push(String(port))
-          }
-        }
-      }
+    } else if (call === 'tcp_connect' || call === 'inet_csk_accept') {
+      // The form no longer manages network rules — they belong to
+      // CiliumNetworkPolicy. Returning null keeps the policy in the YAML
+      // editor instead of loading it into a form that cannot represent these
+      // rules, which on save would silently delete them.
+      return null
 
     } else if (
       call === 'security_file_permission' ||

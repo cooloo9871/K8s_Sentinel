@@ -90,35 +90,10 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     })
   }
 
-  // Network rules: ONE tcp_connect kprobe.
-  // networkMode 'whitelist' → NotDAddr (block connections NOT in list)
-  // networkMode 'blacklist' → DAddr    (block connections IN list)
-  const netAddresses = (input.network ?? []).map(r => r.address.trim()).filter(Boolean)
-  const ports = (input.networkPorts ?? []).map(p => p.trim()).filter(Boolean)
-
-  if (netAddresses.length > 0 || ports.length > 0) {
-    let selectors: Selector[]
-    if (input.networkMode === 'blacklist') {
-      const matchArgs: { index: number; operator: string; values: string[] }[] = []
-      if (netAddresses.length > 0) matchArgs.push({ index: 0, operator: 'DAddr', values: netAddresses })
-      if (ports.length > 0) matchArgs.push({ index: 0, operator: 'DPort', values: ports })
-      selectors = [{ matchArgs, matchActions: [{ action }] }]
-    } else {
-      selectors = []
-      if (netAddresses.length > 0) {
-        selectors.push({ matchArgs: [{ index: 0, operator: 'NotDAddr', values: netAddresses }], matchActions: [{ action }] })
-      }
-      if (ports.length > 0) {
-        selectors.push({ matchArgs: [{ index: 0, operator: 'NotDPort', values: ports }], matchActions: [{ action }] })
-      }
-    }
-    doc.spec.kprobes.push({
-      call: 'tcp_connect',
-      syscall: false,
-      args: [{ index: 0, type: 'sock' }],
-      selectors,
-    })
-  }
+  // No network kprobe is emitted: network access control belongs to
+  // CiliumNetworkPolicy (see PolicyFormInput). Policies that do need a
+  // tcp_connect rule — typically to bind it to process context — are written
+  // in the YAML editor or started from the process-aware template.
 
   return yaml.dump(doc, { lineWidth: -1 })
 }

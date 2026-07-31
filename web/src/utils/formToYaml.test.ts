@@ -3,7 +3,7 @@ import { formToYaml } from './formToYaml'
 import type { PolicyFormInput } from '../api/types'
 
 describe('formToYaml', () => {
-  it('generates a single sys_execve kprobe using matchArgs Postfix', () => {
+  it('generates one sys_execve kprobe with slash-stripped NotPostfix values', () => {
     const input: PolicyFormInput = {
       name: 'block-shells',
       process: [{ binaries: ['/bash'] }, { binaries: ['/sh'] }],
@@ -11,9 +11,13 @@ describe('formToYaml', () => {
     const out = formToYaml(input, 'Post')
     expect(out).toContain('kind: TracingPolicy')
     expect(out).toContain('sys_execve')
-    expect(out).toContain('Postfix')
-    expect(out).toContain('/bash')
-    expect(out).toContain('/sh')
+    // Default mode is whitelist → NotPostfix
+    expect(out).toContain('NotPostfix')
+    // The leading '/' is stripped on purpose so suffix matching catches both
+    // absolute and relative invocations (/bin/bash and ./bash alike).
+    expect(out).toContain('- bash')
+    expect(out).toContain('- sh')
+    expect(out).not.toContain('- /bash')
     expect(out).not.toContain('matchBinaries')
     // Only ONE kprobe definition — no duplicate
     expect(out.split('sys_execve').length - 1).toBe(1)
