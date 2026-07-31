@@ -212,36 +212,4 @@ spec:
         - "/root/.ssh"
 `,
   },
-  {
-    id: 'block-unexpected-egress-binaries',
-    name: 'Block Egress From Unexpected Binaries (Advanced)',
-    description:
-      'Kills processes that open outbound connections unless they are on the allowed binary list. This is the one network control CiliumNetworkPolicy cannot express: CNP decides by workload identity, so it cannot tell a legitimate server process apart from a cryptominer or reverse shell running inside the same pod. Edit matchBinaries and podSelector before applying.',
-    tags: ['network', 'process', 'enforcing', 'advanced'],
-    yaml: `apiVersion: cilium.io/v1alpha1
-kind: TracingPolicy
-metadata:
-  name: block-unexpected-egress-binaries
-spec:
-  podSelector:
-    matchLabels:
-      app: my-app
-  kprobes:
-  - call: "tcp_connect"
-    syscall: false
-    args:
-    - index: 0
-      type: "sock"
-    selectors:
-    # Fires for any binary NOT in this list, then kills that process.
-    # Switch Sigkill to Post first to see what would be killed.
-    - matchBinaries:
-      - operator: "NotIn"
-        values:
-        - "/usr/sbin/nginx"
-        - "/usr/bin/curl"
-      matchActions:
-      - action: Sigkill
-`,
-  },
 ]

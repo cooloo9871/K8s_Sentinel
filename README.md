@@ -32,7 +32,8 @@ Each layer does what only it can do:
 - **Policy Templates** — built-in and custom, searchable and filterable by scope:
   - **Monitor All Process Executions** — observe process execution across every pod
   - **Monitor All File Access** — observe reads and writes on sensitive paths
-  - **Block Egress From Unexpected Binaries** (advanced) — kill processes that open outbound connections unless allow-listed. This is the one network control CiliumNetworkPolicy cannot express, because CNP judges by workload identity and cannot distinguish processes within a pod
+
+> Network rules are not part of the Tracing Policy templates or form — network access control belongs to [Network Policy](#network-policy-cilium). A `tcp_connect` kprobe bound to process context (for example, killing any binary other than an allow-listed one that opens an outbound connection) is still expressible in the YAML editor; it is the one network control CNP cannot represent, because CNP judges by workload identity and cannot distinguish processes inside a pod.
 
 #### Network Policy (Cilium)
 
