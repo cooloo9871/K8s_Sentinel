@@ -29,14 +29,6 @@ func main() {
 		log.Fatalf("k8s clients: %v", err)
 	}
 
-	store := k8sclient.NewStore(dynClient, typedClient, restCfg)
-	store.StartDiscoveryLoop(ctx)
-	// Single Tetragon broadcast — security store, alert and rsyslog
-	// dispatchers all subscribe to this rather than opening independent streams.
-	store.StartTetragonBroadcast(ctx)
-	// Cilium/Hubble flow broadcast — no-op if Cilium CNI is not detected.
-	store.StartCiliumBroadcast(ctx)
-
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
 		dataDir = "/data/sentinel"
@@ -54,6 +46,14 @@ func main() {
 		}
 	}
 	data := func(name string) string { return dataDir + "/" + name }
+
+	store := k8sclient.NewStore(dynClient, typedClient, restCfg, data("templates.json"))
+	store.StartDiscoveryLoop(ctx)
+	// Single Tetragon broadcast — security store, alert and rsyslog
+	// dispatchers all subscribe to this rather than opening independent streams.
+	store.StartTetragonBroadcast(ctx)
+	// Cilium/Hubble flow broadcast — no-op if Cilium CNI is not detected.
+	store.StartCiliumBroadcast(ctx)
 
 	users := auth.NewUserStore(data("users.json"))
 	secret, err := auth.LoadOrCreateSecret(data(".jwt-secret"))

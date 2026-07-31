@@ -67,9 +67,9 @@ type Store struct {
 	ipCacheTTL    time.Duration
 }
 
-// NewStore creates a Store wrapping the given clients.
-func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config) *Store {
-	templatesFile := "/data/sentinel/templates.json"
+// NewStore creates a Store wrapping the given clients. templatesFile is the
+// persistence path for custom policy templates (derived from DATA_DIR).
+func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config, templatesFile string) *Store {
 	return &Store{
 		client:       client,
 		typed:        typed,
