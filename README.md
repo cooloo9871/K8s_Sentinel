@@ -4,123 +4,165 @@
   <img src="assets/sentinel-lockup-light.svg" alt="K8s Sentinel" width="340" />
 </p>
 
-**K8s Sentinel** 是一個部署在 Kubernetes 叢集內的 **K8s 安全管理 console**，整合 Cilium Tetragon 執行期監控與 ValidatingAdmissionPolicy 控制，讓你不需要操作 `kubectl` 或手寫 YAML，就能透過網頁介面管理 Tracing Policy、Admission Policy、監控安全事件、推送告警、視覺化叢集網路流量，全面掌握 K8s workload 的零信任安全防線。
+**K8s Sentinel** is a Kubernetes security management console that runs inside the cluster. It combines Cilium Tetragon runtime monitoring, Cilium network policy enforcement and ValidatingAdmissionPolicy admission control behind one web UI, so you can manage policies, watch security events, route alerts and see live network topology without reaching for `kubectl` or hand-writing YAML.
+
+Each layer does what only it can do:
+
+| Layer | Responsibility |
+|---|---|
+| **Tracing Policy** (Tetragon) | Process execution and file access, with full process context — it can tell a legitimate server process apart from a cryptominer inside the same pod, and kill it |
+| **Network Policy** (Cilium) | Network access control by workload identity — cannot be bypassed by connecting straight to a backend pod IP, covers ingress and egress, drops packets instead of killing processes |
+| **Admission Policy** (VAP) | Rejects non-compliant resources before they are admitted to the cluster |
 
 ---
 
-## 功能總覽
+## Features
 
-### Policies — 策略管理
+### Policies
 
 #### Tracing Policy
-- 建立、編輯、刪除 **Tracing Policy**（cluster-wide 或 namespace-scoped）
-- 依 namespace、scope 篩選策略清單
-- **Process Rules**：控制哪些 binary 可以執行（Whitelist / Blacklist）
-- **File Rules**：控制哪些檔案路徑可以存取；可指定僅封鎖讀取或寫入；可設定例外 process
-- **Network Rules**：控制對外連線（Whitelist / Blacklist，支援 IP 與 Port）
-- 每條 Policy 可個別切換 Monitoring（觀測）/ Protect（封鎖）模式
-- **Global Protect Mode**：一鍵 Turn On / Turn Off 所有 Policy 的封鎖模式
-- **Created By**：記錄每條 Policy 的建立者；透過 `kubectl apply` 建立的顯示 `k8s-apply`
-- **Policy Templates**：內建範本與自訂範本；可依名稱搜尋或依 Cluster-wide / Namespace 分類篩選
-  - **Monitor All Process Executions**：監控叢集所有 Pod 的 process 執行
-  - **Monitor All File Access**：監控敏感檔案讀寫
-  - **Monitor External Network (Outside Cluster)**：偵測 Pod 連線到叢集外；CIDR 自動偵測
-  - **Monitor Internal Network (Inside Cluster)**：監控 Pod 之間及 Pod 到 Service 的連線；供 Network Topology 使用
 
-#### Admission Policy（ValidatingAdmissionPolicy）
-- 管理 K8s 原生 VAP 資源，支援 YAML 編輯器建立/修改 Policy 與 Binding
-- **UI Policy Builder**：不需手寫 YAML，透過表單建立常見安全策略，右側即時預覽生成的 YAML
+- Create, edit and delete **TracingPolicy** resources, cluster-wide or namespace-scoped
+- Filter the list by namespace and scope
+- **Process Rules** — control which binaries may execute (whitelist / blacklist)
+- **File Rules** — control which paths may be accessed, optionally restricted to reads or writes, with per-rule process exceptions
+- Switch each policy between **Monitoring** (observe) and **Protect** (block) mode, or flip every policy at once with **Global Protect Mode**
+- **Created By** records who created each policy; resources applied with `kubectl` show as `k8s-apply`
+- Form builder and raw YAML editor with round-trip conversion between the two
+- **Policy Templates** — built-in and custom, searchable and filterable by scope:
+  - **Monitor All Process Executions** — observe process execution across every pod
+  - **Monitor All File Access** — observe reads and writes on sensitive paths
+  - **Block Egress From Unexpected Binaries** (advanced) — kill processes that open outbound connections unless allow-listed. This is the one network control CiliumNetworkPolicy cannot express, because CNP judges by workload identity and cannot distinguish processes within a pod
 
-  | Rule Type | 說明 |
+#### Network Policy (Cilium)
+
+- Manage **CiliumNetworkPolicy** and **CiliumClusterwideNetworkPolicy** through a list view and YAML editor
+- The list surfaces what is easy to miss in raw YAML: whether a policy carries **L7** rules, and which direction it puts into **default deny** — adding any ingress rule silently switches the selected endpoints to ingress default-deny
+- Seven starter templates, each enforcing one carrying an explicit warning above the editor:
+  - **L7 HTTP Visibility** — route traffic through the Cilium proxy so Hubble reports method, path and status
+  - **Namespace Isolation** — accept ingress only from the same namespace
+  - **Egress: Cluster DNS Only** — lock a workload down to DNS as a base layer
+  - **Egress: FQDN Allowlist** — restrict outbound traffic to named domains
+  - **Allow Ingress Controller Only** — prevent direct access that bypasses the routing layer
+  - **Deny Egress Outside Cluster** — a direct control against data exfiltration and C2 callbacks
+  - **Cluster-wide: Allow DNS Everywhere** — baseline so DNS never becomes the thing that breaks
+- Templates are raw YAML on purpose: a network policy mistake causes an outage, so the operator sees exactly what will be applied
+- Policy denials become Security Events, fire webhook alerts, reach syslog and show as red edges in Network Topology
+
+#### Admission Policy (ValidatingAdmissionPolicy)
+
+- Manage native Kubernetes VAP resources and bindings, via YAML editor or a UI builder that generates CEL
+- The builder covers seven rule types and reverse-parses existing policies so they can be reopened in the form:
+
+  | Rule Type | Description |
   |---|---|
-  | **Label Check** | 要求/禁止資源帶有特定 label key=value；支援多條規則；可指定套用資源範圍 |
-  | **Annotation Check** | 要求/禁止資源帶有特定 annotation key=value；可指定套用資源範圍 |
-  | **Image Policy** | 禁止 `:latest` tag；要求 image 必須來自指定 registry；涵蓋所有 workload 類型及 initContainers |
-  | **Replica Limit** | 限制 Deployment / StatefulSet 的最大 replica 數 |
-  | **Resource Limits** | 要求 container 設定 CPU / Memory limits；涵蓋所有 workload 類型及 initContainers |
-  | **Security Context** | 禁止 privileged container；要求 runAsNonRoot（正確繼承 pod/container 層級） |
-  | **Host Access** | 禁止 hostNetwork / hostPID / hostIPC；涵蓋 Pod 及所有 template-based workload |
+  | **Label Check** | Require or forbid specific label key=value pairs; multiple rules; scoped to chosen resources |
+  | **Annotation Check** | Require or forbid specific annotation key=value pairs; scoped to chosen resources |
+  | **Image Policy** | Forbid the `:latest` tag; require images from named registries; covers every workload type and initContainers |
+  | **Replica Limit** | Cap replicas on Deployments and StatefulSets |
+  | **Resource Limits** | Require CPU and memory limits; covers every workload type and initContainers |
+  | **Security Context** | Forbid privileged containers; require runAsNonRoot, honouring pod and container level inheritance |
+  | **Host Access** | Forbid hostNetwork, hostPID and hostIPC across Pods and template-based workloads |
 
-- **UI Binding Builder**：選擇 Policy、Namespace、Validation Actions（Deny / Audit / Warn）
-- 透過 UI 建立的資源標記 `sentinel.io/builder: "true"`，點 Edit 自動回到 UI 表單
+- **Binding Builder** — pick the policy, namespaces and validation actions (Deny / Audit / Warn)
+- Resources created through the UI are tagged `sentinel.io/builder: "true"` so Edit reopens the builder
 
-### Behavior Discovery — 行為探索
+### Behavior Discovery
 
-- 自動學習叢集中各 Pod 執行過的 process，**不需要任何 TracingPolicy**
-- 依 Deployment / DaemonSet / StatefulSet 分組顯示
-- **Create Policy**：一鍵預填 Policy 表單，帶入 Pod Selector 與 Process Rules
+- Learns the processes each pod actually executes from the Tetragon base sensor — **no TracingPolicy required**
+- Grouped by Deployment, DaemonSet and StatefulSet
+- **Create Policy** prefills a policy form with the observed pod selector and binaries
 
-### Network Topology — 網路拓樸
+### Network Topology
 
-- 以圖形化方式顯示叢集內 Pod 的 TCP 連線關係，資料來源為 Tetragon kprobe 事件
-- **節點類型**：Pod（紫色）、Service（綠色）、External IP（橘色）
-- **連線類型**：
-  - 彩色實線 — 允許的連線（紫 = pod-to-pod、綠 = pod-to-service、橘 = 出叢集）
-  - 紅色虛線 — 被 Protect 模式攔截的連線；**即使 retention 設很小，被拒絕的連線也會持續顯示**（獨立的 topology buffer，以 TTL 為基準而非事件數量）
-- **Auto Layout**：一鍵使用 Dagre 演算法自動排版
-- 點擊節點或連線查看詳情（IP、port、連線次數）
-- 依 Namespace / Pod 名稱 / Service 名稱篩選
-- 每 30 秒自動刷新
-- 需先套用 **Monitor Internal Network** 範本才能收集資料
+Graphs live pod network connections from Cilium Hubble flows.
 
-### Notifications — 安全通知
+- **Node kinds** — Pod (purple), Node (grey), External IP (amber). Service ClusterIPs are not drawn: a VIP is an intermediate routing concept, not an endpoint, and under Cilium the destination is already rewritten to the backend pod before the flow is observed
+- **Edges** — coloured solid lines for allowed traffic, red dashed lines for policy-denied traffic. Blocked edges survive even a very small event retention setting, because the topology buffer is bounded by TTL rather than event count
+- **Aggregated per source/destination pair** with a per-port breakdown in the detail panel, so ephemeral client ports do not fan out into parallel lines
+- **Hover focus** — labels appear only on the hovered node's edges and unrelated traffic dims out; **Hide kube-system** (on by default) removes control-plane noise
+- **Exposure badges** — pods reachable from outside are marked, with each path listed in the detail panel: NodePort, LoadBalancer, Ingress rule, hostNetwork or hostPort. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
+- **L7 detail** — HTTP method, path and status code on edges where Cilium's proxy is in the path
+- Real inbound source IPs (pre-SNAT), Dagre auto-layout, namespace and pod filters, 30-second auto refresh
+
+### Notifications
 
 #### Security Events
-- 即時串流叢集所有 Tetragon kprobe 事件；後端持久化，重啟不消失
-- Warning / Critical 嚴重程度分類；30 秒 content-based 去重
-- 點擊展開詳情：觸發檔案路徑、網路連線目的地、執行 user（UID）、Policy 名稱等
-- **Pause / Resume**：凍結畫面閱讀事件，暫存新進事件並顯示待讀計數
+
+- Live stream of Tetragon kprobe events and Cilium policy denials; persisted across restarts
+- Warning / Critical severity, with content-based deduplication over 30 seconds
+- Expand a row for the triggering file path, connection endpoints, process UID, policy name and more
+- **Pause / Resume** freezes the view while buffering new events with an unread count
 - **Export CSV**
-- 保留策略（預設）：Warning 最多 500 條、Critical 最多 300 條、TTL 7 天（可在 Settings 調整）
+- Default retention: 500 warnings, 300 criticals, 7-day TTL (adjustable in Settings)
 
 #### Admission Events
-- 記錄 ValidatingAdmissionPolicy 違規事件；依 source、namespace、severity 篩選
-- **Critical**（`Deny` action，請求被阻擋）/ **Warning**（`Audit` action，請求放行但記錄）
-- 來源：K8s Warning Events（免設定）或 **kube-apiserver audit webhook**（完整覆蓋，需設定）
-- 30 秒去重；自動持久化；預設最多 500 筆，TTL 30 天（可在 Settings 調整）
 
-### Dashboard — 總覽
+- ValidatingAdmissionPolicy violations, filterable by source, namespace and severity
+- **Critical** for `Deny` (request blocked) and **Warning** for `Audit` (request allowed but recorded)
+- Sourced from Kubernetes Warning Events (no setup) or the **kube-apiserver audit webhook** (full coverage, setup required)
+- 30-second deduplication, persisted; default 500 events with a 30-day TTL
 
-- **Tetragon Agents**：各節點 agent 就緒狀態（ready / total）；未全數就緒時以紅色標示
-- Security Events 統計（Critical / Warning）、Admission Events 統計（即時更新）、Global Protect Mode 狀態
-- **Tracing Policy** 與 **Admission Policy** 清單快覽
+### Dashboard
 
-### Settings — 設定
+- **Tetragon Agents** — per-node agent readiness (ready / total), red when any agent is not ready
+- Security and Admission event counts by severity, updating live, plus Global Protect Mode status
+- Recent Tracing Policy and Admission Policy lists
 
-- **Users（使用者管理）**：本地帳號登入（JWT + token 主動撤銷）、Admin / Viewer 角色、Session Timeout 設定
-- **Event Retention**：
-  - Security Events：Warning/Critical 最大筆數（1–5000/1–2000）及 TTL（1–90 天）
-  - Admission Events：最大筆數（1–5000）及 TTL（1–365 天）
-- **Alerts（Webhook 告警）**：將 Security Events 和 Admission Events 推送到 Slack、Teams、Discord 等
-- **Syslog 轉送**：將事件轉送至 rsyslog/syslog server（UDP 或 TCP）
+### Settings
+
+- **Users** — local accounts with JWT sessions and revocation on logout, Admin / Viewer roles, session timeout
+- **Event Retention** — Security Events (warning and critical caps, TTL 1–90 days) and Admission Events (cap, TTL 1–365 days)
+- **Alerts** — push Security and Admission events to Slack, Teams, Discord or any webhook, with filters and cooldown
+- **Syslog** — forward events to a rsyslog/syslog server over UDP or TCP
 
 ---
 
-## 部署
+## Deployment
 
-### 前置需求
+### Requirements
 
-- Kubernetes 1.26+
-- `kubectl` 已設定 kubeconfig
-- Cilium Tetragon 已安裝於叢集
+- Kubernetes 1.26+ and a configured `kubectl`
+- **Cilium Tetragon** installed in the cluster (process, file and runtime security)
+- **Cilium CNI** with kube-proxy replacement and the Hubble agent (network policy management and Network Topology)
 
-### 步驟
-
-**Clone 專案**
+Install Cilium with the settings this project relies on:
 
 ```bash
-git clone https://github.com/cooloo9871/Sentinel.git
-cd Sentinel
+cilium install --version 1.18.3 \
+  --set kubeProxyReplacement=true \
+  --set k8sServiceHost=<api-server-ip> \
+  --set k8sServicePort=6443 \
+  --set hubble.enabled=true
 ```
 
-**方式 A — Kubernetes Job（不需本機 helm）**
+`kubeProxyReplacement` is what lets Hubble observe NodePort traffic before SNAT, so inbound connections report their real source IP. `hubble.enabled` only opens the agent's local socket — **no Hubble UI or Hubble Relay is needed**, K8s Sentinel reads that socket directly and is the only UI.
+
+Install Tetragon separately:
+
+```bash
+helm repo add cilium https://helm.cilium.io/
+helm install tetragon cilium/tetragon -n kube-system \
+  --set tetragon.podInfo.enabled=true
+```
+
+> `tetragon.podInfo.enabled=true` is what attributes events to pods. Without it, Security Events arrive with empty Namespace and Pod fields.
+
+### Install
+
+```bash
+git clone https://github.com/cooloo9871/K8s_Sentinel.git
+cd K8s_Sentinel
+```
+
+**Option A — Kubernetes Job** (no local helm needed)
 
 ```bash
 kubectl apply -f deploy/install-job.yaml
 kubectl logs -n kube-system job/sentinel-installer -f
 ```
 
-**方式 B — 本機腳本**
+**Option B — local script**
 
 ```bash
 bash deploy/install.sh
@@ -128,34 +170,34 @@ bash deploy/install.sh
 
 ### Container image
 
-部署使用 GitHub Container Registry 上的 image：
-
 ```
 ghcr.io/cooloo9871/sentinel:latest
 ```
 
-各版本的 tag 見 [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases)。生產環境建議在 `deploy/base/deployment.yaml` 改為固定版本（例如 `:v0.2.0`）而非 `:latest`，以確保部署可重現。
+Per-version tags are listed under [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases). For production, pin a version in `deploy/base/deployment.yaml` (for example `:v0.2.0`) instead of `:latest` so deployments are reproducible.
 
-### 存取 UI
+### Access the UI
 
 ```bash
 kubectl port-forward -n sentinel-system svc/sentinel 8080:80
-# 開啟 http://localhost:8080
+# open http://localhost:8080
 ```
 
-### 持久化儲存（PV）
+Default credentials are `admin` / `admin` — change the password immediately after the first login.
 
-K8s Sentinel 將以下資料存放於 `/data/sentinel/`（可透過 `DATA_DIR` 環境變數修改），**強烈建議掛載 PersistentVolume**，否則 Pod 重啟後所有設定與事件記錄將會消失：
+### Persistent storage
 
-| 檔案 | 說明 |
+K8s Sentinel stores the following under `/data/sentinel/` (override with the `DATA_DIR` environment variable). **Mounting a PersistentVolume is strongly recommended** — without it every setting and event is lost when the pod restarts:
+
+| File | Contents |
 |---|---|
-| `users.json` | 使用者帳號與 session 設定 |
-| `.jwt-secret` | JWT 簽章 secret |
-| `templates.json` | 自訂 Policy Templates |
-| `alerts.json` | Webhook 告警規則 |
-| `rsyslog.json` | Syslog 轉送設定 |
-| `admission-events.json` | Admission Events 記錄（預設最多 500 筆，30 天 TTL）|
-| `security-events.json` | Security Events 記錄（預設最多 800 筆，7 天 TTL）|
+| `users.json` | Accounts and session settings |
+| `.jwt-secret` | JWT signing secret |
+| `templates.json` | Custom policy templates |
+| `alerts.json` | Webhook alert rules |
+| `rsyslog.json` | Syslog forwarding settings |
+| `admission-events.json` | Admission events (default 500, 30-day TTL) |
+| `security-events.json` | Security events (default 800, 7-day TTL) |
 
 ```yaml
 volumeMounts:
@@ -167,11 +209,11 @@ volumes:
       claimName: sentinel-data
 ```
 
-> Pod 以 `sentinel` user（UID 10001）執行，PV 需設定 `fsGroup: 10001`。
+> The pod runs as user `sentinel` (UID 10001), so the volume needs `fsGroup: 10001`.
 
-### Admission Events — Audit Webhook 設定
+### Admission Events — audit webhook
 
-kube-apiserver audit webhook 可讓 K8s Sentinel 接收完整的 VAP 違規記錄（包含直接 `kubectl apply` 被拒絕的情況）：
+The kube-apiserver audit webhook gives K8s Sentinel complete VAP violation coverage, including requests rejected straight from `kubectl apply`:
 
 ```yaml
 # /etc/kubernetes/audit-policy.yaml
@@ -199,48 +241,52 @@ contexts:
 current-context: default
 ```
 
-kube-apiserver 加上：
+Add to the kube-apiserver flags:
+
 ```
 --audit-policy-file=/etc/kubernetes/audit-policy.yaml
 --audit-webhook-config-file=/etc/kubernetes/audit-webhook.yaml
 --audit-webhook-batch-max-wait=5s
 ```
 
-### 環境變數
+### Environment variables
 
-| 變數 | 預設值 | 說明 |
+| Variable | Default | Description |
 |---|---|---|
-| `DATA_DIR` | `/data/sentinel` | 資料目錄路徑；啟動時若無法寫入會印出警告 |
-| `TETRAGON_NAMESPACE` | `kube-system` | Tetragon 安裝的 namespace |
+| `DATA_DIR` | `/data/sentinel` | Data directory; a warning is logged at startup if it is not writable |
+| `TETRAGON_NAMESPACE` | `kube-system` | Namespace where Tetragon is installed |
+| `CILIUM_NAMESPACE` | `kube-system` | Namespace where Cilium is installed |
 
 ---
 
-## 資源需求
+## Resource requirements
 
 | | requests | limits |
 |---|---|---|
 | CPU | 200m | 500m |
 | Memory | 128Mi | 256Mi |
 
-> 叢集節點數較多（> 5 個 Tetragon pod）或 TracingPolicy 規則密集時，建議將 CPU limit 調高至 750m。
+> On larger clusters (more than 5 Tetragon pods) or with dense TracingPolicy rules, raise the CPU limit to around 750m.
 
 ---
 
-## RBAC 權限
+## RBAC
 
-| API Group | 資源 | 操作 |
+| API Group | Resources | Verbs |
 |---|---|---|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
+| `cilium.io` | `ciliumnetworkpolicies`, `ciliumclusterwidenetworkpolicies` | CRUD |
+| `cilium.io` | `ciliumnodes` | get, list |
 | `admissionregistration.k8s.io` | `validatingadmissionpolicies`, `validatingadmissionpolicybindings` | CRUD |
 | `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
 | `""` (core) | `events` | get, list, watch |
-| `""` (core) | `nodes` | get, list |
-| `""` (core) | `services` | get, list |
-| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get |
+| `""` (core) | `nodes`, `services`, `endpoints` | get, list |
+| `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get, list |
+| `networking.k8s.io` | `ingresses` | get, list |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 
 ---
 
-## 授權
+## License
 
 [MIT License](LICENSE)

@@ -532,12 +532,20 @@ export function NetworkTopologyPage() {
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-amber-700">No network connections recorded yet</p>
               <p className="text-xs text-amber-600">
-                Apply a network monitoring template from Tracing Policy → Templates:
+                Network Topology is built from Cilium Hubble flows. Confirm the cluster runs Cilium
+                as its CNI with the Hubble agent enabled:
               </p>
-              <ul className="text-xs text-amber-600 list-disc ml-4 mt-0.5 space-y-0.5">
-                <li><span className="font-semibold">Monitor Internal Network (Inside Cluster)</span> — pod-to-pod and pod-to-service connections</li>
-                <li><span className="font-semibold">Monitor External Network (Outside Cluster)</span> — connections leaving the cluster</li>
-              </ul>
+              <pre className="mt-1 overflow-x-auto rounded bg-amber-500/10 px-2 py-1.5 font-mono text-[11px] text-amber-700">
+{`cilium install --version 1.18.3 \\
+  --set kubeProxyReplacement=true \\
+  --set k8sServiceHost=<api-server-ip> --set k8sServicePort=6443 \\
+  --set hubble.enabled=true`}
+              </pre>
+              <p className="mt-0.5 text-xs text-amber-600">
+                <span className="font-medium">kubeProxyReplacement</span> is what lets Hubble observe
+                NodePort traffic before SNAT, so inbound connections show their real source IP.
+                No Hubble UI or Relay is needed — K8s Sentinel reads the agent socket directly.
+              </p>
             </div>
           </CardContent>
         </Card>

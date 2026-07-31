@@ -32,61 +32,6 @@ spec:
 `,
   },
   {
-    id: 'monitor-external-network',
-    name: 'Monitor External Network (Outside Cluster)',
-    description: 'Alert when any pod connects to an address outside the cluster CIDR ranges. Pod and Service CIDRs are auto-detected. Only needed on clusters without Cilium — Cilium clusters get this from Hubble automatically.',
-    tags: ['cluster-wide', 'network', 'monitoring', 'non-cilium'],
-    yaml: `apiVersion: cilium.io/v1alpha1
-kind: TracingPolicy
-metadata:
-  name: monitor-external-network
-spec:
-  podSelector: {}
-  kprobes:
-  - call: "tcp_connect"
-    syscall: false
-    args:
-    - index: 0
-      type: "sock"
-    selectors:
-    - matchArgs:
-      - index: 0
-        operator: "NotDAddr"
-        values:
-        - "127.0.0.1"
-        - "\${PODCIDR}"
-        - "\${SVCCIDR}"
-        - "\${NODEIPS}"
-`,
-  },
-  {
-    id: 'monitor-internal-network',
-    name: 'Monitor Internal Network (Inside Cluster)',
-    description: 'Capture TCP connections between pods within the cluster to feed Network Topology. CIDRs are auto-detected. Only needed on clusters without Cilium — Cilium clusters get richer data from Hubble automatically.',
-    tags: ['cluster-wide', 'network', 'monitoring', 'non-cilium'],
-    yaml: `apiVersion: cilium.io/v1alpha1
-kind: TracingPolicy
-metadata:
-  name: monitor-internal-network
-spec:
-  podSelector: {}
-  kprobes:
-  - call: "tcp_connect"
-    syscall: false
-    args:
-    - index: 0
-      type: "sock"
-    selectors:
-    - matchArgs:
-      - index: 0
-        operator: "DAddr"
-        values:
-        - "\${PODCIDR}"
-        - "\${SVCCIDR}"
-        - "\${NODEIPS}"
-`,
-  },
-  {
     id: 'monitor-all-file',
     name: 'Monitor All File Access',
     description: 'Monitor sensitive file and directory reads/writes across all pods in the cluster.',
