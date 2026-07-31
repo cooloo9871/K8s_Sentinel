@@ -144,7 +144,7 @@ func (d *Dispatcher) TestSend(cfg Config) error {
 }
 
 func securityRuleType(fn string) string {
-	if strings.Contains(fn, "tcp_connect") {
+	if strings.Contains(fn, "tcp_connect") || strings.Contains(fn, "deny") {
 		return "network"
 	}
 	if strings.Contains(fn, "security_file") || strings.Contains(fn, "security_path") {

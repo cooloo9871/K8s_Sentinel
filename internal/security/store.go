@@ -34,6 +34,7 @@ type Event struct {
 	FileOp     string  `json:"fileOp,omitempty"`
 	NetDest    string  `json:"netDest,omitempty"`
 	NetSrc     string  `json:"netSrc,omitempty"`
+	DropReason string  `json:"dropReason,omitempty"`
 }
 
 func sameEvent(a Event, b k8s.TetragonEvent) bool {
@@ -238,6 +239,7 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 		FileOp:     raw.FileOp,
 		NetDest:    raw.NetDest,
 		NetSrc:     raw.NetSrc,
+		DropReason: raw.DropReason,
 	}
 	// Expire events older than TTL first, then cap — so cap sees only valid events
 	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)

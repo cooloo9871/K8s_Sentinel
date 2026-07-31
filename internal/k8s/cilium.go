@@ -54,6 +54,20 @@ type CiliumFlow struct {
 	IsReply  bool   `json:"isReply"`
 }
 
+// IsPolicyDenial reports whether this flow was dropped by a network policy, as
+// opposed to the many non-security drop reasons Cilium also reports (stale or
+// unroutable IP, unsupported L3 protocol, …). Only policy denials belong in the
+// security event stream — treating every drop as an incident would flood it.
+func (f CiliumFlow) IsPolicyDenial() bool {
+	if f.Verdict != "dropped" {
+		return false
+	}
+	if f.PolicyName != "" {
+		return true // policy correlation identified the rule
+	}
+	return strings.Contains(strings.ToUpper(f.DropReason), "POLICY")
+}
+
 func ciliumNamespace() string {
 	if ns := os.Getenv("CILIUM_NAMESPACE"); ns != "" {
 		return ns
@@ -400,4 +414,62 @@ type CiliumTopoEntry struct {
 	DNSQuery      string
 	Count         int
 	LastSeen      time.Time
+}
+
+// SynthesizePolicyDenyEvent converts a Cilium network policy denial into a
+// security event so it flows through the same retention, alerting and syslog
+// pipeline as Tetragon events, rather than being visible only as a red edge in
+// the topology graph.
+//
+// It emits an event only when Hubble names the policy that denied the traffic.
+// An unattributed drop is not recorded: the Policy column must only ever show
+// policies that exist in the cluster, and a row naming no policy — or a
+// fabricated one — tells the operator nothing actionable. Attribution requires
+// Hubble network policy correlation
+// (--set hubble.enabled=true --set hubble.metrics.enableNetworkPolicyCorrelation,
+// or hubble-network-policy-correlation-enabled=true in cilium-config) and, for
+// L3/L4, an explicit ingressDeny/egressDeny rule — a default-deny drop has no
+// rule to attribute, because it is the absence of an allow rule.
+func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
+	if !f.IsPolicyDenial() || f.PolicyName == "" {
+		return TetragonEvent{}, false
+	}
+
+	// The subject is the pod whose policy denied the traffic: the source for an
+	// egress denial, the destination for an ingress denial.
+	ns, pod := f.SrcNs, f.SrcPod
+	if f.Direction == "ingress" || pod == "" {
+		ns, pod = f.DstNs, f.DstPod
+	}
+	if pod == "" {
+		return TetragonEvent{}, false // no workload to attribute the denial to
+	}
+
+	function := "cilium-policy-deny"
+	if f.Direction != "" {
+		function = "cilium-" + f.Direction + "-deny"
+	}
+
+	src, dst := f.SrcIP, f.DstIP
+	if f.SrcPort > 0 {
+		src = fmt.Sprintf("%s:%d", src, f.SrcPort)
+	}
+	if f.DstPort > 0 {
+		dst = fmt.Sprintf("%s:%d", dst, f.DstPort)
+	}
+
+	return TetragonEvent{
+		Type:       "policy-deny",
+		Source:     "cilium",
+		Time:       f.Time,
+		NodeName:   f.NodeName,
+		Namespace:  ns,
+		Pod:        pod,
+		Action:     "deny",
+		PolicyName: f.PolicyName,
+		Function:   function,
+		NetSrc:     src,
+		NetDest:    dst,
+		DropReason: f.DropReason,
+	}, true
 }
