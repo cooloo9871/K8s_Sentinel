@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// TetragonEvent is a normalised Tetragon runtime event for the frontend.
 // TetragonEvent is the shape carried on the shared runtime-security event bus.
 // Most events originate from Tetragon kprobes, but Cilium network policy
 // denials are synthesized into the same shape so that retention, alerting and
