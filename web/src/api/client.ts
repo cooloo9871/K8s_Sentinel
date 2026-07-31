@@ -256,3 +256,32 @@ export const templateApi = {
   delete: (id: string): Promise<void> =>
     api.delete(`/templates/${id}`),
 }
+
+export interface CNPRecord {
+  name: string
+  namespace: string          // "" for cluster-wide
+  scope: 'namespace' | 'cluster'
+  selector: string
+  ingressRules: number
+  egressRules: number
+  hasL7: boolean
+  defaultDeny: '' | 'ingress' | 'egress' | 'both'
+  createdBy: string
+  createdAt: string
+  rawYaml: string
+}
+
+export interface CNPListResponse {
+  available: boolean
+  policies: CNPRecord[]
+  message?: string
+}
+
+export const cnpApi = {
+  list: (): Promise<CNPListResponse> =>
+    api.get('/cnp').then((r) => r.data),
+  apply: (rawYaml: string): Promise<void> =>
+    api.post('/cnp', { rawYaml }),
+  delete: (name: string, scope: string, namespace: string): Promise<void> =>
+    api.delete(`/cnp/${name}`, { params: { scope, namespace } }),
+}
