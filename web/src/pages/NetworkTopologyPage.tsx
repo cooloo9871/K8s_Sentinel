@@ -9,6 +9,7 @@ import dagre from 'dagre'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
@@ -32,9 +33,10 @@ interface TopologyEdge {
   source: string
   target: string
   destIp?: string
-  port?: string
   count: number
   blocked: boolean
+  // Aggregated per-port breakdown (count-desc); ephemeral ports appear as "dynamic"
+  ports?: { port: string; count: number }[]
   // L7 (populated from Cilium/Hubble data)
   l7Type?: string
   httpMethod?: string
@@ -128,38 +130,58 @@ function layoutNodes(apiNodes: TopologyNode[]): any[] {
   ]
 }
 
+interface EdgeVisualData {
+  count: number
+  blocked: boolean
+  l7Type?: string
+  color: string
+}
+
+// edgeVisuals derives an edge's visual props from its data payload and the
+// current focus target. Labels are hidden by default (they dominate visual
+// clutter on dense graphs) and appear only on the focused node's edges;
+// blocked edges always keep their label. Unrelated edges dim under focus.
+function edgeVisuals(e: Edge, focusId: string | null): Edge {
+  const d = (e.data ?? {}) as unknown as EdgeVisualData
+  const focused = !focusId || e.source === focusId || e.target === focusId
+  const dimmed = !!focusId && !focused
+  if (d.blocked) {
+    return {
+      ...e,
+      label: `×${d.count} ✕`,
+      animated: false,
+      style: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 3', opacity: dimmed ? 0.12 : 1 },
+      labelStyle: { fontSize: 10, fill: '#ef4444', fontWeight: 600, opacity: dimmed ? 0.2 : 1 },
+      labelBgStyle: { fill: '#fef2f2', borderRadius: 4 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#ef4444', width: 18, height: 18 },
+    }
+  }
+  const showLabel = !!focusId && focused
+  const l7badge = d.l7Type ? ` [${d.l7Type}]` : ''
+  return {
+    ...e,
+    label: showLabel ? `×${d.count}${l7badge}` : undefined,
+    animated: !dimmed,
+    style: { stroke: d.color, strokeWidth: d.l7Type ? 2 : 1.5, opacity: dimmed ? 0.12 : 1 },
+    labelStyle: { fontSize: 10, fill: d.l7Type ? '#3b82f6' : '#6b7280', fontWeight: d.l7Type ? 600 : 400 },
+    labelBgStyle: { fill: d.l7Type ? '#eff6ff' : '#f9fafb', borderRadius: 4 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: d.color, width: 18, height: 18 },
+  }
+}
+
 function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyNode>): Edge[] {
   return apiEdges.map(e => {
-    if (e.blocked) {
-      return {
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        label: `×${e.count} ✕`,
-        animated: false,
-        style: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 3' },
-        labelStyle: { fontSize: 10, fill: '#ef4444', fontWeight: 600 },
-        labelBgStyle: { fill: '#fef2f2', borderRadius: 4 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#ef4444', width: 18, height: 18 },
-      }
-    }
     const targetKind = nodeMap[e.target]?.kind ?? 'external'
     const color = targetKind === 'external' ? '#f59e0b'
                 : targetKind === 'service'  ? '#22c55e'
                 : '#6366f1'
-    // Show L7 protocol badge in edge label when available
-    const l7badge = e.l7Type ? ` [${e.l7Type}]` : ''
-    return {
+    const base: Edge = {
       id: e.id,
       source: e.source,
       target: e.target,
-      label: `×${e.count}${l7badge}`,
-      animated: true,
-      style: { stroke: color, strokeWidth: e.l7Type ? 2 : 1.5 },
-      labelStyle: { fontSize: 10, fill: e.l7Type ? '#3b82f6' : '#6b7280', fontWeight: e.l7Type ? 600 : 400 },
-      labelBgStyle: { fill: e.l7Type ? '#eff6ff' : '#f9fafb', borderRadius: 4 },
-      markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
+      data: { count: e.count, blocked: e.blocked, l7Type: e.l7Type, color },
     }
+    return edgeVisuals(base, null)
   })
 }
 
@@ -215,6 +237,12 @@ export function NetworkTopologyPage() {
   const [selectedEdge, setSelectedEdge] = useState<TopologyEdge | null>(null)
   const [nsFilter, setNsFilter] = useState('all')
   const [podSearch, setPodSearch] = useState('')
+  // System namespaces are mostly control-plane noise (coredns, operators);
+  // hidden by default, and auto-shown when kube-system is explicitly selected.
+  const [hideSystem, setHideSystem] = useState(true)
+  // Hover focus: highlight the hovered node's edges, dim everything else
+  const [hoverId, setHoverId] = useState<string | null>(null)
+  const adjacencyRef = useRef<Record<string, Set<string>>>({})
 
   // Raw data from API — source of truth for filtering
   const [rawNodes, setRawNodes] = useState<TopologyNode[]>([])
@@ -253,6 +281,16 @@ export function NetworkTopologyPage() {
   useEffect(() => {
     const podQ = podSearch.trim().toLowerCase()
 
+    // Hide kube-system unless the user explicitly filters to it
+    const effectiveHide = hideSystem && nsFilter !== 'kube-system'
+    const scopedNodes = effectiveHide
+      ? rawNodes.filter(n => n.namespace !== 'kube-system')
+      : rawNodes
+    const scopedIds = new Set(scopedNodes.map(n => n.id))
+    const scopedEdges = effectiveHide
+      ? rawEdges.filter(e => scopedIds.has(e.source) && scopedIds.has(e.target))
+      : rawEdges
+
     // "Primary" nodes: pods/services matching the filter criteria.
     // external and node kinds are never seeds — they are pulled in by
     // connections to/from primary nodes (they have no namespace).
@@ -273,25 +311,25 @@ export function NetworkTopologyPage() {
     const noFilter = nsFilter === 'all' && !podQ
     const primaryIds = new Set(
       noFilter
-        ? rawNodes.filter(n => n.kind !== 'external' && n.kind !== 'node').map(n => n.id)
-        : rawNodes.filter(isPrimary).map(n => n.id)
+        ? scopedNodes.filter(n => n.kind !== 'external' && n.kind !== 'node').map(n => n.id)
+        : scopedNodes.filter(isPrimary).map(n => n.id)
     )
 
     // Include ALL edges where at least one end is a primary node.
     // This expands the view to show the complete connection path,
     // even if the other end is in a different namespace.
-    const candidateEdges = rawEdges.filter(e =>
+    const candidateEdges = scopedEdges.filter(e =>
       primaryIds.has(e.source) || primaryIds.has(e.target)
     )
 
-    // If the same (source, target, port) has both a blocked and an allowed edge,
+    // If the same (source, target) pair has both a blocked and an allowed edge,
     // keep only the blocked one — it's more informative and the allowed events
     // likely predate when the policy was set to Protect mode.
     const blockedKeys = new Set(
-      candidateEdges.filter(e => e.blocked).map(e => `${e.source}|${e.target}|${e.port}`)
+      candidateEdges.filter(e => e.blocked).map(e => `${e.source}|${e.target}`)
     )
     const filteredEdges = candidateEdges.filter(e =>
-      e.blocked || !blockedKeys.has(`${e.source}|${e.target}|${e.port}`)
+      e.blocked || !blockedKeys.has(`${e.source}|${e.target}`)
     )
 
     // Collect every node referenced by the filtered edges
@@ -299,7 +337,15 @@ export function NetworkTopologyPage() {
 
     // Visible = anything reachable via filtered edges
     // (external nodes appear only when they have a connection)
-    const visibleNodes = rawNodes.filter(n => connectedIds.has(n.id))
+    const visibleNodes = scopedNodes.filter(n => connectedIds.has(n.id))
+
+    // Adjacency map for hover-focus dimming
+    const adj: Record<string, Set<string>> = {}
+    for (const e of filteredEdges) {
+      ;(adj[e.source] ??= new Set()).add(e.target)
+      ;(adj[e.target] ??= new Set()).add(e.source)
+    }
+    adjacencyRef.current = adj
 
     // Use dagre by default for proper edge routing; fall back to column layout if dagre fails
     const baseNodes = layoutNodes(visibleNodes)
@@ -312,7 +358,18 @@ export function NetworkTopologyPage() {
     setTimeout(() => reactFlowRef.current?.fitView(), 100)
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
-  }, [rawNodes, rawEdges, nsFilter, podSearch, setNodes, setEdges])
+  }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, setNodes, setEdges])
+
+  // Hover / selection focus: highlight the focused node's edges + neighbors,
+  // dim everything else. Labels appear only on focused edges.
+  useEffect(() => {
+    const focusId = hoverId ?? selectedNode?.id ?? null
+    setEdges(eds => eds.map(e => edgeVisuals(e, focusId)))
+    setNodes(nds => nds.map(n => {
+      const dim = !!focusId && n.id !== focusId && !adjacencyRef.current[focusId]?.has(n.id)
+      return { ...n, style: { ...(n.style ?? {}), opacity: dim ? 0.25 : 1 } }
+    }))
+  }, [hoverId, selectedNode, setEdges, setNodes])
 
   const matchCount = useMemo(() => {
     const podQ = podSearch.trim().toLowerCase()
@@ -395,6 +452,14 @@ export function NetworkTopologyPage() {
             className="h-8 w-44 pl-8 text-sm"
           />
         </div>
+        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+          <Checkbox
+            checked={hideSystem}
+            onCheckedChange={v => setHideSystem(v === true)}
+            className="size-3.5"
+          />
+          Hide kube-system
+        </label>
         {matchCount !== null && (
           <span className="text-xs text-muted-foreground">
             {matchCount} match{matchCount !== 1 ? 'es' : ''}
@@ -493,6 +558,8 @@ export function NetworkTopologyPage() {
               onEdgesChange={onEdgesChange}
               onNodeClick={onNodeClick}
               onEdgeClick={onEdgeClick}
+              onNodeMouseEnter={(_: React.MouseEvent, n: { id: string }) => setHoverId(n.id)}
+              onNodeMouseLeave={() => setHoverId(null)}
               onInit={(instance: any) => { reactFlowRef.current = instance }}
               nodeTypes={nodeTypes}
               fitView
@@ -606,12 +673,24 @@ export function NetworkTopologyPage() {
                       <div>
                         <span className="text-muted-foreground">To</span>
                         <div className="mt-0.5 font-mono font-medium">{selectedEdge.destIp ?? selectedEdge.target}</div>
-                        {selectedEdge.port && <div className="font-mono text-muted-foreground">Port: {selectedEdge.port}</div>}
                       </div>
                       <div>
                         <span className="text-muted-foreground">Count</span>
                         <div className="mt-0.5">{selectedEdge.count} connection{selectedEdge.count !== 1 ? 's' : ''}</div>
                       </div>
+                      {selectedEdge.ports && selectedEdge.ports.length > 0 && (
+                        <div>
+                          <span className="text-muted-foreground">Ports</span>
+                          <div className="mt-1 flex flex-col gap-0.5">
+                            {selectedEdge.ports.map(p => (
+                              <div key={p.port} className="flex justify-between font-mono text-[11px]">
+                                <span>{p.port === 'dynamic' ? 'dynamic (ephemeral)' : p.port}</span>
+                                <span className="text-muted-foreground">×{p.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {selectedEdge.l7Type && (
                         <div>
                           <span className="text-muted-foreground">Protocol</span>

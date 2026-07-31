@@ -199,7 +199,13 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	}
 	port := ""
 	if f.DstPort > 0 {
-		port = fmt.Sprintf("%d", f.DstPort)
+		// Collapse ephemeral client-side ports (Linux default range starts at
+		// 32768) into one bucket so the buffer doesn't grow per connection.
+		if f.DstPort >= 32768 {
+			port = "dynamic"
+		} else {
+			port = fmt.Sprintf("%d", f.DstPort)
+		}
 	}
 	key := srcID + "|" + dstID + "|" + port
 

@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cooloo9871/sentinel/internal/k8s"
@@ -19,20 +20,46 @@ type TopologyNode struct {
 	BackingPods []string `json:"backingPods,omitempty"` // only set for service nodes
 }
 
+// PortStat is one destination port's share of an aggregated edge.
+type PortStat struct {
+	Port  string `json:"port"`
+	Count int    `json:"count"`
+}
+
 type TopologyEdge struct {
-	ID      string `json:"id"`
-	Source  string `json:"source"`
-	Target  string `json:"target"`
-	DestIP  string `json:"destIp,omitempty"`
-	Port    string `json:"port,omitempty"`
-	Count   int    `json:"count"`
-	Blocked bool   `json:"blocked"`
+	ID      string     `json:"id"`
+	Source  string     `json:"source"`
+	Target  string     `json:"target"`
+	DestIP  string     `json:"destIp,omitempty"`
+	Count   int        `json:"count"`
+	Blocked bool       `json:"blocked"`
+	Ports   []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
 	// L7 fields (populated from Cilium/Hubble data)
 	L7Type     string `json:"l7Type,omitempty"`
 	HTTPMethod string `json:"httpMethod,omitempty"`
 	HTTPURL    string `json:"httpURL,omitempty"`
 	HTTPStatus uint32 `json:"httpStatus,omitempty"`
 	DNSQuery   string `json:"dnsQuery,omitempty"`
+}
+
+// normalizePort collapses ephemeral ports (Linux default range starts at
+// 32768) into one "dynamic" bucket so a single logical connection pair does
+// not explode into N parallel edges keyed by client-side ports.
+func normalizePort(port string) string {
+	if p, err := strconv.Atoi(port); err == nil && p >= 32768 {
+		return "dynamic"
+	}
+	return port
+}
+
+// portStats flattens a port→count map into a count-descending slice.
+func portStats(ports map[string]int) []PortStat {
+	out := make([]PortStat, 0, len(ports))
+	for p, c := range ports {
+		out = append(out, PortStat{Port: p, Count: c})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out
 }
 
 type TopologyResponse struct {
@@ -76,11 +103,17 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 
 		events := store.ListTopologyEvents()
 
+		// One edge per (src, dst, blocked) pair; ports aggregated into a breakdown.
 		type edgeKey struct {
-			src, dst, destIP, port string
-			blocked                bool
+			src, dst string
+			blocked  bool
 		}
-		edgeCounts := make(map[edgeKey]int)
+		type edgeAgg struct {
+			count  int
+			destIP string
+			ports  map[string]int
+		}
+		edgeCounts := make(map[edgeKey]*edgeAgg)
 		nodeSet := make(map[string]TopologyNode)
 
 		for _, e := range events {
@@ -172,7 +205,16 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 			}
 
 			blocked := e.Action == "kill"
-			edgeCounts[edgeKey{srcID, dstID, destRaw, port, blocked}]++
+			key := edgeKey{srcID, dstID, blocked}
+			agg := edgeCounts[key]
+			if agg == nil {
+				agg = &edgeAgg{destIP: destRaw, ports: make(map[string]int)}
+				edgeCounts[key] = agg
+			}
+			agg.count++
+			if port != "" {
+				agg.ports[normalizePort(port)]++
+			}
 		}
 
 		// Attach backing pod names to service nodes
@@ -192,19 +234,19 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 		}
 
 		edges := make([]TopologyEdge, 0, len(edgeCounts))
-		for k, count := range edgeCounts {
+		for k, agg := range edgeCounts {
 			suffix := ""
 			if k.blocked {
 				suffix = ":blocked"
 			}
 			edges = append(edges, TopologyEdge{
-				ID:      k.src + "->" + k.dst + ":" + k.destIP + ":" + k.port + suffix,
+				ID:      k.src + "->" + k.dst + suffix,
 				Source:  k.src,
 				Target:  k.dst,
-				DestIP:  k.destIP,
-				Port:    k.port,
-				Count:   count,
+				DestIP:  agg.destIP,
+				Count:   agg.count,
 				Blocked: k.blocked,
+				Ports:   portStats(agg.ports),
 			})
 		}
 
@@ -224,13 +266,16 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 
+	// One edge per (src, dst, blocked) pair — ports are aggregated into a
+	// breakdown list instead of fanning out into parallel edges.
 	type edgeKey struct {
-		src, dst, port string
-		blocked        bool
+		src, dst string
+		blocked  bool
 	}
 	type edgeVal struct {
 		count      int
 		destIP     string
+		ports      map[string]int
 		l7Type     string
 		httpMethod string
 		httpURL    string
@@ -302,13 +347,16 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 		}
 
 		blocked := e.Verdict == "dropped"
-		key := edgeKey{srcID, dstID, e.Port, blocked}
+		key := edgeKey{srcID, dstID, blocked}
 		ev := edgeMap[key]
 		if ev == nil {
-			ev = &edgeVal{destIP: e.DstIP}
+			ev = &edgeVal{destIP: e.DstIP, ports: make(map[string]int)}
 			edgeMap[key] = ev
 		}
 		ev.count += e.Count
+		if e.Port != "" {
+			ev.ports[normalizePort(e.Port)] += e.Count
+		}
 		if e.L7Type != "" {
 			ev.l7Type = e.L7Type
 			if e.HTTPMethod != "" {
@@ -326,11 +374,11 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 		}
 	}
 
-	// Dedup: blocked supersedes allowed for same src→dst→port
+	// Dedup: blocked supersedes allowed for the same src→dst pair
 	blockedKeys := make(map[string]bool)
 	for k := range edgeMap {
 		if k.blocked {
-			blockedKeys[k.src+"|"+k.dst+"|"+k.port] = true
+			blockedKeys[k.src+"|"+k.dst] = true
 		}
 	}
 
@@ -341,25 +389,21 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, svcPo
 
 	edges := make([]TopologyEdge, 0, len(edgeMap))
 	for k, ev := range edgeMap {
-		if !k.blocked && blockedKeys[k.src+"|"+k.dst+"|"+k.port] {
+		if !k.blocked && blockedKeys[k.src+"|"+k.dst] {
 			continue // skip allowed when blocked exists
 		}
 		suffix := ""
 		if k.blocked {
 			suffix = ":blocked"
 		}
-		l7suffix := ""
-		if ev.l7Type != "" {
-			l7suffix = ":" + ev.l7Type
-		}
 		edges = append(edges, TopologyEdge{
-			ID:         fmt.Sprintf("%s->%s:%s:%s%s%s", k.src, k.dst, ev.destIP, k.port, suffix, l7suffix),
+			ID:         k.src + "->" + k.dst + suffix,
 			Source:     k.src,
 			Target:     k.dst,
 			DestIP:     ev.destIP,
-			Port:       k.port,
 			Count:      ev.count,
 			Blocked:    k.blocked,
+			Ports:      portStats(ev.ports),
 			L7Type:     ev.l7Type,
 			HTTPMethod: ev.httpMethod,
 			HTTPURL:    ev.httpURL,
