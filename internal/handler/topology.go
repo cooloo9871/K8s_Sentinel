@@ -195,7 +195,7 @@ func getNetworkTopology(store *security.Store, k8sStore *k8s.Store) http.Handler
 				nodeSet[dstID] = dstNode
 			}
 
-			blocked := e.Action == "kill"
+			blocked := e.Action == "kill" || e.Action == "deny"
 			key := edgeKey{srcID, dstID, blocked}
 			agg := edgeCounts[key]
 			if agg == nil {

@@ -42,9 +42,30 @@ type CiliumFlow struct {
 	HTTPStatus uint32 `json:"httpStatus,omitempty"`
 	DNSQuery   string `json:"dnsQuery,omitempty"`
 	DNSRcode   string `json:"dnsRcode,omitempty"`
+	// Drop details (only meaningful when Verdict == "dropped")
+	DropReason string `json:"dropReason,omitempty"`
+	// Policy that denied the traffic — requires Hubble network policy
+	// correlation (hubble-network-policy-correlation-enabled), otherwise empty.
+	PolicyName string `json:"policyName,omitempty"`
+	PolicyNs   string `json:"policyNs,omitempty"`
+	Direction  string `json:"direction,omitempty"` // "ingress" | "egress" for denials
 	// Metadata
 	NodeName string `json:"nodeName"`
 	IsReply  bool   `json:"isReply"`
+}
+
+// IsPolicyDenial reports whether this flow was dropped by a network policy, as
+// opposed to the many non-security drop reasons Cilium also reports (stale or
+// unroutable IP, unsupported L3 protocol, …). Only policy denials belong in the
+// security event stream — treating every drop as an incident would flood it.
+func (f CiliumFlow) IsPolicyDenial() bool {
+	if f.Verdict != "dropped" {
+		return false
+	}
+	if f.PolicyName != "" {
+		return true // policy correlation identified the rule
+	}
+	return strings.Contains(strings.ToUpper(f.DropReason), "POLICY")
 }
 
 func ciliumNamespace() string {
@@ -136,6 +157,14 @@ func (s *Store) streamCiliumFromPod(ctx context.Context, podName string, out cha
 	return <-execDone
 }
 
+// ciliumPolicyRef is one entry of Hubble's *_denied_by / *_allowed_by policy
+// correlation lists.
+type ciliumPolicyRef struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Kind      string `json:"kind"`
+}
+
 // parseCiliumFlow parses one NDJSON line from `hubble observe -o json`.
 func parseCiliumFlow(line string) (CiliumFlow, bool) {
 	// Hubble JSON envelope: {"flow": {...}, "node_name": "...", "time": "..."}
@@ -176,7 +205,11 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 					DstPort uint32 `json:"destination_port"`
 				} `json:"UDP"`
 			} `json:"l4"`
-			L7 *struct {
+			DropReasonDesc string `json:"drop_reason_desc"`
+			// Populated when Hubble network policy correlation is enabled
+			EgressDeniedBy  []ciliumPolicyRef `json:"egress_denied_by"`
+			IngressDeniedBy []ciliumPolicyRef `json:"ingress_denied_by"`
+			L7              *struct {
 				Type string `json:"type"` // REQUEST | RESPONSE
 				HTTP *struct {
 					Method   string `json:"method"`
@@ -240,6 +273,18 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 	}
 	if f.IsReply != nil {
 		flow.IsReply = *f.IsReply
+	}
+
+	// Drop details and policy correlation
+	flow.DropReason = f.DropReasonDesc
+	if len(f.EgressDeniedBy) > 0 {
+		flow.Direction = "egress"
+		flow.PolicyName = f.EgressDeniedBy[0].Name
+		flow.PolicyNs = f.EgressDeniedBy[0].Namespace
+	} else if len(f.IngressDeniedBy) > 0 {
+		flow.Direction = "ingress"
+		flow.PolicyName = f.IngressDeniedBy[0].Name
+		flow.PolicyNs = f.IngressDeniedBy[0].Namespace
 	}
 
 	// Transport layer
@@ -369,4 +414,63 @@ type CiliumTopoEntry struct {
 	DNSQuery      string
 	Count         int
 	LastSeen      time.Time
+}
+
+// SynthesizePolicyDenyEvent converts a Cilium network policy denial into a
+// security event so it flows through the same retention, alerting and syslog
+// pipeline as Tetragon events, instead of being visible only as a red edge in
+// the topology graph. Returns false for flows that are not policy denials or
+// that cannot be attributed to a workload.
+func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
+	if !f.IsPolicyDenial() {
+		return TetragonEvent{}, false
+	}
+
+	// The subject is the pod whose policy denied the traffic: the source for an
+	// egress denial, the destination for an ingress denial. When correlation is
+	// off and the direction is unknown, fall back to whichever side is a pod.
+	ns, pod := f.SrcNs, f.SrcPod
+	if f.Direction == "ingress" || pod == "" {
+		ns, pod = f.DstNs, f.DstPod
+	}
+	if pod == "" {
+		return TetragonEvent{}, false // no workload to attribute the denial to
+	}
+
+	// All security-event consumers filter on a non-empty policy name, and users
+	// filter alerts by it, so fall back to a stable identifier when Hubble
+	// policy correlation is disabled and the real name is unavailable.
+	policy := f.PolicyName
+	if policy == "" {
+		policy = "cilium-network-policy"
+	}
+
+	function := "cilium-policy-deny"
+	if f.Direction != "" {
+		function = "cilium-" + f.Direction + "-deny"
+	}
+
+	src, dst := f.SrcIP, f.DstIP
+	if f.SrcPort > 0 {
+		src = fmt.Sprintf("%s:%d", src, f.SrcPort)
+	}
+	if f.DstPort > 0 {
+		dst = fmt.Sprintf("%s:%d", dst, f.DstPort)
+	}
+
+	return TetragonEvent{
+		Type:       "policy-deny",
+		Source:     "cilium",
+		Time:       f.Time,
+		NodeName:   f.NodeName,
+		Namespace:  ns,
+		Pod:        pod,
+		Action:     "deny",
+		PolicyName: policy,
+		Function:   function,
+		NetSrc:     src,
+		NetDest:    dst,
+		// Surfaces the kernel drop reason (e.g. POLICY_DENIED) in event detail
+		Arguments: f.DropReason,
+	}, true
 }

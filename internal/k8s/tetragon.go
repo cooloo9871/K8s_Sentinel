@@ -16,8 +16,13 @@ import (
 )
 
 // TetragonEvent is a normalised Tetragon runtime event for the frontend.
+// TetragonEvent is the shape carried on the shared runtime-security event bus.
+// Most events originate from Tetragon kprobes, but Cilium network policy
+// denials are synthesized into the same shape so that retention, alerting and
+// syslog forwarding all work off one stream. Source records the origin.
 type TetragonEvent struct {
-	Type       string  `json:"type"`
+	Type       string  `json:"type"`   // "exec" | "kprobe" | "policy-deny"
+	Source     string  `json:"source"` // "" (Tetragon) | "cilium"
 	Time       string  `json:"time"`
 	NodeName   string  `json:"nodeName"`
 	Namespace  string  `json:"namespace"`
@@ -26,14 +31,37 @@ type TetragonEvent struct {
 	Binary     string  `json:"binary"`
 	Arguments  string  `json:"arguments"`
 	ParentBin  string  `json:"parentBin"`
-	Action     string  `json:"action"`     // "monitor" or "kill"
+	Action     string  `json:"action"` // "monitor" | "kill" | "deny"
 	PolicyName string  `json:"policyName"`
 	Function   string  `json:"function"`
-	FilePath   string  `json:"filePath"`   // file/path from file kprobes
-	FileOp     string  `json:"fileOp"`     // "read", "write", "mmap-read", "mmap-write", "truncate"
-	NetDest    string  `json:"netDest"`    // destination "addr:port" from network kprobes
-	NetSrc     string  `json:"netSrc"`     // source "addr:port" from network kprobes
+	FilePath   string  `json:"filePath"` // file/path from file kprobes
+	FileOp     string  `json:"fileOp"`   // "read", "write", "mmap-read", "mmap-write", "truncate"
+	NetDest    string  `json:"netDest"`  // destination "addr:port" from network kprobes
+	NetSrc     string  `json:"netSrc"`   // source "addr:port" from network kprobes
 	ProcessUID *uint32 `json:"processUid,omitempty"`
+}
+
+// Severity classifies an event for retention, alerting and display. Actions
+// that actually prevented something — a process killed, a packet dropped —
+// are critical; pure observations are warnings.
+func (e TetragonEvent) Severity() string {
+	if e.Blocked() {
+		return "critical"
+	}
+	return "warning"
+}
+
+// Blocked reports whether the event represents traffic or execution that was
+// prevented rather than merely observed.
+func (e TetragonEvent) Blocked() bool {
+	return e.Action == "kill" || e.Action == "deny"
+}
+
+// IsSecurityEvent reports whether the event belongs in the security event
+// stream (persisted, alerted on, forwarded to syslog) as opposed to the raw
+// process-discovery stream.
+func (e TetragonEvent) IsSecurityEvent() bool {
+	return (e.Type == "kprobe" || e.Type == "policy-deny") && e.PolicyName != ""
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.

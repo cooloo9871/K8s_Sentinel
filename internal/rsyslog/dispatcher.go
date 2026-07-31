@@ -3,8 +3,8 @@ package rsyslog
 import (
 	"context"
 	"fmt"
-	gosyslog "log/syslog"
 	"log"
+	gosyslog "log/syslog"
 	"strings"
 	"sync"
 	"time"
@@ -47,7 +47,7 @@ func (d *Dispatcher) runTetragon(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if evt.Type != "kprobe" || evt.PolicyName == "" {
+			if !evt.IsSecurityEvent() {
 				continue
 			}
 			d.dispatch(evt)
@@ -56,10 +56,7 @@ func (d *Dispatcher) runTetragon(ctx context.Context) {
 }
 
 func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
-	severity := "warning"
-	if evt.Action == "kill" {
-		severity = "critical"
-	}
+	severity := evt.Severity()
 	for _, cfg := range d.store.EnabledConfigs() {
 		if !cfg.MatchesEventType("security") {
 			continue
@@ -147,7 +144,7 @@ func (d *Dispatcher) TestSend(cfg Config) error {
 }
 
 func securityRuleType(fn string) string {
-	if strings.Contains(fn, "tcp_connect") {
+	if strings.Contains(fn, "tcp_connect") || strings.Contains(fn, "deny") {
 		return "network"
 	}
 	if strings.Contains(fn, "security_file") || strings.Contains(fn, "security_path") {

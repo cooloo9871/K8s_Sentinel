@@ -25,8 +25,8 @@ type slackAttachment struct {
 // WebhookPayload is the JSON body posted to webhook endpoints.
 // Attachments provides Slack-specific colored formatting; Text is a plain fallback.
 type WebhookPayload struct {
-	Text        string            `json:"text"`                    // plain text fallback
-	Attachments []slackAttachment `json:"attachments,omitempty"`   // Slack color + mrkdwn
+	Text        string            `json:"text"`                  // plain text fallback
+	Attachments []slackAttachment `json:"attachments,omitempty"` // Slack color + mrkdwn
 	RuleName    string            `json:"ruleName"`
 	Severity    string            `json:"severity"`
 	Time        string            `json:"time"`
@@ -159,7 +159,7 @@ func (d *Dispatcher) runTetragon(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if evt.Type != "kprobe" || evt.PolicyName == "" {
+			if !evt.IsSecurityEvent() {
 				continue
 			}
 			d.dispatch(evt)
@@ -287,12 +287,8 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity
 	}
 }
 
-
 func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
-	severity := "warning"
-	if evt.Action == "kill" {
-		severity = "critical"
-	}
+	severity := evt.Severity()
 
 	rules := d.store.EnabledRules()
 	for _, rule := range rules {

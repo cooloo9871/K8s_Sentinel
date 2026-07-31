@@ -37,13 +37,6 @@ type Event struct {
 	NetSrc     string  `json:"netSrc,omitempty"`
 }
 
-func severityOf(evt k8s.TetragonEvent) string {
-	if evt.Action == "kill" {
-		return "critical"
-	}
-	return "warning"
-}
-
 func sameEvent(a Event, b k8s.TetragonEvent) bool {
 	return a.Namespace == b.Namespace &&
 		a.Binary == b.Binary &&
@@ -58,7 +51,7 @@ func sameEvent(a Event, b k8s.TetragonEvent) bool {
 }
 
 type eventFile struct {
-	Events    []Event        `json:"events"`
+	Events    []Event          `json:"events"`
 	Retention *RetentionConfig `json:"retention,omitempty"`
 }
 
@@ -93,13 +86,13 @@ type topoEntry struct {
 
 // Store holds Tetragon kprobe events with file persistence and SSE fanout.
 type Store struct {
-	mu        sync.RWMutex
-	evts      []Event // newest-first
-	subs      map[chan Event]struct{}
-	path      string
-	flushGen  uint64     // incremented each flush; goroutine skips write if stale
-	flushMu   sync.Mutex // serialises the stale-check + rename to eliminate TOCTOU
-	cfg       RetentionConfig
+	mu       sync.RWMutex
+	evts     []Event // newest-first
+	subs     map[chan Event]struct{}
+	path     string
+	flushGen uint64     // incremented each flush; goroutine skips write if stale
+	flushMu  sync.Mutex // serialises the stale-check + rename to eliminate TOCTOU
+	cfg      RetentionConfig
 	// topoBuf tracks unique connection pairs by time, independent of event-count retention.
 	// Evicted by TTLDays (same as events), not by MaxWarnings/MaxCriticals.
 	topoBuf     map[topoKey]topoEntry
@@ -134,7 +127,7 @@ func (s *Store) updateTopoBuf(e Event, lastSeen time.Time) {
 			netDestKey = strings.TrimPrefix(netDestKey[:idx], "::ffff:")
 		}
 	}
-	k := topoKey{pod: e.Pod, ns: e.Namespace, nodeName: e.NodeName, netDest: netDestKey, blocked: e.Action == "kill"}
+	k := topoKey{pod: e.Pod, ns: e.Namespace, nodeName: e.NodeName, netDest: netDestKey, blocked: e.Action == "kill" || e.Action == "deny"}
 	s.topoBuf[k] = topoEntry{Pod: e.Pod, Namespace: e.Namespace, NodeName: e.NodeName, NetSrc: e.NetSrc, NetDest: e.NetDest, Action: e.Action, Function: e.Function, LastSeen: lastSeen}
 }
 
@@ -242,10 +235,10 @@ func (s *Store) flush() {
 
 // Add ingests a Tetragon event: dedup, insert newest-first, cap, persist.
 func (s *Store) Add(raw k8s.TetragonEvent) {
-	if raw.Type != "kprobe" || raw.PolicyName == "" {
+	if !raw.IsSecurityEvent() {
 		return
 	}
-	severity := severityOf(raw)
+	severity := raw.Severity()
 	t, err := parseTime(raw.Time)
 	if err != nil {
 		t = time.Now().UTC()
