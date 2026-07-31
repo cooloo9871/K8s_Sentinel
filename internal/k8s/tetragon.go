@@ -15,13 +15,13 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// TetragonEvent is the shape carried on the shared runtime-security event bus.
-// Most events originate from Tetragon kprobes, but Cilium network policy
-// denials are synthesized into the same shape so that retention, alerting and
-// syslog forwarding all work off one stream. Source records the origin.
+// TetragonEvent is a normalised Tetragon runtime event, carried on the shared
+// event bus that the security store, webhook alerts and syslog forwarding all
+// consume. Cilium network policy denials deliberately do NOT appear here —
+// they are surfaced in Network Topology as blocked edges instead, so this
+// stream stays exactly what the user's own TracingPolicies produced.
 type TetragonEvent struct {
-	Type       string  `json:"type"`   // "exec" | "kprobe" | "policy-deny"
-	Source     string  `json:"source"` // "" (Tetragon) | "cilium"
+	Type       string  `json:"type"` // "exec" | "kprobe"
 	Time       string  `json:"time"`
 	NodeName   string  `json:"nodeName"`
 	Namespace  string  `json:"namespace"`
@@ -30,7 +30,7 @@ type TetragonEvent struct {
 	Binary     string  `json:"binary"`
 	Arguments  string  `json:"arguments"`
 	ParentBin  string  `json:"parentBin"`
-	Action     string  `json:"action"` // "monitor" | "kill" | "deny"
+	Action     string  `json:"action"` // "monitor" | "kill"
 	PolicyName string  `json:"policyName"`
 	Function   string  `json:"function"`
 	FilePath   string  `json:"filePath"`             // file/path from file kprobes
@@ -41,34 +41,20 @@ type TetragonEvent struct {
 	ProcessUID *uint32 `json:"processUid,omitempty"`
 }
 
-// Severity classifies an event for retention, alerting and display. Actions
-// that actually prevented something — a process killed, a packet dropped —
-// are critical; pure observations are warnings.
+// Severity classifies an event for retention, alerting and display. An event
+// whose action actually killed the process is critical; observations are
+// warnings.
 func (e TetragonEvent) Severity() string {
-	if e.Blocked() {
+	if e.Action == "kill" {
 		return "critical"
 	}
 	return "warning"
 }
 
-// Blocked reports whether the event represents traffic or execution that was
-// prevented rather than merely observed.
-func (e TetragonEvent) Blocked() bool {
-	return e.Action == "kill" || e.Action == "deny"
-}
-
 // IsSecurityEvent reports whether the event belongs in the security event
-// stream (persisted, alerted on, forwarded to syslog) as opposed to the raw
-// process-discovery stream.
+// stream (persisted, alerted on, forwarded to syslog). Kprobe events without a
+// policy name come from the base sensor and belong to process discovery.
 func (e TetragonEvent) IsSecurityEvent() bool {
-	// A policy denial is inherently policy-driven, so it qualifies even when
-	// Hubble could not name the rule — which is the normal case for
-	// default-deny, where the drop is the absence of an allow rule.
-	if e.Type == "policy-deny" {
-		return true
-	}
-	// Kprobe events without a policy name come from the base sensor and belong
-	// to process discovery, not the security stream.
 	return e.Type == "kprobe" && e.PolicyName != ""
 }
 

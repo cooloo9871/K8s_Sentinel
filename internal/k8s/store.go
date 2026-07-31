@@ -310,12 +310,6 @@ func (s *Store) StartCiliumBroadcast(ctx context.Context) {
 				if f.Verdict == "allowed" || f.Verdict == "dropped" {
 					s.broadcastCilium(f)
 				}
-				// Network policy denials are security events: publish them on the
-				// shared bus so the security store, webhook alerts and syslog
-				// forwarding all pick them up without each subscribing to Cilium.
-				if evt, ok := SynthesizePolicyDenyEvent(f); ok {
-					s.broadcastTetragon(evt)
-				}
 			}
 			if ctx.Err() != nil {
 				return

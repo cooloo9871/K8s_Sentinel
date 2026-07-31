@@ -54,20 +54,6 @@ type CiliumFlow struct {
 	IsReply  bool   `json:"isReply"`
 }
 
-// IsPolicyDenial reports whether this flow was dropped by a network policy, as
-// opposed to the many non-security drop reasons Cilium also reports (stale or
-// unroutable IP, unsupported L3 protocol, …). Only policy denials belong in the
-// security event stream — treating every drop as an incident would flood it.
-func (f CiliumFlow) IsPolicyDenial() bool {
-	if f.Verdict != "dropped" {
-		return false
-	}
-	if f.PolicyName != "" {
-		return true // policy correlation identified the rule
-	}
-	return strings.Contains(strings.ToUpper(f.DropReason), "POLICY")
-}
-
 func ciliumNamespace() string {
 	if ns := os.Getenv("CILIUM_NAMESPACE"); ns != "" {
 		return ns
@@ -414,59 +400,4 @@ type CiliumTopoEntry struct {
 	DNSQuery      string
 	Count         int
 	LastSeen      time.Time
-}
-
-// SynthesizePolicyDenyEvent converts a Cilium network policy denial into a
-// security event so it flows through the same retention, alerting and syslog
-// pipeline as Tetragon events, instead of being visible only as a red edge in
-// the topology graph. Returns false for flows that are not policy denials or
-// that cannot be attributed to a workload.
-func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
-	if !f.IsPolicyDenial() {
-		return TetragonEvent{}, false
-	}
-
-	// The subject is the pod whose policy denied the traffic: the source for an
-	// egress denial, the destination for an ingress denial. When correlation is
-	// off and the direction is unknown, fall back to whichever side is a pod.
-	ns, pod := f.SrcNs, f.SrcPod
-	if f.Direction == "ingress" || pod == "" {
-		ns, pod = f.DstNs, f.DstPod
-	}
-	if pod == "" {
-		return TetragonEvent{}, false // no workload to attribute the denial to
-	}
-
-	// PolicyName is left empty when Hubble cannot attribute the drop to a rule.
-	// That is the normal case for default-deny: the packet was dropped because
-	// no rule allowed it, so there is no rule to name. Never substitute a
-	// placeholder here — the Policy column must only ever show policies that
-	// actually exist in the cluster.
-	function := "cilium-policy-deny"
-	if f.Direction != "" {
-		function = "cilium-" + f.Direction + "-deny"
-	}
-
-	src, dst := f.SrcIP, f.DstIP
-	if f.SrcPort > 0 {
-		src = fmt.Sprintf("%s:%d", src, f.SrcPort)
-	}
-	if f.DstPort > 0 {
-		dst = fmt.Sprintf("%s:%d", dst, f.DstPort)
-	}
-
-	return TetragonEvent{
-		Type:       "policy-deny",
-		Source:     "cilium",
-		Time:       f.Time,
-		NodeName:   f.NodeName,
-		Namespace:  ns,
-		Pod:        pod,
-		Action:     "deny",
-		PolicyName: f.PolicyName,
-		Function:   function,
-		NetSrc:     src,
-		NetDest:    dst,
-		DropReason: f.DropReason,
-	}, true
 }

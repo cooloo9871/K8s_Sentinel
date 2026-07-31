@@ -23,7 +23,6 @@ export interface DisplayEvent {
   fileOp?: string
   netDest?: string
   netSrc?: string
-  dropReason?: string
 }
 
 interface SecurityEventsContextValue {
