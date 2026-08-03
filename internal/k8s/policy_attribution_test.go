@@ -4,7 +4,24 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynfake "k8s.io/client-go/dynamic/fake"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
+
+// emptyPolicyClient is a dynamic client holding no Cilium policies, for tests
+// that only care about the pod side of the attribution cache. The fake client
+// needs the list kinds declared for every CRD the loader queries.
+func emptyPolicyClient() *dynfake.FakeDynamicClient {
+	return dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		cnpGVR:  "CiliumNetworkPolicyList",
+		ccnpGVR: "CiliumClusterwideNetworkPolicyList",
+	})
+}
 
 // The allowlist policy that exposed the gap: it permits egress to port 80 only,
 // so everything else is dropped by default-deny. Hubble reports no denying rule
@@ -145,5 +162,61 @@ func TestUnknownDirectionSkipsRulelessPolicies(t *testing.T) {
 	s := &Store{attrData: &d, attrExpiry: time.Now().Add(time.Minute)}
 	if got := s.AttributePolicyDenial(context.Background(), "demo", "api-1", ""); got != "" {
 		t.Errorf("got %q, want empty — the policy has no rules", got)
+	}
+}
+
+// The container name has to come from the Kubernetes API, because Hubble flows
+// do not carry one. Attributed only for a single-container pod: with several,
+// the flow does not say which one opened the connection.
+func TestPodContainerResolvesSingleContainerPods(t *testing.T) {
+	typed := k8sfake.NewSimpleClientset(
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "traffic-generator-9b649846d-bxqfc", Namespace: "net-lab"},
+			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "traffic-generator"}}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "sidecar-pod", Namespace: "net-lab"},
+			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}, {Name: "proxy"}}},
+		},
+	)
+	s := &Store{typed: typed, client: emptyPolicyClient()}
+
+	got := s.PodContainer(context.Background(), "net-lab", "traffic-generator-9b649846d-bxqfc")
+	if got != "traffic-generator" {
+		t.Errorf("container = %q, want traffic-generator", got)
+	}
+	if got := s.PodContainer(context.Background(), "net-lab", "sidecar-pod"); got != "" {
+		t.Errorf("multi-container pod = %q, want empty — the flow does not identify the container", got)
+	}
+	if got := s.PodContainer(context.Background(), "net-lab", "gone"); got != "" {
+		t.Errorf("unknown pod = %q, want empty", got)
+	}
+}
+
+// The end-to-end path for the reported case: an egress denial Hubble correlated
+// to deny-tg-to-echo must name the source pod and its container.
+func TestDenialEventCarriesTheSourceContainer(t *testing.T) {
+	f, ok := parseCiliumFlow(droppedFlowJSON)
+	if !ok {
+		t.Fatal("parseCiliumFlow rejected a valid flow")
+	}
+	typed := k8sfake.NewSimpleClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "traffic-generator-9b649846d-bxqfc", Namespace: "net-lab"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "traffic-generator"}}},
+	})
+	s := &Store{typed: typed, client: emptyPolicyClient()}
+
+	evt, ok := s.SynthesizePolicyDenyEvent(context.Background(), f)
+	if !ok {
+		t.Fatal("no event synthesized")
+	}
+	if evt.Pod != "traffic-generator-9b649846d-bxqfc" {
+		t.Errorf("pod = %q, want the source", evt.Pod)
+	}
+	if evt.Container != "traffic-generator" {
+		t.Errorf("container = %q, want traffic-generator", evt.Container)
+	}
+	if evt.PolicyName != "deny-tg-to-echo" {
+		t.Errorf("policy = %q, want deny-tg-to-echo", evt.PolicyName)
 	}
 }

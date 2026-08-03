@@ -39,7 +39,9 @@ type PolicyRecord struct {
 // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
 type Store struct {
 	client     dynamic.Interface
-	typed      *kubernetes.Clientset
+	// An interface, not *kubernetes.Clientset, so tests can inject a fake. Only
+	// CoreV1/AppsV1/NetworkingV1 are used, all of which it covers.
+	typed      kubernetes.Interface
 	restConfig *rest.Config
 	modeMu     sync.RWMutex
 	globalMode string // explicitly set by user; never auto-derived from policies
@@ -80,7 +82,7 @@ type Store struct {
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the
 // persistence path for custom policy templates (derived from DATA_DIR).
-func NewStore(client dynamic.Interface, typed *kubernetes.Clientset, cfg *rest.Config, templatesFile string) *Store {
+func NewStore(client dynamic.Interface, typed kubernetes.Interface, cfg *rest.Config, templatesFile string) *Store {
 	return &Store{
 		client:       client,
 		typed:        typed,

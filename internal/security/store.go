@@ -230,6 +230,19 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 				updated := e
 				updated.Count++
 				updated.Time = raw.Time
+				// Fill in what the stored copy is missing. Some fields become
+				// known only later — the container name is resolved from the
+				// Kubernetes API, and an L7 drop reason arrives on a different
+				// flow than the L3/L4 one. A pod retrying in a loop refreshes
+				// the same row indefinitely, so without this the first
+				// sighting's gaps were permanent: a row recorded before the
+				// container lookup existed could never acquire one.
+				if updated.Container == "" {
+					updated.Container = raw.Container
+				}
+				if updated.DropReason == "" {
+					updated.DropReason = raw.DropReason
+				}
 				s.evts = append(s.evts[:i], s.evts[i+1:]...)
 				s.evts = append([]Event{updated}, s.evts...)
 				s.flush()
