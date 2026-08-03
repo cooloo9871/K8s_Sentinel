@@ -212,29 +212,47 @@ func toCNPRecord(item unstructured.Unstructured, scope string) CNPRecord {
 	hasL7 := false
 	denyIngress, denyEgress := false, false
 	for _, spec := range specs {
-		if in, ok, _ := unstructured.NestedSlice(spec, "ingress"); ok {
+		// Whether this spec has rules in each direction. Cilium derives
+		// default-deny from that, but enableDefaultDeny overrides it.
+		specIngress, specEgress := false, false
+
+		if in, ok, _ := unstructured.NestedSlice(spec, "ingress"); ok && len(in) > 0 {
 			ingress += len(in)
-			denyIngress = true // any ingress rule switches the endpoint to default-deny
+			specIngress = true
 			if rulesPresent(in) {
 				hasL7 = true
 			}
 		}
-		if eg, ok, _ := unstructured.NestedSlice(spec, "egress"); ok {
+		if eg, ok, _ := unstructured.NestedSlice(spec, "egress"); ok && len(eg) > 0 {
 			egress += len(eg)
-			denyEgress = true
+			specEgress = true
 			if rulesPresent(eg) {
 				hasL7 = true
 			}
 		}
-		// Explicit deny rules also imply default-deny for that direction
 		if d, ok, _ := unstructured.NestedSlice(spec, "ingressDeny"); ok && len(d) > 0 {
 			ingress += len(d)
-			denyIngress = true
+			specIngress = true
 		}
 		if d, ok, _ := unstructured.NestedSlice(spec, "egressDeny"); ok && len(d) > 0 {
 			egress += len(d)
-			denyEgress = true
+			specEgress = true
 		}
+
+		// enableDefaultDeny lets a policy carry deny rules without switching the
+		// selected endpoints into default-deny. Reporting default-deny purely
+		// because a rule section exists would tell the operator their workload
+		// is locked down when it is not — so the explicit setting wins.
+		if v, found, err := unstructured.NestedBool(spec, "enableDefaultDeny", "ingress"); found && err == nil {
+			specIngress = v
+		}
+		if v, found, err := unstructured.NestedBool(spec, "enableDefaultDeny", "egress"); found && err == nil {
+			specEgress = v
+		}
+
+		// With the specs[] form, any spec enabling a direction enables it.
+		denyIngress = denyIngress || specIngress
+		denyEgress = denyEgress || specEgress
 	}
 
 	defaultDeny := ""
