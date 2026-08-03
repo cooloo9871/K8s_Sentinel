@@ -188,6 +188,12 @@ func TestPodContainerResolvesSingleContainerPods(t *testing.T) {
 	if got := s.PodContainer(context.Background(), "net-lab", "sidecar-pod"); got != "" {
 		t.Errorf("multi-container pod = %q, want empty — the flow does not identify the container", got)
 	}
+	// A multi-container pod is cached with an empty name, so a miss can be told
+	// apart from a pod the cache never saw.
+	d := s.cachedAttribution(context.Background())
+	if _, known := d.podContainer["net-lab/sidecar-pod"]; !known {
+		t.Error("multi-container pod is absent from the cache; it should be present with an empty name")
+	}
 	if got := s.PodContainer(context.Background(), "net-lab", "gone"); got != "" {
 		t.Errorf("unknown pod = %q, want empty", got)
 	}

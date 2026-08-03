@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -41,10 +42,12 @@ type attributionData struct {
 	policies  []policySelector
 	podLabels map[string]map[string]string // "ns/pod" → labels
 	// Hubble flows do not carry a container name, so it is resolved here from
-	// the pod list this cache already fetches. Only recorded when the pod has
-	// exactly one container: with several, the flow does not say which one
-	// opened the connection and naming one would be a guess.
-	podContainer map[string]string // "ns/pod" → sole container name
+	// the pod list this cache already fetches. The value is empty for a pod with
+	// several containers, because the flow does not say which one opened the
+	// connection and naming one would be a guess. An absent key means the pod
+	// was not in the cache at all — a different problem, worth telling apart
+	// when a container name fails to show up.
+	podContainer map[string]string // "ns/pod" → sole container name, or ""
 }
 
 // cachedAttribution refreshes policy selectors and pod labels at most every 30s,
@@ -75,13 +78,24 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 		return d
 	}
 
-	if pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{}); err == nil {
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	switch {
+	case err != nil:
+		// Previously discarded. A failed list leaves both policy attribution and
+		// the container lookup empty, so a denial silently loses its policy name
+		// and its container with nothing said about why.
+		log.Printf("attribution: list pods: %v — denials will be missing their policy and container", err)
+	case len(pods.Items) == 0:
+		log.Printf("attribution: pod list returned nothing — check the ClusterRole grants pods/list cluster-wide")
+	default:
 		for _, p := range pods.Items {
 			key := p.Namespace + "/" + p.Name
 			d.podLabels[key] = p.Labels
+			name := ""
 			if len(p.Spec.Containers) == 1 {
-				d.podContainer[key] = p.Spec.Containers[0].Name
+				name = p.Spec.Containers[0].Name
 			}
+			d.podContainer[key] = name
 		}
 	}
 
@@ -222,5 +236,14 @@ func (s *Store) PodContainer(ctx context.Context, podNs, pod string) string {
 	if pod == "" {
 		return ""
 	}
-	return s.cachedAttribution(ctx).podContainer[podNs+"/"+pod]
+	key := podNs + "/" + pod
+	d := s.cachedAttribution(ctx)
+	name, known := d.podContainer[key]
+	// A pod the cache has never heard of, while the cache itself is populated,
+	// is the one case that is neither by design nor already reported by the load
+	// above. Say so rather than returning an unexplained blank.
+	if !known && len(d.podContainer) > 0 {
+		log.Printf("attribution: pod %s absent from a cache of %d pods — no container name for its flows", key, len(d.podContainer))
+	}
+	return name
 }
