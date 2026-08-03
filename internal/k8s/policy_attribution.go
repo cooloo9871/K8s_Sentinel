@@ -41,13 +41,13 @@ type policySelector struct {
 type attributionData struct {
 	policies  []policySelector
 	podLabels map[string]map[string]string // "ns/pod" → labels
-	// Hubble flows do not carry a container name, so it is resolved here from
-	// the pod list this cache already fetches. The value is empty for a pod with
-	// several containers, because the flow does not say which one opened the
-	// connection and naming one would be a guess. An absent key means the pod
-	// was not in the cache at all — a different problem, worth telling apart
-	// when a container name fails to show up.
-	podContainer map[string]string // "ns/pod" → sole container name, or ""
+	// Hubble flows do not carry a container name, so it is resolved here from the
+	// pod list this cache already fetches. Every container of the pod is listed,
+	// because all of them share one network namespace and one IP: the flow cannot
+	// say which opened the connection, so they are all candidates and singling
+	// one out would be a guess. An absent key means the pod was not in the cache
+	// at all — a different problem, worth telling apart.
+	podContainer map[string]string // "ns/pod" → container names, comma-separated
 }
 
 // cachedAttribution refreshes policy selectors and pod labels at most every 30s,
@@ -91,11 +91,11 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 		for _, p := range pods.Items {
 			key := p.Namespace + "/" + p.Name
 			d.podLabels[key] = p.Labels
-			name := ""
-			if len(p.Spec.Containers) == 1 {
-				name = p.Spec.Containers[0].Name
+			names := make([]string, 0, len(p.Spec.Containers))
+			for _, c := range p.Spec.Containers {
+				names = append(names, c.Name)
 			}
-			d.podContainer[key] = name
+			d.podContainer[key] = strings.Join(names, ", ")
 		}
 	}
 
@@ -228,10 +228,10 @@ func joinSorted(names []string) string {
 	return strings.Join(names, ", ")
 }
 
-// PodContainer returns the pod's container name when it has exactly one, so a
-// network event can carry the same Pod / Container detail as a Tetragon event.
-// Empty for multi-container pods, where the flow does not identify which
-// container opened the connection.
+// PodContainer returns the pod's containers, so a network event can carry the
+// same Pod / Container detail as a Tetragon event. All of them are listed when
+// the pod has several: they share one network namespace, so the flow cannot
+// identify which opened the connection and every one is a candidate.
 func (s *Store) PodContainer(ctx context.Context, podNs, pod string) string {
 	if pod == "" {
 		return ""

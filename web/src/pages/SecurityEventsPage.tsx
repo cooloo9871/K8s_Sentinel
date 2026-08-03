@@ -83,6 +83,15 @@ function DetailRow({ e }: { e: DisplayEvent }) {
   if (e.pod) {
     const podValue = e.container ? `${e.pod} / ${e.container}` : e.pod
     items.push({ label: 'Pod / Container', value: podValue })
+    // A network denial lists every container of the pod, because they share one
+    // network namespace and one IP — the flow cannot say which opened the
+    // connection. Say so, otherwise the list reads as "all of them did it".
+    if ((e.container ?? '').includes(', ') && (e.function ?? '').includes('deny')) {
+      items.push({
+        label: 'Container',
+        value: 'cannot be narrowed — all containers in a pod share one network namespace',
+      })
+    }
   }
   if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
   if (e.function)   items.push({ label: 'Function',  value: e.function })

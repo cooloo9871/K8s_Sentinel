@@ -168,7 +168,7 @@ func TestUnknownDirectionSkipsRulelessPolicies(t *testing.T) {
 // The container name has to come from the Kubernetes API, because Hubble flows
 // do not carry one. Attributed only for a single-container pod: with several,
 // the flow does not say which one opened the connection.
-func TestPodContainerResolvesSingleContainerPods(t *testing.T) {
+func TestPodContainerListsEveryContainer(t *testing.T) {
 	typed := k8sfake.NewSimpleClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: "traffic-generator-9b649846d-bxqfc", Namespace: "net-lab"},
@@ -185,14 +185,10 @@ func TestPodContainerResolvesSingleContainerPods(t *testing.T) {
 	if got != "traffic-generator" {
 		t.Errorf("container = %q, want traffic-generator", got)
 	}
-	if got := s.PodContainer(context.Background(), "net-lab", "sidecar-pod"); got != "" {
-		t.Errorf("multi-container pod = %q, want empty — the flow does not identify the container", got)
-	}
-	// A multi-container pod is cached with an empty name, so a miss can be told
-	// apart from a pod the cache never saw.
-	d := s.cachedAttribution(context.Background())
-	if _, known := d.podContainer["net-lab/sidecar-pod"]; !known {
-		t.Error("multi-container pod is absent from the cache; it should be present with an empty name")
+	// Every container is a candidate: they share one network namespace, so the
+	// flow cannot say which opened the connection.
+	if got := s.PodContainer(context.Background(), "net-lab", "sidecar-pod"); got != "app, proxy" {
+		t.Errorf("multi-container pod = %q, want \"app, proxy\"", got)
 	}
 	if got := s.PodContainer(context.Background(), "net-lab", "gone"); got != "" {
 		t.Errorf("unknown pod = %q, want empty", got)
