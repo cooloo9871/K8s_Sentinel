@@ -100,3 +100,55 @@ func TestSynthesizeSkipsUnattributedDrop(t *testing.T) {
 		t.Error("SynthesizePolicyDenyEvent emitted an event with no policy name")
 	}
 }
+
+// An L7 rejection is dropped by the Envoy proxy, not the datapath, so it can
+// arrive with no drop_reason_desc and no policy correlation. It must still be
+// recorded — an unauthorised method or path reaching a service is exactly the
+// denial worth alerting on. Models a request refused by:
+//
+//	ingress: [{fromEndpoints: [{matchLabels: {env: prod}}],
+//	           toPorts: [{ports: [{port: "8080"}], rules: {http: [{method: GET, path: /hostname}]}}]}]
+const l7DeniedFlowJSON = `{"flow":{"time":"2026-08-03T06:00:00Z","verdict":"DROPPED","IP":{"source":"10.0.1.50","destination":"10.0.2.60","ipVersion":"IPv4"},"l4":{"TCP":{"source_port":45000,"destination_port":8080}},"source":{"namespace":"demo","pod_name":"client-prod-1"},"destination":{"namespace":"demo","pod_name":"service-abc"},"Type":"L7","node_name":"topgun/cilium-w1","traffic_direction":"INGRESS","l7":{"type":"REQUEST","http":{"method":"POST","url":"/admin","protocol":"HTTP/1.1"}}},"node_name":"topgun/cilium-w1","time":"2026-08-03T06:00:00Z"}`
+
+func TestL7DenialIsRecordedWithoutDropReason(t *testing.T) {
+	f, ok := parseCiliumFlow(l7DeniedFlowJSON)
+	if !ok {
+		t.Fatal("parseCiliumFlow rejected a valid L7 flow")
+	}
+	if f.DropReason != "" {
+		t.Fatalf("test premise broken: expected no drop_reason_desc, got %q", f.DropReason)
+	}
+	if f.L7Type != "HTTP" || f.HTTPMethod != "POST" || f.HTTPURL != "/admin" {
+		t.Fatalf("L7 not parsed: %s %s %s", f.L7Type, f.HTTPMethod, f.HTTPURL)
+	}
+	// Without the L7 branch this returns false and the denial is silently lost.
+	if !f.IsPolicyDenial() {
+		t.Error("IsPolicyDenial() = false for an L7 drop")
+	}
+	if f.Direction != "ingress" {
+		t.Errorf("Direction = %q, want ingress from traffic_direction", f.Direction)
+	}
+}
+
+func TestL7DenialEventNamesTheRefusedRequest(t *testing.T) {
+	f, _ := parseCiliumFlow(l7DeniedFlowJSON)
+	// Hubble did not correlate a policy; stand in for what attribution resolves.
+	f.PolicyName = "l7-rule"
+
+	var s Store
+	evt, ok := s.SynthesizePolicyDenyEvent(context.Background(), f)
+	if !ok {
+		t.Fatal("L7 denial produced no event")
+	}
+	// Ingress denial: the subject is the pod being protected.
+	if evt.Pod != "service-abc" || evt.Namespace != "demo" {
+		t.Errorf("subject = %s/%s, want demo/service-abc", evt.Namespace, evt.Pod)
+	}
+	if evt.Function != "cilium-ingress-deny" {
+		t.Errorf("Function = %q, want cilium-ingress-deny", evt.Function)
+	}
+	// "denied" alone is not actionable; the refused request must be visible.
+	if evt.DropReason != "HTTP POST /admin denied by policy" {
+		t.Errorf("DropReason = %q, want the refused request", evt.DropReason)
+	}
+}

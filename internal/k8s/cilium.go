@@ -65,6 +65,14 @@ func (f CiliumFlow) IsPolicyDenial() bool {
 	if f.PolicyName != "" {
 		return true // policy correlation identified the rule
 	}
+	// An L7 drop is always a policy decision: the Envoy proxy only rejects a
+	// request because a rule said so. drop_reason_desc describes datapath
+	// drops and is not reliably set for proxy rejections, so keying on it
+	// alone would silently lose the denials that matter most — an unauthorised
+	// method or path reaching a service.
+	if f.L7Type != "" {
+		return true
+	}
 	return strings.Contains(strings.ToUpper(f.DropReason), "POLICY")
 }
 
@@ -473,6 +481,23 @@ func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (Te
 		dst = fmt.Sprintf("%s:%d", dst, f.DstPort)
 	}
 
+	// For an L7 rejection, the request that was refused is the actionable
+	// detail: "denied" is far less useful than "denied POST /admin".
+	dropReason := f.DropReason
+	if f.L7Type != "" {
+		detail := f.L7Type
+		if f.HTTPMethod != "" || f.HTTPURL != "" {
+			detail = strings.TrimSpace(f.L7Type + " " + f.HTTPMethod + " " + f.HTTPURL)
+		} else if f.DNSQuery != "" {
+			detail = f.L7Type + " " + f.DNSQuery
+		}
+		if dropReason == "" {
+			dropReason = detail + " denied by policy"
+		} else {
+			dropReason = dropReason + " (" + detail + ")"
+		}
+	}
+
 	return TetragonEvent{
 		Type:       "policy-deny",
 		Source:     "cilium",
@@ -485,6 +510,6 @@ func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (Te
 		Function:   function,
 		NetSrc:     src,
 		NetDest:    dst,
-		DropReason: f.DropReason,
+		DropReason: dropReason,
 	}, true
 }
