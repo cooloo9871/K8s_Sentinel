@@ -40,6 +40,11 @@ type policySelector struct {
 type attributionData struct {
 	policies  []policySelector
 	podLabels map[string]map[string]string // "ns/pod" → labels
+	// Hubble flows do not carry a container name, so it is resolved here from
+	// the pod list this cache already fetches. Only recorded when the pod has
+	// exactly one container: with several, the flow does not say which one
+	// opened the connection and naming one would be a guess.
+	podContainer map[string]string // "ns/pod" → sole container name
 }
 
 // cachedAttribution refreshes policy selectors and pod labels at most every 30s,
@@ -62,14 +67,21 @@ func (s *Store) cachedAttribution(ctx context.Context) attributionData {
 }
 
 func (s *Store) loadAttributionData(ctx context.Context) attributionData {
-	d := attributionData{podLabels: map[string]map[string]string{}}
+	d := attributionData{
+		podLabels:    map[string]map[string]string{},
+		podContainer: map[string]string{},
+	}
 	if s.typed == nil || s.client == nil {
 		return d
 	}
 
 	if pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{}); err == nil {
 		for _, p := range pods.Items {
-			d.podLabels[p.Namespace+"/"+p.Name] = p.Labels
+			key := p.Namespace + "/" + p.Name
+			d.podLabels[key] = p.Labels
+			if len(p.Spec.Containers) == 1 {
+				d.podContainer[key] = p.Spec.Containers[0].Name
+			}
 		}
 	}
 
@@ -191,4 +203,15 @@ func joinSorted(names []string) string {
 	}
 	sort.Strings(names)
 	return strings.Join(names, ", ")
+}
+
+// PodContainer returns the pod's container name when it has exactly one, so a
+// network event can carry the same Pod / Container detail as a Tetragon event.
+// Empty for multi-container pods, where the flow does not identify which
+// container opened the connection.
+func (s *Store) PodContainer(ctx context.Context, podNs, pod string) string {
+	if pod == "" {
+		return ""
+	}
+	return s.cachedAttribution(ctx).podContainer[podNs+"/"+pod]
 }

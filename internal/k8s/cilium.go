@@ -422,13 +422,13 @@ type CiliumTopoEntry struct {
 	// applies to. Empty PolicyName means default-deny, resolved at read time.
 	PolicyName string
 	Direction  string
-	L7Type        string
-	HTTPMethod    string
-	HTTPURL       string
-	HTTPStatus    uint32
-	DNSQuery      string
-	Count         int
-	LastSeen      time.Time
+	L7Type     string
+	HTTPMethod string
+	HTTPURL    string
+	HTTPStatus uint32
+	DNSQuery   string
+	Count      int
+	LastSeen   time.Time
 }
 
 // SynthesizePolicyDenyEvent converts a Cilium network policy denial into a
@@ -450,10 +450,13 @@ func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (Te
 		return TetragonEvent{}, false
 	}
 
-	// The subject is the pod whose policy denied the traffic: the source for an
-	// egress denial, the destination for an ingress denial.
+	// The subject is the workload that attempted the connection, matching every
+	// other rule type: a process or file event names the pod that acted, so a
+	// network event should too. Only when the source is not a pod — an external
+	// client denied on ingress — does it fall back to the pod being protected,
+	// since an event naming no pod at all would be useless.
 	ns, pod := f.SrcNs, f.SrcPod
-	if f.Direction == "ingress" || pod == "" {
+	if pod == "" {
 		ns, pod = f.DstNs, f.DstPod
 	}
 	if pod == "" {
@@ -467,7 +470,13 @@ func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (Te
 	// a policy that does not exist.
 	policyName := f.PolicyName
 	if policyName == "" {
-		policyName = s.AttributePolicyDenial(ctx, ns, pod, f.Direction)
+		// Attribution looks at the pod the policy governs, which for an ingress
+		// denial is the destination — not necessarily the subject above.
+		ownerNs, ownerPod := f.SrcNs, f.SrcPod
+		if f.Direction == "ingress" {
+			ownerNs, ownerPod = f.DstNs, f.DstPod
+		}
+		policyName = s.AttributePolicyDenial(ctx, ownerNs, ownerPod, f.Direction)
 	}
 	if policyName == "" {
 		return TetragonEvent{}, false
@@ -510,6 +519,7 @@ func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (Te
 		NodeName:   f.NodeName,
 		Namespace:  ns,
 		Pod:        pod,
+		Container:  s.PodContainer(ctx, ns, pod),
 		Action:     "deny",
 		PolicyName: policyName,
 		Function:   function,

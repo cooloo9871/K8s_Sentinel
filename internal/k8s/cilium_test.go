@@ -140,9 +140,10 @@ func TestL7DenialEventNamesTheRefusedRequest(t *testing.T) {
 	if !ok {
 		t.Fatal("L7 denial produced no event")
 	}
-	// Ingress denial: the subject is the pod being protected.
-	if evt.Pod != "service-abc" || evt.Namespace != "demo" {
-		t.Errorf("subject = %s/%s, want demo/service-abc", evt.Namespace, evt.Pod)
+	// The subject is the workload that made the request, consistent with every
+	// other rule type — not the pod being protected.
+	if evt.Pod != "client-prod-1" || evt.Namespace != "demo" {
+		t.Errorf("subject = %s/%s, want demo/client-prod-1", evt.Namespace, evt.Pod)
 	}
 	if evt.Function != "cilium-ingress-deny" {
 		t.Errorf("Function = %q, want cilium-ingress-deny", evt.Function)
@@ -150,5 +151,26 @@ func TestL7DenialEventNamesTheRefusedRequest(t *testing.T) {
 	// "denied" alone is not actionable; the refused request must be visible.
 	if evt.DropReason != "HTTP POST /admin denied by policy" {
 		t.Errorf("DropReason = %q, want the refused request", evt.DropReason)
+	}
+}
+
+// An external client denied on ingress has no source pod, so the event falls
+// back to the pod being protected rather than being dropped for having no
+// workload at all.
+func TestIngressDenialFromOutsideFallsBackToTarget(t *testing.T) {
+	f, ok := parseCiliumFlow(l7DeniedFlowJSON)
+	if !ok {
+		t.Fatal("parseCiliumFlow rejected a valid flow")
+	}
+	f.SrcPod, f.SrcNs = "", "" // denied client is outside the cluster
+	f.PolicyName = "l7-rule"
+
+	var s Store
+	evt, ok := s.SynthesizePolicyDenyEvent(context.Background(), f)
+	if !ok {
+		t.Fatal("external ingress denial produced no event")
+	}
+	if evt.Pod != "service-abc" || evt.Namespace != "demo" {
+		t.Errorf("subject = %s/%s, want the protected pod demo/service-abc", evt.Namespace, evt.Pod)
 	}
 }
