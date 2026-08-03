@@ -16,7 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, modeApi, vapApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
+import { policyApi, modeApi, vapApi, cnpApi, type VAPRecord, type VAPBindingRecord, type CNPRecord } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import { useSecurityEvents } from '../layout/SecurityEventsProvider'
@@ -64,6 +64,10 @@ export function DashboardPage() {
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [vapPolicies, setVapPolicies] = useState<VAPRecord[]>([])
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
+  const [cnps, setCnps] = useState<CNPRecord[]>([])
+  // null until the first fetch; false on clusters without Cilium, where the
+  // card is hidden rather than shown permanently empty.
+  const [cnpAvailable, setCnpAvailable] = useState<boolean | null>(null)
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [agentTotal, setAgentTotal] = useState<number | null>(null)
   const [agentReady, setAgentReady] = useState<number | null>(null)
@@ -82,6 +86,9 @@ export function DashboardPage() {
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
+    cnpApi.list()
+      .then(r => { setCnpAvailable(r.available); setCnps(r.policies ?? []) })
+      .catch(() => setCnpAvailable(false))
     fetch('/api/tetragon/agents')
       .then(r => r.json())
       .then((d: { agents: { ready: boolean }[] }) => {
@@ -267,6 +274,81 @@ export function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Network Policy — hidden entirely on clusters without Cilium, since the
+          feature is unavailable there rather than merely empty */}
+      {cnpAvailable && (
+        <Card>
+          <div className="flex items-center justify-between border-b px-6 py-4">
+            <div>
+              <h3 className="text-base font-semibold">Network Policy</h3>
+              <p className="text-sm text-muted-foreground">
+                {cnps.length} polic{cnps.length !== 1 ? 'ies' : 'y'}
+                {cnps.filter(p => p.defaultDeny).length > 0 &&
+                  ` · ${cnps.filter(p => p.defaultDeny).length} enforcing default deny`}
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" className="gap-1 text-sm" onClick={() => navigate('/policies/network')}>
+              View all <IconArrowRight size={14} />
+            </Button>
+          </div>
+          <CardContent className="p-0">
+            {cnps.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+                <IconShieldCheck size={36} strokeWidth={1.5} />
+                <p className="text-sm">No network policies</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Policy</TableHead>
+                    <TableHead>Scope</TableHead>
+                    <TableHead>Applies to</TableHead>
+                    <TableHead>Rules</TableHead>
+                    <TableHead>Default Deny</TableHead>
+                    <TableHead>Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cnps.slice(0, 8).map((p) => (
+                    <TableRow key={`${p.scope}-${p.namespace}-${p.name}`}>
+                      <TableCell className="font-medium">
+                        {p.name}
+                        {p.hasL7 && (
+                          <span className="ml-1.5 rounded bg-blue-500/10 px-1 py-0.5 text-[9px] font-medium text-blue-700">L7</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
+                          {p.scope === 'cluster' ? 'cluster-wide' : p.namespace}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate font-mono text-xs text-muted-foreground" title={p.selector}>
+                        {p.selector}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {p.ingressRules === 0 && p.egressRules === 0
+                          ? '—'
+                          : [p.ingressRules > 0 && `in ${p.ingressRules}`, p.egressRules > 0 && `out ${p.egressRules}`]
+                              .filter(Boolean).join(' · ')}
+                      </TableCell>
+                      <TableCell>
+                        {p.defaultDeny
+                          ? <Badge variant="destructive" className="text-[10px]">
+                              {p.defaultDeny === 'both' ? 'Ingress + Egress' : p.defaultDeny === 'ingress' ? 'Ingress' : 'Egress'}
+                            </Badge>
+                          : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground"><RelativeTime iso={p.createdAt} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
