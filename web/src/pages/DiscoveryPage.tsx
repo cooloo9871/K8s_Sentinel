@@ -37,7 +37,6 @@ function WorkloadCard({ wl, creatingFor, onCreatePolicy, isAdmin }: {
   onCreatePolicy: (wl: WorkloadProfile) => void
   isAdmin: boolean
 }) {
-  const key = `${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`
   const binaries = wl.binaries ?? []
   return (
     <Card>
@@ -55,10 +54,10 @@ function WorkloadCard({ wl, creatingFor, onCreatePolicy, isAdmin }: {
           <CardAction>
             <Button
               size="sm" variant="outline" className="h-7 text-xs"
-              disabled={binaries.length === 0 || creatingFor === key}
+              disabled={binaries.length === 0 || creatingFor === wl.key}
               onClick={() => onCreatePolicy(wl)}
             >
-              {creatingFor === key ? 'Loading...' : 'Create Policy'}
+              {creatingFor === wl.key ? 'Loading...' : 'Create Policy'}
             </Button>
           </CardAction>
         )}
@@ -108,6 +107,7 @@ function buildWorkloadGroups(profiles: PodProfile[]): WorkloadProfile[] {
       if (p.lastSeen > existing.lastSeen) existing.lastSeen = p.lastSeen
     } else {
       map.set(key, {
+        key,
         namespace: p.namespace,
         workloadKind: kind || 'Pod',
         workloadName: wname || p.pod,
@@ -146,8 +146,7 @@ export function DiscoveryPage() {
   const workloadGroups = buildWorkloadGroups(filtered)
 
   const handleCreatePolicy = async (wl: WorkloadProfile) => {
-    const key = `${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`
-    setCreatingFor(key)
+    setCreatingFor(wl.key)
     let podSelector: Record<string, string> | undefined
     // Try each pod until labels are found (some may have restarted)
     for (const pod of wl.pods) {
@@ -249,7 +248,7 @@ export function DiscoveryPage() {
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">{items.length} workload{items.length !== 1 ? 's' : ''}</span>
                   </div>
                   <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-                    {items.map(wl => <WorkloadCard key={`${wl.namespace}/${wl.workloadKind}/${wl.workloadName}`} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} isAdmin={isAdmin} />)}
+                    {items.map(wl => <WorkloadCard key={wl.key} wl={wl} creatingFor={creatingFor} onCreatePolicy={handleCreatePolicy} isAdmin={isAdmin} />)}
                   </div>
                 </div>
               ))}
@@ -260,7 +259,7 @@ export function DiscoveryPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {workloadGroups.map(wl => (
             <WorkloadCard
-              key={`${wl.namespace}/${wl.workloadName}`}
+              key={wl.key}
               wl={wl}
               creatingFor={creatingFor}
               onCreatePolicy={handleCreatePolicy}

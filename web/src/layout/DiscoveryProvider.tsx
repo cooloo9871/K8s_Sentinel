@@ -12,6 +12,9 @@ export interface PodProfile {
 
 /** Aggregated view of multiple pods that share the same workload. */
 export interface WorkloadProfile {
+  /** Stable identity, unique across kinds — a standalone Pod and a Deployment
+   *  can share a name, so the React key must include the kind. */
+  key: string
   namespace: string
   workloadKind: string   // e.g. "Deployment"
   workloadName: string   // e.g. "my-app"
