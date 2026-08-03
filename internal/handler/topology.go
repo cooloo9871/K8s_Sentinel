@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strconv"
@@ -25,13 +26,17 @@ type PortStat struct {
 }
 
 type TopologyEdge struct {
-	ID      string     `json:"id"`
-	Source  string     `json:"source"`
-	Target  string     `json:"target"`
-	DestIP  string     `json:"destIp,omitempty"`
-	Count   int        `json:"count"`
-	Blocked bool       `json:"blocked"`
-	Ports   []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
+	ID      string `json:"id"`
+	Source  string `json:"source"`
+	Target  string `json:"target"`
+	DestIP  string `json:"destIp,omitempty"`
+	Count   int    `json:"count"`
+	Blocked bool   `json:"blocked"`
+	// Which policy denied the traffic. Named by Hubble correlation when an
+	// explicit deny rule fired, otherwise resolved from the policies that
+	// govern the pod. Empty when neither can identify one.
+	DeniedBy string     `json:"deniedBy,omitempty"`
+	Ports    []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
 	// L7 fields (populated from Cilium/Hubble data)
 	L7Type     string `json:"l7Type,omitempty"`
 	HTTPMethod string `json:"httpMethod,omitempty"`
@@ -100,13 +105,13 @@ func getNetworkTopology(k8sStore *k8s.Store) http.HandlerFunc {
 		exposures := k8sStore.CachedPodExposures(r.Context())
 		nodeIPMap := k8sStore.ListNodeIPMap(r.Context())
 
-		writeJSON(w, http.StatusOK, buildCiliumTopology(k8sStore, ipMap, nodeIPMap, exposures, partialResolution))
+		writeJSON(w, http.StatusOK, buildCiliumTopology(r.Context(), k8sStore, ipMap, nodeIPMap, exposures, partialResolution))
 	}
 }
 
 // buildCiliumTopology constructs a topology response from Cilium/Hubble flow data.
 // It uses pod names directly from Hubble (no IP lookup needed for known pods).
-func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, partialResolution bool) TopologyResponse {
+func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, partialResolution bool) TopologyResponse {
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 
@@ -135,6 +140,7 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeI
 	type edgeVal struct {
 		count      int
 		destIP     string
+		deniedBy   string
 		ports      map[string]int
 		l7Type     string
 		httpMethod string
@@ -211,6 +217,19 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeI
 			edgeMap[key] = ev
 		}
 		ev.count += e.Count
+		// Name the policy behind a denial. Hubble supplies it for explicit deny
+		// rules; for default-deny it has nothing to report, so fall back to the
+		// policies that govern this pod in this direction.
+		if blocked && ev.deniedBy == "" {
+			ev.deniedBy = e.PolicyName
+			if ev.deniedBy == "" {
+				subjNs, subjPod := e.SrcNs, e.SrcPod
+				if e.Direction == "ingress" {
+					subjNs, subjPod = e.DstNs, e.DstPod
+				}
+				ev.deniedBy = k8sStore.AttributePolicyDenial(ctx, subjNs, subjPod, e.Direction)
+			}
+		}
 		if e.Port != "" {
 			ev.ports[normalizePort(e.Port)] += e.Count
 		}
@@ -271,6 +290,7 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeI
 			DestIP:     ev.destIP,
 			Count:      ev.count,
 			Blocked:    k.blocked,
+			DeniedBy:   ev.deniedBy,
 			Ports:      portStats(ev.ports),
 			L7Type:     ev.l7Type,
 			HTTPMethod: ev.httpMethod,

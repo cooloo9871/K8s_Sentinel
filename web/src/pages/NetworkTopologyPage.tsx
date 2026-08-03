@@ -38,6 +38,8 @@ interface TopologyEdge {
   destIp?: string
   count: number
   blocked: boolean
+  // The policy that denied the traffic, when one can be identified
+  deniedBy?: string
   // Aggregated per-port breakdown (count-desc); ephemeral ports appear as "dynamic"
   ports?: { port: string; count: number }[]
   // L7 (populated from Cilium/Hubble data)
@@ -733,8 +735,14 @@ export function NetworkTopologyPage() {
                         </div>
                       )}
                       {selectedEdge.blocked && (
-                        <div className="mt-1 rounded bg-red-50 px-2 py-1 text-[11px] font-medium text-red-600">
-                          ✕ Blocked by policy
+                        <div className="mt-1 rounded bg-red-50 px-2 py-1.5 text-[11px] text-red-600">
+                          <div className="font-medium">✕ Blocked by policy</div>
+                          {selectedEdge.deniedBy
+                            ? <div className="mt-0.5 break-all font-mono">{selectedEdge.deniedBy}</div>
+                            : <div className="mt-0.5 text-red-500/80">
+                                No policy could be identified — the traffic was dropped by
+                                default deny, with no rule matching this pod.
+                              </div>}
                         </div>
                       )}
                     </div>

@@ -149,7 +149,7 @@ func (p policySelector) matches(podNs string, podLabels map[string]string) bool 
 // attributePolicyDenial names the policies that govern the denied pod in the
 // denied direction. Returns an empty string when none match, so the caller can
 // skip the event rather than report a policy that does not exist.
-func (s *Store) attributePolicyDenial(ctx context.Context, podNs, pod, direction string) string {
+func (s *Store) AttributePolicyDenial(ctx context.Context, podNs, pod, direction string) string {
 	if pod == "" {
 		return ""
 	}

@@ -418,6 +418,10 @@ type CiliumTopoEntry struct {
 	Port          string
 	Protocol      string
 	Verdict       string // "allowed" | "dropped"
+	// Set for denials: the policy Hubble named, and the direction the rule
+	// applies to. Empty PolicyName means default-deny, resolved at read time.
+	PolicyName string
+	Direction  string
 	L7Type        string
 	HTTPMethod    string
 	HTTPURL       string
@@ -463,7 +467,7 @@ func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (Te
 	// a policy that does not exist.
 	policyName := f.PolicyName
 	if policyName == "" {
-		policyName = s.attributePolicyDenial(ctx, ns, pod, f.Direction)
+		policyName = s.AttributePolicyDenial(ctx, ns, pod, f.Direction)
 	}
 	if policyName == "" {
 		return TetragonEvent{}, false

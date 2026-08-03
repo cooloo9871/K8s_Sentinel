@@ -220,7 +220,12 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 			port = fmt.Sprintf("%d", f.DstPort)
 		}
 	}
-	key := srcID + "|" + dstID + "|" + port
+	// The verdict is part of the identity. Leaving it out let a later allowed
+	// flow overwrite a denial in place, turning a blocked edge green on the
+	// graph while the policy was still denying — and it made the handler's
+	// "blocked wins over allowed" rule unreachable, since only one of the two
+	// could ever be in the buffer.
+	key := srcID + "|" + dstID + "|" + port + "|" + f.Verdict
 
 	s.ciliumTopoMu.Lock()
 	entry := s.ciliumTopo[key]
@@ -231,6 +236,10 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	entry.SrcIP, entry.DstIP = f.SrcIP, f.DstIP
 	entry.Port, entry.Protocol = port, f.Protocol
 	entry.Verdict = f.Verdict
+	if f.Verdict == "dropped" {
+		entry.PolicyName = f.PolicyName
+		entry.Direction = f.Direction
+	}
 	entry.Count++
 	entry.LastSeen = time.Now()
 	if f.L7Type != "" {
