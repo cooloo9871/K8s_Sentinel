@@ -410,6 +410,7 @@ func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
 // CiliumTopoEntry tracks a unique directed connection seen in Cilium flows,
 // keyed by (srcID, dstID, port). Accumulates count and L7 info.
 type CiliumTopoEntry struct {
+	Key           string // its key in the buffer, so stale entries can be evicted
 	SrcID, DstID  string
 	SrcPod, SrcNs string
 	DstPod, DstNs string

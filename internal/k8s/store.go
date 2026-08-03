@@ -224,6 +224,7 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 
 	s.ciliumTopoMu.Lock()
 	entry := s.ciliumTopo[key]
+	entry.Key = key
 	entry.SrcID, entry.DstID = srcID, dstID
 	entry.SrcPod, entry.SrcNs = f.SrcPod, f.SrcNs
 	entry.DstPod, entry.DstNs = f.DstPod, f.DstNs
@@ -258,6 +259,20 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 				delete(s.ciliumTopo, k)
 			}
 		}
+	}
+	s.ciliumTopoMu.Unlock()
+}
+
+// PruneCiliumTopo removes the given entries from the buffer. Used to evict
+// connections whose pod endpoints no longer exist, rather than holding them
+// until the 24h TTL.
+func (s *Store) PruneCiliumTopo(keys []string) {
+	if len(keys) == 0 {
+		return
+	}
+	s.ciliumTopoMu.Lock()
+	for _, k := range keys {
+		delete(s.ciliumTopo, k)
 	}
 	s.ciliumTopoMu.Unlock()
 }

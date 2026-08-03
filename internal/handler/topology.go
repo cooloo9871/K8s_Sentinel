@@ -110,6 +110,22 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeI
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 
+	// Flows are buffered for 24h, so a deleted pod would keep its edges for a
+	// day. ipMap is already the set of pods that currently exist, so derive the
+	// live set from it rather than making another API call.
+	livePods := make(map[string]bool, len(ipMap))
+	for _, info := range ipMap {
+		if info.Kind == "pod" {
+			livePods[info.Namespace+"/"+info.Name] = true
+		}
+	}
+	// An empty ipMap means the lookup failed, not that the cluster has no pods.
+	// Pruning on that would wipe the whole graph, so only prune when it loaded.
+	canPrune := len(livePods) > 0
+	gone := func(ns, pod string) bool {
+		return canPrune && pod != "" && !livePods[ns+"/"+pod]
+	}
+
 	// One edge per (src, dst, blocked) pair — ports are aggregated into a
 	// breakdown list instead of fanning out into parallel edges.
 	type edgeKey struct {
@@ -163,7 +179,14 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeI
 		return id, TopologyNode{ID: id, Label: ip, Kind: "external", IP: ip}
 	}
 
+	staleKeys := make([]string, 0)
 	for _, e := range entries {
+		// Drop connections whose pod endpoint has since been deleted — the
+		// workload is gone, so the edge no longer describes the cluster.
+		if gone(e.SrcNs, e.SrcPod) || gone(e.DstNs, e.DstPod) {
+			staleKeys = append(staleKeys, e.Key)
+			continue
+		}
 		srcID, srcNode := resolveID(e.SrcPod, e.SrcNs, e.SrcIP)
 		if srcID == "" {
 			continue // skip: node-internal IP (cilium_host etc.)
@@ -214,6 +237,12 @@ func buildCiliumTopology(k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeI
 		if k.blocked {
 			blockedKeys[k.src+"|"+k.dst] = true
 		}
+	}
+
+	// Evict them from the buffer too, so the memory is not held until the TTL
+	// and the work is not repeated on every poll.
+	if len(staleKeys) > 0 {
+		k8sStore.PruneCiliumTopo(staleKeys)
 	}
 
 	nodes := make([]TopologyNode, 0, len(nodeSet))
