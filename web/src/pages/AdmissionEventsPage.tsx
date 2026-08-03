@@ -56,9 +56,6 @@ export function AdmissionEventsPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Admission Events</h4>
-          <p className="text-sm text-muted-foreground">
-            ValidatingAdmissionPolicy violations captured from Kubernetes Warning events.
-          </p>
         </div>
       </div>
 

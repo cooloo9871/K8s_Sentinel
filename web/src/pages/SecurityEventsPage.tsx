@@ -182,9 +182,6 @@ export function SecurityEventsPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Security Events</h4>
-          <p className="text-sm text-muted-foreground">
-            Policy-triggered kprobe events from your Tracing Policy.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
