@@ -53,11 +53,35 @@ func TestBuildMultipleProcessRulesCombined(t *testing.T) {
 	if len(args) == 0 {
 		t.Fatal("expected matchArgs for process rule")
 	}
-	if args[0].Operator != "Postfix" {
-		t.Errorf("operator = %q, want Postfix", args[0].Operator)
+	// No ProcessMode set means whitelist, which acts on anything NOT listed.
+	if args[0].Operator != "NotPostfix" {
+		t.Errorf("operator = %q, want NotPostfix (whitelist is the default)", args[0].Operator)
 	}
-	if len(args[0].Values) != 2 {
-		t.Errorf("binaries len = %d, want 2", len(args[0].Values))
+	// The leading '/' is stripped on purpose so the suffix match covers both
+	// absolute and relative invocations.
+	want := []string{"bin/bash", "bin/sh"}
+	if len(args[0].Values) != len(want) {
+		t.Fatalf("binaries = %v, want %v", args[0].Values, want)
+	}
+	for i, w := range want {
+		if args[0].Values[i] != w {
+			t.Errorf("binaries[%d] = %q, want %q", i, args[0].Values[i], w)
+		}
+	}
+}
+
+// Blacklist inverts the operator: act on paths that DO end with a listed suffix.
+func TestBuildProcessBlacklistOperator(t *testing.T) {
+	got, err := policy.Build(policy.PolicyFormInput{
+		Name:        "block-shells",
+		ProcessMode: "blacklist",
+		Process:     []policy.ProcessRule{{Binaries: []string{"/bin/bash"}}},
+	}, policy.ActionSigkill)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if op := got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Operator; op != "Postfix" {
+		t.Errorf("operator = %q, want Postfix", op)
 	}
 }
 
@@ -103,9 +127,42 @@ func TestBuildMultipleFileRulesCombined(t *testing.T) {
 	if len(got.Spec.KProbes) != 1 {
 		t.Fatalf("kprobes len = %d, want 1 (all paths must be in one kprobe)", len(got.Spec.KProbes))
 	}
-	paths := got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Values
-	if len(paths) != 2 {
-		t.Errorf("paths len = %d, want 2", len(paths))
+	// Each rule keeps its own selector, because ExceptBinaries and the
+	// read/write permission are per-rule and cannot be merged into one.
+	sels := got.Spec.KProbes[0].Selectors
+	if len(sels) != 2 {
+		t.Fatalf("selectors len = %d, want 2 (one per file rule)", len(sels))
+	}
+	for i, wantPath := range []string{"/etc/shadow", "/root"} {
+		got := sels[i].MatchArgs[0].Values
+		if len(got) != 1 || got[0] != wantPath {
+			t.Errorf("selector[%d] paths = %v, want [%s]", i, got, wantPath)
+		}
+	}
+}
+
+// A per-rule exception must land on that rule's selector only, which is the
+// reason the rules are not merged.
+func TestBuildFileRuleExceptBinariesStayPerRule(t *testing.T) {
+	got, err := policy.Build(policy.PolicyFormInput{
+		Name: "watch-files",
+		File: []policy.FileRule{
+			{Paths: []string{"/etc/shadow"}, ExceptBinaries: []string{"/usr/bin/sshd"}},
+			{Paths: []string{"/root"}},
+		},
+	}, policy.ActionPost)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	sels := got.Spec.KProbes[0].Selectors
+	if len(sels) != 2 {
+		t.Fatalf("selectors len = %d, want 2", len(sels))
+	}
+	if len(sels[0].MatchBinaries) != 1 || sels[0].MatchBinaries[0].Operator != "NotIn" {
+		t.Errorf("rule 0 should carry a NotIn matchBinaries, got %+v", sels[0].MatchBinaries)
+	}
+	if len(sels[1].MatchBinaries) != 0 {
+		t.Errorf("rule 1 has no exceptions, but got %+v", sels[1].MatchBinaries)
 	}
 }
 
