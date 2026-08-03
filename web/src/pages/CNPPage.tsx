@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  IconAlertTriangle, IconNetwork, IconPlus, IconRefresh, IconSearch, IconTrash, IconPencil,
+  IconAlertTriangle, IconNetwork, IconPlus, IconRefresh, IconSearch,
 } from '@tabler/icons-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { YamlEditor } from '../components/YamlEditor'
-import { RelativeTime } from '../components/RelativeTime'
+import { formatTWTime } from '../utils/time'
 import { cnpApi, type CNPRecord } from '../api/client'
 import { cnpTemplates, type CNPTemplate } from '../data/cnpTemplates'
 import { useToast } from '../layout/AppToaster'
@@ -308,8 +308,8 @@ export function CNPPage() {
                   <TableHead className="w-24">Rules</TableHead>
                   <TableHead className="w-32">Default Deny</TableHead>
                   <TableHead>Created By</TableHead>
-                  <TableHead className="w-24">Created</TableHead>
-                  {isAdmin && <TableHead className="w-20"></TableHead>}
+                  <TableHead>Created Time</TableHead>
+                  {isAdmin && <TableHead className="w-36"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -337,17 +337,12 @@ export function CNPPage() {
                     </TableCell>
                     <TableCell><DenyBadge deny={p.defaultDeny} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{p.createdBy}</TableCell>
-                    <TableCell className="text-muted-foreground"><RelativeTime iso={p.createdAt} /></TableCell>
+                    <TableCell className="text-muted-foreground">{formatTWTime(p.createdAt)}</TableCell>
                     {isAdmin && (
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(p)}>
-                            <IconPencil size={14} />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="size-7 text-destructive"
-                            onClick={() => setDeleteTarget(p)}>
-                            <IconTrash size={14} />
-                          </Button>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => openEdit(p)}>Edit</Button>
+                          <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(p)}>Delete</Button>
                         </div>
                       </TableCell>
                     )}

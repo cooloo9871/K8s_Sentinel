@@ -229,7 +229,7 @@ export function SecurityEventsPage() {
           placeholder="Search pod name..."
           value={podSearch}
           onChange={(e) => setPodSearch(e.target.value)}
-          className="h-8 w-48 text-sm"
+          className="h-8 w-56 text-sm"
         />
         <Select value={nsFilter} onValueChange={setNsFilter}>
           <SelectTrigger className="h-8 w-40">

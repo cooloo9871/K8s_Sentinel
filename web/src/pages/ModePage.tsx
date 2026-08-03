@@ -64,7 +64,7 @@ export function ModePage() {
 
   return (
     <>
-      <h4 className="mb-6 text-lg font-semibold">Global Protect Mode</h4>
+      <h4 className="mb-6 text-xl font-semibold">Global Protect Mode</h4>
 
       <Card className="max-w-sm">
         <CardHeader className="border-b pb-3">

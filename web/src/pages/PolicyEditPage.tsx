@@ -182,7 +182,7 @@ export function PolicyEditPage() {
       <>
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h4 className="text-lg font-semibold">View Policy</h4>
+            <h4 className="text-xl font-semibold">View Policy</h4>
             <p className="text-sm text-muted-foreground">{name}</p>
           </div>
           <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
@@ -198,7 +198,7 @@ export function PolicyEditPage() {
     <>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h4 className="text-lg font-semibold">
+          <h4 className="text-xl font-semibold">
             {isNew ? 'New Policy' : 'Edit Policy'}
           </h4>
           {!isNew && (
