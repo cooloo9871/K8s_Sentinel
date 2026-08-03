@@ -48,7 +48,7 @@ type CiliumFlow struct {
 	// correlation (hubble-network-policy-correlation-enabled), otherwise empty.
 	PolicyName string `json:"policyName,omitempty"`
 	PolicyNs   string `json:"policyNs,omitempty"`
-	Direction  string `json:"direction,omitempty"` // "ingress" | "egress" for denials
+	Direction  string `json:"direction,omitempty"` // "ingress" | "egress", from Hubble's traffic_direction
 	// Metadata
 	NodeName string `json:"nodeName"`
 	IsReply  bool   `json:"isReply"`
@@ -205,7 +205,8 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 					DstPort uint32 `json:"destination_port"`
 				} `json:"UDP"`
 			} `json:"l4"`
-			DropReasonDesc string `json:"drop_reason_desc"`
+			DropReasonDesc   string `json:"drop_reason_desc"`
+			TrafficDirection string `json:"traffic_direction"` // "INGRESS" | "EGRESS"
 			// Populated when Hubble network policy correlation is enabled
 			EgressDeniedBy  []ciliumPolicyRef `json:"egress_denied_by"`
 			IngressDeniedBy []ciliumPolicyRef `json:"ingress_denied_by"`
@@ -277,6 +278,7 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 
 	// Drop details and policy correlation
 	flow.DropReason = f.DropReasonDesc
+	flow.Direction = strings.ToLower(f.TrafficDirection)
 	if len(f.EgressDeniedBy) > 0 {
 		flow.Direction = "egress"
 		flow.PolicyName = f.EgressDeniedBy[0].Name
@@ -430,8 +432,8 @@ type CiliumTopoEntry struct {
 // or hubble-network-policy-correlation-enabled=true in cilium-config) and, for
 // L3/L4, an explicit ingressDeny/egressDeny rule — a default-deny drop has no
 // rule to attribute, because it is the absence of an allow rule.
-func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
-	if !f.IsPolicyDenial() || f.PolicyName == "" {
+func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (TetragonEvent, bool) {
+	if !f.IsPolicyDenial() {
 		return TetragonEvent{}, false
 	}
 
@@ -443,6 +445,19 @@ func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
 	}
 	if pod == "" {
 		return TetragonEvent{}, false // no workload to attribute the denial to
+	}
+
+	// Hubble names the policy only for explicit ingressDeny/egressDeny rules.
+	// An allowlist policy denies by default-deny — the absence of an allow rule —
+	// so fall back to asking which of the user's policies govern this pod in
+	// this direction. Still no answer means no event: better silent than naming
+	// a policy that does not exist.
+	policyName := f.PolicyName
+	if policyName == "" {
+		policyName = s.attributePolicyDenial(ctx, ns, pod, f.Direction)
+	}
+	if policyName == "" {
+		return TetragonEvent{}, false
 	}
 
 	function := "cilium-policy-deny"
@@ -466,7 +481,7 @@ func SynthesizePolicyDenyEvent(f CiliumFlow) (TetragonEvent, bool) {
 		Namespace:  ns,
 		Pod:        pod,
 		Action:     "deny",
-		PolicyName: f.PolicyName,
+		PolicyName: policyName,
 		Function:   function,
 		NetSrc:     src,
 		NetDest:    dst,

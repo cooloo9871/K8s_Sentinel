@@ -70,6 +70,12 @@ type Store struct {
 	exposureMu     sync.RWMutex
 	exposureData   map[string][]Exposure
 	exposureExpiry time.Time
+
+	// Policy attribution cache (CNP selectors + pod labels), used to name the
+	// policy behind a denial Hubble could not correlate
+	attrMu     sync.RWMutex
+	attrData   *attributionData
+	attrExpiry time.Time
 }
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the
@@ -313,7 +319,7 @@ func (s *Store) StartCiliumBroadcast(ctx context.Context) {
 				// Network policy denials are security events: publish them on the
 				// shared bus so the security store, webhook alerts and syslog
 				// forwarding all pick them up without each subscribing to Cilium.
-				if evt, ok := SynthesizePolicyDenyEvent(f); ok {
+				if evt, ok := s.SynthesizePolicyDenyEvent(ctx, f); ok {
 					s.broadcastTetragon(evt)
 				}
 			}

@@ -1,6 +1,9 @@
 package k8s
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 // A real dropped flow from a cluster running Cilium 1.18.3 with Hubble network
 // policy correlation, denied by this CiliumNetworkPolicy:
@@ -57,7 +60,8 @@ func TestSynthesizePolicyDenyEvent(t *testing.T) {
 		t.Fatal("parseCiliumFlow rejected a valid dropped flow")
 	}
 
-	evt, ok := SynthesizePolicyDenyEvent(f)
+	var s Store // no clients: Hubble already named the policy, no lookup needed
+	evt, ok := s.SynthesizePolicyDenyEvent(context.Background(), f)
 	if !ok {
 		t.Fatal("SynthesizePolicyDenyEvent dropped an attributed denial")
 	}
@@ -90,7 +94,9 @@ func TestSynthesizeSkipsUnattributedDrop(t *testing.T) {
 		t.Fatal("parseCiliumFlow rejected a valid dropped flow")
 	}
 	f.PolicyName = "" // as Hubble reports it for a default-deny drop
-	if _, ok := SynthesizePolicyDenyEvent(f); ok {
+	// No Kubernetes clients, so self-attribution finds nothing either.
+	var s Store
+	if _, ok := s.SynthesizePolicyDenyEvent(context.Background(), f); ok {
 		t.Error("SynthesizePolicyDenyEvent emitted an event with no policy name")
 	}
 }
