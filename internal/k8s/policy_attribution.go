@@ -85,13 +85,19 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 		}
 	}
 
+	// Cilium allows either one `spec` or a list of `specs`, and each spec carries
+	// its own endpointSelector and its own rules. Merging them into one selector
+	// let the last spec's labels win and pooled every spec's directions
+	// together — so a policy whose specs govern different workloads was
+	// attributed to the wrong one. Each spec is therefore its own candidate.
 	collect := func(items []unstructured.Unstructured, clusterWide bool) {
 		for _, item := range items {
-			sel := policySelector{Name: item.GetName()}
+			ns := ""
 			if !clusterWide {
-				sel.Namespace = item.GetNamespace()
+				ns = item.GetNamespace()
 			}
 			for _, spec := range collectSpecs(item.Object) {
+				sel := policySelector{Name: item.GetName(), Namespace: ns}
 				if v, ok, _ := unstructured.NestedSlice(spec, "ingress"); ok && len(v) > 0 {
 					sel.HasIngress = true
 				}
@@ -105,18 +111,13 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 					sel.HasEgress = true
 				}
 				if labels, ok, _ := unstructured.NestedStringMap(spec, "endpointSelector", "matchLabels"); ok {
-					if sel.MatchLabels == nil {
-						sel.MatchLabels = map[string]string{}
-					}
-					for k, v := range labels {
-						sel.MatchLabels[k] = v
-					}
+					sel.MatchLabels = labels
 				}
 				if expr, ok, _ := unstructured.NestedSlice(spec, "endpointSelector", "matchExpressions"); ok && len(expr) > 0 {
 					sel.Unevaluatable = true
 				}
+				d.policies = append(d.policies, sel)
 			}
-			d.policies = append(d.policies, sel)
 		}
 	}
 
@@ -172,6 +173,7 @@ func (s *Store) AttributePolicyDenial(ctx context.Context, podNs, pod, direction
 	}
 
 	var names []string
+	seen := map[string]bool{}
 	for _, p := range d.policies {
 		switch direction {
 		case "egress":
@@ -182,8 +184,15 @@ func (s *Store) AttributePolicyDenial(ctx context.Context, podNs, pod, direction
 			if !p.HasIngress {
 				continue
 			}
+		default:
+			// Direction unknown: still require the policy to carry rules
+			// somewhere, so a policy that cannot deny anything is never named.
+			if !p.HasIngress && !p.HasEgress {
+				continue
+			}
 		}
-		if p.matches(podNs, labels) {
+		if p.matches(podNs, labels) && !seen[p.Name] {
+			seen[p.Name] = true
 			names = append(names, p.Name)
 		}
 	}

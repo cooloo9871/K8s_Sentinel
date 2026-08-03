@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +39,25 @@ type Event struct {
 	DropReason string  `json:"dropReason,omitempty"`
 }
 
+// collapseEphemeralPort replaces a client-side port with a fixed marker. The
+// kernel picks a different one for every connection (Linux's default range
+// starts at 32768), so comparing it verbatim made two attempts at the same
+// denied destination look like unrelated events: dedup never matched, and a pod
+// retrying in a loop filled the whole list with one repeated denial, evicting
+// everything else through the retention cap.
+//
+// Used only for comparison — the stored event keeps the real port.
+func collapseEphemeralPort(addr string) string {
+	i := strings.LastIndex(addr, ":")
+	if i < 0 {
+		return addr
+	}
+	if p, err := strconv.Atoi(addr[i+1:]); err == nil && p >= 32768 {
+		return addr[:i+1] + "dynamic"
+	}
+	return addr
+}
+
 func sameEvent(a Event, b k8s.TetragonEvent) bool {
 	return a.Namespace == b.Namespace &&
 		a.Binary == b.Binary &&
@@ -47,7 +68,7 @@ func sameEvent(a Event, b k8s.TetragonEvent) bool {
 		a.FilePath == b.FilePath &&
 		a.FileOp == b.FileOp &&
 		a.NetDest == b.NetDest &&
-		a.NetSrc == b.NetSrc
+		collapseEphemeralPort(a.NetSrc) == collapseEphemeralPort(b.NetSrc)
 }
 
 type eventFile struct {

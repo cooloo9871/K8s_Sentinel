@@ -42,6 +42,7 @@ type WebhookPayload struct {
 	FileOp      string            `json:"fileOp,omitempty"`
 	NetDest     string            `json:"netDest,omitempty"`
 	NetSrc      string            `json:"netSrc,omitempty"`
+	DropReason  string            `json:"dropReason,omitempty"`
 }
 
 func ruleType(p WebhookPayload) string {
@@ -84,6 +85,11 @@ func buildSlackText(p WebhookPayload) string {
 	}
 	if p.NetSrc != "" {
 		lines = append(lines, fmt.Sprintf("*Source:* `%s`", p.NetSrc))
+	}
+	// For a network policy denial this is the only line saying what was refused
+	// ("HTTP POST /admin denied by policy"), which is the point of the alert.
+	if p.DropReason != "" {
+		lines = append(lines, fmt.Sprintf("*Reason:* %s", p.DropReason))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -329,6 +335,7 @@ func (d *Dispatcher) post(rule AlertRule, evt k8s.TetragonEvent, severity string
 		FileOp:     evt.FileOp,
 		NetDest:    evt.NetDest,
 		NetSrc:     evt.NetSrc,
+		DropReason: evt.DropReason,
 	}
 	buildPayload(&payload)
 	body, err := json.Marshal(payload)

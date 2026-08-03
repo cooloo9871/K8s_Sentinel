@@ -174,3 +174,18 @@ func TestIngressDenialFromOutsideFallsBackToTarget(t *testing.T) {
 		t.Errorf("subject = %s/%s, want the protected pod demo/service-abc", evt.Namespace, evt.Pod)
 	}
 }
+
+// A reply carries source and destination the other way round, so synthesizing an
+// event from one would name the wrong workload as the actor.
+func TestReplyFlowProducesNoDenialEvent(t *testing.T) {
+	f, ok := parseCiliumFlow(droppedFlowJSON)
+	if !ok {
+		t.Fatal("parseCiliumFlow rejected a valid flow")
+	}
+	f.IsReply = true
+
+	var s Store
+	if _, ok := s.SynthesizePolicyDenyEvent(context.Background(), f); ok {
+		t.Error("reply flow produced a denial event")
+	}
+}

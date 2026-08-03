@@ -1,6 +1,10 @@
 package k8s
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
 
 // The allowlist policy that exposed the gap: it permits egress to port 80 only,
 // so everything else is dropped by default-deny. Hubble reports no denying rule
@@ -85,5 +89,61 @@ func TestAttributionClusterWide(t *testing.T) {
 	}
 	if got := attribute(d, "anywhere", "p", "egress"); got != "cw" {
 		t.Errorf("attribution = %q, want cw", got)
+	}
+}
+
+// Each spec in a `specs[]` policy carries its own endpointSelector and its own
+// rules. Merging them let one spec's labels win, attributing a denial to a
+// policy whose matching spec had no rules in that direction at all.
+func TestSpecsListEvaluatesEachSpecSeparately(t *testing.T) {
+	d := attributionData{
+		podLabels: map[string]map[string]string{
+			"demo/api-1": {"app": "api"},
+		},
+		policies: []policySelector{
+			// spec[0]: governs app=web on ingress
+			{Name: "multi", Namespace: "demo", MatchLabels: map[string]string{"app": "web"}, HasIngress: true},
+			// spec[1]: governs app=api on egress
+			{Name: "multi", Namespace: "demo", MatchLabels: map[string]string{"app": "api"}, HasEgress: true},
+		},
+	}
+	s := &Store{attrData: &d, attrExpiry: time.Now().Add(time.Minute)}
+
+	if got := s.AttributePolicyDenial(context.Background(), "demo", "api-1", "egress"); got != "multi" {
+		t.Errorf("egress = %q, want multi (spec[1] governs app=api on egress)", got)
+	}
+	// app=api is only selected by the egress spec, so an ingress denial is not this policy.
+	if got := s.AttributePolicyDenial(context.Background(), "demo", "api-1", "ingress"); got != "" {
+		t.Errorf("ingress = %q, want empty — no spec governs app=api on ingress", got)
+	}
+}
+
+// Both specs matching must not name the same policy twice.
+func TestMatchingSpecsNameThePolicyOnce(t *testing.T) {
+	d := attributionData{
+		podLabels: map[string]map[string]string{"demo/api-1": {"app": "api"}},
+		policies: []policySelector{
+			{Name: "multi", Namespace: "demo", MatchLabels: map[string]string{"app": "api"}, HasEgress: true},
+			{Name: "multi", Namespace: "demo", MatchLabels: map[string]string{"app": "api"}, HasEgress: true},
+		},
+	}
+	s := &Store{attrData: &d, attrExpiry: time.Now().Add(time.Minute)}
+	if got := s.AttributePolicyDenial(context.Background(), "demo", "api-1", "egress"); got != "multi" {
+		t.Errorf("got %q, want multi listed once", got)
+	}
+}
+
+// With no direction to go on, a policy carrying no rules at all cannot be
+// responsible for anything and must not be named.
+func TestUnknownDirectionSkipsRulelessPolicies(t *testing.T) {
+	d := attributionData{
+		podLabels: map[string]map[string]string{"demo/api-1": {"app": "api"}},
+		policies: []policySelector{
+			{Name: "empty", Namespace: "demo", MatchLabels: map[string]string{"app": "api"}},
+		},
+	}
+	s := &Store{attrData: &d, attrExpiry: time.Now().Add(time.Minute)}
+	if got := s.AttributePolicyDenial(context.Background(), "demo", "api-1", ""); got != "" {
+		t.Errorf("got %q, want empty — the policy has no rules", got)
 	}
 }

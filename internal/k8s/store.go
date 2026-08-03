@@ -237,8 +237,16 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	entry.Port, entry.Protocol = port, f.Protocol
 	entry.Verdict = f.Verdict
 	if f.Verdict == "dropped" {
-		entry.PolicyName = f.PolicyName
-		entry.Direction = f.Direction
+		// Not every drop for the same pair carries correlation data, so only
+		// overwrite when this flow actually names something. Assigning
+		// unconditionally let a later uncorrelated drop blank out a name already
+		// resolved, and the graph's "Blocked by policy" lost its policy.
+		if f.PolicyName != "" {
+			entry.PolicyName = f.PolicyName
+		}
+		if f.Direction != "" {
+			entry.Direction = f.Direction
+		}
 	}
 	entry.Count++
 	entry.LastSeen = time.Now()

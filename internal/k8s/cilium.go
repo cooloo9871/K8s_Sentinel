@@ -100,8 +100,11 @@ func (s *Store) DetectCilium(ctx context.Context) bool {
 // It returns when all pod streams exit (error or context done).
 func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) error {
 	pods, err := s.findAllCiliumPods(ctx)
-	if err != nil || len(pods) == 0 {
+	if err != nil {
 		return fmt.Errorf("no Cilium agent pods found: %w", err)
+	}
+	if len(pods) == 0 {
+		return fmt.Errorf("no Cilium agent pods found")
 	}
 	var wg sync.WaitGroup
 	for _, pod := range pods {
@@ -137,6 +140,13 @@ func (s *Store) streamCiliumFromPod(ctx context.Context, podName string, out cha
 	}
 
 	pr, pw := io.Pipe()
+	// Closing the reader makes any further write fail with ErrClosedPipe, which
+	// unblocks the exec goroutine. Without it, leaving this loop early — a
+	// scanner error, most plausibly a line over the buffer size — left exec
+	// blocked writing into a pipe nobody reads, so `<-execDone` never returned.
+	// That wedged this pod's stream, hence StreamCiliumFlows' WaitGroup, hence
+	// the reconnect loop: flow collection stopped cluster-wide until a restart.
+	defer pr.Close()
 	execDone := make(chan error, 1)
 	go func() {
 		execDone <- exec.StreamWithContext(ctx, remotecommand.StreamOptions{
@@ -161,6 +171,9 @@ func (s *Store) streamCiliumFromPod(ctx context.Context, podName string, out cha
 		case <-ctx.Done():
 			return nil
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read flows from %s: %w", podName, err)
 	}
 	return <-execDone
 }
@@ -447,6 +460,13 @@ type CiliumTopoEntry struct {
 // rule to attribute, because it is the absence of an allow rule.
 func (s *Store) SynthesizePolicyDenyEvent(ctx context.Context, f CiliumFlow) (TetragonEvent, bool) {
 	if !f.IsPolicyDenial() {
+		return TetragonEvent{}, false
+	}
+	// A reply carries the endpoints the other way round, so naming its source as
+	// the actor would report the wrong workload and the wrong direction. Only
+	// the request side defines who attempted what — the same reason the topology
+	// buffer drops replies.
+	if f.IsReply {
 		return TetragonEvent{}, false
 	}
 

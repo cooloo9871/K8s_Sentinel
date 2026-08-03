@@ -1,7 +1,10 @@
 import type { DisplayEvent } from '../layout/SecurityEventsProvider'
 
 function ruleType(fn: string): string {
-  if (fn.includes('tcp_connect')) return 'Network'
+  // Keep in step with the badge on the Security Events page: a Cilium policy
+  // denial (cilium-egress-deny, cilium-ingress-deny) is a network event, and was
+  // being exported as "Process".
+  if (fn.includes('tcp_connect') || fn.includes('deny')) return 'Network'
   if (fn.includes('security_file') || fn.includes('security_path')) return 'File'
   return 'Process'
 }

@@ -185,6 +185,11 @@ func buildMessage(evt k8s.TetragonEvent, severity string) string {
 	if evt.NetSrc != "" {
 		parts = append(parts, fmt.Sprintf("src=%s", evt.NetSrc))
 	}
+	// For a network policy denial this is the only field saying what was refused
+	// ("HTTP POST /admin denied by policy"), which is the point of the alert.
+	if evt.DropReason != "" {
+		parts = append(parts, fmt.Sprintf("reason=%q", evt.DropReason))
+	}
 	return strings.Join(parts, " ")
 }
 
