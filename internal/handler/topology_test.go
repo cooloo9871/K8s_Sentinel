@@ -138,3 +138,20 @@ func TestADenialThatStoppedGivesWayToCurrentTraffic(t *testing.T) {
 		t.Error("a denial that stopped ten minutes ago is still shown")
 	}
 }
+
+// A cluster quiet for longer than the window looks identical to one where Hubble
+// delivers nothing, and only one of those needs the install instructions. The
+// response has to carry the difference.
+func TestResponseSaysWhetherAnyFlowWasEverSeen(t *testing.T) {
+	store := k8s.NewStore(nil, nil, nil, "")
+	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	if resp.FlowsEverSeen {
+		t.Error("a store that never received a flow reports otherwise")
+	}
+
+	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{entry("a", "allowed", time.Now())})
+	resp = buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	if !resp.FlowsEverSeen {
+		t.Error("a store holding a flow reports that none was ever seen")
+	}
+}

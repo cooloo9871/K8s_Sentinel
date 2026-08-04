@@ -62,6 +62,10 @@ type Store struct {
 	ciliumTopoMu      sync.RWMutex
 	ciliumTopo        map[string]CiliumTopoEntry // key: "srcID|dstID|port"
 	ciliumTopoCleanup uint64                     // triggers lazy eviction every N updates
+	// Whether any flow has ever arrived, which the window cannot answer. A
+	// cluster that has been quiet for 15 minutes looks identical to one where
+	// Hubble delivers nothing, and only one of those is a problem.
+	ciliumFlowSeen bool
 
 	// ListClusterIPs cache
 	ipCacheMu     sync.RWMutex
@@ -275,6 +279,7 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 		}
 	}
 	s.ciliumTopo[key] = entry
+	s.ciliumFlowSeen = true
 
 	// Lazy cleanup every 2000 updates — removes entries past the window.
 	s.ciliumTopoCleanup++
@@ -328,6 +333,15 @@ func (s *Store) HasCiliumTopoData() bool {
 		}
 	}
 	return false
+}
+
+// EverSawCiliumFlow reports whether any flow has been recorded since startup,
+// regardless of the window. Tells a quiet cluster apart from one where Hubble is
+// not delivering.
+func (s *Store) EverSawCiliumFlow() bool {
+	s.ciliumTopoMu.RLock()
+	defer s.ciliumTopoMu.RUnlock()
+	return s.ciliumFlowSeen
 }
 
 // StartCiliumBroadcast streams Hubble flows from all cilium-agent pods and
@@ -989,5 +1003,6 @@ func (s *Store) SeedCiliumTopoForTest(entries []CiliumTopoEntry) {
 	for _, e := range entries {
 		s.ciliumTopo[e.Key] = e
 	}
+	s.ciliumFlowSeen = len(entries) > 0
 	s.ciliumTopoMu.Unlock()
 }

@@ -54,6 +54,7 @@ interface TopologyResponse {
   nodes: TopologyNode[]
   edges: TopologyEdge[]
   hasNetworkEvents: boolean
+  flowsEverSeen?: boolean
   dataSource?: string
   partialResolution?: boolean
 }
@@ -225,6 +226,7 @@ export function NetworkTopologyPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([])
   const reactFlowRef = useRef<{ fitView: () => void } | null>(null)
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
+  const [flowsEverSeen, setFlowsEverSeen] = useState(false)
   const [partialResolution, setPartialResolution] = useState(false)
   const [dataSource, setDataSource] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
@@ -251,12 +253,16 @@ export function NetworkTopologyPage() {
       const res = await fetch('/api/network-topology', { credentials: 'include', cache: 'no-store' })
       const data: TopologyResponse = await res.json()
       setHasNetworkEvents(data.hasNetworkEvents)
+      setFlowsEverSeen(!!data.flowsEverSeen)
       setPartialResolution(!!data.partialResolution)
       setDataSource(data.dataSource)
       setRawNodes(data.nodes)
       setRawEdges(data.edges)
     } catch {
       setHasNetworkEvents(false)
+      // The API is unreachable, so nothing is known about Hubble either — the
+      // setup guidance is the more useful of the two messages.
+      setFlowsEverSeen(false)
     } finally {
       setLoading(false)
     }
@@ -527,7 +533,19 @@ export function NetworkTopologyPage() {
         </Card>
       )}
 
-      {!loading && hasNetworkEvents === false && (
+      {!loading && hasNetworkEvents === false && flowsEverSeen && (
+        <Card className="mb-4">
+          <CardContent className="flex items-start gap-3 p-4">
+            <IconNetwork size={18} className="mt-0.5 shrink-0 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              No traffic in the last 15 minutes. The graph shows current connections, so it
+              fills in again as soon as pods talk to each other.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && hasNetworkEvents === false && !flowsEverSeen && (
         <Card className="mb-4 border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex items-start gap-3 p-4">
             <IconAlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />

@@ -161,6 +161,15 @@ export function CNPPage() {
       rules: prev.rules.map((r, i) => (i === index ? { ...r, [key]: value } : r)),
     }))
 
+  // Takes an updater rather than a value: computing the next array from the `r`
+  // captured at render means two edits landing in one batch would each start
+  // from the same stale snapshot, and the later one would drop the earlier.
+  const updateRule = (index: number, next: (r: CNPRule) => CNPRule) =>
+    setForm(prev => ({
+      ...prev,
+      rules: prev.rules.map((r, i) => (i === index ? next(r) : r)),
+    }))
+
   const addRule = () => setForm(prev => ({ ...prev, rules: [...prev.rules, emptyRule()] }))
   const removeRule = (index: number) =>
     setForm(prev => ({ ...prev, rules: prev.rules.filter((_, i) => i !== index) }))
@@ -443,7 +452,7 @@ export function CNPPage() {
                           title={peerLabel(form.direction)}
                           required
                           pairs={r.peerLabels}
-                          onChange={pairs => setRule(i, 'peerLabels', pairs)}
+                          onChange={pairs => updateRule(i, r => ({ ...r, peerLabels: pairs }))}
                         />
                       )}
 
@@ -451,7 +460,7 @@ export function CNPPage() {
                         <div className="flex items-center justify-between">
                           <Label className="text-xs">Ports</Label>
                           <Button variant="outline" size="sm" className="h-7 text-xs"
-                            onClick={() => setRule(i, 'ports', [...r.ports, emptyPort()])}>
+                            onClick={() => updateRule(i, r => ({ ...r, ports: [...r.ports, emptyPort()] }))}>
                             + Add port
                           </Button>
                         </div>
@@ -460,11 +469,15 @@ export function CNPPage() {
                         ) : r.ports.map((p, pi) => (
                           <div key={pi} className="flex items-center gap-2">
                             <Input value={p.port} className="h-8 flex-1 font-mono text-sm"
-                              onChange={e => setRule(i, 'ports',
-                                r.ports.map((q, qi) => qi === pi ? { ...q, port: e.target.value } : q))} />
+                              onChange={e => updateRule(i, r => ({
+                                ...r,
+                                ports: r.ports.map((q, qi) => qi === pi ? { ...q, port: e.target.value } : q),
+                              }))} />
                             <Select value={p.protocol}
-                              onValueChange={v => setRule(i, 'ports',
-                                r.ports.map((q, qi) => qi === pi ? { ...q, protocol: v } : q))}>
+                              onValueChange={v => updateRule(i, r => ({
+                                ...r,
+                                ports: r.ports.map((q, qi) => qi === pi ? { ...q, protocol: v } : q),
+                              }))}>
                               <SelectTrigger className="h-8 w-24 text-sm"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectGroup>
@@ -473,7 +486,9 @@ export function CNPPage() {
                               </SelectContent>
                             </Select>
                             <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-destructive hover:text-destructive"
-                              onClick={() => setRule(i, 'ports', r.ports.filter((_, qi) => qi !== pi))}>
+                              onClick={() => updateRule(i, r => ({
+                                ...r, ports: r.ports.filter((_, qi) => qi !== pi),
+                              }))}>
                               Remove
                             </Button>
                           </div>
@@ -492,7 +507,7 @@ export function CNPPage() {
                           </Label>
                           <Button variant="outline" size="sm" className="h-7 text-xs"
                             disabled={form.mode === 'blacklist'}
-                            onClick={() => setRule(i, 'http', [...r.http, emptyHttp()])}>
+                            onClick={() => updateRule(i, r => ({ ...r, http: [...r.http, emptyHttp()] }))}>
                             + Add HTTP rule
                           </Button>
                         </div>
@@ -505,8 +520,10 @@ export function CNPPage() {
                             <div className="flex flex-1 flex-col gap-1">
                               <span className="text-[11px] text-muted-foreground">Method</span>
                               <Select value={h.method || 'any'}
-                                onValueChange={v => setRule(i, 'http',
-                                  r.http.map((q, qi) => qi === hi ? { ...q, method: v === 'any' ? '' : v } : q))}
+                                onValueChange={v => updateRule(i, r => ({
+                                  ...r,
+                                  http: r.http.map((q, qi) => qi === hi ? { ...q, method: v === 'any' ? '' : v } : q),
+                                }))}
                                 disabled={form.mode === 'blacklist'}>
                                 <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -520,14 +537,18 @@ export function CNPPage() {
                             <div className="flex flex-1 flex-col gap-1">
                               <span className="text-[11px] text-muted-foreground">Path</span>
                               <Input value={h.path}
-                                onChange={e => setRule(i, 'http',
-                                  r.http.map((q, qi) => qi === hi ? { ...q, path: e.target.value } : q))}
+                                onChange={e => updateRule(i, r => ({
+                                  ...r,
+                                  http: r.http.map((q, qi) => qi === hi ? { ...q, path: e.target.value } : q),
+                                }))}
                                 disabled={form.mode === 'blacklist'}
                                 className="h-8 font-mono text-sm" />
                             </div>
                             <Button variant="ghost" size="sm"
                               className="h-8 px-2 text-xs text-destructive hover:text-destructive"
-                              onClick={() => setRule(i, 'http', r.http.filter((_, qi) => qi !== hi))}>
+                              onClick={() => updateRule(i, r => ({
+                                ...r, http: r.http.filter((_, qi) => qi !== hi),
+                              }))}>
                               Remove
                             </Button>
                           </div>

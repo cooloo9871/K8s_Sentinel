@@ -378,3 +378,43 @@ spec:
     expect(tryParseCNPForm('::: not yaml :::')).toBeNull()
   })
 })
+
+describe('tryParseCNPForm — selectors the form cannot show', () => {
+  // The form requires at least one label, so an empty selector — every endpoint —
+  // would open as a blank field that refuses to save until a valid policy was
+  // changed. The subject was already guarded; the peer was not.
+  it('refuses an empty peer selector', () => {
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector:
+    matchLabels:
+      role: backend
+  ingress:
+    - fromEndpoints:
+        - {}
+`)).toBeNull()
+  })
+
+  it('refuses an empty subject selector', () => {
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            role: frontend
+`)).toBeNull()
+  })
+})

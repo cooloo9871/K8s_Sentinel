@@ -371,8 +371,14 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
 
     const rule = emptyRule()
     if (endpoints?.length === 1) {
+      // An empty selector means every endpoint, which the form cannot express —
+      // it requires at least one label. Opening it here would show a blank peer
+      // and refuse to save until the operator changed a policy that was valid.
+      // The subject is guarded the same way above.
+      const labels = endpoints[0].matchLabels
+      if (!labels || Object.keys(labels).length === 0) return null
       rule.peerKind = 'labels'
-      rule.peerLabels = toLabelPairs(endpoints[0].matchLabels ?? {})
+      rule.peerLabels = toLabelPairs(labels)
     } else if (entities?.length === 1) {
       rule.peerKind = 'entity'
       rule.peerEntity = entities[0]

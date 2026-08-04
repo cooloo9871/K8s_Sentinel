@@ -72,11 +72,15 @@ func portStats(ports map[string]int) []PortStat {
 }
 
 type TopologyResponse struct {
-	Nodes             []TopologyNode `json:"nodes"`
-	Edges             []TopologyEdge `json:"edges"`
-	HasNetworkEvents  bool           `json:"hasNetworkEvents"`
-	PartialResolution bool           `json:"partialResolution"`
-	DataSource        string         `json:"dataSource"` // "cilium" | "tetragon"
+	Nodes            []TopologyNode `json:"nodes"`
+	Edges            []TopologyEdge `json:"edges"`
+	HasNetworkEvents bool           `json:"hasNetworkEvents"`
+	// Whether any flow has arrived since startup. Without this the UI cannot tell
+	// a cluster that has simply been quiet from one where Hubble is not working,
+	// and it explained how to install Cilium to people already running it.
+	FlowsEverSeen     bool   `json:"flowsEverSeen"`
+	PartialResolution bool   `json:"partialResolution"`
+	DataSource        string `json:"dataSource"` // "cilium" | "tetragon"
 }
 
 // getNetworkTopology serves the graph from Cilium/Hubble flows. There is no
@@ -91,9 +95,10 @@ func getNetworkTopology(k8sStore *k8s.Store) http.HandlerFunc {
 
 		if k8sStore == nil || !k8sStore.HasCiliumTopoData() {
 			writeJSON(w, http.StatusOK, TopologyResponse{
-				Nodes:      []TopologyNode{},
-				Edges:      []TopologyEdge{},
-				DataSource: "cilium",
+				Nodes:         []TopologyNode{},
+				Edges:         []TopologyEdge{},
+				DataSource:    "cilium",
+				FlowsEverSeen: k8sStore != nil && k8sStore.EverSawCiliumFlow(),
 			})
 			return
 		}
@@ -338,6 +343,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		Nodes:             nodes,
 		Edges:             edges,
 		HasNetworkEvents:  len(edges) > 0,
+		FlowsEverSeen:     k8sStore.EverSawCiliumFlow(),
 		PartialResolution: partialResolution,
 		DataSource:        "cilium",
 	}

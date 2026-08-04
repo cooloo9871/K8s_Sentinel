@@ -123,6 +123,12 @@ export function PolicyEditPage() {
         setLoading(false)
       }
     } else {
+      // An empty document parses cleanly, so validity alone would let a blank
+      // editor be submitted. The other two policy pages guard on content too.
+      if (!yamlContent.trim()) {
+        toast.error('Write or paste a manifest before saving')
+        return
+      }
       if (!yamlValid) {
         toast.error('Fix YAML errors before saving')
         return

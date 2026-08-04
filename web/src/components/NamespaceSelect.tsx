@@ -25,6 +25,25 @@ export function NamespaceSelect({
   disabled?: boolean
   className?: string
 }) {
+  // A cluster always has namespaces, so an empty list means the lookup failed.
+  // Left unsaid, the picker is simply empty and there is no way to tell why —
+  // and for a required namespace, no way to continue either.
+  if (namespaces.length === 0 && !noneLabel) {
+    return (
+      <div className="flex flex-col gap-1">
+        <Select value="" disabled>
+          <SelectTrigger className={className ?? 'h-9 w-full'}>
+            <SelectValue placeholder="No namespaces available" />
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+        <p className="text-[11px] text-destructive">
+          The cluster namespace list could not be loaded.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <Select
       value={value || (noneLabel ? NONE : '')}
