@@ -154,7 +154,14 @@ export function PolicyListPage() {
           <h4 className="text-xl font-semibold">Tracing Policy</h4>
           <p className="text-sm text-muted-foreground">Manage Tracing Policy.</p>
         </div>
-        {isAdmin && <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>}
+        {isAdmin && (
+          <div className="flex gap-2">
+            <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
+            <Button variant="outline" onClick={() => navigate('/policies/tracing/new?mode=yaml')}>
+              + New YAML
+            </Button>
+          </div>
+        )}
       </div>
 
       <Card>
