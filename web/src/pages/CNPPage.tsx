@@ -17,7 +17,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { YamlEditor } from '../components/YamlEditor'
 import { formatTWTime } from '../utils/time'
 import { cnpApi, type CNPRecord } from '../api/client'
@@ -55,7 +54,7 @@ function Field({ label, required, hint, className, children }: {
 
 const EMPTY_FORM: CNPFormInput = {
   name: '', namespace: '', comment: '', from: '', to: '',
-  direction: 'ingress', ports: '', mode: 'blacklist', httpMethod: '', httpPath: '',
+  direction: 'ingress', ports: '', mode: 'whitelist', httpMethod: '', httpPath: '',
 }
 
 export function CNPPage() {
@@ -103,9 +102,9 @@ export function CNPPage() {
   const setField = <K extends keyof CNPFormInput>(key: K, value: CNPFormInput[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
 
-  const openCreate = () => {
+  const openCreate = (as: 'form' | 'yaml') => {
     setEditing(null)
-    setMode('form')
+    setMode(as)
     setForm(EMPTY_FORM)
     setYamlText('')
     setYamlValid(true)
@@ -216,11 +215,13 @@ export function CNPPage() {
             <h4 className="text-xl font-semibold">
               {editing ? `Edit ${editing.name}` : 'New Network Policy'}
             </h4>
-            <p className="text-sm text-muted-foreground">
-              {editing
-                ? `${editing.scope === 'cluster' ? 'Cluster-wide' : editing.namespace} · applied on save`
-                : 'Scope is determined by the manifest kind — CiliumNetworkPolicy is namespaced, CiliumClusterwideNetworkPolicy is not.'}
-            </p>
+            {(editing || !usingForm) && (
+              <p className="text-sm text-muted-foreground">
+                {editing
+                  ? `${editing.scope === 'cluster' ? 'Cluster-wide' : editing.namespace} · applied on save`
+                  : 'Scope is determined by the manifest kind — CiliumNetworkPolicy is namespaced, CiliumClusterwideNetworkPolicy is not.'}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditorOpen(false)}>Cancel</Button>
@@ -229,15 +230,6 @@ export function CNPPage() {
             </Button>
           </div>
         </div>
-
-        {(!editing || usingForm) && (
-          <Tabs value={mode} onValueChange={v => setMode(v as 'form' | 'yaml')} className="mb-4">
-            <TabsList>
-              <TabsTrigger value="form">Simple rule</TabsTrigger>
-              <TabsTrigger value="yaml">YAML</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
 
         {usingForm ? (
           <div className="grid grid-cols-2 gap-6">
@@ -391,10 +383,16 @@ export function CNPPage() {
             Refresh
           </Button>
           {isAdmin && (
-            <Button size="sm" onClick={openCreate}>
-              <IconPlus size={14} className="mr-1.5" />
-              New Policy
-            </Button>
+            <>
+              <Button size="sm" onClick={() => openCreate('form')}>
+                <IconPlus size={14} className="mr-1.5" />
+                New Policy
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => openCreate('yaml')}>
+                <IconPlus size={14} className="mr-1.5" />
+                New YAML
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -439,7 +437,7 @@ export function CNPPage() {
                 {policies.length === 0 ? 'No Cilium network policies yet' : 'No policies match the filter'}
               </p>
               {policies.length === 0 && isAdmin && (
-                <Button size="sm" onClick={openCreate}>Create your first policy</Button>
+                <Button size="sm" onClick={() => openCreate('form')}>Create your first policy</Button>
               )}
             </div>
           ) : (
