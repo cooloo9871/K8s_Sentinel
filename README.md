@@ -201,11 +201,20 @@ Install Tetragon separately:
 
 ```bash
 helm repo add cilium https://helm.cilium.io/
-helm install tetragon cilium/tetragon -n kube-system \
-  --set tetragon.podInfo.enabled=true
+helm install tetragon cilium/tetragon -n kube-system
 ```
 
-> `tetragon.podInfo.enabled=true` is what attributes events to pods. Without it, Security Events arrive with empty Namespace and Pod fields.
+No extra settings are needed. What attributes events to pods is the agent's
+Kubernetes metadata enrichment — `tetragon.enableK8sAPIAccess`, on by default —
+which is what fills the `process.pod` field that Security Events read for
+namespace, pod and container.
+
+> `tetragon.podInfo.enabled` is **not** required, despite what earlier versions of
+> this file said. That flag enables the `PodInfo` CRD, which maps pod IPs for
+> network-event enrichment; K8s Sentinel does not use it. Pod IPs are resolved
+> from the Kubernetes API directly, and network observation comes from Hubble.
+> The Tetragon manifest bundled in `deploy/tetragon.yaml` runs with
+> `enable-pod-info: "false"`.
 
 ### Install
 
