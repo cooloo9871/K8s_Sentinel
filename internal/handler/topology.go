@@ -46,6 +46,11 @@ type TopologyEdge struct {
 	DNSQuery   string `json:"dnsQuery,omitempty"`
 }
 
+// denialStillLive is how recently a drop must have been seen to count as
+// happening now. Comfortably above the 30s the UI polls at, and far below the
+// buffer window, so a denial that has genuinely stopped still gives way.
+const denialStillLive = 2 * time.Minute
+
 // normalizePort collapses ephemeral ports (Linux default range starts at
 // 32768) into one "dynamic" bucket so a single logical connection pair does
 // not explode into N parallel edges keyed by client-side ports.
@@ -115,6 +120,7 @@ func getNetworkTopology(k8sStore *k8s.Store) http.HandlerFunc {
 func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, partialResolution bool) TopologyResponse {
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
+	now := time.Now()
 
 	// A deleted pod would otherwise keep its edges for the rest of the window.
 	// ipMap is already the set of pods that currently exist, so derive the
@@ -255,12 +261,15 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		}
 	}
 
-	// One verdict per pair: the most recent one. Blocked used to win outright,
-	// which left a denial on the graph after its policy was deleted and — worse —
-	// suppressed the allowed edge that replaced it, for as long as the buffer held
-	// the stale entry. Recency makes the graph correct itself as soon as traffic
-	// flows again — lastSeen is still tracked for exactly this, even though no
-	// age reaches the response.
+	// One verdict per pair. Recency alone is wrong: an L7 denial means the
+	// connection was permitted and only the request was refused, so Hubble reports
+	// an allowed L3/L4 flow AND a dropped L7 flow for the same pair, both live.
+	// Picking the newer one flips between them and mostly shows the allow, hiding
+	// the denial entirely.
+	//
+	// So a denial still arriving wins outright, and only one that has stopped
+	// gives way to the traffic that replaced it. Anything past the buffer window
+	// is gone already, which is what lets this be generous.
 	type pairTimes struct{ blocked, allowed time.Time }
 	pairs := make(map[string]*pairTimes, len(edgeMap))
 	for k, ev := range edgeMap {
@@ -299,7 +308,8 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 	for k, ev := range edgeMap {
 		p := pairs[k.src+"|"+k.dst]
 		// A tie goes to the denial: of the two it is the one worth surfacing.
-		showBlocked := !p.blocked.IsZero() && !p.allowed.After(p.blocked)
+		showBlocked := !p.blocked.IsZero() &&
+			(now.Sub(p.blocked) < denialStillLive || !p.allowed.After(p.blocked))
 		if k.blocked != showBlocked {
 			continue
 		}

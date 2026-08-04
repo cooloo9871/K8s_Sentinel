@@ -96,3 +96,45 @@ func TestTieGoesToTheDenial(t *testing.T) {
 		t.Error("a tie should render as blocked")
 	}
 }
+
+// An L7 denial means L3/L4 passed: the connection is permitted and only the
+// request is refused, so Hubble reports both verdicts for the same pair at the
+// same time. Picking the newer one showed the allow and hid the denial, which is
+// the one thing the operator needs to see.
+func TestALiveL7DenialWinsOverTheAllowedConnection(t *testing.T) {
+	now := time.Now()
+	resp := build(t, []k8s.CiliumTopoEntry{
+		// The allowed L3/L4 flow keeps arriving, so it is always the newer one.
+		entry("a", "allowed", now.Add(-1*time.Second)),
+		entry("b", "dropped", now.Add(-5*time.Second)),
+	})
+
+	e := findEdge(resp, "demo/client", "demo/server")
+	if e == nil {
+		t.Fatal("no edge between the two pods")
+	}
+	if !e.Blocked {
+		t.Error("the live denial was hidden by the allowed connection it rides on")
+	}
+	if len(resp.Edges) != 1 {
+		t.Errorf("got %d edges, want 1", len(resp.Edges))
+	}
+}
+
+// The case the recency rule was written for still has to work: once a policy is
+// deleted the drops stop, and the traffic now flowing takes the edge back.
+func TestADenialThatStoppedGivesWayToCurrentTraffic(t *testing.T) {
+	now := time.Now()
+	resp := build(t, []k8s.CiliumTopoEntry{
+		entry("a", "dropped", now.Add(-10*time.Minute)),
+		entry("b", "allowed", now.Add(-2*time.Second)),
+	})
+
+	e := findEdge(resp, "demo/client", "demo/server")
+	if e == nil {
+		t.Fatal("no edge between the two pods")
+	}
+	if e.Blocked {
+		t.Error("a denial that stopped ten minutes ago is still shown")
+	}
+}
