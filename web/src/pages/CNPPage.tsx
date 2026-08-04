@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   IconAlertTriangle, IconNetwork, IconPlus, IconRefresh, IconSearch,
 } from '@tabler/icons-react'
@@ -17,10 +17,15 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { YamlEditor } from '../components/YamlEditor'
 import { formatTWTime } from '../utils/time'
 import { cnpApi, type CNPRecord } from '../api/client'
-import { cnpTemplates, type CNPTemplate } from '../data/cnpTemplates'
+import {
+  cnpFormToYaml, validateCNPForm, HTTP_METHODS,
+  type CNPFormInput, type CNPDirection,
+} from '../utils/cnpForm'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 
@@ -28,6 +33,30 @@ function DenyBadge({ deny }: { deny: CNPRecord['defaultDeny'] }) {
   if (!deny) return <span className="text-muted-foreground text-xs">—</span>
   const label = deny === 'both' ? 'Ingress + Egress' : deny === 'ingress' ? 'Ingress' : 'Egress'
   return <Badge variant="destructive" className="text-[10px]">{label}</Badge>
+}
+
+function Field({ label, required, hint, className, children }: {
+  label: string
+  required?: boolean
+  hint?: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`flex flex-col gap-1.5 ${className ?? ''}`}>
+      <Label className="text-xs">
+        {label}
+        {required && <span className="text-destructive">*</span>}
+      </Label>
+      {children}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
+
+const EMPTY_FORM: CNPFormInput = {
+  name: '', namespace: '', comment: '', from: '', to: '',
+  direction: 'ingress', ports: '', action: 'deny', httpMethod: '', httpPath: '',
 }
 
 export function CNPPage() {
@@ -47,7 +76,9 @@ export function CNPPage() {
   const [editing, setEditing] = useState<CNPRecord | null>(null)
   const [yamlText, setYamlText] = useState('')
   const [yamlValid, setYamlValid] = useState(true)
-  const [templateId, setTemplateId] = useState('')
+  // Create flow only: build a simple rule in the form, or write YAML directly.
+  const [mode, setMode] = useState<'form' | 'yaml'>('form')
+  const [form, setForm] = useState<CNPFormInput>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<CNPRecord | null>(null)
 
@@ -68,40 +99,42 @@ export function CNPPage() {
 
   useEffect(() => { load() }, [load])
 
-  const selectedTemplate: CNPTemplate | undefined = useMemo(
-    () => cnpTemplates.find(t => t.id === templateId), [templateId]
-  )
+  const formErrors = useMemo(() => validateCNPForm(form), [form])
+  const formYaml = useMemo(() => cnpFormToYaml(form), [form])
+  const setField = <K extends keyof CNPFormInput>(key: K, value: CNPFormInput[K]) =>
+    setForm(prev => ({ ...prev, [key]: value }))
 
   const openCreate = () => {
     setEditing(null)
-    setTemplateId('')
+    setMode('form')
+    setForm(EMPTY_FORM)
     setYamlText('')
     setYamlValid(true)
     setEditorOpen(true)
   }
 
+  // Editing goes straight to YAML: an existing policy can hold anything, and
+  // reading arbitrary rules back into these fields would silently drop what the
+  // form cannot express.
   const openEdit = (p: CNPRecord) => {
     setEditing(p)
-    setTemplateId('')
+    setMode('yaml')
     setYamlText(p.rawYaml)
     setYamlValid(true)
     setEditorOpen(true)
   }
 
-  const applyTemplate = (id: string) => {
-    setTemplateId(id)
-    const t = cnpTemplates.find(x => x.id === id)
-    if (t) {
-      setYamlText(t.yaml)
-      setYamlValid(true)
-    }
-  }
+  const usingForm = !editing && mode === 'form'
+  const outgoingYaml = usingForm ? formYaml : yamlText
+  const canApply = usingForm
+    ? formErrors.length === 0 && !!formYaml
+    : !!yamlText.trim() && yamlValid
 
   const save = async () => {
-    if (!yamlText.trim() || !yamlValid) return
+    if (!canApply) return
     setSaving(true)
     try {
-      await cnpApi.apply(yamlText)
+      await cnpApi.apply(outgoingYaml)
       toast.success(editing ? 'Network policy updated.' : 'Network policy created.')
       setEditorOpen(false)
       load()
@@ -185,49 +218,151 @@ export function CNPPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditorOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={save} disabled={saving || !yamlValid || !yamlText.trim()}>
+            <Button size="sm" onClick={save} disabled={saving || !canApply}>
               {saving ? 'Applying...' : 'Apply'}
             </Button>
           </div>
         </div>
 
         {!editing && (
-          <div className="mb-4 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs">Start from a template</Label>
-              <Select value={templateId} onValueChange={applyTemplate}>
-                <SelectTrigger className="h-8 w-72 text-sm">
-                  <SelectValue placeholder="Blank — write your own" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {cnpTemplates.map(t => (
-                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedTemplate && (
-              <Card className="border-muted">
-                <CardContent className="flex flex-col gap-1.5 p-3">
-                  <p className="text-xs text-muted-foreground">{selectedTemplate.description}</p>
-                  {selectedTemplate.caution && (
-                    <p className="flex items-start gap-1.5 text-xs font-medium text-amber-700">
-                      <IconAlertTriangle size={13} className="mt-0.5 shrink-0" />
-                      {selectedTemplate.caution}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          <Tabs value={mode} onValueChange={v => setMode(v as 'form' | 'yaml')} className="mb-4">
+            <TabsList>
+              <TabsTrigger value="form">Simple rule</TabsTrigger>
+              <TabsTrigger value="yaml">YAML</TabsTrigger>
+            </TabsList>
+          </Tabs>
         )}
 
-        <YamlEditor
-          initialValue={yamlText}
-          onValueChange={(v, valid) => { setYamlText(v); setYamlValid(valid) }}
-        />
+        {usingForm ? (
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <Card className="lg:w-1/2">
+              <CardContent className="flex flex-col gap-5 pt-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Name" required>
+                    <Input value={form.name} onChange={e => setField('name', e.target.value)}
+                      placeholder="deny-tg-to-echo" className="h-9" />
+                  </Field>
+                  <Field label="Namespace" required>
+                    <Input value={form.namespace} onChange={e => setField('namespace', e.target.value)}
+                      placeholder="net-lab" className="h-9" />
+                  </Field>
+                </div>
+
+                <Field label="Comment">
+                  <Input value={form.comment} onChange={e => setField('comment', e.target.value)}
+                    placeholder="Why this rule exists" className="h-9" />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="From" required hint="key=value, or world / cluster / host">
+                    <Input value={form.from} onChange={e => setField('from', e.target.value)}
+                      placeholder="app=traffic-generator" className="h-9 font-mono text-sm" />
+                  </Field>
+                  <Field label="To" required hint="ns=other-namespace also works">
+                    <Input value={form.to} onChange={e => setField('to', e.target.value)}
+                      placeholder="app=echo-server" className="h-9 font-mono text-sm" />
+                  </Field>
+                </div>
+
+                <Field
+                  label="Enforce on"
+                  hint={form.direction === 'ingress'
+                    ? 'The policy is attached to To — nothing else reaching it is affected.'
+                    : 'The policy is attached to From — other sources can still reach To.'}
+                >
+                  <Select value={form.direction}
+                    onValueChange={v => setField('direction', v as CNPDirection)}>
+                    <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="ingress">Ingress on To</SelectItem>
+                        <SelectItem value="egress">Egress from From</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <div className="flex items-end gap-4">
+                  <Field label="Ports" hint="Blank means every port" className="flex-1">
+                    <Input value={form.ports} onChange={e => setField('ports', e.target.value)}
+                      placeholder="80/TCP, 443" className="h-9 font-mono text-sm" />
+                  </Field>
+                  <div className="flex items-center gap-2.5 pb-2">
+                    <Label className="text-xs">Action</Label>
+                    <Switch
+                      checked={form.action === 'allow'}
+                      onCheckedChange={c => setField('action', c ? 'allow' : 'deny')}
+                    />
+                    <span className={`text-sm font-semibold ${form.action === 'deny' ? 'text-destructive' : 'text-emerald-600'}`}>
+                      {form.action === 'deny' ? 'Deny' : 'Allow'}
+                    </span>
+                  </div>
+                </div>
+
+                {form.action === 'allow' && (
+                  <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                    <IconAlertTriangle size={13} className="mt-0.5 shrink-0" />
+                    An allow rule switches the selected endpoint to default-deny for this
+                    direction — anything not permitted here is dropped.
+                  </p>
+                )}
+
+                {/* Cilium deny rules match on L3/L4 only, so this is unusable
+                    with Deny and there is no point rendering it enabled. */}
+                <div className="flex flex-col gap-3 border-t pt-4">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs">HTTP rule</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {form.action === 'deny'
+                        ? 'Allow only — Cilium deny rules are L3/L4'
+                        : 'Optional, needs a port and the Cilium proxy'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Select value={form.httpMethod || 'any'}
+                      onValueChange={v => setField('httpMethod', v === 'any' ? '' : v)}
+                      disabled={form.action === 'deny'}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="any">Any method</SelectItem>
+                          {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Input value={form.httpPath} onChange={e => setField('httpPath', e.target.value)}
+                      placeholder="/api/.*" disabled={form.action === 'deny'}
+                      className="h-9 font-mono text-sm" />
+                  </div>
+                </div>
+
+                {formErrors.length > 0 && (
+                  <ul className="flex flex-col gap-1 border-t pt-4">
+                    {formErrors.map(err => (
+                      <li key={err} className="flex items-start gap-1.5 text-xs text-destructive">
+                        <IconAlertTriangle size={13} className="mt-0.5 shrink-0" />
+                        {err}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="flex flex-col gap-2 lg:w-1/2">
+              <Label className="text-xs text-muted-foreground">Generated manifest</Label>
+              <pre className="min-h-40 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+                {formYaml || 'Fill in the required fields to see the policy.'}
+              </pre>
+            </div>
+          </div>
+        ) : (
+          <YamlEditor
+            key={editing?.name ?? 'new'}
+            initialValue={yamlText}
+            onValueChange={(v, valid) => { setYamlText(v); setYamlValid(valid) }}
+          />
+        )}
       </>
     )
   }
