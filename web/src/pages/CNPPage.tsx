@@ -591,8 +591,8 @@ export function CNPPage() {
                   {form.scope === 'cluster' ? 'CiliumClusterwideNetworkPolicy' : 'CiliumNetworkPolicy'}
                 </Badge>
               </div>
-              <CardContent className="p-0">
-                <pre className="min-h-[420px] overflow-auto rounded-b-xl bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
+              <CardContent className="min-h-0 flex-1 p-0">
+                <pre className="h-full min-h-[420px] overflow-auto rounded-b-xl bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
                   {formYaml}
                 </pre>
               </CardContent>
