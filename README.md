@@ -163,16 +163,31 @@ cilium install --version <version> \
   --set operator.rollOutPods=true
 ```
 
-What each one is for:
+Which of these K8s Sentinel actually reads, and which are there for other reasons:
 
-| Flag | Why |
-|---|---|
-| `kubeProxyReplacement=true` | Cilium's eBPF load balancer replaces kube-proxy. Required for the socket-level LB, and for Hubble to observe NodePort traffic before SNAT |
-| `k8sServiceHost` / `k8sServicePort` | With kube-proxy gone, the agents need to reach the API server directly rather than through a Service VIP |
-| `hubble.enabled=true` | Opens the agent's local observation socket. **No Hubble UI or Hubble Relay is needed** — K8s Sentinel reads that socket directly and is the only UI |
-| `hubble.tls.enabled=false` | The socket is read in-cluster over the agent's own exec channel, so there is no network hop to secure. Leaving TLS on adds certificate rotation for no gain here |
-| `rollOutCiliumPods=true` | Restarts the agent DaemonSet on a config change, so a `cilium upgrade` actually takes effect without a manual rollout |
-| `operator.rollOutPods=true` | The same for the operator deployment |
+| Flag | Needed by Sentinel | Why |
+|---|---|---|
+| `hubble.enabled=true` | **Yes — required** | Opens the agent's observation socket. Sentinel execs `hubble observe` inside `cilium-agent` and reads it directly, which is the only source for Network Topology and Cilium policy denials |
+| `kubeProxyReplacement=true` | **Yes** | Cilium's socket-level load balancer rewrites a Service address to the backend pod *before* the flow is observed, so the topology sees the real endpoint. Left to kube-proxy, iptables does the translation after the packet leaves the pod, the flow carries the ClusterIP, and Sentinel drops that edge — a VIP is not an endpoint. It is also what lets Hubble see inbound NodePort traffic before SNAT |
+| `k8sServiceHost` / `k8sServicePort` | Indirectly | Not read by Sentinel. Required *by Cilium* once kube-proxy is gone: the agents can no longer reach the API server through a Service VIP |
+| `hubble.tls.enabled` | **No** | Not used, at either value. That setting secures Hubble's *network* listener for Relay and remote clients; Sentinel reads the local socket inside the agent over its own exec channel, so no network hop is involved. Setting it to `false` is not required — leave it enabled if you prefer |
+| `rollOutCiliumPods` / `operator.rollOutPods` | **No** | Nothing to do with Sentinel. They restart the agent and operator on a config change, so a `cilium upgrade` takes effect without a manual rollout — worth having, for its own sake |
+
+**Recommended in addition:**
+
+```bash
+  --set hubble.metrics.enableNetworkPolicyCorrelation=true
+```
+
+This makes Hubble report *which* policy denied a flow, in `egress_denied_by` / `ingress_denied_by`. It is not required — without it Sentinel resolves the policy by asking which of yours govern that pod in that direction — but correlation is authoritative where the fallback is an inference, and lists one policy where the fallback may list several candidates.
+
+Note what it cannot do: correlation only names a policy for an **explicit** `ingressDeny` / `egressDeny` rule. A whitelist denies by the *absence* of an allow rule, so there is no rule to report and the fallback is used either way. If your policies are mostly whitelists, this flag changes little.
+
+**Not needed at all:**
+
+- **Hubble Relay and Hubble UI.** Sentinel reads the agent socket directly and is the only UI
+- **`hubble.metrics`** beyond the correlation flag. Sentinel does not scrape Hubble metrics
+- **Tetragon's `podInfo`** — see below
 
 ##### Preserving the client source IP
 
