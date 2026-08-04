@@ -1267,14 +1267,15 @@ export function VAPPage() {
             </CardContent>
           </Card>
 
-          {/* Right: YAML preview */}
-          <Card className="overflow-hidden">
+          {/* Right: YAML preview. gap-0 py-0 so the code surface meets the frame:
+              Card adds py-4 and gap-4 otherwise, insetting it. */}
+          <Card className="gap-0 overflow-hidden py-0">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <span className="text-sm font-medium">Generated YAML</span>
               <Badge variant="secondary" className="font-mono text-[10px]">ValidatingAdmissionPolicy</Badge>
             </div>
             <CardContent className="p-0">
-              <pre className="min-h-[420px] overflow-auto rounded-b-lg bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
+              <pre className="min-h-[420px] overflow-auto rounded-b-xl bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
                 {previewYaml}
               </pre>
             </CardContent>
@@ -1376,14 +1377,15 @@ export function VAPPage() {
             </CardContent>
           </Card>
 
-          {/* Right: YAML preview */}
-          <Card className="overflow-hidden">
+          {/* Right: YAML preview. gap-0 py-0 so the code surface meets the frame:
+              Card adds py-4 and gap-4 otherwise, insetting it. */}
+          <Card className="gap-0 overflow-hidden py-0">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <span className="text-sm font-medium">Generated YAML</span>
               <Badge variant="secondary" className="font-mono text-[10px]">ValidatingAdmissionPolicyBinding</Badge>
             </div>
             <CardContent className="p-0">
-              <pre className="min-h-[420px] overflow-auto rounded-b-lg bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
+              <pre className="min-h-[420px] overflow-auto rounded-b-xl bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
                 {previewYaml}
               </pre>
             </CardContent>
