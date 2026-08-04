@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld } from '@tabler/icons-react'
+import { RelativeTime } from '../components/RelativeTime'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ interface TopologyEdge {
   blocked: boolean
   // The policy that denied the traffic, when one can be identified
   deniedBy?: string
+  lastSeen?: string
   // Aggregated per-port breakdown (count-desc); ephemeral ports appear as "dynamic"
   ports?: { port: string; count: number }[]
   // L7 (populated from Cilium/Hubble data)
@@ -740,9 +742,16 @@ export function NetworkTopologyPage() {
                           {selectedEdge.deniedBy
                             ? <div className="mt-0.5 break-all font-mono">{selectedEdge.deniedBy}</div>
                             : <div className="mt-0.5 text-red-500/80">
-                                No policy could be identified — the traffic was dropped by
-                                default deny, with no rule matching this pod.
+                                No policy could be identified. Either the traffic was dropped by
+                                default deny with no rule naming this pod, or the policy that
+                                dropped it no longer exists.
                               </div>}
+                          {selectedEdge.lastSeen && (
+                            <div className="mt-1 text-red-500/80">
+                              Last seen <RelativeTime iso={selectedEdge.lastSeen} />. Flows are
+                              kept for 24h, so a denial stays here until newer traffic replaces it.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

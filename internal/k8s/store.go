@@ -38,7 +38,7 @@ type PolicyRecord struct {
 
 // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
 type Store struct {
-	client     dynamic.Interface
+	client dynamic.Interface
 	// An interface, not *kubernetes.Clientset, so tests can inject a fake. Only
 	// CoreV1/AppsV1/NetworkingV1 are used, all of which it covers.
 	typed      kubernetes.Interface
@@ -972,4 +972,15 @@ func (s *Store) ListServicePodNames(ctx context.Context) (map[string][]string, e
 		}
 	}
 	return result, nil
+}
+
+// SeedCiliumTopoForTest replaces the topology buffer. Test-only: the buffer is
+// otherwise filled by the Hubble stream, which a unit test has no way to drive.
+func (s *Store) SeedCiliumTopoForTest(entries []CiliumTopoEntry) {
+	s.ciliumTopoMu.Lock()
+	s.ciliumTopo = make(map[string]CiliumTopoEntry, len(entries))
+	for _, e := range entries {
+		s.ciliumTopo[e.Key] = e
+	}
+	s.ciliumTopoMu.Unlock()
 }

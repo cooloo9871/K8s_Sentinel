@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/cooloo9871/sentinel/internal/k8s"
 )
@@ -35,7 +36,11 @@ type TopologyEdge struct {
 	// Which policy denied the traffic. Named by Hubble correlation when an
 	// explicit deny rule fired, otherwise resolved from the policies that
 	// govern the pod. Empty when neither can identify one.
-	DeniedBy string     `json:"deniedBy,omitempty"`
+	DeniedBy string `json:"deniedBy,omitempty"`
+	// When this connection was last observed. Flows are buffered for 24h, so an
+	// edge can describe something that stopped happening hours ago — the UI needs
+	// this to say so rather than presenting it as current.
+	LastSeen string     `json:"lastSeen,omitempty"`
 	Ports    []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
 	// L7 fields (populated from Cilium/Hubble data)
 	L7Type     string `json:"l7Type,omitempty"`
@@ -139,6 +144,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 	}
 	type edgeVal struct {
 		count      int
+		lastSeen   time.Time
 		destIP     string
 		deniedBy   string
 		ports      map[string]int
@@ -217,6 +223,9 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			edgeMap[key] = ev
 		}
 		ev.count += e.Count
+		if e.LastSeen.After(ev.lastSeen) {
+			ev.lastSeen = e.LastSeen
+		}
 		// Name the policy behind a denial. Hubble supplies it for explicit deny
 		// rules; for default-deny it has nothing to report, so fall back to the
 		// policies that govern this pod in this direction.
@@ -250,11 +259,26 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		}
 	}
 
-	// Dedup: blocked supersedes allowed for the same src→dst pair
-	blockedKeys := make(map[string]bool)
-	for k := range edgeMap {
+	// One verdict per pair: the most recent one. Blocked used to win outright,
+	// which left a denial on the graph after its policy was deleted and — worse —
+	// suppressed the allowed edge that replaced it, for as long as the 24h buffer
+	// held the stale entry. Recency makes the graph correct itself as soon as
+	// traffic flows again.
+	type pairTimes struct{ blocked, allowed time.Time }
+	pairs := make(map[string]*pairTimes, len(edgeMap))
+	for k, ev := range edgeMap {
+		id := k.src + "|" + k.dst
+		p := pairs[id]
+		if p == nil {
+			p = &pairTimes{}
+			pairs[id] = p
+		}
 		if k.blocked {
-			blockedKeys[k.src+"|"+k.dst] = true
+			if ev.lastSeen.After(p.blocked) {
+				p.blocked = ev.lastSeen
+			}
+		} else if ev.lastSeen.After(p.allowed) {
+			p.allowed = ev.lastSeen
 		}
 	}
 
@@ -276,8 +300,11 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 
 	edges := make([]TopologyEdge, 0, len(edgeMap))
 	for k, ev := range edgeMap {
-		if !k.blocked && blockedKeys[k.src+"|"+k.dst] {
-			continue // skip allowed when blocked exists
+		p := pairs[k.src+"|"+k.dst]
+		// A tie goes to the denial: of the two it is the one worth surfacing.
+		showBlocked := !p.blocked.IsZero() && !p.allowed.After(p.blocked)
+		if k.blocked != showBlocked {
+			continue
 		}
 		suffix := ""
 		if k.blocked {
@@ -291,6 +318,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			Count:      ev.count,
 			Blocked:    k.blocked,
 			DeniedBy:   ev.deniedBy,
+			LastSeen:   ev.lastSeen.UTC().Format(time.RFC3339),
 			Ports:      portStats(ev.ports),
 			L7Type:     ev.l7Type,
 			HTTPMethod: ev.httpMethod,
