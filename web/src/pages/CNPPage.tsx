@@ -480,20 +480,36 @@ export function CNPPage() {
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <Select value={r.httpMethod || 'any'}
-                          onValueChange={v => setRule(i, 'httpMethod', v === 'any' ? '' : v)}
-                          disabled={form.mode === 'blacklist'}>
-                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectItem value="any">Any method</SelectItem>
-                              {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                        <Input value={r.httpPath} onChange={e => setRule(i, 'httpPath', e.target.value)}
-                          disabled={form.mode === 'blacklist'} className="h-9 font-mono text-sm" />
+                      {/* Two bare controls said nothing about what they were.
+                          Captioned the same way as Key/Value and the port rows. */}
+                      <div className="flex flex-col gap-2 border-t pt-3">
+                        <Label className="text-xs">
+                          L7 — HTTP rule{' '}
+                          <span className="font-normal text-muted-foreground">
+                            {form.mode === 'blacklist' ? '(whitelist only)' : '(optional)'}
+                          </span>
+                        </Label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] text-muted-foreground">Method</span>
+                            <Select value={r.httpMethod || 'any'}
+                              onValueChange={v => setRule(i, 'httpMethod', v === 'any' ? '' : v)}
+                              disabled={form.mode === 'blacklist'}>
+                              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  <SelectItem value="any">Any method</SelectItem>
+                                  {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] text-muted-foreground">Path</span>
+                            <Input value={r.httpPath} onChange={e => setRule(i, 'httpPath', e.target.value)}
+                              disabled={form.mode === 'blacklist'} className="h-9 font-mono text-sm" />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
