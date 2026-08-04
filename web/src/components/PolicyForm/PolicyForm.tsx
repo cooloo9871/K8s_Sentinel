@@ -100,7 +100,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                 </Label>
                 <Input
                   id="policy-name"
-                  placeholder="my-policy"
                   value={value.name}
                   onChange={(e) => onChange({ ...value, name: e.target.value })}
                 />
@@ -129,29 +128,34 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <p className="mb-3 text-xs text-muted-foreground">
               Target specific pods by label. Leave empty to apply to all pods in the namespace.
             </p>
+            {/* Captioned above rather than joined by "=", matching the label
+                rows on Network Policy. */}
             <div className="flex flex-col gap-2">
               {localLabels.map((entry, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    placeholder="Key (e.g. app)"
-                    value={entry.key}
-                    onChange={(e) => updateLabel(i, { key: e.target.value })}
-                    className="h-8 text-sm"
-                  />
-                  <span className="shrink-0 text-sm text-muted-foreground">=</span>
-                  <Input
-                    placeholder="Value (e.g. nginx)"
-                    value={entry.value}
-                    onChange={(e) => updateLabel(i, { value: e.target.value })}
-                    className="h-8 text-sm"
-                  />
+                <div key={i} className="flex items-end gap-2">
+                  <div className="flex flex-1 flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">Key</span>
+                    <Input
+                      value={entry.key}
+                      onChange={(e) => updateLabel(i, { key: e.target.value })}
+                      className="h-8 font-mono text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">Value</span>
+                    <Input
+                      value={entry.value}
+                      onChange={(e) => updateLabel(i, { value: e.target.value })}
+                      className="h-8 font-mono text-sm"
+                    />
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => removeLabel(i)}
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    className="h-8 shrink-0 px-2 text-xs text-destructive hover:text-destructive"
                   >
-                    ✕
+                    Remove
                   </Button>
                 </div>
               ))}
