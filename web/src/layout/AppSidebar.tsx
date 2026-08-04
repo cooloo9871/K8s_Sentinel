@@ -111,7 +111,7 @@ export function AppSidebar() {
                   type="button"
                   aria-expanded={expanded}
                   onClick={() => toggle(group.label)}
-                  className="h-9 w-full cursor-pointer justify-between text-base hover:text-sidebar-foreground"
+                  className="h-10 w-full cursor-pointer justify-between text-lg hover:text-sidebar-foreground"
                 >
                   {group.label}
                   <IconChevronRight
