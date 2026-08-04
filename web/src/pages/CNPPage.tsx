@@ -248,7 +248,7 @@ export function CNPPage() {
       <>
         <div className="mb-6">
           <h4 className="text-xl font-semibold">Network Policy</h4>
-          <p className="text-sm text-muted-foreground">Cilium network policies — identity-based network access control.</p>
+          <p className="text-sm text-muted-foreground">Manage Cilium Network Policy.</p>
         </div>
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex items-start gap-3 p-5">
@@ -594,7 +594,7 @@ export function CNPPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Network Policy</h4>
-          <p className="text-sm text-muted-foreground">Cilium network policies — identity-based network access control.</p>
+          <p className="text-sm text-muted-foreground">Manage Cilium Network Policy.</p>
         </div>
       </div>
 
