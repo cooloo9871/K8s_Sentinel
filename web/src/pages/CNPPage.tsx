@@ -234,33 +234,29 @@ export function CNPPage() {
         )}
 
         {usingForm ? (
-          <div className="flex flex-col gap-6 lg:flex-row">
-            <Card className="lg:w-1/2">
-              <CardContent className="flex flex-col gap-5 pt-6">
+          <div className="grid grid-cols-2 gap-6">
+            {/* Left: form */}
+            <Card>
+              <CardContent className="flex flex-col gap-5 p-6">
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Name" required>
-                    <Input value={form.name} onChange={e => setField('name', e.target.value)}
-                      placeholder="deny-tg-to-echo" className="h-9" />
+                    <Input value={form.name} onChange={e => setField('name', e.target.value)} className="h-9" />
                   </Field>
                   <Field label="Namespace" required>
-                    <Input value={form.namespace} onChange={e => setField('namespace', e.target.value)}
-                      placeholder="net-lab" className="h-9" />
+                    <Input value={form.namespace} onChange={e => setField('namespace', e.target.value)} className="h-9" />
                   </Field>
                 </div>
 
                 <Field label="Comment">
-                  <Input value={form.comment} onChange={e => setField('comment', e.target.value)}
-                    placeholder="Why this rule exists" className="h-9" />
+                  <Input value={form.comment} onChange={e => setField('comment', e.target.value)} className="h-9" />
                 </Field>
 
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="From" required hint="key=value, or world / cluster / host">
-                    <Input value={form.from} onChange={e => setField('from', e.target.value)}
-                      placeholder="app=traffic-generator" className="h-9 font-mono text-sm" />
+                    <Input value={form.from} onChange={e => setField('from', e.target.value)} className="h-9 font-mono text-sm" />
                   </Field>
                   <Field label="To" required hint="ns=other-namespace also works">
-                    <Input value={form.to} onChange={e => setField('to', e.target.value)}
-                      placeholder="app=echo-server" className="h-9 font-mono text-sm" />
+                    <Input value={form.to} onChange={e => setField('to', e.target.value)} className="h-9 font-mono text-sm" />
                   </Field>
                 </div>
 
@@ -284,8 +280,7 @@ export function CNPPage() {
 
                 <div className="flex items-end gap-4">
                   <Field label="Ports" hint="Blank means every port" className="flex-1">
-                    <Input value={form.ports} onChange={e => setField('ports', e.target.value)}
-                      placeholder="80/TCP, 443" className="h-9 font-mono text-sm" />
+                    <Input value={form.ports} onChange={e => setField('ports', e.target.value)} className="h-9 font-mono text-sm" />
                   </Field>
                   <div className="flex items-center gap-2.5 pb-2">
                     <Label className="text-xs">Action</Label>
@@ -330,8 +325,7 @@ export function CNPPage() {
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <Input value={form.httpPath} onChange={e => setField('httpPath', e.target.value)}
-                      placeholder="/api/.*" disabled={form.action === 'deny'}
+                    <Input value={form.httpPath} onChange={e => setField('httpPath', e.target.value)} disabled={form.action === 'deny'}
                       className="h-9 font-mono text-sm" />
                   </div>
                 </div>
@@ -349,12 +343,18 @@ export function CNPPage() {
               </CardContent>
             </Card>
 
-            <div className="flex flex-col gap-2 lg:w-1/2">
-              <Label className="text-xs text-muted-foreground">Generated manifest</Label>
-              <pre className="min-h-40 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                {formYaml || 'Fill in the required fields to see the policy.'}
-              </pre>
-            </div>
+            {/* Right: YAML preview */}
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <span className="text-sm font-medium">Generated YAML</span>
+                <Badge variant="secondary" className="font-mono text-[10px]">CiliumNetworkPolicy</Badge>
+              </div>
+              <CardContent className="p-0">
+                <pre className="min-h-[420px] overflow-auto rounded-b-lg bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
+                  {formYaml}
+                </pre>
+              </CardContent>
+            </Card>
           </div>
         ) : (
           <YamlEditor
@@ -393,7 +393,6 @@ export function CNPPage() {
         <div className="relative">
           <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Name / namespace / selector..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="h-8 w-56 pl-8 text-sm"
@@ -401,7 +400,7 @@ export function CNPPage() {
         </div>
         <Select value={scopeFilter} onValueChange={setScopeFilter}>
           <SelectTrigger className="h-8 w-40 text-sm">
-            <SelectValue placeholder="All scopes" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
