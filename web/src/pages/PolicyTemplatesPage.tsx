@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
@@ -211,29 +214,38 @@ export function PolicyTemplatesPage() {
           <h4 className="text-xl font-semibold">Policy Templates</h4>
           <p className="text-sm text-muted-foreground">Pre-built and custom Tracing Policy templates.</p>
         </div>
-        {isAdmin && <Button onClick={() => setShowNewForm(v => !v)}>{showNewForm ? 'Cancel' : '+ New Template'}</Button>}
       </div>
 
-      <div className="mb-6 flex items-center gap-2">
-        <Input
-          placeholder="Search templates..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="h-8 w-56 text-sm"
-        />
-        <div className="flex items-center gap-1">
-          {(['all', 'cluster', 'namespace'] as const).map(s => (
-            <Button
-              key={s}
-              size="sm"
-              variant={scopeFilter === s ? 'default' : 'outline'}
-              className="h-8 text-xs capitalize"
-              onClick={() => setScopeFilter(s)}
-            >
-              {s === 'all' ? 'All' : s === 'cluster' ? 'Cluster-wide' : 'Namespace'}
-            </Button>
-          ))}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Search by name..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="h-8 w-56 text-sm"
+          />
+          {/* Not the shared ScopeFilter: that one lists the cluster's namespaces,
+              and a template belongs to none — its scope is whichever kind its
+              manifest declares. Same control and size, options that are true
+              here. */}
+          <Select value={scopeFilter} onValueChange={v => setScopeFilter(v as typeof scopeFilter)}>
+            <SelectTrigger className="h-8 w-52 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All scopes</SelectItem>
+                <SelectItem value="cluster">Cluster-wide</SelectItem>
+                <SelectItem value="namespace">Namespaced</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
+        {isAdmin && (
+          <Button size="sm" onClick={() => setShowNewForm(v => !v)}>
+            {showNewForm ? 'Cancel' : '+ New Template'}
+          </Button>
+        )}
       </div>
 
       {showNewForm && (
