@@ -55,9 +55,12 @@ const GROUPS: NavGroup[] = [
 ]
 
 // A group header is a top-level entry, the same rank as the ungrouped links, so
-// they share a size. The links revealed inside a group sit a step below.
+// they share a size. The links revealed inside a group sit a step below: smaller
+// and dimmed, so the two ranks are told apart by more than 2px of type. The
+// active item still takes the full accent colour — the base style applies that
+// under data-active, which outranks this.
 const TOP_LEVEL_CLASS = 'h-9 text-base'
-const GROUP_ITEM_CLASS = 'h-8 text-sm'
+const GROUP_ITEM_CLASS = 'h-8 text-sm text-sidebar-foreground/70'
 
 export function AppSidebar() {
   const { pathname } = useLocation()
