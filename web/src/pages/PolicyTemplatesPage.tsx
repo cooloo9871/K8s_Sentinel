@@ -83,6 +83,8 @@ export function PolicyTemplatesPage() {
   const [newDesc, setNewDesc] = useState('')
   const [newTags, setNewTags] = useState('')
   const [newYaml, setNewYaml] = useState(DEFAULT_YAML)
+  const [newYamlValid, setNewYamlValid] = useState(true)
+  const [savingNew, setSavingNew] = useState(false)
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<PolicyTemplate | null>(null)
@@ -153,10 +155,15 @@ export function PolicyTemplatesPage() {
 
 
   /* ── new template form ── */
-  const resetNewForm = () => { setNewName(''); setNewDesc(''); setNewTags(''); setNewYaml(DEFAULT_YAML); setShowNewForm(false) }
+  const resetNewForm = () => {
+    setNewName(''); setNewDesc(''); setNewTags('')
+    setNewYaml(DEFAULT_YAML); setNewYamlValid(true)
+    setShowNewForm(false)
+  }
 
   const handleSaveTemplate = async () => {
-    if (!newName.trim() || !newYaml.trim()) return
+    if (!newName.trim() || !newYaml.trim() || !newYamlValid) return
+    setSavingNew(true)
     const payload: CustomTemplatePayload = {
       id: `custom-${Date.now()}`,
       name: newName.trim(), description: newDesc.trim(),
@@ -168,7 +175,11 @@ export function PolicyTemplatesPage() {
       await loadCustom()
       toast.success('Template saved.')
       resetNewForm()
-    } catch { toast.error('Failed to save template') }
+    } catch {
+      toast.error('Failed to save template')
+    } finally {
+      setSavingNew(false)
+    }
   }
 
   /* ── delete ── */
@@ -183,6 +194,58 @@ export function PolicyTemplatesPage() {
   }
 
   /* ── inline editor view ── */
+  /* ── new template view ── */
+  if (showNewForm) {
+    return (
+      <>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h4 className="text-xl font-semibold">New Template</h4>
+            <p className="text-sm text-muted-foreground">
+              A custom template is stored in K8s Sentinel and applied only when you create a policy from it.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={resetNewForm}>Cancel</Button>
+            <Button
+              onClick={handleSaveTemplate}
+              disabled={savingNew || !newName.trim() || !newYaml.trim() || !newYamlValid}
+            >
+              {savingNew ? 'Applying...' : 'Apply'}
+            </Button>
+          </div>
+        </div>
+
+        <Card className="mb-4">
+          <CardContent className="flex flex-col gap-5 p-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+                <Input value={newName} onChange={e => setNewName(e.target.value)} className="h-9" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">
+                  Tags <span className="font-normal text-muted-foreground">(comma-separated)</span>
+                </Label>
+                <Input value={newTags} onChange={e => setNewTags(e.target.value)} className="h-9" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Description</Label>
+              <Input value={newDesc} onChange={e => setNewDesc(e.target.value)} className="h-9" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <YamlEditor
+          key="new-template"
+          initialValue={newYaml}
+          onValueChange={(v, valid) => { setNewYaml(v); setNewYamlValid(valid) }}
+        />
+      </>
+    )
+  }
+
   if (editingTemplate) {
     return (
       <>
@@ -192,11 +255,9 @@ export function PolicyTemplatesPage() {
             <p className="text-sm text-muted-foreground">{editingTemplate.name}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={closeEditor}>← Back</Button>
+            <Button variant="outline" onClick={closeEditor}>Cancel</Button>
             {isAdmin && editingTemplate?.custom && (
-              <Button variant="outline" onClick={handleSave} disabled={!editorValid}>
-                Save
-              </Button>
+              <Button onClick={handleSave} disabled={!editorValid}>Apply</Button>
             )}
           </div>
         </div>
@@ -242,44 +303,9 @@ export function PolicyTemplatesPage() {
           </Select>
         </div>
         {isAdmin && (
-          <Button size="sm" onClick={() => setShowNewForm(v => !v)}>
-            {showNewForm ? 'Cancel' : '+ New Template'}
-          </Button>
+          <Button size="sm" onClick={() => setShowNewForm(true)}>+ New Template</Button>
         )}
       </div>
-
-      {showNewForm && (
-        <Card className="mb-6 border-primary/40">
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">New Custom Template</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4 flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
-                <Input placeholder="My Template" value={newName} onChange={e => setNewName(e.target.value)} className="h-8 text-sm" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs">Tags <span className="text-muted-foreground font-normal">(comma-separated)</span></Label>
-                <Input placeholder="namespace, process" value={newTags} onChange={e => setNewTags(e.target.value)} className="h-8 text-sm" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs">Description</Label>
-              <Input placeholder="What does this template do?" value={newDesc} onChange={e => setNewDesc(e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs">YAML <span className="text-destructive">*</span></Label>
-              <textarea className="min-h-[200px] w-full rounded-md border bg-muted px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={newYaml} onChange={e => setNewYaml(e.target.value)} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={resetNewForm}>Cancel</Button>
-              <Button size="sm" onClick={handleSaveTemplate} disabled={!newName.trim() || !newYaml.trim()}>Save Template</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filteredTemplates.length === 0 && (
