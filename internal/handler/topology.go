@@ -171,12 +171,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		if ip == "" {
 			return "", TopologyNode{}
 		}
-		// Skip per-node internal interface IPs (cilium_host etc.) — these are
-		// node-local network plumbing, not real endpoints.
-		if nodeIPMap.SkipIPs[ip] {
-			return "", TopologyNode{}
-		}
-		// Check if it's a Kubernetes node physical IP → show as "node" kind
+		// A node address, physical or cilium_host → show as "node" kind.
 		if nodeName, ok := nodeIPMap.IPToName[ip]; ok {
 			id := "node:" + ip
 			return id, TopologyNode{ID: id, Label: nodeName, Kind: "node", IP: ip}
@@ -213,6 +208,13 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		dstID, dstNode := resolveID(e.DstPod, e.DstNs, e.DstIP)
 		if dstID == "" {
 			continue // skip: node-internal IP
+		}
+		// Node to node is Cilium's own plumbing — health probes and tunnel
+		// chatter between cilium_host addresses. Node to pod is not: that is how
+		// traffic from outside reaches a workload, which is the whole point of
+		// showing it.
+		if srcNode.Kind == "node" && dstNode.Kind == "node" {
+			continue
 		}
 
 		if _, ok := nodeSet[srcID]; !ok {

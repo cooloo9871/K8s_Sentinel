@@ -689,19 +689,19 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 
 // NodeIPMap holds per-node information for topology IP classification.
 type NodeIPMap struct {
-	IPToName map[string]string // primary node IP → nodeName (shown as "node")
-	SkipIPs  map[string]bool   // cilium_host / internal interface IPs (hidden)
-	PodCIDRs []string          // all pod CIDRs across all nodes
+	// Node IP → nodeName, covering both the physical addresses and cilium_host.
+	// cilium_host used to be hidden instead, which silently dropped any edge it
+	// appeared on — including inbound NodePort traffic, which Cilium SNATs to the
+	// ingress node's cilium_host when the backend pod is on another node. Naming
+	// the node is truthful: the traffic did arrive through it.
+	IPToName map[string]string
+	PodCIDRs []string // all pod CIDRs across all nodes
 }
 
-// ListNodeIPMap returns node physical IPs, cilium internal IPs, and pod CIDRs
-// used to distinguish node IPs from external IPs and to hide per-node internal
-// interface addresses (e.g. cilium_host) in the topology graph.
+// ListNodeIPMap returns node IPs — physical and cilium_host — and pod CIDRs,
+// used to tell node addresses from external ones in the topology graph.
 func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
-	result := NodeIPMap{
-		IPToName: make(map[string]string),
-		SkipIPs:  make(map[string]bool),
-	}
+	result := NodeIPMap{IPToName: make(map[string]string)}
 	if s.typed == nil {
 		return result
 	}
@@ -744,7 +744,7 @@ func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
 							continue
 						}
 						if ipType == "CiliumInternalIP" {
-							result.SkipIPs[ip] = true
+							result.IPToName[ip] = cn.GetName()
 						}
 					}
 				}

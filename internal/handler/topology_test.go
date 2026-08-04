@@ -155,3 +155,51 @@ func TestResponseSaysWhetherAnyFlowWasEverSeen(t *testing.T) {
 		t.Error("a store holding a flow reports that none was ever seen")
 	}
 }
+
+func nodeEntry(key, srcIP, dstNs, dstPod string, seen time.Time) k8s.CiliumTopoEntry {
+	return k8s.CiliumTopoEntry{
+		Key: key, SrcIP: srcIP, DstNs: dstNs, DstPod: dstPod,
+		Port: "80", Verdict: "allowed", Count: 1, LastSeen: seen,
+	}
+}
+
+// Cilium SNATs inbound NodePort traffic to the ingress node's cilium_host when
+// the backend pod is on another node. That address used to be hidden, which did
+// not hide a node — it dropped the whole edge, losing the fact that something
+// outside the cluster reached a workload.
+func TestInboundTrafficViaCiliumHostReachesTheGraph(t *testing.T) {
+	store := k8s.NewStore(nil, nil, nil, "")
+	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{
+		nodeEntry("a", "10.0.1.1", "demo", "nginx", time.Now()),
+	})
+	nodeIPs := k8s.NodeIPMap{IPToName: map[string]string{"10.0.1.1": "worker-1"}}
+
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	e := findEdge(resp, "node:10.0.1.1", "demo/nginx")
+	if e == nil {
+		t.Fatalf("inbound edge missing; got %d edges", len(resp.Edges))
+	}
+	for _, n := range resp.Nodes {
+		if n.ID == "node:10.0.1.1" && n.Label != "worker-1" {
+			t.Errorf("node label = %q, want the node name", n.Label)
+		}
+	}
+}
+
+// The chatter that hiding cilium_host was meant to suppress is between node
+// addresses, and that is still suppressed — by what it is, not by hiding one end.
+func TestNodeToNodeChatterStaysOut(t *testing.T) {
+	store := k8s.NewStore(nil, nil, nil, "")
+	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{{
+		Key: "a", SrcIP: "10.0.1.1", DstIP: "10.0.2.1",
+		Port: "4240", Verdict: "allowed", Count: 1, LastSeen: time.Now(),
+	}})
+	nodeIPs := k8s.NodeIPMap{IPToName: map[string]string{
+		"10.0.1.1": "worker-1", "10.0.2.1": "worker-2",
+	}}
+
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	if len(resp.Edges) != 0 {
+		t.Errorf("got %d edges, want none — node to node is plumbing", len(resp.Edges))
+	}
+}
