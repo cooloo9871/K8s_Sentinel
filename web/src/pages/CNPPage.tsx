@@ -483,10 +483,12 @@ export function CNPPage() {
                       <div className="flex flex-col gap-2 border-t pt-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs">
-                            L7 — HTTP rules{' '}
-                            <span className="font-normal text-muted-foreground">
-                              {form.mode === 'blacklist' ? '(whitelist only)' : '(optional)'}
-                            </span>
+                            L7 — HTTP rules
+                            {/* Kept only on a blacklist, where it says why the
+                                controls below are disabled. */}
+                            {form.mode === 'blacklist' && (
+                              <span className="font-normal text-muted-foreground"> (whitelist only)</span>
+                            )}
                           </Label>
                           <Button variant="outline" size="sm" className="h-7 text-xs"
                             disabled={form.mode === 'blacklist'}
