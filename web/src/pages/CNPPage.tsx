@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ScopeFilter, matchesScopeFilter, SCOPE_ALL } from '../components/ScopeFilter'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -68,7 +69,7 @@ export function CNPPage() {
   const [unavailableMsg, setUnavailableMsg] = useState('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [scopeFilter, setScopeFilter] = useState('all')
+  const [nsFilter, setNsFilter] = useState(SCOPE_ALL)
 
   // Editor state — open for create (editing=null) or edit (editing=record)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -165,8 +166,12 @@ export function CNPPage() {
     }
   }
 
+  // Offer only namespaces that actually hold a policy — an empty option is a
+  // dead end.
+  const namespaces = [...new Set(policies.map(p => p.namespace).filter(Boolean))].sort()
+
   const filtered = policies.filter(p => {
-    if (scopeFilter !== 'all' && p.scope !== scopeFilter) return false
+    if (!matchesScopeFilter(p.scope, p.namespace, nsFilter)) return false
     if (search) {
       const q = search.toLowerCase()
       if (!p.name.toLowerCase().includes(q) &&
@@ -388,18 +393,7 @@ export function CNPPage() {
             onChange={e => setSearch(e.target.value)}
             className="h-8 w-56 text-sm"
           />
-          <Select value={scopeFilter} onValueChange={setScopeFilter}>
-            <SelectTrigger className="h-8 w-40 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">All scopes</SelectItem>
-                <SelectItem value="namespace">Namespaced</SelectItem>
-                <SelectItem value="cluster">Cluster-wide</SelectItem>
-                </SelectGroup>
-            </SelectContent>
-          </Select>
+          <ScopeFilter value={nsFilter} onChange={setNsFilter} namespaces={namespaces} />
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { IconRefresh } from '@tabler/icons-react'
+import { ScopeFilter, matchesScopeFilter, SCOPE_ALL } from '../components/ScopeFilter'
 import { useNavigate } from 'react-router-dom'
 import { formatTWTime } from '../utils/time'
 import {
@@ -37,8 +38,7 @@ export function PolicyListPage() {
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [loading, setLoading] = useState(!hasLoaded.current)
   const [search, setSearch] = useState('')
-  const [scopeFilter, setScopeFilter] = useState('all')
-  const [nsFilter, setNsFilter] = useState('all')
+  const [nsFilter, setNsFilter] = useState(SCOPE_ALL)
   const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
   const [pendingModeChange, setPendingModeChange] = useState<{
     policy: PolicyRecord
@@ -109,9 +109,8 @@ export function PolicyListPage() {
 
   const filtered = policies.filter((p) => {
     const matchName = p.name.toLowerCase().includes(search.toLowerCase())
-    const matchScope = scopeFilter === 'all' || p.scope === scopeFilter
-    const matchNs = nsFilter === 'all' || (p.namespace ?? '') === nsFilter
-    return matchName && matchScope && matchNs
+    const matchNs = matchesScopeFilter(p.scope, p.namespace, nsFilter)
+    return matchName && matchNs
   })
 
   return (
@@ -159,37 +158,13 @@ export function PolicyListPage() {
 
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-            <Input
-              placeholder="Search by name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-56 text-sm"
-            />
-            <Select value={scopeFilter} onValueChange={setScopeFilter}>
-              <SelectTrigger className="h-8 w-36 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">All Scopes</SelectItem>
-                  <SelectItem value="namespaced">namespace</SelectItem>
-                  <SelectItem value="cluster">cluster</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <Select value={nsFilter} onValueChange={setNsFilter}>
-              <SelectTrigger className="h-8 w-40 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">All Namespaces</SelectItem>
-                  {namespaces.map(ns => (
-                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+          <Input
+            placeholder="Search by name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 w-56 text-sm"
+          />
+          <ScopeFilter value={nsFilter} onChange={setNsFilter} namespaces={namespaces} />
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => fetchPolicies(true)} disabled={loading}>
