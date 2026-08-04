@@ -149,11 +149,33 @@ describe('cnpFormToYaml', () => {
       rules: [rule({
         peerLabels: [{ key: 'app', value: 'echo' }],
         ports: [{ port: '80', protocol: 'TCP' }],
-        httpMethod: 'GET', httpPath: '/api/.*',
+        http: [{ method: 'GET', path: '/api/.*' }],
       })],
     })
     expect(out).toContain('method: GET')
     expect(out).toContain('path: /api/.*')
+  })
+
+  // Cilium's rules.http is a list of alternatives, so several entries belong
+  // under one toPorts.
+  it('emits every HTTP entry of a rule', () => {
+    const out = cnpFormToYaml({
+      ...base,
+      mode: 'whitelist',
+      rules: [rule({
+        peerLabels: [{ key: 'app', value: 'echo' }],
+        ports: [{ port: '80', protocol: 'TCP' }],
+        http: [
+          { method: 'GET', path: '/api/.*' },
+          { method: 'POST', path: '/submit' },
+          { method: '', path: '/public' },
+        ],
+      })],
+    })
+    expect((out.match(/- method:|- path:/g) ?? []).length).toBe(3)
+    expect(out).toContain('method: POST')
+    // A blank method means any method, so only the path is written.
+    expect(out).toContain('path: /public')
   })
 
   it('omits toPorts entirely when no port is given', () => {
@@ -241,7 +263,7 @@ describe('validateCNPForm', () => {
       rules: [rule({
         peerLabels: [{ key: 'a', value: 'b' }],
         ports: [{ port: '80', protocol: 'TCP' }],
-        httpMethod: 'GET',
+        http: [{ method: 'GET', path: '' }],
       })],
     }).join(' ')).toContain('L3/L4 only')
   })
@@ -250,8 +272,22 @@ describe('validateCNPForm', () => {
     expect(validateCNPForm({
       ...base,
       mode: 'whitelist',
-      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], httpPath: '/x' })],
+      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], http: [{ method: '', path: '/x' }] })],
     }).join(' ')).toContain('needs at least one port')
+  })
+
+  // A row with neither is what leaving HTTP out already does, so it looks like a
+  // restriction and is not.
+  it('catches an HTTP row with neither a method nor a path', () => {
+    expect(validateCNPForm({
+      ...base,
+      mode: 'whitelist',
+      rules: [rule({
+        peerLabels: [{ key: 'a', value: 'b' }],
+        ports: [{ port: '80', protocol: 'TCP' }],
+        http: [{ method: '', path: '' }],
+      })],
+    }).join(' ')).toContain('is empty')
   })
 })
 
@@ -273,7 +309,7 @@ describe('tryParseCNPForm', () => {
           rule({
             peerLabels: [{ key: 'app', value: 'frontend' }],
             ports: [{ port: '80', protocol: 'TCP' }, { port: '443', protocol: 'TCP' }],
-            httpMethod: 'GET', httpPath: '/api/.*',
+            http: [{ method: 'GET', path: '/api/.*' }, { method: 'POST', path: '/submit' }],
           }),
           rule({ peerLabels: [{ key: 'app', value: 'admin' }], ports: [{ port: '8080', protocol: 'TCP' }] }),
         ],

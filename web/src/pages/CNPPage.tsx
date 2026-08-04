@@ -25,7 +25,7 @@ import { cnpApi, namespaceApi, type CNPRecord } from '../api/client'
 import { NamespaceSelect } from '../components/NamespaceSelect'
 import {
   cnpFormToYaml, validateCNPForm, tryParseCNPForm, peerLabel,
-  emptyForm, emptyRule, emptyLabel, emptyPort,
+  emptyForm, emptyRule, emptyLabel, emptyPort, emptyHttp,
   HTTP_METHODS, PROTOCOLS, ENTITIES,
   type CNPFormInput, type CNPRule, type CNPDirection, type CNPMode, type CNPScope,
   type PeerKind, type LabelPair,
@@ -480,36 +480,61 @@ export function CNPPage() {
                         ))}
                       </div>
 
-                      {/* Two bare controls said nothing about what they were.
-                          Captioned the same way as Key/Value and the port rows. */}
                       <div className="flex flex-col gap-2 border-t pt-3">
-                        <Label className="text-xs">
-                          L7 — HTTP rule{' '}
-                          <span className="font-normal text-muted-foreground">
-                            {form.mode === 'blacklist' ? '(whitelist only)' : '(optional)'}
-                          </span>
-                        </Label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[11px] text-muted-foreground">Method</span>
-                            <Select value={r.httpMethod || 'any'}
-                              onValueChange={v => setRule(i, 'httpMethod', v === 'any' ? '' : v)}
-                              disabled={form.mode === 'blacklist'}>
-                              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectGroup>
-                                  <SelectItem value="any">Any method</SelectItem>
-                                  {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                                </SelectGroup>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[11px] text-muted-foreground">Path</span>
-                            <Input value={r.httpPath} onChange={e => setRule(i, 'httpPath', e.target.value)}
-                              disabled={form.mode === 'blacklist'} className="h-9 font-mono text-sm" />
-                          </div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">
+                            L7 — HTTP rules{' '}
+                            <span className="font-normal text-muted-foreground">
+                              {form.mode === 'blacklist' ? '(whitelist only)' : '(optional)'}
+                            </span>
+                          </Label>
+                          <Button variant="outline" size="sm" className="h-7 text-xs"
+                            disabled={form.mode === 'blacklist'}
+                            onClick={() => setRule(i, 'http', [...r.http, emptyHttp()])}>
+                            + Add HTTP rule
+                          </Button>
                         </div>
+                        {r.http.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            No HTTP rule — every request on the ports above.
+                          </p>
+                        ) : r.http.map((h, hi) => (
+                          <div key={hi} className="flex items-end gap-2">
+                            <div className="flex flex-1 flex-col gap-1">
+                              <span className="text-[11px] text-muted-foreground">Method</span>
+                              <Select value={h.method || 'any'}
+                                onValueChange={v => setRule(i, 'http',
+                                  r.http.map((q, qi) => qi === hi ? { ...q, method: v === 'any' ? '' : v } : q))}
+                                disabled={form.mode === 'blacklist'}>
+                                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectGroup>
+                                    <SelectItem value="any">Any method</SelectItem>
+                                    {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex flex-1 flex-col gap-1">
+                              <span className="text-[11px] text-muted-foreground">Path</span>
+                              <Input value={h.path}
+                                onChange={e => setRule(i, 'http',
+                                  r.http.map((q, qi) => qi === hi ? { ...q, path: e.target.value } : q))}
+                                disabled={form.mode === 'blacklist'}
+                                className="h-8 font-mono text-sm" />
+                            </div>
+                            <Button variant="ghost" size="sm"
+                              className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                              onClick={() => setRule(i, 'http', r.http.filter((_, qi) => qi !== hi))}>
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                        {r.http.length > 1 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Alternatives — a request matching any of them matches the rule.
+                          </p>
+                        )}
                       </div>
                     </div>
                   ))}

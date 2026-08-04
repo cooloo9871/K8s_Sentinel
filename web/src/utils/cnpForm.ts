@@ -49,13 +49,19 @@ export interface PortEntry {
   protocol: string
 }
 
+// Cilium's rules.http is a list, and the entries are alternatives: a request
+// matching any of them matches the rule.
+export interface HttpRule {
+  method: string
+  path: string
+}
+
 export interface CNPRule {
   peerKind: PeerKind
   peerLabels: LabelPair[]
   peerEntity: string
   ports: PortEntry[]
-  httpMethod?: string
-  httpPath?: string
+  http: HttpRule[]
 }
 
 export interface CNPFormInput {
@@ -77,14 +83,17 @@ export function emptyPort(): PortEntry {
   return { port: '', protocol: 'TCP' }
 }
 
+export function emptyHttp(): HttpRule {
+  return { method: '', path: '' }
+}
+
 export function emptyRule(): CNPRule {
   return {
     peerKind: 'labels',
     peerLabels: [emptyLabel()],
     peerEntity: 'world',
     ports: [],
-    httpMethod: '',
-    httpPath: '',
+    http: [],
   }
 }
 
@@ -139,8 +148,9 @@ function labelRowErrors(pairs: LabelPair[], what: string): string[] {
 
 const DNS1123 = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
 
-function ruleHasL7(r: CNPRule): boolean {
-  return !!(r.httpMethod || r.httpPath?.trim())
+/** The HTTP entries that say something, dropping rows left blank. */
+function filledHttp(r: CNPRule): HttpRule[] {
+  return r.http.filter(h => h.method !== '' || h.path.trim() !== '')
 }
 
 /** The ports of a rule, dropping rows left empty. */
@@ -208,7 +218,17 @@ export function validateCNPForm(input: CNPFormInput): string[] {
       }
     })
 
-    if (ruleHasL7(r)) {
+    // An entry with neither a method nor a path matches every request, which is
+    // what leaving HTTP out already does — so it is a row that looks like a
+    // restriction and is not.
+    r.http.forEach((h, hi) => {
+      const label = r.http.length > 1 ? ` ${hi + 1}` : ''
+      if (h.method === '' && h.path.trim() === '') {
+        errors.push(`${at}HTTP rule${label} is empty — set a method or a path, or remove it.`)
+      }
+    })
+
+    if (r.http.length > 0) {
       // Cilium deny rules match on L3/L4 only. An HTTP rule under egressDeny or
       // ingressDeny is rejected by the API server, so refuse it here with a
       // reason instead of letting the apply fail.
@@ -252,12 +272,13 @@ function toCiliumRule(r: CNPRule, direction: CNPDirection): Rule {
   const ports = filledPorts(r).map(p => ({ port: p.port.trim(), protocol: p.protocol }))
   if (ports.length > 0) {
     const portRule: PortRule = { ports }
-    if (ruleHasL7(r)) {
-      const http: { method?: string; path?: string } = {}
-      if (r.httpMethod) http.method = r.httpMethod
-      if (r.httpPath?.trim()) http.path = r.httpPath.trim()
-      portRule.rules = { http: [http] }
-    }
+    const http = filledHttp(r).map(h => {
+      const entry: { method?: string; path?: string } = {}
+      if (h.method) entry.method = h.method
+      if (h.path.trim()) entry.path = h.path.trim()
+      return entry
+    })
+    if (http.length > 0) portRule.rules = { http }
     out.toPorts = [portRule]
   }
   return out
@@ -363,12 +384,10 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
       if (cr.toPorts.length !== 1) return null
       const pr = cr.toPorts[0]
       rule.ports = (pr.ports ?? []).map(p => ({ port: p.port, protocol: p.protocol }))
-      const http = pr.rules?.http
-      if (http) {
-        if (http.length !== 1) return null
-        rule.httpMethod = http[0].method ?? ''
-        rule.httpPath = http[0].path ?? ''
-      }
+      rule.http = (pr.rules?.http ?? []).map(h => ({
+        method: h.method ?? '',
+        path: h.path ?? '',
+      }))
     }
     rules.push(rule)
   }
