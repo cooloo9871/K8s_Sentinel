@@ -55,9 +55,9 @@ const GROUPS: NavGroup[] = [
 ]
 
 // A group header is a top-level entry, the same rank as the ungrouped links, so
-// they share a size. The links inside a group are the larger ones.
+// they share a size. The links revealed inside a group sit a step below.
 const TOP_LEVEL_CLASS = 'h-9 text-base'
-const GROUP_ITEM_CLASS = 'h-10 text-lg'
+const GROUP_ITEM_CLASS = 'h-8 text-sm'
 
 export function AppSidebar() {
   const { pathname } = useLocation()
@@ -109,12 +109,20 @@ export function AppSidebar() {
           const expanded = !!open[group.label]
           return (
             <SidebarGroup key={group.label}>
-              <SidebarGroupLabel asChild>
+              {/* The classes belong on SidebarGroupLabel, not on the button:
+                  asChild concatenates the two className strings without
+                  tailwind-merge, so the label's own text-xs and h-8 survived
+                  alongside anything set here and won on stylesheet order — the
+                  header stayed 12px however large this was set. Passed to the
+                  label they go through cn(), which drops the conflicts. */}
+              <SidebarGroupLabel
+                asChild
+                className={`${TOP_LEVEL_CLASS} w-full cursor-pointer justify-between text-sidebar-foreground`}
+              >
                 <button
                   type="button"
                   aria-expanded={expanded}
                   onClick={() => toggle(group.label)}
-                  className={`${TOP_LEVEL_CLASS} w-full cursor-pointer justify-between hover:text-sidebar-foreground`}
                 >
                   {group.label}
                   <IconChevronRight
