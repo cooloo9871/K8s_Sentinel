@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { IconRefresh } from '@tabler/icons-react'
 import { useNavigate } from 'react-router-dom'
 import { formatTWTime } from '../utils/time'
 import {
@@ -154,27 +155,18 @@ export function PolicyListPage() {
           <h4 className="text-xl font-semibold">Tracing Policy</h4>
           <p className="text-sm text-muted-foreground">Manage Tracing Policy.</p>
         </div>
-        {isAdmin && (
-          <div className="flex gap-2">
-            <Button onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
-            <Button variant="outline" onClick={() => navigate('/policies/tracing/new?mode=yaml')}>
-              + New YAML
-            </Button>
-          </div>
-        )}
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="flex items-center gap-2 border-b px-4 py-3">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
             <Input
-              placeholder="Search policy name..."
+              placeholder="Search by name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-56"
+              className="h-8 w-56 text-sm"
             />
             <Select value={scopeFilter} onValueChange={setScopeFilter}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="h-8 w-36 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -186,7 +178,7 @@ export function PolicyListPage() {
               </SelectContent>
             </Select>
             <Select value={nsFilter} onValueChange={setNsFilter}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="h-8 w-40 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -198,16 +190,28 @@ export function PolicyListPage() {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <span className="ml-auto text-sm text-muted-foreground">
-              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
-            </span>
-          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => fetchPolicies(true)} disabled={loading}>
+            <IconRefresh size={14} className="mr-1.5" />
+            Refresh
+          </Button>
+          {isAdmin && (
+            <>
+              <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
+              <Button size="sm" variant="outline" onClick={() => navigate('/policies/tracing/new?mode=yaml')}>
+                + New YAML
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
+      <Card>
+        <CardContent className="p-0">
           {loading ? (
             <div className="flex flex-col gap-2 p-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full rounded-lg" />
-              ))}
+              {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
           ) : (
             <Table>

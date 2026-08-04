@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -82,7 +83,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+    <div className="grid grid-cols-2 gap-6">
       {/* Left: form cards */}
       <div className="flex flex-col gap-4">
 
@@ -225,41 +226,19 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
       </div>
 
       {/* Right: YAML preview */}
-      <div className="sticky top-20 self-start">
-        <div className="overflow-hidden rounded-lg">
-          <div
-            className="flex items-center justify-between px-3 py-2"
-            style={{ background: '#252526', borderBottom: '1px solid #3c3c3c' }}
-          >
-            <span className="font-mono text-xs" style={{ color: '#9cdcfe' }}>
-              YAML Preview
-            </span>
-            <span
-              className="rounded px-1.5 py-0.5 text-[10px]"
-              style={{
-                color: yamlPreview ? '#4ec94e' : '#6c757d',
-                background: yamlPreview ? '#1a3a1a' : '#2a2a2a',
-              }}
-            >
-              {yamlPreview ? '✓ valid' : '—'}
-            </span>
-          </div>
-          <pre
-            className="overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed"
-            style={{
-              margin: 0,
-              background: '#1e1e1e',
-              color: '#d4d4d4',
-              minHeight: 200,
-              maxHeight: 500,
-            }}
-          >
-            {yamlPreview || (
-              <span style={{ color: '#555' }}>Enter a policy name to preview…</span>
-            )}
-          </pre>
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <span className="text-sm font-medium">Generated YAML</span>
+          <Badge variant="secondary" className="font-mono text-[10px]">
+            {value.namespace ? 'TracingPolicyNamespaced' : 'TracingPolicy'}
+          </Badge>
         </div>
-      </div>
+        <CardContent className="p-0">
+          <pre className="min-h-[420px] overflow-auto rounded-b-lg bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
+            {yamlPreview}
+          </pre>
+        </CardContent>
+      </Card>
     </div>
   )
 }

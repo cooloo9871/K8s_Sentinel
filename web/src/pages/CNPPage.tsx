@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  IconAlertTriangle, IconNetwork, IconPlus, IconRefresh, IconSearch,
+  IconAlertTriangle, IconRefresh,
 } from '@tabler/icons-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -377,6 +378,29 @@ export function CNPPage() {
           <h4 className="text-xl font-semibold">Network Policy</h4>
           <p className="text-sm text-muted-foreground">Cilium network policies — identity-based network access control.</p>
         </div>
+      </div>
+
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Search by name..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="h-8 w-56 text-sm"
+          />
+          <Select value={scopeFilter} onValueChange={setScopeFilter}>
+            <SelectTrigger className="h-8 w-40 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All scopes</SelectItem>
+                <SelectItem value="namespace">Namespaced</SelectItem>
+                <SelectItem value="cluster">Cluster-wide</SelectItem>
+                </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <IconRefresh size={14} className="mr-1.5" />
@@ -384,61 +408,18 @@ export function CNPPage() {
           </Button>
           {isAdmin && (
             <>
-              <Button size="sm" onClick={() => openCreate('form')}>
-                <IconPlus size={14} className="mr-1.5" />
-                New Policy
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => openCreate('yaml')}>
-                <IconPlus size={14} className="mr-1.5" />
-                New YAML
-              </Button>
+              <Button size="sm" onClick={() => openCreate('form')}>+ New Policy</Button>
+              <Button size="sm" variant="outline" onClick={() => openCreate('yaml')}>+ New YAML</Button>
             </>
           )}
         </div>
       </div>
 
-      <div className="mb-4 flex items-center gap-2">
-        <div className="relative">
-          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="h-8 w-56 pl-8 text-sm"
-          />
-        </div>
-        <Select value={scopeFilter} onValueChange={setScopeFilter}>
-          <SelectTrigger className="h-8 w-40 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All scopes</SelectItem>
-              <SelectItem value="namespace">Namespaced</SelectItem>
-              <SelectItem value="cluster">Cluster-wide</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} polic{filtered.length !== 1 ? 'ies' : 'y'}
-        </span>
-      </div>
-
       <Card>
-        <CardHeader className="border-b pb-3">
-          <CardTitle className="text-sm font-medium">Policies</CardTitle>
-        </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="py-16 text-center text-sm text-muted-foreground">Loading...</div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-              <IconNetwork size={36} strokeWidth={1.5} />
-              <p className="text-sm">
-                {policies.length === 0 ? 'No Cilium network policies yet' : 'No policies match the filter'}
-              </p>
-              {policies.length === 0 && isAdmin && (
-                <Button size="sm" onClick={() => openCreate('form')}>Create your first policy</Button>
-              )}
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
           ) : (
             <Table>
@@ -451,11 +432,17 @@ export function CNPPage() {
                   <TableHead className="w-32">Default Deny</TableHead>
                   <TableHead>Created By</TableHead>
                   <TableHead>Created Time</TableHead>
-                  {isAdmin && <TableHead className="w-36"></TableHead>}
+                  {isAdmin && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(p => (
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 8 : 7} className="py-10 text-center text-muted-foreground">
+                      No policies found
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.map(p => (
                   <TableRow key={`${p.scope}-${p.namespace}-${p.name}`}>
                     <TableCell className="font-medium">
                       {p.name}

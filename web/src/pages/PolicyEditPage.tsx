@@ -203,7 +203,7 @@ export function PolicyEditPage() {
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={loading}>
-            {loading ? 'Saving...' : 'Save Changes'}
+            {loading ? 'Applying...' : 'Apply'}
           </Button>
         </div>
       </div>

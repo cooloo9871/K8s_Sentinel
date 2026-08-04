@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
-  IconShieldLock, IconServer,
+  IconShieldLock, IconServer, IconRefresh,
 } from '@tabler/icons-react'
 import React from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -885,7 +885,7 @@ export function VAPPage() {
             <p className="text-sm text-muted-foreground">Configure the policy rules below, then click Apply.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowBuilder(false); resetBuilderForm() }}>← Back</Button>
+            <Button variant="outline" onClick={() => { setShowBuilder(false); resetBuilderForm() }}>Cancel</Button>
             {isAdmin && (
               <Button onClick={handleBuilderApply} disabled={!canApply || builderSaving}>
                 {builderSaving ? 'Applying...' : 'Apply'}
@@ -1293,7 +1293,7 @@ export function VAPPage() {
             <p className="text-sm text-muted-foreground">Bind a policy to a scope and choose validation actions.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowBindingBuilder(false); setBindingEditName(undefined); setBindingName(''); setBindingPolicy(''); setBindingNamespace(''); setBindingActions(new Set(['Deny'])) }}>← Back</Button>
+            <Button variant="outline" onClick={() => { setShowBindingBuilder(false); setBindingEditName(undefined); setBindingName(''); setBindingPolicy(''); setBindingNamespace(''); setBindingActions(new Set(['Deny'])) }}>Cancel</Button>
             {isAdmin && (
               <Button onClick={handleBindingBuilderApply} disabled={!canApply || bindingBuilderSaving}>
                 {bindingBuilderSaving ? 'Applying...' : 'Apply'}
@@ -1398,7 +1398,7 @@ export function VAPPage() {
             {editor.name && <p className="text-sm text-muted-foreground">{editor.name}</p>}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setEditor(null)}>← Back</Button>
+            <Button variant="outline" onClick={() => setEditor(null)}>Cancel</Button>
             {isAdmin && (
               <Button onClick={handleSave} disabled={!editorValid || saving}>
                 {saving ? 'Applying...' : 'Apply'}
@@ -1440,12 +1440,18 @@ export function VAPPage() {
         <TabsContent value="policies">
           <div className="mb-4 flex items-center justify-between">
             <Input placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 w-56 text-sm" />
-            {isAdmin && (
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => setShowBuilder(true)}>+ New Policy</Button>
-                <Button size="sm" variant="outline" onClick={() => openNew('policy')}>+ New YAML</Button>
-              </div>
-            )}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => load(true)} disabled={loading}>
+                <IconRefresh size={14} className="mr-1.5" />
+                Refresh
+              </Button>
+              {isAdmin && (
+                <>
+                  <Button size="sm" onClick={() => setShowBuilder(true)}>+ New Policy</Button>
+                  <Button size="sm" variant="outline" onClick={() => openNew('policy')}>+ New YAML</Button>
+                </>
+              )}
+            </div>
           </div>
           <Card>
             <CardContent className="p-0">
@@ -1494,12 +1500,18 @@ export function VAPPage() {
         <TabsContent value="bindings">
           <div className="mb-4 flex items-center justify-between">
             <Input placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 w-56 text-sm" />
-            {isAdmin && (
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => setShowBindingBuilder(true)}>+ New Binding</Button>
-                <Button size="sm" variant="outline" onClick={() => openNew('binding')}>+ New YAML</Button>
-              </div>
-            )}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => load(true)} disabled={loading}>
+                <IconRefresh size={14} className="mr-1.5" />
+                Refresh
+              </Button>
+              {isAdmin && (
+                <>
+                  <Button size="sm" onClick={() => setShowBindingBuilder(true)}>+ New Binding</Button>
+                  <Button size="sm" variant="outline" onClick={() => openNew('binding')}>+ New YAML</Button>
+                </>
+              )}
+            </div>
           </div>
           <Card>
             <CardContent className="p-0">
