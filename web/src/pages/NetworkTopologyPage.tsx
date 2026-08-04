@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld } from '@tabler/icons-react'
 import { RelativeTime } from '../components/RelativeTime'
+import { isStaleObservation } from '../utils/time'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -746,10 +747,13 @@ export function NetworkTopologyPage() {
                                 default deny with no rule naming this pod, or the policy that
                                 dropped it no longer exists.
                               </div>}
-                          {selectedEdge.lastSeen && (
+                          {/* Only worth saying when the denial has stopped: on live
+                              traffic this would cast doubt on a correct reading. */}
+                          {isStaleObservation(selectedEdge.lastSeen) && (
                             <div className="mt-1 text-red-500/80">
-                              Last seen <RelativeTime iso={selectedEdge.lastSeen} />. Flows are
-                              kept for 24h, so a denial stays here until newer traffic replaces it.
+                              Last seen <RelativeTime iso={selectedEdge.lastSeen!} /> — not happening
+                              now. Flows are kept for 24h, so this stays until newer traffic
+                              replaces it.
                             </div>
                           )}
                         </div>
