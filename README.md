@@ -28,7 +28,7 @@ Each layer does what only it can do:
 - **File Rules** — control which paths may be accessed, optionally restricted to reads or writes, with per-rule process exceptions
 - Switch each policy between **Monitoring** (observe) and **Protect** (block) mode, or flip every policy at once with **Global Protect Mode**
 - **Created By** records who created each policy; resources applied with `kubectl` show as `k8s-apply`
-- Form builder and raw YAML editor with round-trip conversion between the two
+- **+ New Policy** opens the form builder; **+ New YAML** starts from a manifest. Editing reopens the form when the policy can be represented in it, and the YAML editor otherwise — a policy carrying network kprobes opens as YAML so a save cannot drop those rules
 - **Policy Templates** — built-in and custom, searchable and filterable by scope:
   - **Monitor All Process Executions** — observe process execution across every pod
   - **Monitor All File Access** — observe reads and writes on sensitive paths
@@ -37,17 +37,17 @@ Each layer does what only it can do:
 
 #### Network Policy (Cilium)
 
-- Manage **CiliumNetworkPolicy** and **CiliumClusterwideNetworkPolicy** through a list view and YAML editor
-- The list surfaces what is easy to miss in raw YAML: whether a policy carries **L7** rules, and which direction it puts into **default deny** — adding any ingress rule silently switches the selected endpoints to ingress default-deny
-- Seven starter templates, each enforcing one carrying an explicit warning above the editor:
-  - **L7 HTTP Visibility** — route traffic through the Cilium proxy so Hubble reports method, path and status
-  - **Namespace Isolation** — accept ingress only from the same namespace
-  - **Egress: Cluster DNS Only** — lock a workload down to DNS as a base layer
-  - **Egress: FQDN Allowlist** — restrict outbound traffic to named domains
-  - **Allow Ingress Controller Only** — prevent direct access that bypasses the routing layer
-  - **Deny Egress Outside Cluster** — a direct control against data exfiltration and C2 callbacks
-  - **Cluster-wide: Allow DNS Everywhere** — baseline so DNS never becomes the thing that breaks
-- Templates are raw YAML on purpose: a network policy mistake causes an outage, so the operator sees exactly what will be applied
+- Manage **CiliumNetworkPolicy** and **CiliumClusterwideNetworkPolicy** through a form builder, with a raw YAML editor for anything the form cannot express
+- A policy is anchored on **one** `endpointSelector`, which is what the form shows: **Applies to**, **Direction** and **Mode** belong to the policy, while each rule contributes a peer with its own ports and HTTP rules
+- **Mode** is the choice that matters, and it is named for what it does rather than as Allow/Deny:
+  - **Blacklist** — blocks only what the rules name; everything else is untouched. Writes `ingressDeny`/`egressDeny` with `enableDefaultDeny: false` for that direction, so one deny rule does not lock the whole direction down
+  - **Whitelist** — permits only what the rules name and **drops everything else** reaching the endpoint, because in Cilium an allow section switches the endpoint to default-deny for that direction
+- **Scope** — namespaced, or cluster-wide. A namespaced policy's `endpointSelector` only ever matches its own namespace, so governing pods elsewhere requires `CiliumClusterwideNetworkPolicy`
+- Labels are **Key / Value** fields, not free text: a mistyped `app=web` does not fail, it selects nothing
+- A peer is either **Labels** or an **Entity** — `world`, `cluster`, `host`, `remote-node` and the rest, for peers that have no labels to select
+- Ports are rows with a protocol each; **L7 HTTP rules** are a list of alternatives (method and path), and are disabled under Blacklist because Cilium deny rules match on L3/L4 only
+- Policies built here carry `sentinel.io/builder: "true"`, so **Edit** reopens the form; anything else opens as YAML, since a hand-written policy can hold rules the form cannot show
+- The list shows what is easy to miss in raw YAML: whether a policy carries **L7** rules, and which direction it puts into **default deny**
 - Policy denials become Security Events, fire webhook alerts, reach syslog and show as red edges in Network Topology
 
 #### Admission Policy (ValidatingAdmissionPolicy)
@@ -78,21 +78,27 @@ Each layer does what only it can do:
 
 Graphs live pod network connections from Cilium Hubble flows.
 
+- **A 15-minute window.** The graph shows what is happening now: a connection that stops falls off, and one that resumes reappears. Fifteen rather than five so a workload that only talks every few minutes does not make its edge flicker
 - **Node kinds** — Pod (purple), Node (grey), External IP (amber). Service ClusterIPs are not drawn: a VIP is an intermediate routing concept, not an endpoint, and under Cilium the destination is already rewritten to the backend pod before the flow is observed
-- **Edges** — coloured solid lines for allowed traffic, red dashed lines for policy-denied traffic. Blocked edges survive even a very small event retention setting, because the topology buffer is bounded by TTL rather than event count
+- **Edges** — solid for allowed traffic, red dashed for policy-denied. A denial that is still arriving wins over the allowed traffic it rides on, which is what an **L7 denial** always looks like: the connection is permitted and only the request is refused, so Hubble reports both verdicts at once
+- Click a red edge for the policy that denied it. Where no policy can be named, it says so rather than inventing one — a default-deny drop has no rule to attribute, and the policy may also have been deleted
 - **Aggregated per source/destination pair** with a per-port breakdown in the detail panel, so ephemeral client ports do not fan out into parallel lines
 - **Hover focus** — labels appear only on the hovered node's edges and unrelated traffic dims out; **Hide kube-system** (on by default) removes control-plane noise
-- **Exposure badges** — pods reachable from outside are marked, with each path listed in the detail panel: NodePort, LoadBalancer, Ingress rule, hostNetwork or hostPort. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
+- **Exposure badges** — pods reachable from outside are marked, with each path listed: NodePort, LoadBalancer, Ingress rule, hostNetwork or hostPort. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
 - **L7 detail** — HTTP method, path and status code on edges where Cilium's proxy is in the path
-- Real inbound source IPs (pre-SNAT), Dagre auto-layout, namespace and pod filters, 30-second auto refresh
+- Traffic arriving from outside is identified by Cilium's `reserved:world` identity rather than by its address, so a connection SNATed to a node's `cilium_host` still reads as external — labelled **world via `<node>`**, with the detail panel explaining that the address is the node's and how to keep the client's
+- Node-to-node traffic is left out: that is Cilium's own health probing and tunnel chatter. Node-to-pod is not, because that is how the outside reaches a workload
+- Dagre auto-layout, namespace and pod filters, 30-second auto refresh
 
 ### Notifications
 
 #### Security Events
 
 - Live stream of Tetragon kprobe events and Cilium policy denials; persisted across restarts
-- Warning / Critical severity, with content-based deduplication over 30 seconds
-- Expand a row for the triggering file path, connection endpoints, process UID, policy name and more
+- Warning / Critical severity, with content-based deduplication over 30 seconds. The client-side port is collapsed for that comparison, so a pod retrying a denied destination accumulates a count rather than filling the list
+- A network denial names the workload that **attempted** the connection, the same way a process or file event names the pod that acted, and carries its containers. All of them are listed when a pod has several: they share one network namespace, so the flow cannot say which opened the connection
+- **Only policies that exist are ever named.** A drop Hubble cannot correlate is attributed by asking which of your policies govern that pod in that direction; if none match, no event is recorded rather than one naming nothing
+- Expand a row for the triggering file path, connection endpoints, process UID, policy name, drop reason and more
 - **Pause / Resume** freezes the view while buffering new events with an unread count
 - **Export CSV**
 - Default retention: 500 warnings, 300 criticals, 7-day TTL (adjustable in Settings)
@@ -117,27 +123,79 @@ Graphs live pod network connections from Cilium Hubble flows.
 - **Alerts** — push Security and Admission events to Slack, Teams, Discord or any webhook, with filters and cooldown
 - **Syslog** — forward events to a rsyslog/syslog server over UDP or TCP
 
+### Things worth knowing before you enforce
+
+Each of these is a real way to cause an outage or to think you are protected when you are not.
+
+- **A whitelist blocks more than it names.** In Cilium an allow section switches the selected endpoint to default-deny for that direction. A policy permitting `app=frontend` on ingress also drops **kubelet's liveness and readiness probes**, which come from the node and match no pod label, and Cilium's own health checks. Add rules for the `host` and `health` entities alongside the one you wanted:
+
+  | Rule | Peer | Why |
+  |---|---|---|
+  | 1 | Labels `app=frontend` | what you wanted |
+  | 2 | Entity `host` | kubelet probes |
+  | 3 | Entity `health` | Cilium health checks |
+
+- **Deny rules are L3/L4 only.** Cilium rejects an HTTP rule inside `ingressDeny`/`egressDeny`, which is why the form disables the L7 fields under Blacklist. "Deny POST /admin" has to be expressed as a whitelist of what *is* allowed
+- **A drop is not always attributable.** Default-deny drops are caused by the *absence* of an allow rule, so Hubble has no rule to report. Sentinel resolves those by asking which of your policies govern the pod in that direction, and stays silent when none do — the Policy column never shows something that is not in the cluster
+- **Global Protect Mode is a switch on live enforcement.** Flipping every Tracing Policy to Monitoring stops them killing anything. There is currently no audit record of who changed it
+- **Tetragon cannot see pre-SNAT inbound addresses.** Its `tcp_connect` kprobe fires after the kernel has rewritten the source, which is why network observation is Cilium's job here and the network templates were removed from Tracing Policy
+
 ---
 
 ## Deployment
 
 ### Requirements
 
-- Kubernetes 1.26+ and a configured `kubectl`
+- **Kubernetes 1.32+** and a configured `kubectl`. ValidatingAdmissionPolicy is GA from 1.30, and 1.32 is the floor this project is developed and tested against
 - **Cilium Tetragon** installed in the cluster (process, file and runtime security)
 - **Cilium CNI** with kube-proxy replacement and the Hubble agent (network policy management and Network Topology)
 
 Install Cilium with the settings this project relies on:
 
 ```bash
-cilium install --version 1.18.3 \
+cilium install --version <version> \
   --set kubeProxyReplacement=true \
   --set k8sServiceHost=<api-server-ip> \
   --set k8sServicePort=6443 \
-  --set hubble.enabled=true
+  --set hubble.enabled=true \
+  --set hubble.tls.enabled=false \
+  --set rollOutCiliumPods=true \
+  --set operator.rollOutPods=true
 ```
 
-`kubeProxyReplacement` is what lets Hubble observe NodePort traffic before SNAT, so inbound connections report their real source IP. `hubble.enabled` only opens the agent's local socket — **no Hubble UI or Hubble Relay is needed**, K8s Sentinel reads that socket directly and is the only UI.
+What each one is for:
+
+| Flag | Why |
+|---|---|
+| `kubeProxyReplacement=true` | Cilium's eBPF load balancer replaces kube-proxy. Required for the socket-level LB, and for Hubble to observe NodePort traffic before SNAT |
+| `k8sServiceHost` / `k8sServicePort` | With kube-proxy gone, the agents need to reach the API server directly rather than through a Service VIP |
+| `hubble.enabled=true` | Opens the agent's local observation socket. **No Hubble UI or Hubble Relay is needed** — K8s Sentinel reads that socket directly and is the only UI |
+| `hubble.tls.enabled=false` | The socket is read in-cluster over the agent's own exec channel, so there is no network hop to secure. Leaving TLS on adds certificate rotation for no gain here |
+| `rollOutCiliumPods=true` | Restarts the agent DaemonSet on a config change, so a `cilium upgrade` actually takes effect without a manual rollout |
+| `operator.rollOutPods=true` | The same for the operator deployment |
+
+##### Preserving the client source IP
+
+Inbound NodePort traffic forwarded to a pod on **another** node is SNATed to the ingress node's `cilium_host` address, so the original client IP is lost before the flow is observed. Cilium still reports the source identity as `reserved:world`, and Network Topology labels such an edge **world via `<node>`** rather than pretending the node initiated it.
+
+Two ways to keep the real address, if you need it:
+
+```bash
+# Simplest: only nodes running a backend pod serve the Service, so nothing is forwarded
+kubectl patch svc <name> -p '{"spec":{"externalTrafficPolicy":"Local"}}'
+```
+
+```bash
+# Or Direct Server Return, which keeps any node able to accept the connection
+cilium install --version <version> \
+  --set kubeProxyReplacement=true \
+  --set loadBalancer.mode=hybrid \
+  --set loadBalancer.dsrDispatch=geneve
+```
+
+`hybrid` uses DSR for TCP and SNAT for UDP, which avoids DSR's MTU edge cases. `dsrDispatch=geneve` avoids the default IP-option dispatch, which intermediate routers and firewalls sometimes drop. Note that DSR makes the return path asymmetric — a stateful firewall between the client and the cluster may reject it.
+
+Behind an **Ingress or Gateway API**, the client IP is not available at L3/L4 at all: the proxy terminates the connection and opens its own to the backend, so the flow reaching the pod comes from the ingress controller. The client address survives only in `X-Forwarded-For`.
 
 Install Tetragon separately:
 
@@ -175,7 +233,7 @@ bash deploy/install.sh
 ghcr.io/cooloo9871/sentinel:latest
 ```
 
-Per-version tags are listed under [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases). For production, pin a version in `deploy/base/deployment.yaml` (for example `:v0.2.0`) instead of `:latest` so deployments are reproducible.
+Per-version tags are listed under [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases). For production, pin a version in `deploy/base/deployment.yaml` (for example `:v0.9.8`) instead of `:latest` so deployments are reproducible.
 
 ### Access the UI
 
@@ -188,7 +246,9 @@ Default credentials are `admin` / `admin` — change the password immediately af
 
 ### Persistent storage
 
-K8s Sentinel stores the following under `/data/sentinel/` (override with the `DATA_DIR` environment variable). **Mounting a PersistentVolume is strongly recommended** — without it every setting and event is lost when the pod restarts:
+K8s Sentinel stores the following under `/data/sentinel/` (override with the `DATA_DIR` environment variable).
+
+> **The bundled manifests mount an `emptyDir`, which means every restart resets all of it** — accounts back to the default `admin`, alert rules and syslog targets gone, custom templates gone, event history gone. Attach a PersistentVolume before configuring anything you expect to keep. A single-instance deployment should also use `strategy: { type: Recreate }`, so a rollout does not briefly run two pods that both stream events.
 
 | File | Contents |
 |---|---|
