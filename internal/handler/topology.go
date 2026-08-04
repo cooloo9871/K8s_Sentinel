@@ -11,12 +11,15 @@ import (
 )
 
 type TopologyNode struct {
-	ID        string         `json:"id"`
-	Label     string         `json:"label"`
-	Pod       string         `json:"pod"`
-	Namespace string         `json:"namespace"`
-	Kind      string         `json:"kind"` // "pod" | "external" | "node"
-	IP        string         `json:"ip,omitempty"`
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Pod       string `json:"pod"`
+	Namespace string `json:"namespace"`
+	Kind      string `json:"kind"` // "pod" | "external" | "node"
+	IP        string `json:"ip,omitempty"`
+	// Set when an external source arrived through a node and its address was
+	// rewritten on the way, so the UI can say the IP is not the client's.
+	ViaNode   string         `json:"viaNode,omitempty"`
 	Exposures []k8s.Exposure `json:"exposures,omitempty"` // static attack-surface paths (pod nodes only)
 }
 
@@ -163,13 +166,28 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 	}
 	edgeMap := make(map[edgeKey]*edgeVal)
 
-	resolveID := func(pod, ns, ip string) (string, TopologyNode) {
+	// isWorld says Cilium identified this source as outside the cluster. It
+	// outranks the address, because inbound NodePort traffic forwarded across
+	// nodes arrives SNATed to the ingress node's cilium_host: the IP reads as a
+	// node while the identity still reads reserved:world. Labelling that as the
+	// node invites the conclusion that the node initiated it.
+	resolveID := func(pod, ns, ip string, isWorld bool) (string, TopologyNode) {
 		if pod != "" {
 			id := ns + "/" + pod
 			return id, TopologyNode{ID: id, Label: pod, Pod: pod, Namespace: ns, Kind: "pod"}
 		}
 		if ip == "" {
 			return "", TopologyNode{}
+		}
+		if isWorld {
+			id := "ext:" + ip
+			node := TopologyNode{ID: id, Label: ip, Kind: "external", IP: ip}
+			// Say whose address it is, so the IP is not mistaken for the client's.
+			if nodeName, ok := nodeIPMap.IPToName[ip]; ok {
+				node.Label = "world via " + nodeName
+				node.ViaNode = nodeName
+			}
+			return id, node
 		}
 		// A node address, physical or cilium_host → show as "node" kind.
 		if nodeName, ok := nodeIPMap.IPToName[ip]; ok {
@@ -201,11 +219,11 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			staleKeys = append(staleKeys, e.Key)
 			continue
 		}
-		srcID, srcNode := resolveID(e.SrcPod, e.SrcNs, e.SrcIP)
+		srcID, srcNode := resolveID(e.SrcPod, e.SrcNs, e.SrcIP, e.SrcIsWorld)
 		if srcID == "" {
 			continue // skip: node-internal IP (cilium_host etc.)
 		}
-		dstID, dstNode := resolveID(e.DstPod, e.DstNs, e.DstIP)
+		dstID, dstNode := resolveID(e.DstPod, e.DstNs, e.DstIP, false)
 		if dstID == "" {
 			continue // skip: node-internal IP
 		}

@@ -189,3 +189,37 @@ func TestReplyFlowProducesNoDenialEvent(t *testing.T) {
 		t.Error("reply flow produced a denial event")
 	}
 }
+
+// Inbound NodePort traffic forwarded across nodes arrives SNATed to the ingress
+// node's cilium_host, so the address reads as in-cluster while Cilium still
+// knows the source is outside. Losing that identity is what made external
+// traffic look like a node talking to a pod.
+func TestReservedWorldSourceIsRecognisedDespiteAnInClusterAddress(t *testing.T) {
+	line := `{"flow":{"time":"2026-08-04T15:00:00Z","verdict":"FORWARDED",` +
+		`"IP":{"source":"10.0.0.181","destination":"10.0.1.181","ipVersion":"IPv4"},` +
+		`"l4":{"TCP":{"source_port":41000,"destination_port":80}},` +
+		`"source":{"identity":2,"labels":["reserved:world"]},` +
+		`"destination":{"namespace":"default","pod_name":"nginx"},` +
+		`"traffic_direction":"INGRESS"},"node_name":"topgun/cilium-w1"}`
+
+	f, ok := parseCiliumFlow(line)
+	if !ok {
+		t.Fatal("parseCiliumFlow rejected a valid flow")
+	}
+	if !f.SrcIsWorld {
+		t.Error("reserved:world source was not recognised")
+	}
+	if f.SrcIP != "10.0.0.181" {
+		t.Errorf("SrcIP = %q, want the post-SNAT address as reported", f.SrcIP)
+	}
+}
+
+func TestPodSourceIsNotWorld(t *testing.T) {
+	f, ok := parseCiliumFlow(droppedFlowJSON)
+	if !ok {
+		t.Fatal("parseCiliumFlow rejected a valid flow")
+	}
+	if f.SrcIsWorld {
+		t.Error("a pod source was labelled as outside the cluster")
+	}
+}

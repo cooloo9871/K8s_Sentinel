@@ -247,6 +247,7 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	entry.SrcPod, entry.SrcNs = f.SrcPod, f.SrcNs
 	entry.DstPod, entry.DstNs = f.DstPod, f.DstNs
 	entry.SrcIP, entry.DstIP = f.SrcIP, f.DstIP
+	entry.SrcIsWorld = f.SrcIsWorld
 	entry.Port, entry.Protocol = port, f.Protocol
 	entry.Verdict = f.Verdict
 	if f.Verdict == "dropped" {

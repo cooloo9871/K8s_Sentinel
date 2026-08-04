@@ -52,6 +52,11 @@ type CiliumFlow struct {
 	// Metadata
 	NodeName string `json:"nodeName"`
 	IsReply  bool   `json:"isReply"`
+	// Whether Cilium identified the source as outside the cluster. Kept because
+	// the address cannot be trusted to say so: inbound NodePort traffic forwarded
+	// across nodes is SNATed to the ingress node's cilium_host, so the IP looks
+	// in-cluster while the identity still reads reserved:world.
+	SrcIsWorld bool `json:"srcIsWorld"`
 }
 
 // IsPolicyDenial reports whether this flow was dropped by a network policy, as
@@ -201,8 +206,9 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 			IsReply *bool  `json:"is_reply"`
 			Type    string `json:"Type"` // "L3_L4" | "L7"
 			Source  struct {
-				Namespace string `json:"namespace"`
-				PodName   string `json:"pod_name"`
+				Namespace string   `json:"namespace"`
+				PodName   string   `json:"pod_name"`
+				Labels    []string `json:"labels"`
 			} `json:"source"`
 			Destination struct {
 				Namespace string `json:"namespace"`
@@ -295,6 +301,12 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 	}
 	if f.IsReply != nil {
 		flow.IsReply = *f.IsReply
+	}
+	for _, l := range f.Source.Labels {
+		if l == "reserved:world" {
+			flow.SrcIsWorld = true
+			break
+		}
 	}
 
 	// Drop details and policy correlation
@@ -428,9 +440,12 @@ type CiliumTopoEntry struct {
 	SrcPod, SrcNs string
 	DstPod, DstNs string
 	SrcIP, DstIP  string
-	Port          string
-	Protocol      string
-	Verdict       string // "allowed" | "dropped"
+	// Cilium identified the source as outside the cluster, whatever the address
+	// says — see CiliumFlow.SrcIsWorld.
+	SrcIsWorld bool
+	Port       string
+	Protocol   string
+	Verdict    string // "allowed" | "dropped"
 	// Set for denials: the policy Hubble named, and the direction the rule
 	// applies to. Empty PolicyName means default-deny, resolved at read time.
 	PolicyName string

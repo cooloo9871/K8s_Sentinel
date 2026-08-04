@@ -203,3 +203,35 @@ func TestNodeToNodeChatterStaysOut(t *testing.T) {
 		t.Errorf("got %d edges, want none — node to node is plumbing", len(resp.Edges))
 	}
 }
+
+// Identity outranks the address: an external source whose IP was rewritten to a
+// node's must not read as the node, or the graph says a node initiated traffic
+// that came from outside.
+func TestAWorldSourceStaysExternalEvenWithANodeAddress(t *testing.T) {
+	store := k8s.NewStore(nil, nil, nil, "")
+	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{{
+		Key: "a", SrcIP: "10.0.0.181", SrcIsWorld: true,
+		DstNs: "default", DstPod: "nginx",
+		Port: "80", Verdict: "allowed", Count: 1, LastSeen: time.Now(),
+	}})
+	nodeIPs := k8s.NodeIPMap{IPToName: map[string]string{"10.0.0.181": "cilium-w0"}}
+
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	e := findEdge(resp, "ext:10.0.0.181", "default/nginx")
+	if e == nil {
+		t.Fatalf("external edge missing; got %d edges", len(resp.Edges))
+	}
+	for _, n := range resp.Nodes {
+		if n.ID != "ext:10.0.0.181" {
+			continue
+		}
+		if n.Kind != "external" {
+			t.Errorf("kind = %q, want external", n.Kind)
+		}
+		// The address belongs to the ingress node, not the client, and the label
+		// has to stop it being read as the client's.
+		if n.ViaNode != "cilium-w0" {
+			t.Errorf("viaNode = %q, want cilium-w0", n.ViaNode)
+		}
+	}
+}

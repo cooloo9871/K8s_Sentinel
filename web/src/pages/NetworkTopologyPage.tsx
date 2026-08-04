@@ -25,6 +25,7 @@ interface TopologyNode {
   namespace: string
   kind: 'pod' | 'external' | 'node'
   ip?: string
+  viaNode?: string
   // Static attack-surface paths (NodePort/LB/Ingress/hostNetwork), pod nodes only
   exposures?: { type: string; detail: string }[]
   // Derived client-side: this pod receives traffic from an ext: source
@@ -672,6 +673,18 @@ export function NetworkTopologyPage() {
                           </div>
                         )}
                       </>
+                    )}
+                    {/* The address of an SNATed inbound connection belongs to the
+                        ingress node, not the client — without saying so it reads
+                        as the client's. */}
+                    {selectedNode.viaNode && (
+                      <div className="rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
+                        Arrived through node <span className="font-mono">{selectedNode.viaNode}</span>,
+                        which replaced the client address. Cilium reports the source as outside the
+                        cluster, but the original IP is lost to SNAT — set the Service to
+                        <span className="font-mono"> externalTrafficPolicy: Local</span>, or run Cilium
+                        in DSR mode, to keep it.
+                      </div>
                     )}
                     {selectedNode.kind === 'external' && (
                       <div>
