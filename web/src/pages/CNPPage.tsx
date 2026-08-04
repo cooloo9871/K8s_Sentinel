@@ -23,8 +23,9 @@ import { YamlEditor } from '../components/YamlEditor'
 import { formatTWTime } from '../utils/time'
 import { cnpApi, type CNPRecord } from '../api/client'
 import {
-  cnpFormToYaml, validateCNPForm, tryParseCNPForm, HTTP_METHODS,
-  type CNPFormInput, type CNPDirection, type CNPMode,
+  cnpFormToYaml, validateCNPForm, tryParseCNPForm, peerLabel,
+  emptyForm, emptyRule, HTTP_METHODS,
+  type CNPFormInput, type CNPRule, type CNPDirection, type CNPMode, type CNPScope,
 } from '../utils/cnpForm'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
@@ -54,11 +55,6 @@ function Field({ label, required, hint, className, children }: {
   )
 }
 
-const EMPTY_FORM: CNPFormInput = {
-  name: '', namespace: '', comment: '', from: '', to: '',
-  direction: 'ingress', ports: '', mode: 'whitelist', httpMethod: '', httpPath: '',
-}
-
 export function CNPPage() {
   const toast = useToast()
   const { user } = useAuth()
@@ -78,7 +74,7 @@ export function CNPPage() {
   const [yamlValid, setYamlValid] = useState(true)
   // Create flow only: build a simple rule in the form, or write YAML directly.
   const [mode, setMode] = useState<'form' | 'yaml'>('form')
-  const [form, setForm] = useState<CNPFormInput>(EMPTY_FORM)
+  const [form, setForm] = useState<CNPFormInput>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<CNPRecord | null>(null)
 
@@ -104,10 +100,20 @@ export function CNPPage() {
   const setField = <K extends keyof CNPFormInput>(key: K, value: CNPFormInput[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
 
+  const setRule = <K extends keyof CNPRule>(index: number, key: K, value: CNPRule[K]) =>
+    setForm(prev => ({
+      ...prev,
+      rules: prev.rules.map((r, i) => (i === index ? { ...r, [key]: value } : r)),
+    }))
+
+  const addRule = () => setForm(prev => ({ ...prev, rules: [...prev.rules, emptyRule()] }))
+  const removeRule = (index: number) =>
+    setForm(prev => ({ ...prev, rules: prev.rules.filter((_, i) => i !== index) }))
+
   const openCreate = (as: 'form' | 'yaml') => {
     setEditing(null)
     setMode(as)
-    setForm(EMPTY_FORM)
+    setForm(emptyForm())
     setYamlText('')
     setYamlValid(true)
     setEditorOpen(true)
@@ -123,7 +129,7 @@ export function CNPPage() {
       setForm(parsed)
       setMode('form')
     } else {
-      setForm(EMPTY_FORM)
+      setForm(emptyForm())
       setMode('yaml')
     }
     setYamlText(p.rawYaml)
@@ -248,94 +254,137 @@ export function CNPPage() {
                       readOnly={!!editing}
                       className={`h-9 ${editing ? 'cursor-default opacity-60' : ''}`} />
                   </Field>
+                  <Field
+                    label="Scope"
+                    hint={form.scope === 'cluster'
+                      ? 'Cluster-wide: the selector can reach pods in any namespace.'
+                      : 'Namespaced: the selector only matches pods in this namespace.'}
+                  >
+                    <Select value={form.scope} onValueChange={v => setField('scope', v as CNPScope)}
+                      disabled={!!editing}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="namespaced">Namespaced</SelectItem>
+                          <SelectItem value="cluster">Cluster-wide</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+
+                {form.scope === 'namespaced' && (
                   <Field label="Namespace" required>
                     <Input value={form.namespace} onChange={e => setField('namespace', e.target.value)}
                       readOnly={!!editing}
                       className={`h-9 ${editing ? 'cursor-default opacity-60' : ''}`} />
                   </Field>
-                </div>
+                )}
 
                 <Field label="Comment">
                   <Input value={form.comment} onChange={e => setField('comment', e.target.value)} className="h-9" />
                 </Field>
 
+                {/* A Cilium policy has one endpointSelector, so the subject is
+                    set once here and every rule below shares it. */}
+                <Field
+                  label="Applies to"
+                  required
+                  hint={form.scope === 'cluster'
+                    ? 'The endpoints this policy governs. Add namespace=<ns> to reach another namespace.'
+                    : 'The endpoints this policy governs, within this namespace.'}
+                >
+                  <Input value={form.subject} onChange={e => setField('subject', e.target.value)}
+                    className="h-9 font-mono text-sm" />
+                </Field>
+
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="From" required hint="key=value, or world / cluster / host">
-                    <Input value={form.from} onChange={e => setField('from', e.target.value)} className="h-9 font-mono text-sm" />
-                  </Field>
-                  <Field label="To" required hint="ns=other-namespace also works">
-                    <Input value={form.to} onChange={e => setField('to', e.target.value)} className="h-9 font-mono text-sm" />
-                  </Field>
-                </div>
-
-                <Field
-                  label="Enforce on"
-                  hint={form.direction === 'ingress'
-                    ? 'The policy is attached to To — nothing else reaching it is affected.'
-                    : 'The policy is attached to From — other sources can still reach To.'}
-                >
-                  <Select value={form.direction}
-                    onValueChange={v => setField('direction', v as CNPDirection)}>
-                    <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="ingress">Ingress on To</SelectItem>
-                        <SelectItem value="egress">Egress from From</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <Field label="Ports" hint="Blank means every port">
-                  <Input value={form.ports} onChange={e => setField('ports', e.target.value)} className="h-9 font-mono text-sm" />
-                </Field>
-
-                {/* Not an Allow/Deny action: the two options write different
-                    policy models, and "Allow" would hide that it also drops
-                    everything it does not name. */}
-                <Field
-                  label="Mode"
-                  hint={form.mode === 'blacklist'
-                    ? 'Blacklist: only this traffic is blocked. Everything else is allowed.'
-                    : 'Whitelist: only this traffic is allowed. Everything else reaching the endpoint is blocked.'}
-                >
-                  <Select value={form.mode} onValueChange={v => setField('mode', v as CNPMode)}>
-                    <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="blacklist">Blacklist — deny this traffic</SelectItem>
-                        <SelectItem value="whitelist">Whitelist — allow only this traffic</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                {/* Cilium deny rules match on L3/L4 only, so this is unusable
-                    with Deny and there is no point rendering it enabled. */}
-                <div className="flex flex-col gap-3 border-t pt-4">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs">HTTP rule</Label>
-                    <span className="text-xs text-muted-foreground">
-                      {form.mode === 'blacklist'
-                        ? 'Whitelist only — Cilium deny rules are L3/L4'
-                        : 'Optional, needs a port and the Cilium proxy'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Select value={form.httpMethod || 'any'}
-                      onValueChange={v => setField('httpMethod', v === 'any' ? '' : v)}
-                      disabled={form.mode === 'blacklist'}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <Field
+                    label="Direction"
+                    hint={form.direction === 'ingress'
+                      ? 'Rules name who may reach it.'
+                      : 'Rules name what it may reach.'}
+                  >
+                    <Select value={form.direction} onValueChange={v => setField('direction', v as CNPDirection)}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="any">Any method</SelectItem>
-                          {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          <SelectItem value="ingress">Ingress</SelectItem>
+                          <SelectItem value="egress">Egress</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <Input value={form.httpPath} onChange={e => setField('httpPath', e.target.value)} disabled={form.mode === 'blacklist'}
-                      className="h-9 font-mono text-sm" />
+                  </Field>
+                  <Field
+                    label="Mode"
+                    hint={form.mode === 'blacklist'
+                      ? 'Only this traffic is blocked.'
+                      : 'Only this traffic is allowed.'}
+                  >
+                    <Select value={form.mode} onValueChange={v => setField('mode', v as CNPMode)}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="blacklist">Blacklist — deny</SelectItem>
+                          <SelectItem value="whitelist">Whitelist — allow only</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+
+                <div className="flex flex-col gap-3 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Rules</Label>
+                    <Button variant="outline" size="sm" onClick={addRule}>+ Add</Button>
                   </div>
+
+                  {form.rules.map((r, i) => (
+                    <div key={i} className="flex flex-col gap-3 rounded-md border p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Rule {i + 1}</span>
+                        {form.rules.length > 1 && (
+                          <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive hover:text-destructive"
+                            onClick={() => removeRule(i)}>
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label={peerLabel(form.direction)} required>
+                          <Input value={r.peer} onChange={e => setRule(i, 'peer', e.target.value)}
+                            className="h-9 font-mono text-sm" />
+                        </Field>
+                        <Field label="Ports">
+                          <Input value={r.ports} onChange={e => setRule(i, 'ports', e.target.value)}
+                            className="h-9 font-mono text-sm" />
+                        </Field>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <Select value={r.httpMethod || 'any'}
+                          onValueChange={v => setRule(i, 'httpMethod', v === 'any' ? '' : v)}
+                          disabled={form.mode === 'blacklist'}>
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="any">Any method</SelectItem>
+                              {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <Input value={r.httpPath} onChange={e => setRule(i, 'httpPath', e.target.value)}
+                          disabled={form.mode === 'blacklist'} className="h-9 font-mono text-sm" />
+                      </div>
+                    </div>
+                  ))}
+
+                  <p className="text-[11px] text-muted-foreground">
+                    {form.mode === 'blacklist'
+                      ? 'HTTP is whitelist-only — Cilium deny rules match on L3/L4.'
+                      : 'HTTP is optional per rule, and needs a port and the Cilium proxy.'}
+                  </p>
                 </div>
 
                 {formErrors.length > 0 && (
@@ -355,7 +404,9 @@ export function CNPPage() {
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between border-b px-4 py-3">
                 <span className="text-sm font-medium">Generated YAML</span>
-                <Badge variant="secondary" className="font-mono text-[10px]">CiliumNetworkPolicy</Badge>
+                <Badge variant="secondary" className="font-mono text-[10px]">
+                  {form.scope === 'cluster' ? 'CiliumClusterwideNetworkPolicy' : 'CiliumNetworkPolicy'}
+                </Badge>
               </div>
               <CardContent className="p-0">
                 <pre className="min-h-[420px] overflow-auto rounded-b-lg bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
