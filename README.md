@@ -158,7 +158,6 @@ cilium install --version <version> \
   --set k8sServiceHost=<api-server-ip> \
   --set k8sServicePort=6443 \
   --set hubble.enabled=true \
-  --set hubble.tls.enabled=false \
   --set rollOutCiliumPods=true \
   --set operator.rollOutPods=true
 ```
@@ -170,7 +169,6 @@ Which of these K8s Sentinel actually reads, and which are there for other reason
 | `hubble.enabled=true` | **Yes — required** | Opens the agent's observation socket. Sentinel execs `hubble observe` inside `cilium-agent` and reads it directly, which is the only source for Network Topology and Cilium policy denials |
 | `kubeProxyReplacement=true` | **Yes** | Cilium's socket-level load balancer rewrites a Service address to the backend pod *before* the flow is observed, so the topology sees the real endpoint. Left to kube-proxy, iptables does the translation after the packet leaves the pod, the flow carries the ClusterIP, and Sentinel drops that edge — a VIP is not an endpoint. It is also what lets Hubble see inbound NodePort traffic before SNAT |
 | `k8sServiceHost` / `k8sServicePort` | Indirectly | Not read by Sentinel. Required *by Cilium* once kube-proxy is gone: the agents can no longer reach the API server through a Service VIP |
-| `hubble.tls.enabled` | **No** | Not used, at either value. That setting secures Hubble's *network* listener for Relay and remote clients; Sentinel reads the local socket inside the agent over its own exec channel, so no network hop is involved. Setting it to `false` is not required — leave it enabled if you prefer |
 | `rollOutCiliumPods` / `operator.rollOutPods` | **No** | Nothing to do with Sentinel. They restart the agent and operator on a config change, so a `cilium upgrade` takes effect without a manual rollout — worth having, for its own sake |
 
 **Recommended in addition:**
@@ -185,6 +183,7 @@ Note what it cannot do: correlation only names a policy for an **explicit** `ing
 
 **Not needed at all:**
 
+- **`hubble.tls.enabled`.** Deliberately absent above. It defaults to `true`, Sentinel is unaffected either way — the setting secures Hubble's *network* listener for Relay and remote clients, while Sentinel reads the local socket inside the agent over its own exec channel — and Cilium's own chart calls disabling it "highly discouraged" because the Hubble API exposes potentially sensitive information. Leave it at the default
 - **Hubble Relay and Hubble UI.** Sentinel reads the agent socket directly and is the only UI
 - **`hubble.metrics`** beyond the correlation flag. Sentinel does not scrape Hubble metrics
 - **Tetragon's `podInfo`** — see below
