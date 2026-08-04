@@ -57,7 +57,8 @@ type Store struct {
 	ciliumMu   sync.RWMutex
 	ciliumSubs map[chan CiliumFlow]struct{}
 
-	// Cilium topology buffer — unique connections from Hubble flows (TTL 24h)
+	// Cilium topology buffer — unique connections from Hubble flows, kept for
+	// ciliumTopoWindow
 	ciliumTopoMu      sync.RWMutex
 	ciliumTopo        map[string]CiliumTopoEntry // key: "srcID|dstID|port"
 	ciliumTopoCleanup uint64                     // triggers lazy eviction every N updates
@@ -182,6 +183,12 @@ func (s *Store) broadcastCilium(f CiliumFlow) {
 	}
 }
 
+// ciliumTopoWindow is how far back the topology looks. The graph shows what is
+// happening now, so a connection that has stopped drops off rather than being
+// drawn as though it were live. Long enough that periodic traffic — a workload
+// that polls every few minutes — does not make its edge flicker in and out.
+const ciliumTopoWindow = 15 * time.Minute
+
 // updateCiliumTopo merges a flow into the topology buffer.
 func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	// Only store flows that are actually forwarded or dropped — skip TRACED,
@@ -269,10 +276,10 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	}
 	s.ciliumTopo[key] = entry
 
-	// Lazy cleanup every 2000 updates — removes entries older than 24h.
+	// Lazy cleanup every 2000 updates — removes entries past the window.
 	s.ciliumTopoCleanup++
 	if s.ciliumTopoCleanup%2000 == 0 {
-		cutoff := time.Now().Add(-24 * time.Hour)
+		cutoff := time.Now().Add(-ciliumTopoWindow)
 		for k, e := range s.ciliumTopo {
 			if !e.LastSeen.After(cutoff) {
 				delete(s.ciliumTopo, k)
@@ -284,7 +291,7 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 
 // PruneCiliumTopo removes the given entries from the buffer. Used to evict
 // connections whose pod endpoints no longer exist, rather than holding them
-// until the 24h TTL.
+// until they fall out of the window.
 func (s *Store) PruneCiliumTopo(keys []string) {
 	if len(keys) == 0 {
 		return
@@ -296,9 +303,9 @@ func (s *Store) PruneCiliumTopo(keys []string) {
 	s.ciliumTopoMu.Unlock()
 }
 
-// ListCiliumTopoEntries returns all topology entries seen within the last 24h.
+// ListCiliumTopoEntries returns the topology entries seen within the window.
 func (s *Store) ListCiliumTopoEntries() []CiliumTopoEntry {
-	cutoff := time.Now().Add(-24 * time.Hour)
+	cutoff := time.Now().Add(-ciliumTopoWindow)
 	s.ciliumTopoMu.RLock()
 	defer s.ciliumTopoMu.RUnlock()
 	out := make([]CiliumTopoEntry, 0, len(s.ciliumTopo))
@@ -312,7 +319,7 @@ func (s *Store) ListCiliumTopoEntries() []CiliumTopoEntry {
 
 // HasCiliumTopoData returns true when there is recent Cilium topology data.
 func (s *Store) HasCiliumTopoData() bool {
-	cutoff := time.Now().Add(-24 * time.Hour)
+	cutoff := time.Now().Add(-ciliumTopoWindow)
 	s.ciliumTopoMu.RLock()
 	defer s.ciliumTopoMu.RUnlock()
 	for _, e := range s.ciliumTopo {

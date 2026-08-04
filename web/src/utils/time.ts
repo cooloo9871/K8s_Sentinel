@@ -20,17 +20,3 @@ export function formatTWTime(iso: string | undefined | null): string {
     hour12: false,
   })
 }
-
-// The topology buffers flows for 24h, so an edge can describe something that
-// stopped happening hours ago. Live traffic refreshes an edge continuously and
-// the graph polls every 30s, so anything seen within a few minutes is current —
-// saying so about it would only cast doubt on a correct reading.
-const STALE_AFTER_MS = 5 * 60_000
-
-/** Whether an observation is old enough that it may no longer be happening. */
-export function isStaleObservation(iso: string | undefined | null, now = Date.now()): boolean {
-  if (!iso) return false
-  const t = new Date(iso).getTime()
-  if (isNaN(t)) return false
-  return now - t > STALE_AFTER_MS
-}

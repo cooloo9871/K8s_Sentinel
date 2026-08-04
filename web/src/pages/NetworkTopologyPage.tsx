@@ -15,8 +15,6 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld } from '@tabler/icons-react'
-import { RelativeTime } from '../components/RelativeTime'
-import { isStaleObservation } from '../utils/time'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -42,7 +40,6 @@ interface TopologyEdge {
   blocked: boolean
   // The policy that denied the traffic, when one can be identified
   deniedBy?: string
-  lastSeen?: string
   // Aggregated per-port breakdown (count-desc); ephemeral ports appear as "dynamic"
   ports?: { port: string; count: number }[]
   // L7 (populated from Cilium/Hubble data)
@@ -747,15 +744,6 @@ export function NetworkTopologyPage() {
                                 default deny with no rule naming this pod, or the policy that
                                 dropped it no longer exists.
                               </div>}
-                          {/* Only worth saying when the denial has stopped: on live
-                              traffic this would cast doubt on a correct reading. */}
-                          {isStaleObservation(selectedEdge.lastSeen) && (
-                            <div className="mt-1 text-red-500/80">
-                              Last seen <RelativeTime iso={selectedEdge.lastSeen!} /> — not happening
-                              now. Flows are kept for 24h, so this stays until newer traffic
-                              replaces it.
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>

@@ -96,22 +96,3 @@ func TestTieGoesToTheDenial(t *testing.T) {
 		t.Error("a tie should render as blocked")
 	}
 }
-
-// The age has to reach the UI, which is the only way a viewer can tell a live
-// denial from one that stopped happening hours ago.
-func TestEdgeCarriesWhenItWasLastSeen(t *testing.T) {
-	seen := time.Now().Add(-90 * time.Minute).Truncate(time.Second)
-	resp := build(t, []k8s.CiliumTopoEntry{entry("a", "dropped", seen)})
-
-	e := findEdge(resp, "demo/client", "demo/server")
-	if e == nil {
-		t.Fatal("no edge between the two pods")
-	}
-	got, err := time.Parse(time.RFC3339, e.LastSeen)
-	if err != nil {
-		t.Fatalf("lastSeen %q is not RFC3339: %v", e.LastSeen, err)
-	}
-	if !got.Equal(seen.UTC().Truncate(time.Second)) {
-		t.Errorf("lastSeen = %v, want %v", got, seen.UTC())
-	}
-}

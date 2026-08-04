@@ -36,11 +36,7 @@ type TopologyEdge struct {
 	// Which policy denied the traffic. Named by Hubble correlation when an
 	// explicit deny rule fired, otherwise resolved from the policies that
 	// govern the pod. Empty when neither can identify one.
-	DeniedBy string `json:"deniedBy,omitempty"`
-	// When this connection was last observed. Flows are buffered for 24h, so an
-	// edge can describe something that stopped happening hours ago — the UI needs
-	// this to say so rather than presenting it as current.
-	LastSeen string     `json:"lastSeen,omitempty"`
+	DeniedBy string     `json:"deniedBy,omitempty"`
 	Ports    []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
 	// L7 fields (populated from Cilium/Hubble data)
 	L7Type     string `json:"l7Type,omitempty"`
@@ -120,8 +116,8 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 
-	// Flows are buffered for 24h, so a deleted pod would keep its edges for a
-	// day. ipMap is already the set of pods that currently exist, so derive the
+	// A deleted pod would otherwise keep its edges for the rest of the window.
+	// ipMap is already the set of pods that currently exist, so derive the
 	// live set from it rather than making another API call.
 	livePods := make(map[string]bool, len(ipMap))
 	for _, info := range ipMap {
@@ -261,9 +257,10 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 
 	// One verdict per pair: the most recent one. Blocked used to win outright,
 	// which left a denial on the graph after its policy was deleted and — worse —
-	// suppressed the allowed edge that replaced it, for as long as the 24h buffer
-	// held the stale entry. Recency makes the graph correct itself as soon as
-	// traffic flows again.
+	// suppressed the allowed edge that replaced it, for as long as the buffer held
+	// the stale entry. Recency makes the graph correct itself as soon as traffic
+	// flows again — lastSeen is still tracked for exactly this, even though no
+	// age reaches the response.
 	type pairTimes struct{ blocked, allowed time.Time }
 	pairs := make(map[string]*pairTimes, len(edgeMap))
 	for k, ev := range edgeMap {
@@ -318,7 +315,6 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			Count:      ev.count,
 			Blocked:    k.blocked,
 			DeniedBy:   ev.deniedBy,
-			LastSeen:   ev.lastSeen.UTC().Format(time.RFC3339),
 			Ports:      portStats(ev.ports),
 			L7Type:     ev.l7Type,
 			HTTPMethod: ev.httpMethod,
