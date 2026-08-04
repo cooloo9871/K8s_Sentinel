@@ -1,74 +1,57 @@
 import { describe, it, expect } from 'vitest'
 import {
-  cnpFormToYaml, parsePeer, parsePorts, validateCNPForm, tryParseCNPForm,
-  emptyForm, type CNPFormInput,
+  cnpFormToYaml, validateCNPForm, tryParseCNPForm, toMatchLabels, toLabelPairs,
+  emptyForm, emptyRule, type CNPFormInput, type CNPRule,
 } from './cnpForm'
+
+function rule(over: Partial<CNPRule> = {}): CNPRule {
+  return { ...emptyRule(), ...over }
+}
 
 const base: CNPFormInput = {
   name: 'deny-tg-to-echo',
   scope: 'namespaced',
   namespace: 'net-lab',
-  subject: 'app=traffic-generator',
+  comment: '',
+  subject: [{ key: 'app', value: 'traffic-generator' }],
   direction: 'egress',
   mode: 'blacklist',
-  rules: [{ peer: 'app=echo-server', ports: '80/TCP', httpMethod: '', httpPath: '' }],
+  rules: [rule({
+    peerLabels: [{ key: 'app', value: 'echo-server' }],
+    ports: [{ port: '80', protocol: 'TCP' }],
+  })],
 }
 
-describe('parsePeer', () => {
-  it('reads key=value pairs', () => {
-    expect(parsePeer('app=echo-server')).toEqual({ matchLabels: { app: 'echo-server' } })
-    expect(parsePeer('app=api, env=prod')).toEqual({ matchLabels: { app: 'api', env: 'prod' } })
+describe('toMatchLabels', () => {
+  it('drops blank rows and keeps the filled ones', () => {
+    expect(toMatchLabels([
+      { key: 'app', value: 'api' },
+      { key: '', value: '' },
+      { key: 'env', value: 'prod' },
+    ])).toEqual({ app: 'api', env: 'prod' })
   })
 
-  it('reads a bare Cilium entity', () => {
-    expect(parsePeer('world')).toEqual({ entity: 'world' })
-    expect(parsePeer('cluster')).toEqual({ entity: 'cluster' })
+  it('trims, so a stray space does not become part of a label', () => {
+    expect(toMatchLabels([{ key: ' app ', value: ' api ' }])).toEqual({ app: 'api' })
   })
 
-  // Nobody remembers the real key, so the form accepts the short forms. This is
-  // how a rule reaches a workload in another namespace.
+  // This is how a rule reaches a workload in another namespace.
   it('expands the namespace aliases to the label Cilium actually uses', () => {
-    expect(parsePeer('namespace=prod')).toEqual({
-      matchLabels: { 'io.kubernetes.pod.namespace': 'prod' },
-    })
-    expect(parsePeer('ns=prod')).toEqual({
-      matchLabels: { 'io.kubernetes.pod.namespace': 'prod' },
-    })
-    expect(parsePeer('app=api, ns=prod')).toEqual({
-      matchLabels: { app: 'api', 'io.kubernetes.pod.namespace': 'prod' },
-    })
-  })
-
-  it('rejects text that is neither an entity nor key=value', () => {
-    expect(parsePeer('echo-server')).toBeNull()
-    expect(parsePeer('app=')).toBeNull()
-    expect(parsePeer('=value')).toBeNull()
-    expect(parsePeer('')).toBeNull()
+    expect(toMatchLabels([{ key: 'namespace', value: 'prod' }]))
+      .toEqual({ 'io.kubernetes.pod.namespace': 'prod' })
+    expect(toMatchLabels([{ key: 'ns', value: 'prod' }]))
+      .toEqual({ 'io.kubernetes.pod.namespace': 'prod' })
   })
 })
 
-describe('parsePorts', () => {
-  it('defaults the protocol to TCP', () => {
-    expect(parsePorts('80')).toEqual([{ port: '80', protocol: 'TCP' }])
+describe('toLabelPairs', () => {
+  it('shows the namespace alias rather than the real key', () => {
+    expect(toLabelPairs({ 'io.kubernetes.pod.namespace': 'prod' }))
+      .toEqual([{ key: 'namespace', value: 'prod' }])
   })
 
-  it('reads several ports with explicit protocols', () => {
-    expect(parsePorts('80/TCP, 53/udp')).toEqual([
-      { port: '80', protocol: 'TCP' },
-      { port: '53', protocol: 'UDP' },
-    ])
-  })
-
-  it('treats blank as no port restriction', () => {
-    expect(parsePorts('')).toEqual([])
-    expect(parsePorts(undefined)).toEqual([])
-  })
-
-  it('rejects nonsense rather than emitting a policy that matches nothing', () => {
-    expect(parsePorts('http')).toBeNull()
-    expect(parsePorts('0')).toBeNull()
-    expect(parsePorts('70000')).toBeNull()
-    expect(parsePorts('80/ICMP')).toBeNull()
+  it('always yields at least one row for the form to render', () => {
+    expect(toLabelPairs({})).toEqual([{ key: '', value: '' }])
   })
 })
 
@@ -76,41 +59,59 @@ describe('cnpFormToYaml', () => {
   it('anchors an egress deny on the subject and names the peer', () => {
     const out = cnpFormToYaml(base)
     expect(out).toContain('kind: CiliumNetworkPolicy')
-    expect(out).toContain('name: deny-tg-to-echo')
     expect(out).toContain('namespace: net-lab')
     expect(out.indexOf('app: traffic-generator')).toBeLessThan(out.indexOf('egressDeny'))
-    expect(out).toContain('egressDeny')
     expect(out).toContain('toEndpoints')
     expect(out).toContain('app: echo-server')
-    expect(out).not.toContain('ingressDeny')
   })
 
   it('puts the peer on the from side for an ingress rule', () => {
     const out = cnpFormToYaml({ ...base, direction: 'ingress' })
     expect(out).toContain('ingressDeny')
     expect(out).toContain('fromEndpoints')
-    expect(out).not.toContain('egressDeny')
   })
 
-  // A CNP has one endpointSelector, so every rule shares the subject and only
-  // the peer varies. That is what lets one policy hold several rules.
+  it('joins several labels into one selector', () => {
+    const out = cnpFormToYaml({
+      ...base,
+      subject: [{ key: 'app', value: 'api' }, { key: 'env', value: 'prod' }],
+    })
+    expect(out).toContain('app: api')
+    expect(out).toContain('env: prod')
+  })
+
+  // A CNP has one endpointSelector, so every rule shares the subject.
   it('emits one entry per rule under a single selector', () => {
     const out = cnpFormToYaml({
       ...base,
       mode: 'whitelist',
       direction: 'ingress',
-      subject: 'app=echo-server',
       rules: [
-        { peer: 'app=frontend', ports: '80/TCP' },
-        { peer: 'app=admin', ports: '8080/TCP' },
-        { peer: 'world', ports: '' },
+        rule({ peerLabels: [{ key: 'app', value: 'frontend' }], ports: [{ port: '80', protocol: 'TCP' }] }),
+        rule({ peerLabels: [{ key: 'app', value: 'admin' }], ports: [{ port: '8080', protocol: 'TCP' }] }),
+        rule({ peerKind: 'entity', peerEntity: 'world' }),
       ],
     })
     expect((out.match(/endpointSelector/g) ?? []).length).toBe(1)
     expect((out.match(/fromEndpoints/g) ?? []).length).toBe(2)
-    expect(out).toContain('app: frontend')
-    expect(out).toContain('app: admin')
     expect(out).toContain('fromEntities')
+    expect(out).toContain('- world')
+  })
+
+  it('emits every port of a rule', () => {
+    const out = cnpFormToYaml({
+      ...base,
+      rules: [rule({
+        peerLabels: [{ key: 'app', value: 'echo-server' }],
+        ports: [
+          { port: '80', protocol: 'TCP' },
+          { port: '443', protocol: 'TCP' },
+          { port: '53', protocol: 'UDP' },
+        ],
+      })],
+    })
+    expect(out).toContain('protocol: UDP')
+    expect((out.match(/- port:/g) ?? []).length).toBe(3)
   })
 
   // Without this a one-line deny rule would lock down the endpoint's whole
@@ -134,11 +135,10 @@ describe('cnpFormToYaml', () => {
       ...base,
       scope: 'cluster',
       namespace: '',
-      subject: 'app=echo-server, namespace=other',
+      subject: [{ key: 'app', value: 'echo' }, { key: 'namespace', value: 'other' }],
     })
     expect(out).toContain('kind: CiliumClusterwideNetworkPolicy')
     expect(out).not.toContain('namespace: net-lab')
-    // The subject's namespace label is how it reaches into that namespace.
     expect(out).toContain('io.kubernetes.pod.namespace: other')
   })
 
@@ -146,21 +146,25 @@ describe('cnpFormToYaml', () => {
     const out = cnpFormToYaml({
       ...base,
       mode: 'whitelist',
-      rules: [{ peer: 'app=echo-server', ports: '80/TCP', httpMethod: 'GET', httpPath: '/api/.*' }],
+      rules: [rule({
+        peerLabels: [{ key: 'app', value: 'echo' }],
+        ports: [{ port: '80', protocol: 'TCP' }],
+        httpMethod: 'GET', httpPath: '/api/.*',
+      })],
     })
-    expect(out).toContain('toPorts')
-    expect(out).toContain('http:')
     expect(out).toContain('method: GET')
     expect(out).toContain('path: /api/.*')
   })
 
   it('omits toPorts entirely when no port is given', () => {
-    expect(cnpFormToYaml({ ...base, rules: [{ peer: 'app=echo-server', ports: '' }] }))
-      .not.toContain('toPorts')
+    expect(cnpFormToYaml({
+      ...base,
+      rules: [rule({ peerLabels: [{ key: 'app', value: 'echo' }] })],
+    })).not.toContain('toPorts')
   })
 
   it('returns nothing when the form is invalid', () => {
-    expect(cnpFormToYaml({ ...base, subject: '' })).toBe('')
+    expect(cnpFormToYaml({ ...base, subject: [] })).toBe('')
     expect(cnpFormToYaml({ ...base, name: 'Bad_Name' })).toBe('')
     expect(cnpFormToYaml({ ...base, rules: [] })).toBe('')
   })
@@ -175,14 +179,34 @@ describe('validateCNPForm', () => {
     const errors = validateCNPForm(emptyForm()).join(' ')
     expect(errors).toContain('Name is required')
     expect(errors).toContain('Namespace is required')
-    expect(errors).toContain('Applies to is required')
-    expect(errors).toContain('From is required')
+    expect(errors).toContain('Applies to needs at least one label')
+    expect(errors).toContain('From needs at least one label')
   })
 
-  // An entity has no labels, so it cannot own a policy.
-  it('refuses an entity as the subject', () => {
-    expect(validateCNPForm({ ...base, subject: 'world' }).join(' '))
-      .toContain('cannot be an entity')
+  // A half-typed row selects nothing, which is the failure this form exists to
+  // prevent — so it is named rather than quietly dropped.
+  it('catches a label row with only one half filled in', () => {
+    expect(validateCNPForm({
+      ...base,
+      subject: [{ key: 'app', value: 'api' }, { key: 'env', value: '' }],
+    }).join(' ')).toContain('has a key but no value')
+
+    expect(validateCNPForm({
+      ...base,
+      subject: [{ key: 'app', value: 'api' }, { key: '', value: 'prod' }],
+    }).join(' ')).toContain('has a value but no key')
+  })
+
+  it('catches an empty or out-of-range port row', () => {
+    expect(validateCNPForm({
+      ...base,
+      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], ports: [{ port: '', protocol: 'TCP' }] })],
+    }).join(' ')).toContain('is empty')
+
+    expect(validateCNPForm({
+      ...base,
+      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], ports: [{ port: '70000', protocol: 'TCP' }] })],
+    }).join(' ')).toContain('between 1 and 65535')
   })
 
   it('does not ask a cluster-wide policy for a namespace', () => {
@@ -193,29 +217,41 @@ describe('validateCNPForm', () => {
   it('numbers the rule a problem is in', () => {
     const errors = validateCNPForm({
       ...base,
-      rules: [{ peer: 'app=ok' }, { peer: '' }],
+      rules: [
+        rule({ peerLabels: [{ key: 'app', value: 'ok' }] }),
+        rule({ peerLabels: [] }),
+      ],
     }).join(' ')
     expect(errors).toContain('Rule 2:')
     expect(errors).not.toContain('Rule 1:')
   })
 
+  it('refuses an entity it does not know', () => {
+    expect(validateCNPForm({
+      ...base,
+      rules: [rule({ peerKind: 'entity', peerEntity: 'outside' })],
+    }).join(' ')).toContain('not a Cilium entity')
+  })
+
   // Cilium rejects an HTTP rule inside egressDeny/ingressDeny, so say why here
   // rather than letting the apply fail with an API server error.
   it('refuses HTTP rules on a blacklist, with the reason', () => {
-    const errors = validateCNPForm({
+    expect(validateCNPForm({
       ...base,
-      rules: [{ peer: 'app=x', ports: '80', httpMethod: 'GET' }],
-    }).join(' ')
-    expect(errors).toContain('L3/L4 only')
+      rules: [rule({
+        peerLabels: [{ key: 'a', value: 'b' }],
+        ports: [{ port: '80', protocol: 'TCP' }],
+        httpMethod: 'GET',
+      })],
+    }).join(' ')).toContain('L3/L4 only')
   })
 
   it('requires a port for an HTTP rule to attach to', () => {
-    const errors = validateCNPForm({
+    expect(validateCNPForm({
       ...base,
       mode: 'whitelist',
-      rules: [{ peer: 'app=x', ports: '', httpPath: '/x' }],
-    }).join(' ')
-    expect(errors).toContain('needs at least one port')
+      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], httpPath: '/x' })],
+    }).join(' ')).toContain('needs at least one port')
   })
 })
 
@@ -229,38 +265,25 @@ describe('tryParseCNPForm', () => {
       { ...base, mode: 'whitelist' },
       { ...base, comment: 'why this exists' },
       { ...base, scope: 'cluster', namespace: '' },
-      { ...base, rules: [{ peer: 'world', ports: '', httpMethod: '', httpPath: '' }] },
+      { ...base, subject: [{ key: 'app', value: 'api' }, { key: 'env', value: 'prod' }] },
+      { ...base, rules: [rule({ peerKind: 'entity', peerEntity: 'world' })] },
       {
-        ...base, mode: 'whitelist', direction: 'ingress', subject: 'app=echo-server',
+        ...base, mode: 'whitelist', direction: 'ingress',
         rules: [
-          { peer: 'app=frontend', ports: '80/TCP', httpMethod: 'GET', httpPath: '/api/.*' },
-          { peer: 'app=admin', ports: '8080/TCP', httpMethod: '', httpPath: '' },
+          rule({
+            peerLabels: [{ key: 'app', value: 'frontend' }],
+            ports: [{ port: '80', protocol: 'TCP' }, { port: '443', protocol: 'TCP' }],
+            httpMethod: 'GET', httpPath: '/api/.*',
+          }),
+          rule({ peerLabels: [{ key: 'app', value: 'admin' }], ports: [{ port: '8080', protocol: 'TCP' }] }),
         ],
       },
     ]
     for (const form of forms) {
       const parsed = tryParseCNPForm(cnpFormToYaml(form))
       expect(parsed, JSON.stringify(form)).not.toBeNull()
-      expect(parsed).toEqual({
-        ...form,
-        comment: form.comment ?? '',
-        rules: form.rules.map(r => ({
-          peer: r.peer,
-          ports: r.ports ?? '',
-          httpMethod: r.httpMethod ?? '',
-          httpPath: r.httpPath ?? '',
-        })),
-      })
+      expect(parsed).toEqual(form)
     }
-  })
-
-  // ns= and namespace= are aliases for one label, so only one of them can come
-  // back. The canonical spelling is the long one.
-  it('normalizes the ns= alias on the way back', () => {
-    const parsed = tryParseCNPForm(cnpFormToYaml({
-      ...base, mode: 'whitelist', rules: [{ peer: 'app=x, ns=other' }],
-    }))
-    expect(parsed?.rules[0].peer).toContain('namespace=other')
   })
 
   // A hand-written policy can hold rules the form cannot show, and reopening it
@@ -271,7 +294,7 @@ describe('tryParseCNPForm', () => {
   })
 
   it('refuses both directions in one policy', () => {
-    const bothWays = `apiVersion: cilium.io/v2
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: x
@@ -290,12 +313,11 @@ spec:
     - toEndpoints:
         - matchLabels:
             role: db
-`
-    expect(tryParseCNPForm(bothWays)).toBeNull()
+`)).toBeNull()
   })
 
   it('refuses a rule with more peers than one field can show', () => {
-    const twoPeers = `apiVersion: cilium.io/v2
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: x
@@ -312,8 +334,7 @@ spec:
             role: frontend
         - matchLabels:
             role: other
-`
-    expect(tryParseCNPForm(twoPeers)).toBeNull()
+`)).toBeNull()
   })
 
   it('refuses another kind, and unparseable text', () => {

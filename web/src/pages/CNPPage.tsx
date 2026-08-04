@@ -25,8 +25,10 @@ import { cnpApi, namespaceApi, type CNPRecord } from '../api/client'
 import { NamespaceSelect } from '../components/NamespaceSelect'
 import {
   cnpFormToYaml, validateCNPForm, tryParseCNPForm, peerLabel,
-  emptyForm, emptyRule, HTTP_METHODS,
+  emptyForm, emptyRule, emptyLabel, emptyPort,
+  HTTP_METHODS, PROTOCOLS, ENTITIES,
   type CNPFormInput, type CNPRule, type CNPDirection, type CNPMode, type CNPScope,
+  type PeerKind, type LabelPair,
 } from '../utils/cnpForm'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
@@ -35,6 +37,53 @@ function DenyBadge({ deny }: { deny: CNPRecord['defaultDeny'] }) {
   if (!deny) return <span className="text-muted-foreground text-xs">—</span>
   const label = deny === 'both' ? 'Ingress + Egress' : deny === 'ingress' ? 'Ingress' : 'Egress'
   return <Badge variant="destructive" className="text-[10px]">{label}</Badge>
+}
+
+function LabelRows({ title, required, hint, pairs, onChange }: {
+  title: string
+  required?: boolean
+  hint?: string
+  pairs: LabelPair[]
+  onChange: (pairs: LabelPair[]) => void
+}) {
+  const set = (i: number, key: keyof LabelPair, value: string) =>
+    onChange(pairs.map((p, pi) => (pi === i ? { ...p, [key]: value } : p)))
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">
+          {title}
+          {required && <span className="text-destructive">*</span>}
+        </Label>
+        <Button variant="outline" size="sm" className="h-7 text-xs"
+          onClick={() => onChange([...pairs, emptyLabel()])}>
+          + Add label
+        </Button>
+      </div>
+      {pairs.map((p, i) => (
+        <div key={i} className="flex items-end gap-2">
+          <div className="flex flex-1 flex-col gap-1">
+            <span className="text-[11px] text-muted-foreground">Key</span>
+            <Input value={p.key} onChange={e => set(i, 'key', e.target.value)}
+              className="h-8 font-mono text-sm" />
+          </div>
+          <div className="flex flex-1 flex-col gap-1">
+            <span className="text-[11px] text-muted-foreground">Value</span>
+            <Input value={p.value} onChange={e => set(i, 'value', e.target.value)}
+              className="h-8 font-mono text-sm" />
+          </div>
+          {pairs.length > 1 && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+              onClick={() => onChange(pairs.filter((_, pi) => pi !== i))}>
+              Remove
+            </Button>
+          )}
+        </div>
+      ))}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  )
 }
 
 function Field({ label, required, hint, className, children }: {
@@ -263,8 +312,8 @@ export function CNPPage() {
                   <Field
                     label="Scope"
                     hint={form.scope === 'cluster'
-                      ? 'Cluster-wide: the selector can reach pods in any namespace.'
-                      : 'Namespaced: the selector only matches pods in this namespace.'}
+                      ? 'The selector can reach pods in any namespace.'
+                      : 'The selector only matches pods in this namespace.'}
                   >
                     <Select value={form.scope} onValueChange={v => setField('scope', v as CNPScope)}
                       disabled={!!editing}>
@@ -296,16 +345,15 @@ export function CNPPage() {
 
                 {/* A Cilium policy has one endpointSelector, so the subject is
                     set once here and every rule below shares it. */}
-                <Field
-                  label="Applies to"
+                <LabelRows
+                  title="Applies to"
                   required
                   hint={form.scope === 'cluster'
-                    ? 'The endpoints this policy governs. Add namespace=<ns> to reach another namespace.'
+                    ? 'The endpoints this policy governs. Add namespace to reach another one.'
                     : 'The endpoints this policy governs, within this namespace.'}
-                >
-                  <Input value={form.subject} onChange={e => setField('subject', e.target.value)}
-                    className="h-9 font-mono text-sm" />
-                </Field>
+                  pairs={form.subject}
+                  onChange={pairs => setField('subject', pairs)}
+                />
 
                 <div className="grid grid-cols-2 gap-4">
                   <Field
@@ -345,30 +393,91 @@ export function CNPPage() {
                 <div className="flex flex-col gap-3 border-t pt-4">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Rules</Label>
-                    <Button variant="outline" size="sm" onClick={addRule}>+ Add</Button>
+                    <Button variant="outline" size="sm" onClick={addRule}>+ Add rule</Button>
                   </div>
 
                   {form.rules.map((r, i) => (
                     <div key={i} className="flex flex-col gap-3 rounded-md border p-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">Rule {i + 1}</span>
+                        <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
                         {form.rules.length > 1 && (
-                          <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive hover:text-destructive"
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
                             onClick={() => removeRule(i)}>
                             Remove
                           </Button>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <Field
+                        label={`${peerLabel(form.direction)} — kind`}
+                        hint={r.peerKind === 'entity'
+                          ? 'A reserved Cilium identity, which has no labels to select.'
+                          : undefined}
+                      >
+                        <Select value={r.peerKind}
+                          onValueChange={v => setRule(i, 'peerKind', v as PeerKind)}>
+                          <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="labels">Labels</SelectItem>
+                              <SelectItem value="entity">Entity</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </Field>
+
+                      {r.peerKind === 'entity' ? (
                         <Field label={peerLabel(form.direction)} required>
-                          <Input value={r.peer} onChange={e => setRule(i, 'peer', e.target.value)}
-                            className="h-9 font-mono text-sm" />
+                          <Select value={r.peerEntity}
+                            onValueChange={v => setRule(i, 'peerEntity', v)}>
+                            <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {ENTITIES.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
                         </Field>
-                        <Field label="Ports">
-                          <Input value={r.ports} onChange={e => setRule(i, 'ports', e.target.value)}
-                            className="h-9 font-mono text-sm" />
-                        </Field>
+                      ) : (
+                        <LabelRows
+                          title={peerLabel(form.direction)}
+                          required
+                          pairs={r.peerLabels}
+                          onChange={pairs => setRule(i, 'peerLabels', pairs)}
+                        />
+                      )}
+
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Ports</Label>
+                          <Button variant="outline" size="sm" className="h-7 text-xs"
+                            onClick={() => setRule(i, 'ports', [...r.ports, emptyPort()])}>
+                            + Add port
+                          </Button>
+                        </div>
+                        {r.ports.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">No port restriction — every port.</p>
+                        ) : r.ports.map((p, pi) => (
+                          <div key={pi} className="flex items-center gap-2">
+                            <Input value={p.port} className="h-8 flex-1 font-mono text-sm"
+                              onChange={e => setRule(i, 'ports',
+                                r.ports.map((q, qi) => qi === pi ? { ...q, port: e.target.value } : q))} />
+                            <Select value={p.protocol}
+                              onValueChange={v => setRule(i, 'ports',
+                                r.ports.map((q, qi) => qi === pi ? { ...q, protocol: v } : q))}>
+                              <SelectTrigger className="h-8 w-24 text-sm"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  {PROTOCOLS.map(pr => <SelectItem key={pr} value={pr}>{pr}</SelectItem>)}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                              onClick={() => setRule(i, 'ports', r.ports.filter((_, qi) => qi !== pi))}>
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
