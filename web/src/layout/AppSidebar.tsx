@@ -54,7 +54,10 @@ const GROUPS: NavGroup[] = [
   },
 ]
 
-const ITEM_CLASS = 'h-9 text-base'
+// A group header is a top-level entry, the same rank as the ungrouped links, so
+// they share a size. The links inside a group are the larger ones.
+const TOP_LEVEL_CLASS = 'h-9 text-base'
+const GROUP_ITEM_CLASS = 'h-10 text-lg'
 
 export function AppSidebar() {
   const { pathname } = useLocation()
@@ -89,12 +92,12 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/dashboard')} className={ITEM_CLASS}>
+                <SidebarMenuButton asChild isActive={isActive('/dashboard')} className={TOP_LEVEL_CLASS}>
                   <NavLink to="/dashboard">Dashboard</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/network/topology')} className={ITEM_CLASS}>
+                <SidebarMenuButton asChild isActive={isActive('/network/topology')} className={TOP_LEVEL_CLASS}>
                   <NavLink to="/network/topology">Network Topology</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -111,7 +114,7 @@ export function AppSidebar() {
                   type="button"
                   aria-expanded={expanded}
                   onClick={() => toggle(group.label)}
-                  className="h-10 w-full cursor-pointer justify-between text-lg hover:text-sidebar-foreground"
+                  className={`${TOP_LEVEL_CLASS} w-full cursor-pointer justify-between hover:text-sidebar-foreground`}
                 >
                   {group.label}
                   <IconChevronRight
@@ -124,7 +127,7 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {group.items.map(item => (
                       <SidebarMenuItem key={item.to}>
-                        <SidebarMenuButton asChild isActive={isActive(item.to)} className={ITEM_CLASS}>
+                        <SidebarMenuButton asChild isActive={isActive(item.to)} className={GROUP_ITEM_CLASS}>
                           <NavLink to={item.to}>{item.label}</NavLink>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
