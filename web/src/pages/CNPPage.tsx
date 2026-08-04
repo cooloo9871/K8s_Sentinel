@@ -21,7 +21,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { YamlEditor } from '../components/YamlEditor'
 import { formatTWTime } from '../utils/time'
-import { cnpApi, type CNPRecord } from '../api/client'
+import { cnpApi, namespaceApi, type CNPRecord } from '../api/client'
+import { NamespaceSelect } from '../components/NamespaceSelect'
 import {
   cnpFormToYaml, validateCNPForm, tryParseCNPForm, peerLabel,
   emptyForm, emptyRule, HTTP_METHODS,
@@ -66,6 +67,10 @@ export function CNPPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [nsFilter, setNsFilter] = useState(SCOPE_ALL)
+  // Every namespace in the cluster, for the form. The filter's list comes from
+  // the loaded policies instead, since filtering to an empty one is a dead end —
+  // but creating a policy in a namespace that has none yet is the normal case.
+  const [clusterNamespaces, setClusterNamespaces] = useState<string[]>([])
 
   // Editor state — open for create (editing=null) or edit (editing=record)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -94,6 +99,7 @@ export function CNPPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { namespaceApi.list().then(setClusterNamespaces).catch(() => {}) }, [])
 
   const formErrors = useMemo(() => validateCNPForm(form), [form])
   const formYaml = useMemo(() => cnpFormToYaml(form), [form])
@@ -275,9 +281,12 @@ export function CNPPage() {
 
                 {form.scope === 'namespaced' && (
                   <Field label="Namespace" required>
-                    <Input value={form.namespace} onChange={e => setField('namespace', e.target.value)}
-                      readOnly={!!editing}
-                      className={`h-9 ${editing ? 'cursor-default opacity-60' : ''}`} />
+                    <NamespaceSelect
+                      value={form.namespace}
+                      onChange={v => setField('namespace', v)}
+                      namespaces={clusterNamespaces}
+                      disabled={!!editing}
+                    />
                   </Field>
                 )}
 

@@ -22,7 +22,8 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import yaml from 'js-yaml'
-import { vapApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
+import { vapApi, namespaceApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
+import { NamespaceSelect } from '../components/NamespaceSelect'
 import { YamlEditor } from '../components/YamlEditor'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
@@ -723,6 +724,7 @@ export function VAPPage() {
   const [bindingName, setBindingName] = useState('')
   const [bindingPolicy, setBindingPolicy] = useState('')
   const [bindingNamespace, setBindingNamespace] = useState('')
+  const [clusterNamespaces, setClusterNamespaces] = useState<string[]>([])
   const [bindingActions, setBindingActions] = useState<Set<ValidationAction>>(new Set(['Deny']))
   const [bindingBuilderSaving, setBindingBuilderSaving] = useState(false)
 
@@ -739,6 +741,7 @@ export function VAPPage() {
 
   // Show spinner only on first load; subsequent navigations silently refresh in background
   useEffect(() => { load(!hasLoaded.current) }, [load])
+  useEffect(() => { namespaceApi.list().then(setClusterNamespaces).catch(() => {}) }, [])
 
   const openNew = (kind: 'policy' | 'binding') => {
     setEditorYaml('')
@@ -1335,7 +1338,12 @@ export function VAPPage() {
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="binding-ns">Namespace</Label>
-                <Input id="binding-ns" value={bindingNamespace} onChange={e => setBindingNamespace(e.target.value)} placeholder="Leave empty to match all namespaces" />
+                <NamespaceSelect
+                  value={bindingNamespace}
+                  onChange={setBindingNamespace}
+                  namespaces={clusterNamespaces}
+                  noneLabel="All namespaces"
+                />
                 <p className="text-xs text-muted-foreground">
                   {bindingNamespace.trim()
                     ? `Applies to namespace: ${bindingNamespace.trim()}`

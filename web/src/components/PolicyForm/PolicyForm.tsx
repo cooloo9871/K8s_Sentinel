@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { NamespaceSelect } from '../NamespaceSelect'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,6 @@ import type { PolicyFormInput } from '../../api/types'
 
 type LabelEntry = { key: string; value: string }
 
-const CLUSTER_WIDE = '__cluster_wide__'
 
 interface Props {
   namespaces: string[]
@@ -107,24 +107,14 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Namespace</Label>
-                <Select
-                  value={value.namespace ?? CLUSTER_WIDE}
-                  onValueChange={(v) =>
-                    onChange({ ...value, namespace: v === CLUSTER_WIDE ? undefined : v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value={CLUSTER_WIDE}>cluster-wide</SelectItem>
-                      {namespaces.map((n) => (
-                        <SelectItem key={n} value={n}>{n}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                {/* undefined, not '', is what selects the cluster-wide kind, so
+                    the two are mapped at this boundary. */}
+                <NamespaceSelect
+                  value={value.namespace ?? ''}
+                  onChange={(v) => onChange({ ...value, namespace: v || undefined })}
+                  namespaces={namespaces}
+                  noneLabel="cluster-wide"
+                />
               </div>
             </div>
           </CardContent>
