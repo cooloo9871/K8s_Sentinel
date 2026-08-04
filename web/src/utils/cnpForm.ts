@@ -5,8 +5,18 @@ import yaml from 'js-yaml'
 // the other side as a peer, so the form asks which side to enforce on and this
 // module does the translation.
 
-export type CNPAction = 'allow' | 'deny'
+// The choice is not "does this rule allow or deny" — it is which policy model
+// to write. A blacklist blocks the one flow named and leaves everything else
+// alone; a whitelist permits the one flow named and drops everything else
+// reaching the endpoint, because in Cilium an allow section switches that
+// endpoint to default-deny for the direction. Calling that "Allow" hid the
+// second half.
+export type CNPMode = 'blacklist' | 'whitelist'
 export type CNPDirection = 'ingress' | 'egress'
+
+// Written on the policies this form generates, so editing one can reopen the
+// form instead of dropping to raw YAML. Matches how Admission Policy does it.
+export const BUILDER_ANNOTATION = 'sentinel.io/builder'
 
 export interface CNPFormInput {
   name: string
@@ -16,7 +26,7 @@ export interface CNPFormInput {
   to: string
   direction: CNPDirection
   ports?: string
-  action: CNPAction
+  mode: CNPMode
   httpMethod?: string
   httpPath?: string
 }
@@ -113,8 +123,8 @@ export function validateCNPForm(input: CNPFormInput): string[] {
     // Cilium deny rules match on L3/L4 only. An HTTP rule under egressDeny or
     // ingressDeny is rejected by the API server, so refuse it here with a
     // reason instead of letting the apply fail.
-    if (input.action === 'deny') {
-      errors.push('HTTP rules cannot be combined with Deny — Cilium deny rules match on L3/L4 only.')
+    if (input.mode === 'blacklist') {
+      errors.push('HTTP rules cannot be combined with a blacklist — Cilium deny rules match on L3/L4 only.')
     }
     // An L7 rule lives under toPorts, so there has to be a port to attach it to.
     if (ports !== null && ports.length === 0) {
@@ -186,7 +196,7 @@ export function cnpFormToYaml(input: CNPFormInput): string {
   }
   if (input.comment?.trim()) spec.description = input.comment.trim()
 
-  if (input.action === 'deny') {
+  if (input.mode === 'blacklist') {
     // Without this, adding a deny rule would also switch the endpoint to
     // default-deny for the whole direction — denying far more than the one rule
     // the operator wrote.
@@ -199,7 +209,102 @@ export function cnpFormToYaml(input: CNPFormInput): string {
   return yaml.dump({
     apiVersion: 'cilium.io/v2',
     kind: 'CiliumNetworkPolicy',
-    metadata: { name: input.name.trim(), namespace: input.namespace.trim() },
+    metadata: {
+      name: input.name.trim(),
+      namespace: input.namespace.trim(),
+      annotations: { [BUILDER_ANNOTATION]: 'true' },
+    },
     spec,
   }, { noRefs: true, lineWidth: 120 })
+}
+
+/** Renders a peer back into the text the From/To fields accept. */
+function peerToText(peer: Peer): string {
+  if (peer.entity) return peer.entity
+  return Object.entries(peer.matchLabels ?? {})
+    // Emit the alias, not the real key: it is what the field shows and it parses
+    // back to the same label.
+    .map(([k, v]) => `${k === NAMESPACE_KEY ? 'namespace' : k}=${v}`)
+    .join(', ')
+}
+
+interface ParsedDoc {
+  kind?: string
+  metadata?: { name?: string; namespace?: string; annotations?: Record<string, unknown> }
+  spec?: Record<string, unknown>
+}
+
+/**
+ * Reads a policy this form generated back into form state, so editing it can
+ * reopen the form. Returns null for anything else — a policy written by hand can
+ * hold rules these fields cannot represent, and reopening it here would
+ * silently discard them on save. The caller falls back to the YAML editor.
+ */
+export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
+  let doc: ParsedDoc
+  try {
+    doc = yaml.load(rawYaml) as ParsedDoc
+  } catch {
+    return null
+  }
+  if (doc?.kind !== 'CiliumNetworkPolicy') return null
+  if (String(doc.metadata?.annotations?.[BUILDER_ANNOTATION]) !== 'true') return null
+
+  const spec = doc.spec
+  const subjectLabels = (spec?.endpointSelector as { matchLabels?: Record<string, string> } | undefined)?.matchLabels
+  if (!spec || !subjectLabels || Object.keys(subjectLabels).length === 0) return null
+
+  // Exactly one rule section, holding exactly one rule — more than that is not
+  // something this form can show.
+  const sections: { key: string; direction: CNPDirection; mode: CNPMode }[] = [
+    { key: 'ingressDeny', direction: 'ingress', mode: 'blacklist' },
+    { key: 'egressDeny', direction: 'egress', mode: 'blacklist' },
+    { key: 'ingress', direction: 'ingress', mode: 'whitelist' },
+    { key: 'egress', direction: 'egress', mode: 'whitelist' },
+  ]
+  const present = sections.filter(s => Array.isArray(spec[s.key]))
+  if (present.length !== 1) return null
+  const section = present[0]
+  const rules = spec[section.key] as Rule[]
+  if (rules.length !== 1) return null
+  const rule = rules[0]
+
+  const isIngress = section.direction === 'ingress'
+  const endpoints = isIngress ? rule.fromEndpoints : rule.toEndpoints
+  const entities = isIngress ? rule.fromEntities : rule.toEntities
+  let peer: Peer | null = null
+  if (endpoints?.length === 1) peer = { matchLabels: endpoints[0].matchLabels }
+  else if (entities?.length === 1) peer = { entity: entities[0] }
+  if (!peer) return null
+
+  let ports = ''
+  let httpMethod = ''
+  let httpPath = ''
+  if (rule.toPorts) {
+    if (rule.toPorts.length !== 1) return null
+    const pr = rule.toPorts[0]
+    ports = (pr.ports ?? []).map(p => `${p.port}/${p.protocol}`).join(', ')
+    const http = pr.rules?.http
+    if (http) {
+      if (http.length !== 1) return null
+      httpMethod = http[0].method ?? ''
+      httpPath = http[0].path ?? ''
+    }
+  }
+
+  const subjectText = peerToText({ matchLabels: subjectLabels })
+  const peerText = peerToText(peer)
+
+  return {
+    name: doc.metadata?.name ?? '',
+    namespace: doc.metadata?.namespace ?? '',
+    comment: typeof spec.description === 'string' ? spec.description : '',
+    from: isIngress ? peerText : subjectText,
+    to: isIngress ? subjectText : peerText,
+    direction: section.direction,
+    ports,
+    mode: section.mode,
+    httpMethod,
+    httpPath,
+  }
 }

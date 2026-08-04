@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { cnpFormToYaml, parsePeer, parsePorts, validateCNPForm, type CNPFormInput } from './cnpForm'
+import {
+  cnpFormToYaml, parsePeer, parsePorts, validateCNPForm, tryParseCNPForm,
+  type CNPFormInput,
+} from './cnpForm'
 
 const base: CNPFormInput = {
   name: 'deny-tg-to-echo',
@@ -8,7 +11,7 @@ const base: CNPFormInput = {
   to: 'app=echo-server',
   direction: 'egress',
   ports: '80/TCP',
-  action: 'deny',
+  mode: 'blacklist',
 }
 
 describe('parsePeer', () => {
@@ -90,20 +93,20 @@ describe('cnpFormToYaml', () => {
 
   // Without this a one-line deny rule would lock down the endpoint's whole
   // direction, denying far more than what was written.
-  it('opts out of default-deny for a deny rule, in the rule direction only', () => {
+  it('opts out of default-deny for a blacklist, in the rule direction only', () => {
     expect(cnpFormToYaml(base)).toContain('egress: false')
     expect(cnpFormToYaml({ ...base, direction: 'ingress' })).toContain('ingress: false')
   })
 
-  it('uses the allow sections and leaves default-deny alone for an allow rule', () => {
-    const out = cnpFormToYaml({ ...base, action: 'allow' })
+  it('uses the allow sections and leaves default-deny alone for a whitelist', () => {
+    const out = cnpFormToYaml({ ...base, mode: 'whitelist' })
     expect(out).toContain('egress:')
     expect(out).not.toContain('egressDeny')
     expect(out).not.toContain('enableDefaultDeny')
   })
 
   it('renders an entity peer as toEntities rather than a label selector', () => {
-    const out = cnpFormToYaml({ ...base, to: 'world', action: 'allow' })
+    const out = cnpFormToYaml({ ...base, to: 'world', mode: 'whitelist' })
     expect(out).toContain('toEntities')
     expect(out).toContain('- world')
     expect(out).not.toContain('toEndpoints')
@@ -111,7 +114,7 @@ describe('cnpFormToYaml', () => {
 
   it('attaches an HTTP rule under toPorts', () => {
     const out = cnpFormToYaml({
-      ...base, action: 'allow', httpMethod: 'GET', httpPath: '/api/.*',
+      ...base, mode: 'whitelist', httpMethod: 'GET', httpPath: '/api/.*',
     })
     expect(out).toContain('toPorts')
     expect(out).toContain('rules:')
@@ -149,13 +152,109 @@ describe('validateCNPForm', () => {
 
   // Cilium rejects an HTTP rule inside egressDeny/ingressDeny, so say why here
   // rather than letting the apply fail with an API server error.
-  it('refuses HTTP rules on a deny action, with the reason', () => {
+  it('refuses HTTP rules on a blacklist, with the reason', () => {
     const errors = validateCNPForm({ ...base, httpMethod: 'GET' })
     expect(errors.join(' ')).toContain('L3/L4 only')
   })
 
   it('requires a port for an HTTP rule to attach to', () => {
-    const errors = validateCNPForm({ ...base, action: 'allow', ports: '', httpPath: '/x' })
+    const errors = validateCNPForm({ ...base, mode: 'whitelist', ports: '', httpPath: '/x' })
     expect(errors.join(' ')).toContain('needs at least one port')
+  })
+})
+
+describe('tryParseCNPForm', () => {
+  // What the form generated must read back as what was typed, or Edit would show
+  // something different from what is deployed.
+  it('round-trips every field', () => {
+    const forms: CNPFormInput[] = [
+      base,
+      { ...base, direction: 'ingress' },
+      { ...base, mode: 'whitelist' },
+      { ...base, mode: 'whitelist', httpMethod: 'GET', httpPath: '/api/.*' },
+      { ...base, comment: 'why this exists' },
+      { ...base, ports: '' },
+      { ...base, to: 'world', mode: 'whitelist' },
+      { ...base, from: 'app=api, env=prod' },
+      { ...base, to: 'namespace=other', mode: 'whitelist' },
+    ]
+    for (const form of forms) {
+      const parsed = tryParseCNPForm(cnpFormToYaml(form))
+      expect(parsed, JSON.stringify(form)).not.toBeNull()
+      // Blank optional fields come back as '' rather than undefined.
+      expect(parsed).toEqual({
+        ...form,
+        comment: form.comment ?? '',
+        ports: form.ports ?? '',
+        httpMethod: form.httpMethod ?? '',
+        httpPath: form.httpPath ?? '',
+      })
+    }
+  })
+
+  // ns= and namespace= are aliases for one label, so only one of them can come
+  // back. The canonical spelling is the long one.
+  it('normalizes the ns= alias on the way back', () => {
+    const parsed = tryParseCNPForm(cnpFormToYaml({ ...base, to: 'ns=other', mode: 'whitelist' }))
+    expect(parsed?.to).toBe('namespace=other')
+  })
+
+  // A hand-written policy can hold rules the form cannot show, and reopening it
+  // there would drop them on save.
+  it('refuses a policy without the builder annotation', () => {
+    const yaml = cnpFormToYaml(base).replace('sentinel.io/builder: \'true\'', 'other: \'true\'')
+    expect(tryParseCNPForm(yaml)).toBeNull()
+  })
+
+  it('refuses more rules than the form can show', () => {
+    const twoRules = `apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector:
+    matchLabels:
+      role: backend
+  ingressDeny:
+    - fromEndpoints:
+        - matchLabels:
+            role: frontend
+    - fromEndpoints:
+        - matchLabels:
+            role: other
+`
+    expect(tryParseCNPForm(twoRules)).toBeNull()
+  })
+
+  it('refuses both directions in one policy', () => {
+    const bothWays = `apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector:
+    matchLabels:
+      role: backend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            role: frontend
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+`
+    expect(tryParseCNPForm(bothWays)).toBeNull()
+  })
+
+  it('refuses another kind, and unparseable text', () => {
+    expect(tryParseCNPForm('kind: NetworkPolicy')).toBeNull()
+    expect(tryParseCNPForm('::: not yaml :::')).toBeNull()
   })
 })

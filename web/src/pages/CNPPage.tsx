@@ -17,14 +17,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { YamlEditor } from '../components/YamlEditor'
 import { formatTWTime } from '../utils/time'
 import { cnpApi, type CNPRecord } from '../api/client'
 import {
-  cnpFormToYaml, validateCNPForm, HTTP_METHODS,
-  type CNPFormInput, type CNPDirection,
+  cnpFormToYaml, validateCNPForm, tryParseCNPForm, HTTP_METHODS,
+  type CNPFormInput, type CNPDirection, type CNPMode,
 } from '../utils/cnpForm'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
@@ -56,7 +55,7 @@ function Field({ label, required, hint, className, children }: {
 
 const EMPTY_FORM: CNPFormInput = {
   name: '', namespace: '', comment: '', from: '', to: '',
-  direction: 'ingress', ports: '', action: 'deny', httpMethod: '', httpPath: '',
+  direction: 'ingress', ports: '', mode: 'blacklist', httpMethod: '', httpPath: '',
 }
 
 export function CNPPage() {
@@ -113,18 +112,25 @@ export function CNPPage() {
     setEditorOpen(true)
   }
 
-  // Editing goes straight to YAML: an existing policy can hold anything, and
-  // reading arbitrary rules back into these fields would silently drop what the
-  // form cannot express.
+  // A policy this form generated reopens in the form; anything else opens in the
+  // YAML editor, because arbitrary rules can hold what these fields cannot show
+  // and saving would silently drop the rest.
   const openEdit = (p: CNPRecord) => {
     setEditing(p)
-    setMode('yaml')
+    const parsed = tryParseCNPForm(p.rawYaml)
+    if (parsed) {
+      setForm(parsed)
+      setMode('form')
+    } else {
+      setForm(EMPTY_FORM)
+      setMode('yaml')
+    }
     setYamlText(p.rawYaml)
     setYamlValid(true)
     setEditorOpen(true)
   }
 
-  const usingForm = !editing && mode === 'form'
+  const usingForm = mode === 'form'
   const outgoingYaml = usingForm ? formYaml : yamlText
   const canApply = usingForm
     ? formErrors.length === 0 && !!formYaml
@@ -224,7 +230,7 @@ export function CNPPage() {
           </div>
         </div>
 
-        {!editing && (
+        {(!editing || usingForm) && (
           <Tabs value={mode} onValueChange={v => setMode(v as 'form' | 'yaml')} className="mb-4">
             <TabsList>
               <TabsTrigger value="form">Simple rule</TabsTrigger>
@@ -240,10 +246,14 @@ export function CNPPage() {
               <CardContent className="flex flex-col gap-5 p-6">
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Name" required>
-                    <Input value={form.name} onChange={e => setField('name', e.target.value)} className="h-9" />
+                    <Input value={form.name} onChange={e => setField('name', e.target.value)}
+                      readOnly={!!editing}
+                      className={`h-9 ${editing ? 'cursor-default opacity-60' : ''}`} />
                   </Field>
                   <Field label="Namespace" required>
-                    <Input value={form.namespace} onChange={e => setField('namespace', e.target.value)} className="h-9" />
+                    <Input value={form.namespace} onChange={e => setField('namespace', e.target.value)}
+                      readOnly={!!editing}
+                      className={`h-9 ${editing ? 'cursor-default opacity-60' : ''}`} />
                   </Field>
                 </div>
 
@@ -278,29 +288,29 @@ export function CNPPage() {
                   </Select>
                 </Field>
 
-                <div className="flex items-end gap-4">
-                  <Field label="Ports" hint="Blank means every port" className="flex-1">
-                    <Input value={form.ports} onChange={e => setField('ports', e.target.value)} className="h-9 font-mono text-sm" />
-                  </Field>
-                  <div className="flex items-center gap-2.5 pb-2">
-                    <Label className="text-xs">Action</Label>
-                    <Switch
-                      checked={form.action === 'allow'}
-                      onCheckedChange={c => setField('action', c ? 'allow' : 'deny')}
-                    />
-                    <span className={`text-sm font-semibold ${form.action === 'deny' ? 'text-destructive' : 'text-emerald-600'}`}>
-                      {form.action === 'deny' ? 'Deny' : 'Allow'}
-                    </span>
-                  </div>
-                </div>
+                <Field label="Ports" hint="Blank means every port">
+                  <Input value={form.ports} onChange={e => setField('ports', e.target.value)} className="h-9 font-mono text-sm" />
+                </Field>
 
-                {form.action === 'allow' && (
-                  <p className="flex items-start gap-1.5 text-xs text-amber-700">
-                    <IconAlertTriangle size={13} className="mt-0.5 shrink-0" />
-                    An allow rule switches the selected endpoint to default-deny for this
-                    direction — anything not permitted here is dropped.
-                  </p>
-                )}
+                {/* Not an Allow/Deny action: the two options write different
+                    policy models, and "Allow" would hide that it also drops
+                    everything it does not name. */}
+                <Field
+                  label="Mode"
+                  hint={form.mode === 'blacklist'
+                    ? 'Blacklist: only this traffic is blocked. Everything else is allowed.'
+                    : 'Whitelist: only this traffic is allowed. Everything else reaching the endpoint is blocked.'}
+                >
+                  <Select value={form.mode} onValueChange={v => setField('mode', v as CNPMode)}>
+                    <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="blacklist">Blacklist — deny this traffic</SelectItem>
+                        <SelectItem value="whitelist">Whitelist — allow only this traffic</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
 
                 {/* Cilium deny rules match on L3/L4 only, so this is unusable
                     with Deny and there is no point rendering it enabled. */}
@@ -308,15 +318,15 @@ export function CNPPage() {
                   <div className="flex items-center gap-2">
                     <Label className="text-xs">HTTP rule</Label>
                     <span className="text-xs text-muted-foreground">
-                      {form.action === 'deny'
-                        ? 'Allow only — Cilium deny rules are L3/L4'
+                      {form.mode === 'blacklist'
+                        ? 'Whitelist only — Cilium deny rules are L3/L4'
                         : 'Optional, needs a port and the Cilium proxy'}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <Select value={form.httpMethod || 'any'}
                       onValueChange={v => setField('httpMethod', v === 'any' ? '' : v)}
-                      disabled={form.action === 'deny'}>
+                      disabled={form.mode === 'blacklist'}>
                       <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -325,7 +335,7 @@ export function CNPPage() {
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <Input value={form.httpPath} onChange={e => setField('httpPath', e.target.value)} disabled={form.action === 'deny'}
+                    <Input value={form.httpPath} onChange={e => setField('httpPath', e.target.value)} disabled={form.mode === 'blacklist'}
                       className="h-9 font-mono text-sm" />
                   </div>
                 </div>
