@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 
@@ -85,7 +86,12 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			_ = s.streamFromPod(ctx, name, out) // errors logged; one pod failing won't stop others
+			// One pod failing must not stop the others, but it does have to be
+			// visible: the error was discarded here while the comment claimed it
+			// was logged, so a broken Tetragon stream looked like a quiet cluster.
+			if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
+				log.Printf("tetragon-stream: pod %s: %v", name, err)
+			}
 		}(podName)
 	}
 	wg.Wait()
@@ -170,11 +176,18 @@ func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
 		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 		})
-		if err == nil && len(list.Items) > 0 {
-			names := make([]string, len(list.Items))
-			for i, p := range list.Items {
-				names[i] = p.Name
+		if err != nil {
+			continue
+		}
+		// Only running pods can be exec'd into. Taking every pod meant a pending or
+		// evicted one produced an exec failure on every reconnect.
+		var names []string
+		for _, p := range list.Items {
+			if p.Status.Phase == corev1.PodRunning {
+				names = append(names, p.Name)
 			}
+		}
+		if len(names) > 0 {
 			return names, nil
 		}
 	}

@@ -110,11 +110,19 @@ func setSessionTTLHandler(users *auth.UserStore) http.HandlerFunc {
 	}
 }
 
-func logoutHandler(users *auth.UserStore) http.HandlerFunc {
+func logoutHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Revoke the current token so it cannot be reused after logout
-		if claims := claimsFromCtx(r); claims != nil && claims.ID != "" && claims.ExpiresAt != nil {
-			users.RevokeToken(claims.ID, claims.ExpiresAt.Time)
+		// The cookie is parsed here rather than read from the request context,
+		// because this route is deliberately public — so that logging out works
+		// with an expired token — which means the auth middleware never ran and
+		// there are no claims to read. Taking them from the context silently found
+		// nothing every time, so nothing was ever revoked and a token kept working
+		// for the rest of its TTL after its owner logged out.
+		if c, err := r.Cookie("sentinel_token"); err == nil {
+			if claims, err := auth.ParseToken(secret, c.Value); err == nil &&
+				claims.ID != "" && claims.ExpiresAt != nil {
+				users.RevokeToken(claims.ID, claims.ExpiresAt.Time)
+			}
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sentinel_token",

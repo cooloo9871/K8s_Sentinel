@@ -143,6 +143,17 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			livePods[info.Namespace+"/"+info.Name] = true
 		}
 	}
+	// A pod's address, keyed the way an edge names it. Hubble supplies the pod
+	// name without an address, so resolving by name alone left the IP blank —
+	// while an entry that had to be resolved by address carried one. Whichever of
+	// the two landed in the node set first decided whether Pod Detail showed an IP
+	// at all, and map iteration order made that vary between polls.
+	podIP := make(map[string]string, len(livePods))
+	for _, info := range ipMap {
+		if info.Kind == "pod" {
+			podIP[info.Namespace+"/"+info.Name] = info.IP
+		}
+	}
 	// An empty ipMap means the lookup failed, not that the cluster has no pods.
 	// Pruning on that would wipe the whole graph, so only prune when it loaded.
 	canPrune := len(livePods) > 0
@@ -179,7 +190,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 	resolveID := func(pod, ns, ip string, isWorld bool) (string, TopologyNode) {
 		if pod != "" {
 			id := ns + "/" + pod
-			return id, TopologyNode{ID: id, Label: pod, Pod: pod, Namespace: ns, Kind: "pod"}
+			return id, TopologyNode{ID: id, Label: pod, Pod: pod, Namespace: ns, Kind: "pod", IP: podIP[id]}
 		}
 		if ip == "" {
 			return "", TopologyNode{}

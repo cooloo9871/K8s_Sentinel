@@ -18,10 +18,17 @@ type Claims struct {
 
 func LoadOrCreateSecret(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
-	// Trim trailing whitespace/newlines that editors may append
 	if err == nil {
-		trimmed := []byte(strings.TrimRight(string(data), " \t\r\n"))
-		if len(trimmed) == 32 {
+		// Take the file as it is when the length already matches. The secret is 32
+		// raw random bytes, so its last byte can legitimately be a space, tab, CR
+		// or LF — 4 values out of 256. Trimming first therefore misread roughly one
+		// restart in 64 as the wrong length, generated a fresh secret, overwrote
+		// the file and logged every user out for no reason.
+		if len(data) == 32 {
+			return data, nil
+		}
+		// Only then trim, for a secret placed there by hand and given a newline.
+		if trimmed := []byte(strings.TrimRight(string(data), " \t\r\n")); len(trimmed) == 32 {
 			return trimmed, nil
 		}
 	}

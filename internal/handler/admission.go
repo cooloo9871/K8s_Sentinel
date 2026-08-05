@@ -15,6 +15,10 @@ import (
 // Only VAP violation events (message contains "ValidatingAdmissionPolicy") are stored.
 func admissionWebhook(store *admission.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// This is the only route without authentication, so it is the one that must
+		// not let a caller choose the allocation size. Audit batches are small;
+		// 4 MiB is already far above a Metadata-level policy's output.
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "read error", http.StatusBadRequest)

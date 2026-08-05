@@ -40,7 +40,7 @@ func New(cfg Config) http.Handler {
 
 	// Public auth
 	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
-	r.Post("/api/auth/logout", logoutHandler(cfg.Users))
+	r.Post("/api/auth/logout", logoutHandler(cfg.Users, cfg.Secret))
 
 	// Authenticated routes
 	r.Group(func(r chi.Router) {

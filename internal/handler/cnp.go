@@ -60,6 +60,9 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "rawYaml is required")
 			return
 		}
+		if !checkManifestName(w, r, body.RawYaml) {
+			return
+		}
 		if err := store.ApplyCNPRaw(r.Context(), body.RawYaml, claimsFromCtx(r).Username); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return

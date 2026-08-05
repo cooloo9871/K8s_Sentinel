@@ -81,11 +81,19 @@ func (f CiliumFlow) IsPolicyDenial() bool {
 	return strings.Contains(strings.ToUpper(f.DropReason), "POLICY")
 }
 
-func ciliumNamespace() string {
+// ciliumNamespaces lists where to look for Cilium, in order. An explicit
+// CILIUM_NAMESPACE is taken as the only answer; otherwise the three places the
+// chart is commonly installed are all searched.
+//
+// Detection used to search all three while every exec afterwards targeted the
+// configured default alone, so a cluster running Cilium anywhere but kube-system
+// logged "Cilium detected, starting flow stream" and then failed to find an agent
+// pod every 15 seconds, forever, with an empty topology and no explanation.
+func ciliumNamespaces() []string {
 	if ns := os.Getenv("CILIUM_NAMESPACE"); ns != "" {
-		return ns
+		return []string{ns}
 	}
-	return "kube-system"
+	return []string{"kube-system", "cilium", "cilium-system"}
 }
 
 // DetectCilium returns true when a Cilium DaemonSet is present in the cluster.
@@ -93,7 +101,7 @@ func (s *Store) DetectCilium(ctx context.Context) bool {
 	if s.typed == nil {
 		return false
 	}
-	for _, ns := range []string{ciliumNamespace(), "cilium", "cilium-system"} {
+	for _, ns := range ciliumNamespaces() {
 		if _, err := s.typed.AppsV1().DaemonSets(ns).Get(ctx, "cilium", metav1.GetOptions{}); err == nil {
 			return true
 		}
@@ -104,19 +112,16 @@ func (s *Store) DetectCilium(ctx context.Context) bool {
 // StreamCiliumFlows streams Hubble flows from all Cilium agent pods concurrently.
 // It returns when all pod streams exit (error or context done).
 func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) error {
-	pods, err := s.findAllCiliumPods(ctx)
+	ns, pods, err := s.findAllCiliumPods(ctx)
 	if err != nil {
 		return fmt.Errorf("no Cilium agent pods found: %w", err)
-	}
-	if len(pods) == 0 {
-		return fmt.Errorf("no Cilium agent pods found")
 	}
 	var wg sync.WaitGroup
 	for _, pod := range pods {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			if err := s.streamCiliumFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
+			if err := s.streamCiliumFromPod(ctx, ns, name, out); err != nil && ctx.Err() == nil {
 				log.Printf("cilium-stream: pod %s: %v", name, err)
 			}
 		}(pod)
@@ -125,12 +130,12 @@ func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) er
 	return nil
 }
 
-func (s *Store) streamCiliumFromPod(ctx context.Context, podName string, out chan<- CiliumFlow) error {
+func (s *Store) streamCiliumFromPod(ctx context.Context, namespace, podName string, out chan<- CiliumFlow) error {
 	req := s.typed.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
 		Name(podName).
-		Namespace(ciliumNamespace()).
+		Namespace(namespace).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "cilium-agent",
@@ -368,25 +373,30 @@ func verdictLabel(v string) string {
 	}
 }
 
-func (s *Store) findAllCiliumPods(ctx context.Context) ([]string, error) {
-	for _, sel := range []string{"k8s-app=cilium", "app.kubernetes.io/name=cilium", "app=cilium"} {
-		list, err := s.typed.CoreV1().Pods(ciliumNamespace()).List(ctx, metav1.ListOptions{
-			LabelSelector: sel,
-		})
-		if err != nil || len(list.Items) == 0 {
-			continue
-		}
-		var names []string
-		for _, p := range list.Items {
-			if p.Status.Phase == "Running" {
-				names = append(names, p.Name)
+// findAllCiliumPods returns the namespace Cilium was found in and its running
+// agent pods. The namespace is returned rather than assumed, so every exec that
+// follows goes where the pods actually are.
+func (s *Store) findAllCiliumPods(ctx context.Context) (string, []string, error) {
+	for _, ns := range ciliumNamespaces() {
+		for _, sel := range []string{"k8s-app=cilium", "app.kubernetes.io/name=cilium", "app=cilium"} {
+			list, err := s.typed.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
+				LabelSelector: sel,
+			})
+			if err != nil || len(list.Items) == 0 {
+				continue
+			}
+			var names []string
+			for _, p := range list.Items {
+				if p.Status.Phase == "Running" {
+					names = append(names, p.Name)
+				}
+			}
+			if len(names) > 0 {
+				return ns, names, nil
 			}
 		}
-		if len(names) > 0 {
-			return names, nil
-		}
 	}
-	return nil, fmt.Errorf("no running Cilium pods found in namespace %q", ciliumNamespace())
+	return "", nil, fmt.Errorf("no running Cilium pods found in %v", ciliumNamespaces())
 }
 
 // HubbleStatus reports whether the Hubble agent socket is reachable inside cilium-agent.
@@ -398,7 +408,7 @@ type HubbleStatus struct {
 
 // CheckHubbleReady probes one cilium-agent pod to see if hubble observe works.
 func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
-	pods, err := s.findAllCiliumPods(ctx)
+	ns, pods, err := s.findAllCiliumPods(ctx)
 	if err != nil || len(pods) == 0 {
 		return HubbleStatus{Available: false, Message: "Cilium agent pods not found"}
 	}
@@ -407,7 +417,7 @@ func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
 		Post().
 		Resource("pods").
 		Name(pods[0]).
-		Namespace(ciliumNamespace()).
+		Namespace(ns).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "cilium-agent",
@@ -421,7 +431,7 @@ func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
 		return HubbleStatus{Available: true, Ready: false, Message: "exec error: " + err.Error()}
 	}
 	var out, errBuf bytes.Buffer
-	execCtx, cancel := context.WithTimeout(ctx, 5000000000) // 5s
+	execCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_ = exec.StreamWithContext(execCtx, remotecommand.StreamOptions{Stdout: &out, Stderr: &errBuf})
 	if errBuf.Len() > 0 && out.Len() == 0 {

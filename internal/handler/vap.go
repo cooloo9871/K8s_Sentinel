@@ -41,6 +41,9 @@ func applyVAP(store *k8s.Store) http.HandlerFunc {
 			http.Error(w, "rawYaml required", http.StatusBadRequest)
 			return
 		}
+		if !checkManifestName(w, r, body.RawYAML) {
+			return
+		}
 		if err := store.ApplyVAPRaw(r.Context(), body.RawYAML, claimsFromCtx(r).Username); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -90,6 +93,9 @@ func applyVAPBinding(store *k8s.Store) http.HandlerFunc {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RawYAML == "" {
 			http.Error(w, "rawYaml required", http.StatusBadRequest)
+			return
+		}
+		if !checkManifestName(w, r, body.RawYAML) {
 			return
 		}
 		if err := store.ApplyVAPBindingRaw(r.Context(), body.RawYAML, claimsFromCtx(r).Username); err != nil {

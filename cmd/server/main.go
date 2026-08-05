@@ -96,7 +96,15 @@ func main() {
 	}
 	mux.Handle("/", spaHandler(http.FS(staticFS)))
 
-	srv := &http.Server{Addr: ":8080", Handler: mux}
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+		// Bounds how long a connection may take to send its headers, so an idle or
+		// deliberately slow client cannot hold one open indefinitely. Read and
+		// write timeouts are deliberately not set: the event streams are
+		// long-lived by design and either one would cut them off.
+		ReadHeaderTimeout: 15 * time.Second,
+	}
 	go func() {
 		log.Printf("starting sentinel on :8080")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

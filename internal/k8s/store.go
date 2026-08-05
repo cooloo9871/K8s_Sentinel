@@ -84,6 +84,9 @@ type Store struct {
 	attrMu     sync.RWMutex
 	attrData   *attributionData
 	attrExpiry time.Time
+	// Pods already reported as missing from the attribution cache, so the warning
+	// is logged once each rather than once per flow.
+	warnedPods sync.Map
 }
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the
@@ -790,29 +793,13 @@ func (s *Store) GetMode(ctx context.Context) (string, error) {
 // cached globalMode. If any policy apply fails the cache is not updated, so
 // the displayed mode stays consistent with what was actually applied.
 func (s *Store) SetMode(ctx context.Context, mode string) error {
-	action := policy.ActionPost
-	if mode == "Protect" {
-		action = policy.ActionSigkill
-	}
-
 	records, err := s.List(ctx)
 	if err != nil {
 		return err
 	}
-
+	action := modeAction(mode)
 	for _, r := range records {
-		var tp policy.TracingPolicy
-		if err := yaml.Unmarshal([]byte(r.RawYAML), &tp); err != nil {
-			return fmt.Errorf("parse policy %q: %w", r.Name, err)
-		}
-		for i := range tp.Spec.KProbes {
-			for j := range tp.Spec.KProbes[i].Selectors {
-				for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
-					tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
-				}
-			}
-		}
-		if err := s.Apply(ctx, tp, ""); err != nil {
+		if err := s.setPolicyAction(ctx, r.Name, r.Namespace, action); err != nil {
 			return fmt.Errorf("apply policy %q: %w", r.Name, err)
 		}
 	}
@@ -822,6 +809,85 @@ func (s *Store) SetMode(ctx context.Context, mode string) error {
 	s.globalMode = mode
 	s.modeMu.Unlock()
 	return nil
+}
+
+// modeAction is the Tetragon action a mode applies.
+func modeAction(mode string) string {
+	if mode == "Protect" {
+		return policy.ActionSigkill
+	}
+	return policy.ActionPost
+}
+
+// probeFields are the spec sections that can carry selectors with actions.
+// kprobes is the only one Sentinel's own builder produces, but a policy written
+// by hand can use any of them and a mode switch has to reach all of it.
+var probeFields = []string{"kprobes", "tracepoints", "uprobes", "lsmhooks"}
+
+// setPolicyAction rewrites one policy's enforcement actions in the cluster.
+//
+// The object is fetched and edited in place. Going through policy.TracingPolicy
+// instead — marshal the struct, apply it back — was silently destructive: that
+// struct models only podSelector and kprobes, so switching the mode deleted
+// every field it does not know about. A policy applied with kubectl carrying
+// tracepoints, enforcers, matchNamespaces, tags or message lost them, and
+// nothing said so until the policy stopped doing what it was written to do.
+func (s *Store) setPolicyAction(ctx context.Context, name, namespace, action string) error {
+	var ri dynamic.ResourceInterface = s.client.Resource(tracingPolicyGVR)
+	if namespace != "" {
+		ri = s.client.Resource(tracingPolicyNamespacedGVR).Namespace(namespace)
+	}
+	obj, err := ri.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if rewriteActions(obj.Object, action) == 0 {
+		return nil // nothing to switch — leave the object untouched
+	}
+	_, err = ri.Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+// rewriteActions sets every enforcement action in the object to action, in place,
+// and reports how many it changed.
+//
+// Only actions that are already Post or Sigkill are touched. The others —
+// Override, Signal, FollowFD, NoPost — say something a mode switch has no
+// business rewriting, and the previous code overwrote them all indiscriminately.
+func rewriteActions(obj map[string]any, action string) int {
+	spec, ok := obj["spec"].(map[string]any)
+	if !ok {
+		return 0
+	}
+	changed := 0
+	for _, field := range probeFields {
+		probes, _ := spec[field].([]any)
+		for _, p := range probes {
+			pm, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			sels, _ := pm["selectors"].([]any)
+			for _, sel := range sels {
+				sm, ok := sel.(map[string]any)
+				if !ok {
+					continue
+				}
+				acts, _ := sm["matchActions"].([]any)
+				for _, a := range acts {
+					am, ok := a.(map[string]any)
+					if !ok {
+						continue
+					}
+					if cur, _ := am["action"].(string); cur == policy.ActionPost || cur == policy.ActionSigkill {
+						am["action"] = action
+						changed++
+					}
+				}
+			}
+		}
+	}
+	return changed
 }
 
 func setCreatedByAnnotation(obj *unstructured.Unstructured, createdBy string) {
@@ -906,30 +972,52 @@ func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error
 		Name:      item.GetName(),
 		Namespace: item.GetNamespace(),
 		Scope:     scope,
-		Mode:      detectMode(string(rawYAML)),
+		Mode:      detectMode(item.Object),
 		CreatedBy: createdBy,
 		CreatedAt: createdAt,
 		RawYAML:   string(rawYAML),
 	}, nil
 }
 
-// detectMode returns "Monitoring", "Protect", or "Mixed" based on kprobe actions.
-func detectMode(rawYAML string) string {
-	var tp policy.TracingPolicy
-	if err := yaml.Unmarshal([]byte(rawYAML), &tp); err != nil {
+// detectMode returns "Monitoring", "Protect", or "Mixed" from the policy's
+// actions. It walks the same spec sections the mode switch writes, so what the
+// list column reports and what flipping the mode changes cannot disagree —
+// reading kprobes alone made a hand-written tracepoint policy that kills report
+// itself as Monitoring.
+//
+// Actions other than Post and Sigkill are deliberately not counted: they say
+// nothing about enforcement mode.
+func detectMode(obj map[string]any) string {
+	spec, ok := obj["spec"].(map[string]any)
+	if !ok {
 		return "Monitoring"
 	}
 	post, kill := 0, 0
-	for _, kp := range tp.Spec.KProbes {
-		for _, sel := range kp.Selectors {
-			for _, act := range sel.MatchActions {
-				switch act.Action {
-				case policy.ActionSigkill:
-					kill++
-				case policy.ActionPost:
-					post++
-					// Unknown actions are intentionally ignored — they don't
-					// contribute to either counter, matching GetMode's behaviour.
+	for _, field := range probeFields {
+		probes, _ := spec[field].([]any)
+		for _, p := range probes {
+			pm, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			sels, _ := pm["selectors"].([]any)
+			for _, sel := range sels {
+				sm, ok := sel.(map[string]any)
+				if !ok {
+					continue
+				}
+				acts, _ := sm["matchActions"].([]any)
+				for _, a := range acts {
+					am, ok := a.(map[string]any)
+					if !ok {
+						continue
+					}
+					switch act, _ := am["action"].(string); act {
+					case policy.ActionSigkill:
+						kill++
+					case policy.ActionPost:
+						post++
+					}
 				}
 			}
 		}
@@ -943,30 +1031,9 @@ func detectMode(rawYAML string) string {
 	return "Mixed"
 }
 
-// SetPolicyMode updates all kprobe actions in a single policy.
+// SetPolicyMode updates the enforcement actions in a single policy.
 func (s *Store) SetPolicyMode(ctx context.Context, name, namespace, mode string) error {
-	action := policy.ActionPost
-	if mode == "Protect" {
-		action = policy.ActionSigkill
-	}
-
-	record, err := s.Get(ctx, name, namespace)
-	if err != nil {
-		return err
-	}
-
-	var tp policy.TracingPolicy
-	if err := yaml.Unmarshal([]byte(record.RawYAML), &tp); err != nil {
-		return fmt.Errorf("parse policy %q: %w", name, err)
-	}
-	for i := range tp.Spec.KProbes {
-		for j := range tp.Spec.KProbes[i].Selectors {
-			for k := range tp.Spec.KProbes[i].Selectors[j].MatchActions {
-				tp.Spec.KProbes[i].Selectors[j].MatchActions[k].Action = action
-			}
-		}
-	}
-	return s.Apply(ctx, tp, "")
+	return s.setPolicyAction(ctx, name, namespace, modeAction(mode))
 }
 
 // ListServicePodNames returns a map of "namespace/serviceName" → pod names

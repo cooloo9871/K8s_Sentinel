@@ -266,9 +266,12 @@ func (s *Store) PodContainer(ctx context.Context, podNs, pod string) string {
 	name, known := d.podContainer[key]
 	// A pod the cache has never heard of, while the cache itself is populated,
 	// is the one case that is neither by design nor already reported by the load
-	// above. Say so rather than returning an unexplained blank.
+	// above. Say so once per pod: this runs per flow, and a workload retrying a
+	// denied connection in a loop would otherwise fill the log with one line.
 	if !known && len(d.podContainer) > 0 {
-		log.Printf("attribution: pod %s absent from a cache of %d pods — no container name for its flows", key, len(d.podContainer))
+		if _, warned := s.warnedPods.LoadOrStore(key, true); !warned {
+			log.Printf("attribution: pod %s absent from a cache of %d pods — no container name for its flows", key, len(d.podContainer))
+		}
 	}
 	return name
 }
