@@ -711,7 +711,18 @@ export function NetworkTopologyPage() {
                         {selectedNode.exposures && selectedNode.exposures.length > 0 && (
                           <div>
                             <span className="text-muted-foreground">Exposure</span>
-                            <div className="mt-1 flex flex-col gap-1">
+                            {/* Said out loud because the heading alone reads as
+                                "how the traffic you are looking at arrived", and
+                                it is not that: it is every way in from outside,
+                                read from configuration. A ClusterIP Service is
+                                absent on purpose — it is not reachable from
+                                outside — which looks like an omission until this
+                                line says otherwise. */}
+                            <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                              Ways in from outside the cluster, read from configuration rather than
+                              from traffic. A ClusterIP Service is not one of them.
+                            </p>
+                            <div className="mt-1.5 flex flex-col gap-1">
                               {/* The path as a chain, outermost first, each hop
                                   naming a Kubernetes object — those are what an
                                   operator edits to close the path, and a single
