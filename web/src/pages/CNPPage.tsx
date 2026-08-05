@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ScopeFilter, matchesScopeFilter, SCOPE_ALL } from '../components/ScopeFilter'
+import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -115,7 +115,7 @@ export function CNPPage() {
   const [unavailableMsg, setUnavailableMsg] = useState('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [nsFilter, setNsFilter] = useState(SCOPE_ALL)
+  const [nsFilter, setNsFilter] = useState<string[]>([])
   // Every namespace in the cluster, for the form. The filter's list comes from
   // the loaded policies instead, since filtering to an empty one is a dead end —
   // but creating a policy in a namespace that has none yet is the normal case.

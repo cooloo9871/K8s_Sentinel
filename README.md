@@ -98,7 +98,7 @@ Graphs live pod network connections from Cilium Hubble flows.
 - **L7 detail** — HTTP method, path and status code on edges where Cilium's proxy is in the path
 - Traffic arriving from outside is identified by Cilium's `reserved:world` identity rather than by its address, so a connection SNATed to a node's `cilium_host` still reads as external — labelled **world via `<node>`**, with the detail panel explaining that the address is the node's and how to keep the client's
 - Node-to-node traffic is left out: that is Cilium's own health probing and tunnel chatter. Node-to-pod is not, because that is how the outside reaches a workload
-- Dagre auto-layout, namespace and pod filters, 30-second auto refresh
+- Dagre auto-layout, pod search, and a namespace filter that takes several at once. Refreshes every 60 seconds, and only redraws when the poll brings something new — a count ticking up does not move the camera
 
 ### Notifications
 

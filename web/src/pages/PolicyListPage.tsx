@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { IconRefresh } from '@tabler/icons-react'
-import { ScopeFilter, matchesScopeFilter, SCOPE_ALL } from '../components/ScopeFilter'
+import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
 import { useNavigate } from 'react-router-dom'
 import { formatTWTime } from '../utils/time'
 import {
@@ -38,7 +38,7 @@ export function PolicyListPage() {
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
   const [loading, setLoading] = useState(!hasLoaded.current)
   const [search, setSearch] = useState('')
-  const [nsFilter, setNsFilter] = useState(SCOPE_ALL)
+  const [nsFilter, setNsFilter] = useState<string[]>([])
   const [deleteTarget, setDeleteTarget] = useState<PolicyRecord | null>(null)
   const [pendingModeChange, setPendingModeChange] = useState<{
     policy: PolicyRecord

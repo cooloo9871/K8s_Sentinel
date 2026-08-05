@@ -11,10 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld } from '@tabler/icons-react'
+import { ScopeFilter } from '../components/ScopeFilter'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -229,6 +227,11 @@ export function NetworkTopologyPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([])
   const reactFlowRef = useRef<{ fitView: () => void } | null>(null)
+  // What the last poll returned, so an unchanged one changes nothing.
+  const lastPayload = useRef('')
+  // The node ids the view was last fitted to. Re-fitting is right when the graph
+  // gains or loses something, and wrong when only a count moved.
+  const fittedTo = useRef('')
   const [hasNetworkEvents, setHasNetworkEvents] = useState<boolean | null>(null)
   const [flowsEverSeen, setFlowsEverSeen] = useState(false)
   const [partialResolution, setPartialResolution] = useState(false)
@@ -236,7 +239,7 @@ export function NetworkTopologyPage() {
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<TopologyEdge | null>(null)
-  const [nsFilter, setNsFilter] = useState('all')
+  const [nsFilter, setNsFilter] = useState<string[]>([])
   const [podSearch, setPodSearch] = useState('')
   // System namespaces are mostly control-plane noise (coredns, operators);
   // hidden by default, and auto-shown when kube-system is explicitly selected.
@@ -264,8 +267,15 @@ export function NetworkTopologyPage() {
       setFlowsEverSeen(!!data.flowsEverSeen)
       setPartialResolution(!!data.partialResolution)
       setDataSource(data.dataSource)
-      setRawNodes(data.nodes)
-      setRawEdges(data.edges)
+      // Only disturb the graph when the poll actually brings something new.
+      // Replacing identical arrays re-ran the layout and reset pan and zoom
+      // under whoever was reading it.
+      const signature = JSON.stringify([data.nodes, data.edges])
+      if (signature !== lastPayload.current) {
+        lastPayload.current = signature
+        setRawNodes(data.nodes)
+        setRawEdges(data.edges)
+      }
     } catch {
       setHasNetworkEvents(false)
       // The API is unreachable, so nothing is known about Hubble either — the
@@ -279,7 +289,7 @@ export function NetworkTopologyPage() {
   useEffect(() => {
     load()
     // Auto-refresh every 30s so new connections appear without manual reload
-    const timer = setInterval(() => load(), 30_000)
+    const timer = setInterval(() => load(), 60_000)
     return () => clearInterval(timer)
   }, [load])
 
@@ -295,7 +305,7 @@ export function NetworkTopologyPage() {
     const visibleEdges = hideProbes ? rawEdges.filter(e => !e.healthProbe) : rawEdges
 
     // Hide kube-system unless the user explicitly filters to it
-    const effectiveHide = hideSystem && nsFilter !== 'kube-system'
+    const effectiveHide = hideSystem && !nsFilter.includes('kube-system')
     const scopedNodes = effectiveHide
       ? rawNodes.filter(n => n.namespace !== 'kube-system')
       : rawNodes
@@ -309,7 +319,7 @@ export function NetworkTopologyPage() {
     // connections to/from primary nodes (they have no namespace).
     const isPrimary = (n: TopologyNode): boolean => {
       if (n.kind === 'external' || n.kind === 'node') return false
-      if (nsFilter !== 'all' && n.namespace !== nsFilter) return false
+      if (nsFilter.length > 0 && !nsFilter.includes(n.namespace)) return false
       if (exposedOnly && !(n.exposures?.length)) return false
       if (podQ) {
         const nameMatch =
@@ -321,7 +331,7 @@ export function NetworkTopologyPage() {
     }
 
     // When no filter is active, all pods are primary
-    const noFilter = nsFilter === 'all' && !podQ && !exposedOnly
+    const noFilter = nsFilter.length === 0 && !podQ && !exposedOnly
     const primaryIds = new Set(
       noFilter
         ? scopedNodes.filter(n => n.kind !== 'external' && n.kind !== 'node').map(n => n.id)
@@ -373,9 +383,14 @@ export function NetworkTopologyPage() {
     setNodes(laidOut)
     const nodeMap = Object.fromEntries(visibleNodes.map(n => [n.id, n]))
     setEdges(layoutEdges(filteredEdges, nodeMap))
-    // Fit view after layout so nodes are always visible (especially on first load
-    // or when switching from Tetragon→Cilium data source)
-    setTimeout(() => reactFlowRef.current?.fitView(), 100)
+    // Fit only when the set of nodes changed — on first load, on a filter, or
+    // when traffic reveals something new. A connection count ticking up is not a
+    // reason to move the camera.
+    const shape = visibleNodes.map(n => n.id).sort().join('|')
+    if (shape !== fittedTo.current) {
+      fittedTo.current = shape
+      setTimeout(() => reactFlowRef.current?.fitView(), 100)
+    }
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
   }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, hideProbes, exposedOnly, setNodes, setEdges])
@@ -393,10 +408,10 @@ export function NetworkTopologyPage() {
 
   const matchCount = useMemo(() => {
     const podQ = podSearch.trim().toLowerCase()
-    if (nsFilter === 'all' && !podQ) return null
+    if (nsFilter.length === 0 && !podQ) return null
     return rawNodes.filter(n =>
       n.kind === 'pod' &&
-      (nsFilter === 'all' || n.namespace === nsFilter) &&
+      (nsFilter.length === 0 || nsFilter.includes(n.namespace)) &&
       (!podQ || n.pod.toLowerCase().includes(podQ) || n.label.toLowerCase().includes(podQ))
     ).length
   }, [rawNodes, nsFilter, podSearch])
@@ -450,19 +465,15 @@ export function NetworkTopologyPage() {
 
       {/* Filter bar */}
       <div className="mb-4 flex items-center gap-2">
-        <Select value={nsFilter} onValueChange={setNsFilter}>
-          <SelectTrigger className="h-8 w-44">
-            <SelectValue placeholder="All Namespaces" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All Namespaces</SelectItem>
-              {namespaces.map(ns => (
-                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        {/* Every node here has a namespace, so there is no cluster-scoped entry
+            to offer — unlike the policy pages using the same control. */}
+        <ScopeFilter
+          value={nsFilter}
+          onChange={setNsFilter}
+          namespaces={namespaces}
+          includeCluster={false}
+          className="h-8 w-44 justify-between text-sm font-normal"
+        />
         <div className="relative">
           <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -501,9 +512,9 @@ export function NetworkTopologyPage() {
             {matchCount} match{matchCount !== 1 ? 'es' : ''}
           </span>
         )}
-        {(nsFilter !== 'all' || podSearch) && (
+        {(nsFilter.length > 0 || podSearch) && (
           <Button variant="ghost" size="sm" className="h-8 text-xs"
-            onClick={() => { setNsFilter('all'); setPodSearch('') }}>
+            onClick={() => { setNsFilter([]); setPodSearch('') }}>
             Clear
           </Button>
         )}
@@ -513,7 +524,7 @@ export function NetworkTopologyPage() {
             Pod
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-slate-400/40 bg-slate-400/10 inline-block" />
+            <span className="size-2.5 rounded border border-blue-500/60 bg-blue-500/10 inline-block" />
             Node
           </span>
           <span className="flex items-center gap-1.5">
