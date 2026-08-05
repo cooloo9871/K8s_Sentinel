@@ -101,12 +101,12 @@ function PodNode({ data }: { data: TopologyNode }) {
 
 function NodeHostNode({ data }: { data: TopologyNode }) {
   return (
-    <div className="rounded-lg border border-blue-700 bg-blue-600 px-3 py-2 shadow-sm min-w-[120px] text-center text-white">
-      <Handle type="target" position={Position.Left} className="!bg-blue-800" />
-      <div className="text-[10px] font-medium text-blue-100 mb-0.5">Node</div>
+    <div className="rounded-lg border border-blue-400 bg-blue-50 px-3 py-2 shadow-sm min-w-[120px] text-center">
+      <Handle type="target" position={Position.Left} className="!bg-blue-500" />
+      <div className="text-[10px] font-medium text-blue-600 mb-0.5">Node</div>
       <div className="text-xs font-medium truncate max-w-[140px]" title={data.label}>{data.label}</div>
-      {data.ip && <div className="text-[10px] font-mono text-blue-200">{data.ip}</div>}
-      <Handle type="source" position={Position.Right} className="!bg-blue-800" />
+      {data.ip && <div className="text-[10px] font-mono text-blue-500">{data.ip}</div>}
+      <Handle type="source" position={Position.Right} className="!bg-blue-500" />
     </div>
   )
 }
@@ -115,12 +115,12 @@ function NodeHostNode({ data }: { data: TopologyNode }) {
 
 function ExternalNode({ data }: { data: TopologyNode }) {
   return (
-    <div className="rounded-lg border border-amber-600 bg-amber-500 px-3 py-2 shadow-sm min-w-[110px] text-center text-amber-950">
+    <div className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 shadow-sm min-w-[110px] text-center">
       {/* External can be both a connection target (pod→ext) and a source (ext→pod inbound) */}
-      <Handle type="target" position={Position.Left} className="!bg-amber-700" />
-      <div className="text-[10px] text-amber-900 mb-0.5">External</div>
+      <Handle type="target" position={Position.Left} className="!bg-amber-500" />
+      <div className="text-[10px] text-amber-600 mb-0.5">External</div>
       <div className="text-xs font-medium font-mono">{data.label}</div>
-      <Handle type="source" position={Position.Right} className="!bg-amber-700" />
+      <Handle type="source" position={Position.Right} className="!bg-amber-500" />
     </div>
   )
 }
@@ -573,11 +573,11 @@ export function NetworkTopologyPage() {
             Pod
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-blue-700 bg-blue-600 inline-block" />
+            <span className="size-2.5 rounded border border-blue-400 bg-blue-50 inline-block" />
             Node
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-amber-600 bg-amber-500 inline-block" />
+            <span className="size-2.5 rounded border border-amber-400 bg-amber-50 inline-block" />
             External
           </span>
           <span className="flex items-center gap-1">
