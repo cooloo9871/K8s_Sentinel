@@ -84,7 +84,17 @@ Graphs live pod network connections from Cilium Hubble flows.
 - Click a red edge for the policy that denied it. Where no policy can be named, it says so rather than inventing one — a default-deny drop has no rule to attribute, and the policy may also have been deleted
 - **Aggregated per source/destination pair** with a per-port breakdown in the detail panel, so ephemeral client ports do not fan out into parallel lines
 - **Hover focus** — labels appear only on the hovered node's edges and unrelated traffic dims out; **Hide kube-system** (on by default) removes control-plane noise
-- **Exposure badges** — pods reachable from outside are marked, with each path listed: NodePort, LoadBalancer, Ingress rule, hostNetwork or hostPort. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
+- **Exposure badges** — pods reachable from outside are marked, with each path listed. Every entry point is followed to the pods behind it, not just recorded:
+
+  | Type | Resolved from |
+  |---|---|
+  | `nodeport` / `loadbalancer` | Service → Endpoints → Pod |
+  | `ingress` | Ingress rules and default backend, any controller |
+  | `gateway` | Gateway API `HTTPRoute` / `GRPCRoute` `backendRefs`, including cross-namespace ones |
+  | `istio` | `VirtualService` destinations — only where a real Gateway is attached, since `mesh` alone is sidecar traffic and exposes nothing |
+  | `hostnetwork` / `hostport` | pod and container spec |
+
+  Gateway API and Istio are optional: without the CRDs the lookup is skipped rather than failing. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
 - **L7 detail** — HTTP method, path and status code on edges where Cilium's proxy is in the path
 - Traffic arriving from outside is identified by Cilium's `reserved:world` identity rather than by its address, so a connection SNATed to a node's `cilium_host` still reads as external — labelled **world via `<node>`**, with the detail panel explaining that the address is the node's and how to keep the client's
 - Node-to-node traffic is left out: that is Cilium's own health probing and tunnel chatter. Node-to-pod is not, because that is how the outside reaches a workload
@@ -367,6 +377,8 @@ Add to the kube-apiserver flags:
 | `""` (core) | `nodes`, `services`, `endpoints` | get, list |
 | `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get, list |
 | `networking.k8s.io` | `ingresses` | get, list |
+| `gateway.networking.k8s.io` | `httproutes`, `grpcroutes` | get, list |
+| `networking.istio.io` | `virtualservices` | get, list |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 
 ---
