@@ -512,12 +512,6 @@ export function NetworkTopologyPage() {
             {matchCount} match{matchCount !== 1 ? 'es' : ''}
           </span>
         )}
-        {(nsFilter.length > 0 || podSearch) && (
-          <Button variant="ghost" size="sm" className="h-8 text-xs"
-            onClick={() => { setNsFilter([]); setPodSearch('') }}>
-            Clear
-          </Button>
-        )}
         <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded border border-primary/40 bg-primary/10 inline-block" />
