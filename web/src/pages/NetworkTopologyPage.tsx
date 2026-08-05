@@ -86,12 +86,12 @@ function PodNode({ data }: { data: TopologyNode }) {
 
 function NodeHostNode({ data }: { data: TopologyNode }) {
   return (
-    <div className="rounded-lg border border-slate-400/40 bg-slate-400/5 px-3 py-2 shadow-sm min-w-[120px] text-center">
-      <Handle type="target" position={Position.Left} className="!bg-slate-500" />
-      <div className="text-[10px] text-slate-500 mb-0.5">Node</div>
+    <div className="rounded-lg border border-blue-500/60 bg-blue-500/10 px-3 py-2 shadow-sm min-w-[120px] text-center">
+      <Handle type="target" position={Position.Left} className="!bg-blue-500" />
+      <div className="text-[10px] font-medium text-blue-600 mb-0.5">Node</div>
       <div className="text-xs font-medium truncate max-w-[140px]" title={data.label}>{data.label}</div>
-      {data.ip && <div className="text-[10px] font-mono text-slate-400">{data.ip}</div>}
-      <Handle type="source" position={Position.Right} className="!bg-slate-500" />
+      {data.ip && <div className="text-[10px] font-mono text-blue-500/70">{data.ip}</div>}
+      <Handle type="source" position={Position.Right} className="!bg-blue-500" />
     </div>
   )
 }
@@ -172,7 +172,9 @@ function edgeVisuals(e: Edge, focusId: string | null): Edge {
 function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyNode>): Edge[] {
   return apiEdges.map(e => {
     const targetKind = nodeMap[e.target]?.kind ?? 'external'
-    const color = targetKind === 'external' ? '#f59e0b' : '#6366f1'
+    const color = targetKind === 'external' ? '#f59e0b'
+      : targetKind === 'node' ? '#3b82f6'
+      : '#6366f1'
     const base: Edge = {
       id: e.id,
       source: e.source,

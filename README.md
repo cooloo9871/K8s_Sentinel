@@ -79,7 +79,7 @@ Each layer does what only it can do:
 Graphs live pod network connections from Cilium Hubble flows.
 
 - **A 15-minute window.** The graph shows what is happening now: a connection that stops falls off, and one that resumes reappears. Fifteen rather than five so a workload that only talks every few minutes does not make its edge flicker
-- **Node kinds** — Pod (purple), Node (grey), External IP (amber). Service ClusterIPs are not drawn: a VIP is an intermediate routing concept, not an endpoint, and under Cilium the destination is already rewritten to the backend pod before the flow is observed
+- **Node kinds** — Pod (neutral), Node (blue), External IP (amber). The three carry distinct hues so a glance separates workloads from infrastructure from what is outside the cluster. Service ClusterIPs are not drawn: a VIP is an intermediate routing concept, not an endpoint, and under Cilium the destination is already rewritten to the backend pod before the flow is observed
 - **Edges** — solid for allowed traffic, red dashed for policy-denied. A denial that is still arriving wins over the allowed traffic it rides on, which is what an **L7 denial** always looks like: the connection is permitted and only the request is refused, so Hubble reports both verdicts at once
 - Click a red edge for the policy that denied it. Where no policy can be named, it says so rather than inventing one — a default-deny drop has no rule to attribute, and the policy may also have been deleted
 - **Aggregated per source/destination pair** with a per-port breakdown in the detail panel, so ephemeral client ports do not fan out into parallel lines
