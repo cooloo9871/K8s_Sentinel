@@ -419,7 +419,7 @@ export function NetworkTopologyPage() {
         <div>
           <h4 className="text-xl font-semibold">Network Topology</h4>
           <p className="text-sm text-muted-foreground">
-            Pod network connections observed via Tetragon kprobe events
+            Live pod connections from Cilium Hubble flows, over the last 15 minutes
           </p>
         </div>
         <div className="flex items-center gap-2">
