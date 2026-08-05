@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld } from '@tabler/icons-react'
+import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld, IconAdjustmentsHorizontal } from '@tabler/icons-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScopeFilter } from '../components/ScopeFilter'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -452,9 +453,6 @@ export function NetworkTopologyPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Network Topology</h4>
-          <p className="text-sm text-muted-foreground">
-            Live pod connections from Cilium Hubble flows, over the last 15 minutes
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {dataSource === 'cilium' && (
@@ -493,38 +491,41 @@ export function NetworkTopologyPage() {
             className="h-8 w-44 pl-8 text-sm"
           />
         </div>
-        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
-          <Checkbox
-            checked={hideSystem}
-            onCheckedChange={v => setHideSystem(v === true)}
-            className="size-3.5"
-          />
-          Hide kube-system
-        </label>
-        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
-          <Checkbox
-            checked={hideProbes}
-            onCheckedChange={v => setHideProbes(v === true)}
-            className="size-3.5"
-          />
-          Hide health probes
-        </label>
-        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
-          <Checkbox
-            checked={autoRefresh}
-            onCheckedChange={v => setAutoRefresh(v === true)}
-            className="size-3.5"
-          />
-          Auto refresh
-        </label>
-        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
-          <Checkbox
-            checked={exposedOnly}
-            onCheckedChange={v => setExposedOnly(v === true)}
-            className="size-3.5"
-          />
-          Exposed only
-        </label>
+        {/* Four toggles took more of the bar than the filters they sit beside, so
+            they live behind one control. The dot is not decoration: with them
+            hidden, an empty-looking graph would otherwise give no hint that
+            something is being filtered out. */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 text-sm font-normal">
+              <IconAdjustmentsHorizontal size={14} className="mr-1.5" />
+              View
+              {(hideSystem || hideProbes || exposedOnly) && (
+                <span className="ml-1.5 size-1.5 rounded-full bg-primary" />
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-60 p-1">
+            {([
+              { label: 'Hide kube-system', checked: hideSystem, set: setHideSystem },
+              { label: 'Hide health probes', checked: hideProbes, set: setHideProbes },
+              { label: 'Exposed only', checked: exposedOnly, set: setExposedOnly },
+              { label: 'Auto refresh', checked: autoRefresh, set: setAutoRefresh },
+            ] as const).map(o => (
+              <label
+                key={o.label}
+                className="flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <Checkbox
+                  checked={o.checked}
+                  onCheckedChange={v => o.set(v === true)}
+                  className="size-3.5"
+                />
+                {o.label}
+              </label>
+            ))}
+          </PopoverContent>
+        </Popover>
         {matchCount !== null && (
           <span className="text-xs text-muted-foreground">
             {matchCount} match{matchCount !== 1 ? 'es' : ''}
