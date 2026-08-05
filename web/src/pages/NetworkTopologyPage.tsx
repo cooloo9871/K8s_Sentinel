@@ -732,16 +732,32 @@ export function NetworkTopologyPage() {
 
                 {selectedEdge && (() => {
                   const srcNode = rawNodes.find(n => n.id === selectedEdge.source)
+                  const dstNode = rawNodes.find(n => n.id === selectedEdge.target)
+                  // An external node's label is its address, so printing the label
+                  // and then the IP said the same thing twice. Name what it is
+                  // instead, and keep the address on the line below.
+                  const endpoint = (node: TopologyNode | undefined, fallback: string) => {
+                    const name = node?.kind === 'external' && node.label === node.ip
+                      ? 'External'
+                      : node?.label ?? fallback
+                    const ip = node?.ip && node.ip !== name ? node.ip : undefined
+                    return { name, ip }
+                  }
+                  const from = endpoint(srcNode, selectedEdge.source)
+                  const to = endpoint(dstNode, selectedEdge.destIp ?? selectedEdge.target)
                   return (
                     <div className="flex flex-col gap-2 text-xs">
                       <div>
                         <span className="text-muted-foreground">From</span>
-                        <div className="mt-0.5 font-mono font-medium break-all">{srcNode?.label ?? selectedEdge.source}</div>
-                        {srcNode?.ip && <div className="font-mono text-muted-foreground">{srcNode.ip}</div>}
+                        <div className="mt-0.5 font-mono font-medium break-all">{from.name}</div>
+                        {from.ip && <div className="font-mono text-muted-foreground">{from.ip}</div>}
                       </div>
                       <div>
                         <span className="text-muted-foreground">To</span>
-                        <div className="mt-0.5 font-mono font-medium">{selectedEdge.destIp ?? selectedEdge.target}</div>
+                        <div className="mt-0.5 font-mono font-medium break-all">{to.name}</div>
+                        {(to.ip ?? selectedEdge.destIp) && (
+                          <div className="font-mono text-muted-foreground">{to.ip ?? selectedEdge.destIp}</div>
+                        )}
                       </div>
                       <div>
                         <span className="text-muted-foreground">Count</span>
