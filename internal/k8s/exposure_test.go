@@ -168,7 +168,7 @@ func TestGatewayAPIRouteExposesItsBackendPods(t *testing.T) {
 	want := []ExposureHop{
 		{Kind: "Gateway", Name: "shop/public-gw"},
 		{Kind: "HTTPRoute", Name: "shop/web-route"},
-		{Kind: "Service", Name: "shop/web"},
+		{Kind: "Backend", Name: "shop/web"},
 	}
 	if len(exps[0].Hops) != len(want) {
 		t.Fatalf("hops = %+v, want %+v", exps[0].Hops, want)
@@ -376,7 +376,7 @@ func TestIngressSchemeFollowsItsTLSBlock(t *testing.T) {
 		}
 		// The Ingress itself has to be a hop, not just the Service behind it.
 		if len(exps[0].Hops) != 2 || exps[0].Hops[0].Kind != "Ingress" {
-			t.Errorf("%s: hops = %+v, want Ingress then Service", c.ing.Name, exps[0].Hops)
+			t.Errorf("%s: hops = %+v, want Ingress then Backend", c.ing.Name, exps[0].Hops)
 		}
 	}
 }

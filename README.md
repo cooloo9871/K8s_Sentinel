@@ -101,10 +101,15 @@ Graphs live pod network connections from Cilium Hubble flows.
   GATEWAY
   www.test.com
   HTTPS · 443
-  ├─ Gateway        envoy-gateway-system/eg
-  ├─ HTTPRoute      default/backend2-route
-  └─ Service        default/svc-backend2:8080
-  ↓ this pod
+  ↓
+  Gateway
+  envoy-gateway-system/eg
+  ↓
+  HTTPRoute
+  default/backend2-route
+  ↓
+  Backend
+  default/svc-backend2:8080
   ```
 
   Every entry point resolves through **Service → EndpointSlice → Pod**. EndpointSlice rather than the deprecated Endpoints API, which truncates at 1000 addresses per object — enough to drop pods out of a large Service, in the one place a missing pod reads as "not reachable".

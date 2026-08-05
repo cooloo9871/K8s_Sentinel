@@ -37,7 +37,7 @@ var (
 // Kind and name are separate because the point of listing them is to know which
 // object to go and change.
 type ExposureHop struct {
-	Kind string `json:"kind"` // Gateway, HTTPRoute, Ingress, VirtualService, Service…
+	Kind string `json:"kind"` // Gateway, HTTPRoute, Ingress, VirtualService, Backend…
 	Name string `json:"name"` // "namespace/name", with a port where one applies
 }
 
@@ -86,13 +86,15 @@ func qualified(ns, name string) string {
 	return ns + "/" + name
 }
 
-// servicePort renders the Service hop, which is where every path ends.
+// servicePort renders the hop every path ends on. Called "Backend" rather than
+// "Service" because that is what the manifests call it — backendRefs on a route,
+// backend.service on an Ingress — so it matches the field you would go and edit.
 func servicePort(ns, name string, port int32) ExposureHop {
 	target := qualified(ns, name)
 	if port > 0 {
 		target = fmt.Sprintf("%s:%d", target, port)
 	}
-	return ExposureHop{Kind: "Service", Name: target}
+	return ExposureHop{Kind: "Backend", Name: target}
 }
 
 func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {

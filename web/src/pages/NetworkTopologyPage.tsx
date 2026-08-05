@@ -712,11 +712,12 @@ export function NetworkTopologyPage() {
                           <div>
                             <span className="text-muted-foreground">Exposure</span>
                             <div className="mt-1 flex flex-col gap-1">
-                              {/* The path as a chain, outermost first. Each hop
-                                  names a Kubernetes object, because those are what
-                                  an operator edits to close the path — a single
-                                  joined-up sentence read as prose and could not be
-                                  acted on. */}
+                              {/* The path as a chain, outermost first, each hop
+                                  naming a Kubernetes object — those are what an
+                                  operator edits to close the path, and a single
+                                  joined-up line read as prose and could not be
+                                  acted on. Two lines per hop rather than columns,
+                                  so a long namespace/name is not squeezed. */}
                               {selectedNode.exposures.map((x, i) => (
                                 <div key={i} className="rounded border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
                                   <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-medium uppercase text-amber-700">
@@ -726,23 +727,13 @@ export function NetworkTopologyPage() {
                                   {x.detail && (
                                     <div className="font-mono text-[10px] text-muted-foreground">{x.detail}</div>
                                   )}
-                                  {x.hops && x.hops.length > 0 && (
-                                    <div className="mt-1.5 flex flex-col">
-                                      {x.hops.map((h, hi) => (
-                                        <div key={hi} className="flex items-start gap-1.5 font-mono text-[10px]">
-                                          <span className="text-muted-foreground/60">
-                                            {hi === x.hops!.length - 1 ? '└─' : '├─'}
-                                          </span>
-                                          <span className="w-[86px] shrink-0 text-muted-foreground">{h.kind}</span>
-                                          <span className="break-all">{h.name}</span>
-                                        </div>
-                                      ))}
+                                  {x.hops?.map((h, hi) => (
+                                    <div key={hi}>
+                                      <div className="py-0.5 text-[11px] leading-none text-amber-600/70">↓</div>
+                                      <div className="text-[10px] text-muted-foreground">{h.kind}</div>
+                                      <div className="break-all font-mono text-[11px]">{h.name}</div>
                                     </div>
-                                  )}
-                                  <div className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                                    <span className="text-muted-foreground/60">↓</span>
-                                    this pod
-                                  </div>
+                                  ))}
                                 </div>
                               ))}
                             </div>
