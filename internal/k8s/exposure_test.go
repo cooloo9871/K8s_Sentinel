@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -45,6 +46,7 @@ func routeClient(objs ...runtime.Object) *dynfake.FakeDynamicClient {
 		runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{
 			httpRouteGVR:               "HTTPRouteList",
+			gatewayGVR:                 "GatewayList",
 			grpcRouteGVR:               "GRPCRouteList",
 			istioVirtualServiceGVRs[0]: "VirtualServiceList",
 			istioVirtualServiceGVRs[1]: "VirtualServiceList",
@@ -53,6 +55,21 @@ func routeClient(objs ...runtime.Object) *dynfake.FakeDynamicClient {
 		},
 		objs...,
 	)
+}
+
+// withGateway seeds a Gateway through the resource interface rather than the
+// constructor. The fake client places seeded objects by guessing the resource
+// from the kind, and that guess turns a kind ending in "y" into "ies" — so
+// "Gateway" lands under "gatewaies" and a List on "gateways" finds nothing.
+// The real API server serves "gateways", which the CRD names explicitly.
+func withGateway(t *testing.T, c *dynfake.FakeDynamicClient, gw *unstructured.Unstructured) *dynfake.FakeDynamicClient {
+	t.Helper()
+	_, err := c.Resource(gatewayGVR).Namespace(gw.GetNamespace()).
+		Create(context.Background(), gw, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seeding the Gateway: %v", err)
+	}
+	return c
 }
 
 func httpRoute(ns, name, gateway, host, backendNs, backend string) *unstructured.Unstructured {
@@ -147,8 +164,19 @@ func TestGatewayAPIRouteExposesItsBackendPods(t *testing.T) {
 	if exps[0].Address != "shop.example.com" {
 		t.Errorf("address = %q, want the hostname reached from outside", exps[0].Address)
 	}
-	if want := "public-gw → web"; exps[0].Via != want {
-		t.Errorf("via = %q, want %q", exps[0].Via, want)
+	// The chain has to name each object, since those are what an operator edits.
+	want := []ExposureHop{
+		{Kind: "Gateway", Name: "shop/public-gw"},
+		{Kind: "HTTPRoute", Name: "shop/web-route"},
+		{Kind: "Service", Name: "shop/web"},
+	}
+	if len(exps[0].Hops) != len(want) {
+		t.Fatalf("hops = %+v, want %+v", exps[0].Hops, want)
+	}
+	for i := range want {
+		if exps[0].Hops[i] != want[i] {
+			t.Errorf("hop %d = %+v, want %+v", i, exps[0].Hops[i], want[i])
+		}
 	}
 }
 
@@ -281,5 +309,74 @@ func TestPodListedInSeveralSlicesIsCountedOnce(t *testing.T) {
 	}
 	if exps := s.listPodExposures(context.Background())["shop/web-1"]; len(exps) != 1 {
 		t.Errorf("got %v, want one", exposureTypes(exps))
+	}
+}
+
+// A route alone cannot say whether it is reached over HTTP or HTTPS; only the
+// Gateway's listener knows, so it has to be read.
+func TestGatewayListenerSuppliesTheScheme(t *testing.T) {
+	gw := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "gateway.networking.k8s.io/v1",
+		"kind":       "Gateway",
+		"metadata":   map[string]interface{}{"name": "public-gw", "namespace": "shop"},
+		"spec": map[string]interface{}{
+			"listeners": []interface{}{map[string]interface{}{
+				"name": "https", "protocol": "HTTPS", "port": int64(443),
+			}},
+		},
+	}}
+	s := &Store{
+		typed: k8sfake.NewSimpleClientset(servedPod("shop", "web", "web-1")...),
+		client: withGateway(t, routeClient(
+			httpRoute("shop", "web-route", "public-gw", "shop.example.com", "", "web"),
+		), gw),
+	}
+
+	exps := s.listPodExposures(context.Background())["shop/web-1"]
+	if len(exps) != 1 {
+		t.Fatalf("got %d exposures, want 1", len(exps))
+	}
+	if exps[0].Detail != "HTTPS · 443" {
+		t.Errorf("detail = %q, want the listener's protocol and port", exps[0].Detail)
+	}
+}
+
+// An Ingress says HTTPS only through a TLS block covering the host.
+func TestIngressSchemeFollowsItsTLSBlock(t *testing.T) {
+	plain := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: "plain", Namespace: "shop"},
+		Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{
+			Host: "shop.example.com",
+			IngressRuleValue: networkingv1.IngressRuleValue{HTTP: &networkingv1.HTTPIngressRuleValue{
+				Paths: []networkingv1.HTTPIngressPath{{
+					Path: "/",
+					Backend: networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{
+						Name: "web", Port: networkingv1.ServiceBackendPort{Number: 8080},
+					}},
+				}},
+			}},
+		}}},
+	}
+	secure := plain.DeepCopy()
+	secure.Name = "secure"
+	secure.Spec.TLS = []networkingv1.IngressTLS{{Hosts: []string{"shop.example.com"}}}
+
+	for _, c := range []struct {
+		ing  *networkingv1.Ingress
+		want string
+	}{{plain, "HTTP · 80"}, {secure, "HTTPS · 443"}} {
+		objs := append(servedPod("shop", "web", "web-1"), c.ing)
+		s := &Store{typed: k8sfake.NewSimpleClientset(objs...), client: routeClient()}
+		exps := s.listPodExposures(context.Background())["shop/web-1"]
+		if len(exps) != 1 {
+			t.Fatalf("%s: got %d exposures, want 1", c.ing.Name, len(exps))
+		}
+		if exps[0].Detail != c.want {
+			t.Errorf("%s: detail = %q, want %q", c.ing.Name, exps[0].Detail, c.want)
+		}
+		// The Ingress itself has to be a hop, not just the Service behind it.
+		if len(exps[0].Hops) != 2 || exps[0].Hops[0].Kind != "Ingress" {
+			t.Errorf("%s: hops = %+v, want Ingress then Service", c.ing.Name, exps[0].Hops)
+		}
 	}
 }

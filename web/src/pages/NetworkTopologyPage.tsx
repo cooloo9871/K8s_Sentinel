@@ -26,7 +26,12 @@ interface TopologyNode {
   ip?: string
   viaNode?: string
   // Static attack-surface paths (NodePort/LB/Ingress/hostNetwork), pod nodes only
-  exposures?: { type: string; address: string; via?: string }[]
+  exposures?: {
+    type: string
+    address: string
+    detail?: string
+    hops?: { kind: string; name: string }[]
+  }[]
   // Derived client-side: this pod receives traffic from an ext: source
   extInbound?: boolean
 }
@@ -699,17 +704,37 @@ export function NetworkTopologyPage() {
                           <div>
                             <span className="text-muted-foreground">Exposure</span>
                             <div className="mt-1 flex flex-col gap-1">
+                              {/* The path as a chain, outermost first. Each hop
+                                  names a Kubernetes object, because those are what
+                                  an operator edits to close the path — a single
+                                  joined-up sentence read as prose and could not be
+                                  acted on. */}
                               {selectedNode.exposures.map((x, i) => (
-                                <div key={i} className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5">
+                                <div key={i} className="rounded border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
                                   <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-medium uppercase text-amber-700">
                                     {x.type}
                                   </span>
-                                  <div className="mt-1 break-all font-mono text-[11px] font-medium">{x.address}</div>
-                                  {x.via && (
-                                    <div className="break-all font-mono text-[10px] text-muted-foreground">
-                                      → {x.via}
+                                  <div className="mt-1.5 break-all font-mono text-[11px] font-medium">{x.address}</div>
+                                  {x.detail && (
+                                    <div className="font-mono text-[10px] text-muted-foreground">{x.detail}</div>
+                                  )}
+                                  {x.hops && x.hops.length > 0 && (
+                                    <div className="mt-1.5 flex flex-col">
+                                      {x.hops.map((h, hi) => (
+                                        <div key={hi} className="flex items-start gap-1.5 font-mono text-[10px]">
+                                          <span className="text-muted-foreground/60">
+                                            {hi === x.hops!.length - 1 ? '└─' : '├─'}
+                                          </span>
+                                          <span className="w-[86px] shrink-0 text-muted-foreground">{h.kind}</span>
+                                          <span className="break-all">{h.name}</span>
+                                        </div>
+                                      ))}
                                     </div>
                                   )}
+                                  <div className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                                    <span className="text-muted-foreground/60">↓</span>
+                                    this pod
+                                  </div>
                                 </div>
                               ))}
                             </div>

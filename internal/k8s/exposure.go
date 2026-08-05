@@ -7,6 +7,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -21,6 +22,9 @@ var (
 	grpcRouteGVR = schema.GroupVersionResource{
 		Group: "gateway.networking.k8s.io", Version: "v1", Resource: "grpcroutes",
 	}
+	gatewayGVR = schema.GroupVersionResource{
+		Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways",
+	}
 	// Istio serves v1 on current releases and v1beta1 on older ones, so the first
 	// version that answers wins.
 	istioVirtualServiceGVRs = []schema.GroupVersionResource{
@@ -29,20 +33,30 @@ var (
 	}
 )
 
+// ExposureHop is one Kubernetes object standing between the outside and the pod.
+// Kind and name are separate because the point of listing them is to know which
+// object to go and change.
+type ExposureHop struct {
+	Kind string `json:"kind"` // Gateway, HTTPRoute, Ingress, VirtualService, Service…
+	Name string `json:"name"` // "namespace/name", with a port where one applies
+}
+
 // Exposure describes one externally-reachable path to a pod, derived statically
 // from K8s API objects (not from observed traffic).
 //
-// Split into the address and the route rather than one sentence, because the two
-// answer different questions and only the first is usually being asked: where do
-// I reach this pod from outside, and only then, what carries it there.
+// The path is kept as a chain rather than flattened into a sentence: an operator
+// reading it wants the address first, and then the objects that carry traffic
+// there, because those are what they would edit to close it.
 type Exposure struct {
 	// "nodeport" | "loadbalancer" | "externalip" | "ingress" | "gateway" |
 	// "istio" | "hostnetwork" | "hostport"
 	Type string `json:"type"`
 	// What reaches the pod from outside — a port, an address, a hostname.
 	Address string `json:"address"`
-	// What routes it there: the object in the path and the Service behind it.
-	Via string `json:"via,omitempty"`
+	// The protocol and port behind that address, where they are knowable.
+	Detail string `json:"detail,omitempty"`
+	// The objects in the path, outermost first, ending at the Service.
+	Hops []ExposureHop `json:"hops,omitempty"`
 }
 
 // CachedPodExposures returns "namespace/pod" → exposure list, refreshing at
@@ -62,6 +76,23 @@ func (s *Store) CachedPodExposures(ctx context.Context) map[string][]Exposure {
 	s.exposureExpiry = time.Now().Add(30 * time.Second)
 	s.exposureMu.Unlock()
 	return fresh
+}
+
+// qualified renders an object as an operator would look it up.
+func qualified(ns, name string) string {
+	if ns == "" {
+		return name
+	}
+	return ns + "/" + name
+}
+
+// servicePort renders the Service hop, which is where every path ends.
+func servicePort(ns, name string, port int32) ExposureHop {
+	target := qualified(ns, name)
+	if port > 0 {
+		target = fmt.Sprintf("%s:%d", target, port)
+	}
+	return ExposureHop{Kind: "Service", Name: target}
 }
 
 func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
@@ -94,7 +125,8 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 					addForService(svc.Namespace, svc.Name, Exposure{
 						Type:    "externalip",
 						Address: fmt.Sprintf("%s:%d", extIP, p.Port),
-						Via:     svc.Name,
+						Detail:  fmt.Sprintf("%s · %d", portProtocol(p), p.Port),
+						Hops:    []ExposureHop{servicePort(svc.Namespace, svc.Name, p.Port)},
 					})
 				}
 			}
@@ -106,7 +138,8 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 						addForService(svc.Namespace, svc.Name, Exposure{
 							Type:    "nodeport",
 							Address: fmt.Sprintf("any node :%d", p.NodePort),
-							Via:     fmt.Sprintf("%s:%d", svc.Name, p.Port),
+							Detail:  fmt.Sprintf("%s · %d → %d", portProtocol(p), p.NodePort, p.Port),
+							Hops:    []ExposureHop{servicePort(svc.Namespace, svc.Name, p.Port)},
 						})
 					}
 				}
@@ -128,7 +161,10 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 						addr = fmt.Sprintf("pending :%d", p.Port)
 					}
 					addForService(svc.Namespace, svc.Name, Exposure{
-						Type: "loadbalancer", Address: addr, Via: svc.Name,
+						Type:    "loadbalancer",
+						Address: addr,
+						Detail:  fmt.Sprintf("%s · %d", portProtocol(p), p.Port),
+						Hops:    []ExposureHop{servicePort(svc.Namespace, svc.Name, p.Port)},
 					})
 				}
 			}
@@ -138,11 +174,15 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 	// 2. Ingress backends — L7 exposure via the ingress controller
 	if ings, err := s.typed.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{}); err == nil {
 		for _, ing := range ings.Items {
+			ingHop := ExposureHop{Kind: "Ingress", Name: qualified(ing.Namespace, ing.Name)}
+
 			if db := ing.Spec.DefaultBackend; db != nil && db.Service != nil {
 				addForService(ing.Namespace, db.Service.Name, Exposure{
 					Type:    "ingress",
 					Address: "any host (default backend)",
-					Via:     fmt.Sprintf("%s → %s", ing.Name, db.Service.Name),
+					Detail:  ingressScheme(ing, ""),
+					Hops: []ExposureHop{ingHop,
+						servicePort(ing.Namespace, db.Service.Name, backendPort(db.Service.Port))},
 				})
 			}
 			for _, rule := range ing.Spec.Rules {
@@ -160,7 +200,10 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 					addForService(ing.Namespace, path.Backend.Service.Name, Exposure{
 						Type:    "ingress",
 						Address: host + path.Path,
-						Via:     fmt.Sprintf("%s → %s", ing.Name, path.Backend.Service.Name),
+						Detail:  ingressScheme(ing, rule.Host),
+						Hops: []ExposureHop{ingHop,
+							servicePort(ing.Namespace, path.Backend.Service.Name,
+								backendPort(path.Backend.Service.Port))},
 					})
 				}
 			}
@@ -175,7 +218,7 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 				result[key] = append(result[key], Exposure{
 					Type:    "hostnetwork",
 					Address: "the node's own IP",
-					Via:     "shares the node network namespace",
+					Detail:  "shares the node network namespace",
 				})
 			}
 			for _, c := range p.Spec.Containers {
@@ -184,7 +227,11 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 						result[key] = append(result[key], Exposure{
 							Type:    "hostport",
 							Address: fmt.Sprintf("its node :%d", port.HostPort),
-							Via:     fmt.Sprintf("%s:%d", c.Name, port.ContainerPort),
+							Detail:  fmt.Sprintf("%s · %d → %d", hostPortProtocol(port), port.HostPort, port.ContainerPort),
+							Hops: []ExposureHop{{
+								Kind: "Container",
+								Name: fmt.Sprintf("%s:%d", c.Name, port.ContainerPort),
+							}},
 						})
 					}
 				}
@@ -206,19 +253,31 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 // A route's backendRefs name Services, which the shared resolution chain turns
 // into pods.
 func (s *Store) addGatewayRouteExposures(ctx context.Context, add func(ns, svc string, e Exposure)) {
+	// Listed once and indexed, so naming the Gateway and reading its listener
+	// costs one call rather than one per route.
+	listeners := s.gatewayListeners(ctx)
+
 	for _, gvr := range []schema.GroupVersionResource{httpRouteGVR, grpcRouteGVR} {
 		list, err := s.client.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
 		if err != nil {
 			continue // CRD not installed, or no permission — neither is an error here
 		}
+		routeKind := "HTTPRoute"
+		if gvr == grpcRouteGVR {
+			routeKind = "GRPCRoute"
+		}
+
 		for _, route := range list.Items {
 			routeNs := route.GetNamespace()
-			via := gatewayParents(route)
 			hosts, _, _ := unstructured.NestedStringSlice(route.Object, "spec", "hostnames")
 			host := "*"
 			if len(hosts) > 0 {
 				host = strings.Join(hosts, ", ")
 			}
+
+			// A parentRef without a namespace means the route's own.
+			gwHops, detail := gatewayHops(route, routeNs, listeners)
+			routeHop := ExposureHop{Kind: routeKind, Name: qualified(routeNs, route.GetName())}
 
 			rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "rules")
 			for _, r := range rules {
@@ -245,10 +304,13 @@ func (s *Store) addGatewayRouteExposures(ctx context.Context, add func(ns, svc s
 					if ns == "" {
 						ns = routeNs
 					}
+					port, _, _ := unstructured.NestedInt64(ref, "port")
 					add(ns, name, Exposure{
 						Type:    "gateway",
 						Address: host,
-						Via:     fmt.Sprintf("%s → %s", via, name),
+						Detail:  detail,
+						Hops: append(append([]ExposureHop{}, gwHops...),
+							routeHop, servicePort(ns, name, int32(port))),
 					})
 				}
 			}
@@ -256,10 +318,14 @@ func (s *Store) addGatewayRouteExposures(ctx context.Context, add func(ns, svc s
 	}
 }
 
-// gatewayParents names the Gateways a route attaches to, for the detail line.
-func gatewayParents(route unstructured.Unstructured) string {
+// gatewayHops names the Gateways a route attaches to, and reads the scheme from
+// the listener it targets — which is the part a route alone cannot say.
+func gatewayHops(
+	route unstructured.Unstructured, routeNs string, listeners map[string]string,
+) ([]ExposureHop, string) {
 	parents, _, _ := unstructured.NestedSlice(route.Object, "spec", "parentRefs")
-	var names []string
+	var hops []ExposureHop
+	detail := ""
 	for _, p := range parents {
 		ref, ok := p.(map[string]interface{})
 		if !ok {
@@ -268,14 +334,61 @@ func gatewayParents(route unstructured.Unstructured) string {
 		if kind, _, _ := unstructured.NestedString(ref, "kind"); kind != "" && kind != "Gateway" {
 			continue
 		}
-		if name, _, _ := unstructured.NestedString(ref, "name"); name != "" {
-			names = append(names, name)
+		name, _, _ := unstructured.NestedString(ref, "name")
+		if name == "" {
+			continue
+		}
+		ns, _, _ := unstructured.NestedString(ref, "namespace")
+		if ns == "" {
+			ns = routeNs
+		}
+		key := ns + "/" + name
+		hops = append(hops, ExposureHop{Kind: "Gateway", Name: key})
+		if section, _, _ := unstructured.NestedString(ref, "sectionName"); section != "" {
+			if d := listeners[key+"/"+section]; d != "" {
+				detail = d
+			}
+		}
+		if detail == "" {
+			detail = listeners[key]
 		}
 	}
-	if len(names) == 0 {
-		return route.GetName()
+	return hops, detail
+}
+
+// gatewayListeners indexes every Gateway's listeners as "protocol · port", both
+// per named section and once for the Gateway as a whole, so a route that does not
+// name a section still gets an answer.
+func (s *Store) gatewayListeners(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	list, err := s.client.Resource(gatewayGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return out
 	}
-	return strings.Join(names, ", ")
+	for _, gw := range list.Items {
+		key := gw.GetNamespace() + "/" + gw.GetName()
+		items, _, _ := unstructured.NestedSlice(gw.Object, "spec", "listeners")
+		for _, l := range items {
+			listener, ok := l.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			proto, _, _ := unstructured.NestedString(listener, "protocol")
+			port, _, _ := unstructured.NestedInt64(listener, "port")
+			if proto == "" || port == 0 {
+				continue
+			}
+			detail := fmt.Sprintf("%s · %d", proto, port)
+			if name, _, _ := unstructured.NestedString(listener, "name"); name != "" {
+				out[key+"/"+name] = detail
+			}
+			// The first listener stands for the Gateway when no section is named.
+			if _, seen := out[key]; !seen {
+				out[key] = detail
+			}
+		}
+	}
+	return out
 }
 
 // addIstioExposures resolves Istio VirtualServices to the pods behind them.
@@ -307,8 +420,6 @@ func (s *Store) addIstioExposures(ctx context.Context, add func(ns, svc string, 
 			if len(hosts) > 0 {
 				host = strings.Join(hosts, ", ")
 			}
-			via := strings.Join(external, ", ")
-
 			for _, section := range []string{"http", "tcp", "tls"} {
 				routes, _, _ := unstructured.NestedSlice(vs.Object, "spec", section)
 				for _, r := range routes {
@@ -327,10 +438,17 @@ func (s *Store) addIstioExposures(ctx context.Context, add func(ns, svc string, 
 						if svc == "" {
 							continue
 						}
+						hops := make([]ExposureHop, 0, len(external)+2)
+						for _, g := range external {
+							hops = append(hops, ExposureHop{Kind: "Gateway", Name: g})
+						}
+						hops = append(hops,
+							ExposureHop{Kind: "VirtualService", Name: qualified(vs.GetNamespace(), vs.GetName())},
+							servicePort(ns, svc, 0))
 						add(ns, svc, Exposure{
 							Type:    "istio",
 							Address: host,
-							Via:     fmt.Sprintf("%s → %s", via, svc),
+							Hops:    hops,
 						})
 					}
 				}
@@ -353,4 +471,42 @@ func splitIstioHost(host, defaultNs string) (svc, ns string) {
 		return parts[0], defaultNs
 	}
 	return parts[0], parts[1]
+}
+
+// portProtocol names a Service port's protocol, which defaults to TCP.
+func portProtocol(p corev1.ServicePort) string {
+	if p.Protocol == "" {
+		return "TCP"
+	}
+	return string(p.Protocol)
+}
+
+func hostPortProtocol(p corev1.ContainerPort) string {
+	if p.Protocol == "" {
+		return "TCP"
+	}
+	return string(p.Protocol)
+}
+
+// backendPort takes whichever of the two forms an Ingress backend port uses.
+// A named port cannot be resolved without the Service, and reporting no port is
+// better than reporting a name where a number is expected.
+func backendPort(p networkingv1.ServiceBackendPort) int32 {
+	return p.Number
+}
+
+// ingressScheme reports HTTPS when the host is covered by a TLS block, which is
+// the only place an Ingress says so.
+func ingressScheme(ing networkingv1.Ingress, host string) string {
+	for _, tls := range ing.Spec.TLS {
+		if len(tls.Hosts) == 0 {
+			return "HTTPS · 443"
+		}
+		for _, h := range tls.Hosts {
+			if h == host {
+				return "HTTPS · 443"
+			}
+		}
+	}
+	return "HTTP · 80"
 }

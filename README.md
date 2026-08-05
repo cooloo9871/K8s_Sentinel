@@ -95,6 +95,18 @@ Graphs live pod network connections from Cilium Hubble flows.
   | `istio` | `VirtualService` destinations — only where a real Gateway is attached, since `mesh` alone is sidecar traffic and exposes nothing |
   | `hostnetwork` / `hostport` | pod and container spec |
 
+  Each one is shown as the chain of objects between the outside and the pod, rather than a joined-up sentence — the hops name what you would edit to close the path:
+
+  ```
+  GATEWAY
+  www.test.com
+  HTTPS · 443
+  ├─ Gateway        envoy-gateway-system/eg
+  ├─ HTTPRoute      default/backend2-route
+  └─ Service        default/svc-backend2:8080
+  ↓ this pod
+  ```
+
   Every entry point resolves through **Service → EndpointSlice → Pod**. EndpointSlice rather than the deprecated Endpoints API, which truncates at 1000 addresses per object — enough to drop pods out of a large Service, in the one place a missing pod reads as "not reachable".
 
   Gateway API and Istio are optional: without the CRDs the lookup is skipped rather than failing.
