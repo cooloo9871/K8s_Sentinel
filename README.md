@@ -395,7 +395,7 @@ Add to the kube-apiserver flags:
 | `discovery.k8s.io` | `endpointslices` | get, list |
 | `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get, list |
 | `networking.k8s.io` | `ingresses` | get, list |
-| `gateway.networking.k8s.io` | `httproutes`, `grpcroutes` | get, list |
+| `gateway.networking.k8s.io` | `gateways`, `httproutes`, `grpcroutes` | get, list |
 | `networking.istio.io` | `virtualservices` | get, list |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 
