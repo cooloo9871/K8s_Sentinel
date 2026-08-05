@@ -642,15 +642,22 @@ export function NetworkTopologyPage() {
                 as its CNI with the Hubble agent enabled:
               </p>
               <pre className="mt-1 overflow-x-auto rounded bg-amber-500/10 px-2 py-1.5 font-mono text-[11px] text-amber-700">
-{`cilium install --version 1.18.3 \\
+{`cilium install --version <version> \\
   --set kubeProxyReplacement=true \\
-  --set k8sServiceHost=<api-server-ip> --set k8sServicePort=6443 \\
-  --set hubble.enabled=true`}
+  --set k8sServiceHost=<api-server-ip> \\
+  --set k8sServicePort=6443 \\
+  --set hubble.enabled=true \\
+  --set rollOutCiliumPods=true \\
+  --set operator.rollOutPods=true`}
               </pre>
               <p className="mt-0.5 text-xs text-amber-600">
-                <span className="font-medium">kubeProxyReplacement</span> is what lets Hubble observe
-                NodePort traffic before SNAT, so inbound connections show their real source IP.
-                No Hubble UI or Relay is needed — K8s Sentinel reads the agent socket directly.
+                <span className="font-medium">hubble.enabled</span> opens the agent socket this page
+                reads — no Hubble UI or Relay is needed.{' '}
+                <span className="font-medium">kubeProxyReplacement</span> is what rewrites a Service
+                address to the backend pod before the flow is observed; left to kube-proxy the flow
+                carries the ClusterIP, which is not an endpoint, and service traffic never reaches
+                the graph. The two <span className="font-medium">rollOut</span> flags are unrelated
+                to K8s Sentinel — they restart the agent and operator on a config change.
               </p>
             </div>
           </CardContent>
@@ -866,10 +873,6 @@ export function NetworkTopologyPage() {
                         {(to.ip ?? selectedEdge.destIp) && (
                           <div className="font-mono text-muted-foreground">{to.ip ?? selectedEdge.destIp}</div>
                         )}
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Count</span>
-                        <div className="mt-0.5">{selectedEdge.count} connection{selectedEdge.count !== 1 ? 's' : ''}</div>
                       </div>
                       {selectedEdge.ports && selectedEdge.ports.length > 0 && (
                         <div>
