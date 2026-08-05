@@ -66,7 +66,11 @@ function PodNode({ data }: { data: TopologyNode }) {
   // External traffic arriving at a pod with no declared exposure path is a
   // security signal (config drift, hostPort bypass, or an active probe).
   const anomaly = !!data.extInbound && !exposed
-  const border = anomaly ? 'border-red-500/70' : exposed ? 'border-amber-500/60' : 'border-primary/40'
+  // Being exposed is a fact about most pods behind a Service, not an alert, so it
+  // is said with the globe alone — recolouring the card made a normal state
+  // compete for attention with the node cards and with the one state that is an
+  // alert. That one keeps its border.
+  const border = anomaly ? 'border-red-500/70' : 'border-primary/40'
   return (
     <div className={`relative rounded-lg border ${border} bg-background px-3 py-2 shadow-sm min-w-[120px] text-center`}>
       <Handle type="target" position={Position.Left} className="!bg-primary" />
