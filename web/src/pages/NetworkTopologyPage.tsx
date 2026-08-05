@@ -25,7 +25,7 @@ interface TopologyNode {
   ip?: string
   viaNode?: string
   // Static attack-surface paths (NodePort/LB/Ingress/hostNetwork), pod nodes only
-  exposures?: { type: string; detail: string }[]
+  exposures?: { type: string; address: string; via?: string }[]
   // Derived client-side: this pod receives traffic from an ext: source
   extInbound?: boolean
 }
@@ -248,6 +248,9 @@ export function NetworkTopologyPage() {
   // how workloads talk to each other, so it is out of the way by default —
   // available because it is exactly what a whitelist ingress policy blocks.
   const [hideProbes, setHideProbes] = useState(true)
+  // On, because a 15-minute window shown without refreshing goes stale silently.
+  // Off is available for reading the graph undisturbed.
+  const [autoRefresh, setAutoRefresh] = useState(true)
   // Show only pods with a declared exposure path (attack-surface audit view)
   const [exposedOnly, setExposedOnly] = useState(false)
   // Hover focus: highlight the hovered node's edges, dim everything else
@@ -258,8 +261,11 @@ export function NetworkTopologyPage() {
   const [rawNodes, setRawNodes] = useState<TopologyNode[]>([])
   const [rawEdges, setRawEdges] = useState<TopologyEdge[]>([])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  // showSpinner is off for the background poll: replacing the graph with
+  // "Loading topology..." unmounted and remounted it every minute, which is what
+  // the refresh looked like even after it stopped moving the view.
+  const load = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
     try {
       const res = await fetch('/api/network-topology', { credentials: 'include', cache: 'no-store' })
       const data: TopologyResponse = await res.json()
@@ -282,16 +288,16 @@ export function NetworkTopologyPage() {
       // setup guidance is the more useful of the two messages.
       setFlowsEverSeen(false)
     } finally {
-      setLoading(false)
+      if (showSpinner) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    load()
-    // Auto-refresh every 30s so new connections appear without manual reload
+    load(true) // first load is the only one worth a spinner
+    if (!autoRefresh) return
     const timer = setInterval(() => load(), 60_000)
     return () => clearInterval(timer)
-  }, [load])
+  }, [load, autoRefresh])
 
   // Namespaces available for filter
   const namespaces = useMemo(() =>
@@ -456,7 +462,7 @@ export function NetworkTopologyPage() {
             <IconLayoutGrid size={14} className="mr-1.5" />
             Auto Layout
           </Button>
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => load(true)} disabled={loading}>
             <IconRefresh size={14} className="mr-1.5" />
             Refresh
           </Button>
@@ -498,6 +504,14 @@ export function NetworkTopologyPage() {
             className="size-3.5"
           />
           Hide health probes
+        </label>
+        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+          <Checkbox
+            checked={autoRefresh}
+            onCheckedChange={v => setAutoRefresh(v === true)}
+            className="size-3.5"
+          />
+          Auto refresh
         </label>
         <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
           <Checkbox
@@ -681,9 +695,16 @@ export function NetworkTopologyPage() {
                             <span className="text-muted-foreground">Exposure</span>
                             <div className="mt-1 flex flex-col gap-1">
                               {selectedNode.exposures.map((x, i) => (
-                                <div key={i} className="flex items-start gap-1.5">
-                                  <span className="shrink-0 rounded bg-amber-500/10 px-1 py-0.5 text-[9px] font-medium uppercase text-amber-700">{x.type}</span>
-                                  <span className="break-all font-mono text-[11px]">{x.detail}</span>
+                                <div key={i} className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5">
+                                  <span className="rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-medium uppercase text-amber-700">
+                                    {x.type}
+                                  </span>
+                                  <div className="mt-1 break-all font-mono text-[11px] font-medium">{x.address}</div>
+                                  {x.via && (
+                                    <div className="break-all font-mono text-[10px] text-muted-foreground">
+                                      → {x.via}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>

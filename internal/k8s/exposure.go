@@ -29,11 +29,18 @@ var (
 	}
 )
 
-// Exposure describes one externally-reachable path to a pod, derived
-// statically from K8s API objects (not from observed traffic).
+// Exposure describes one externally-reachable path to a pod, derived statically
+// from K8s API objects (not from observed traffic).
+//
+// Split into the address and the route rather than one sentence, because the two
+// answer different questions and only the first is usually being asked: where do
+// I reach this pod from outside, and only then, what carries it there.
 type Exposure struct {
-	Type   string `json:"type"`   // "nodeport" | "loadbalancer" | "ingress" | "gateway" | "istio" | "hostnetwork" | "hostport"
-	Detail string `json:"detail"` // human-readable route, e.g. ":31906 → svc-test:80"
+	Type string `json:"type"` // "nodeport" | "loadbalancer" | "ingress" | "gateway" | "istio" | "hostnetwork" | "hostport"
+	// What reaches the pod from outside — a port, an address, a hostname.
+	Address string `json:"address"`
+	// What routes it there: the object in the path and the Service behind it.
+	Via string `json:"via,omitempty"`
 }
 
 // CachedPodExposures returns "namespace/pod" → exposure list, refreshing at
@@ -81,8 +88,9 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 				for _, p := range svc.Spec.Ports {
 					if p.NodePort > 0 {
 						addForService(svc.Namespace, svc.Name, Exposure{
-							Type:   "nodeport",
-							Detail: fmt.Sprintf(":%d → %s:%d", p.NodePort, svc.Name, p.Port),
+							Type:    "nodeport",
+							Address: fmt.Sprintf("any node :%d", p.NodePort),
+							Via:     fmt.Sprintf("%s:%d", svc.Name, p.Port),
 						})
 					}
 				}
@@ -99,11 +107,13 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 					}
 				}
 				for _, p := range svc.Spec.Ports {
-					detail := fmt.Sprintf("%s:%d → %s", lbAddr, p.Port, svc.Name)
+					addr := fmt.Sprintf("%s:%d", lbAddr, p.Port)
 					if lbAddr == "" {
-						detail = fmt.Sprintf("LB :%d → %s (pending)", p.Port, svc.Name)
+						addr = fmt.Sprintf("pending :%d", p.Port)
 					}
-					addForService(svc.Namespace, svc.Name, Exposure{Type: "loadbalancer", Detail: detail})
+					addForService(svc.Namespace, svc.Name, Exposure{
+						Type: "loadbalancer", Address: addr, Via: svc.Name,
+					})
 				}
 			}
 		}
@@ -114,8 +124,9 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 		for _, ing := range ings.Items {
 			if db := ing.Spec.DefaultBackend; db != nil && db.Service != nil {
 				addForService(ing.Namespace, db.Service.Name, Exposure{
-					Type:   "ingress",
-					Detail: fmt.Sprintf("%s (default) → %s", ing.Name, db.Service.Name),
+					Type:    "ingress",
+					Address: "any host (default backend)",
+					Via:     fmt.Sprintf("%s → %s", ing.Name, db.Service.Name),
 				})
 			}
 			for _, rule := range ing.Spec.Rules {
@@ -131,8 +142,9 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 						continue
 					}
 					addForService(ing.Namespace, path.Backend.Service.Name, Exposure{
-						Type:   "ingress",
-						Detail: fmt.Sprintf("%s%s → %s", host, path.Path, path.Backend.Service.Name),
+						Type:    "ingress",
+						Address: host + path.Path,
+						Via:     fmt.Sprintf("%s → %s", ing.Name, path.Backend.Service.Name),
 					})
 				}
 			}
@@ -144,14 +156,19 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 		for _, p := range pods.Items {
 			key := p.Namespace + "/" + p.Name
 			if p.Spec.HostNetwork {
-				result[key] = append(result[key], Exposure{Type: "hostnetwork", Detail: "shares the node network namespace"})
+				result[key] = append(result[key], Exposure{
+					Type:    "hostnetwork",
+					Address: "the node's own IP",
+					Via:     "shares the node network namespace",
+				})
 			}
 			for _, c := range p.Spec.Containers {
 				for _, port := range c.Ports {
 					if port.HostPort > 0 {
 						result[key] = append(result[key], Exposure{
-							Type:   "hostport",
-							Detail: fmt.Sprintf("node :%d → %s:%d", port.HostPort, c.Name, port.ContainerPort),
+							Type:    "hostport",
+							Address: fmt.Sprintf("its node :%d", port.HostPort),
+							Via:     fmt.Sprintf("%s:%d", c.Name, port.ContainerPort),
 						})
 					}
 				}
@@ -213,8 +230,9 @@ func (s *Store) addGatewayRouteExposures(ctx context.Context, add func(ns, svc s
 						ns = routeNs
 					}
 					add(ns, name, Exposure{
-						Type:   "gateway",
-						Detail: fmt.Sprintf("%s · %s → %s", via, host, name),
+						Type:    "gateway",
+						Address: host,
+						Via:     fmt.Sprintf("%s → %s", via, name),
 					})
 				}
 			}
@@ -294,8 +312,9 @@ func (s *Store) addIstioExposures(ctx context.Context, add func(ns, svc string, 
 							continue
 						}
 						add(ns, svc, Exposure{
-							Type:   "istio",
-							Detail: fmt.Sprintf("%s · %s → %s", via, host, svc),
+							Type:    "istio",
+							Address: host,
+							Via:     fmt.Sprintf("%s → %s", via, svc),
 						})
 					}
 				}

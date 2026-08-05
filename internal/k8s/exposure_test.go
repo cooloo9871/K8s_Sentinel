@@ -133,8 +133,11 @@ func TestGatewayAPIRouteExposesItsBackendPods(t *testing.T) {
 	}
 	// The detail has to name the Gateway, or an audit cannot tell which front
 	// door reaches this pod.
-	if want := "public-gw · shop.example.com → web"; exps[0].Detail != want {
-		t.Errorf("detail = %q, want %q", exps[0].Detail, want)
+	if exps[0].Address != "shop.example.com" {
+		t.Errorf("address = %q, want the hostname reached from outside", exps[0].Address)
+	}
+	if want := "public-gw → web"; exps[0].Via != want {
+		t.Errorf("via = %q, want %q", exps[0].Via, want)
 	}
 }
 
