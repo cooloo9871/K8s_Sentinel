@@ -12,6 +12,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -974,23 +975,36 @@ func (s *Store) ListServicePodNames(ctx context.Context) (map[string][]string, e
 	if s.typed == nil {
 		return nil, nil
 	}
-	list, err := s.typed.CoreV1().Endpoints("").List(ctx, metav1.ListOptions{})
+	// EndpointSlice, not Endpoints. The older API is deprecated as of Kubernetes
+	// 1.33, and a single Endpoints object truncates at 1000 addresses — which
+	// would silently drop the rest of a large Service's pods out of exposure
+	// detection, the one place a missing pod reads as "not reachable".
+	list, err := s.typed.DiscoveryV1().EndpointSlices("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	result := make(map[string][]string, len(list.Items))
-	for _, ep := range list.Items {
-		key := ep.Namespace + "/" + ep.Name
-		var pods []string
-		for _, sub := range ep.Subsets {
-			for _, addr := range sub.Addresses {
-				if addr.TargetRef != nil && addr.TargetRef.Kind == "Pod" {
-					pods = append(pods, addr.TargetRef.Name)
-				}
-			}
+	seen := make(map[string]bool)
+	for _, slice := range list.Items {
+		svc := slice.Labels[discoveryv1.LabelServiceName]
+		if svc == "" {
+			continue // not backing a Service
 		}
-		if len(pods) > 0 {
-			result[key] = pods
+		key := slice.Namespace + "/" + svc
+		for _, ep := range slice.Endpoints {
+			if ep.TargetRef == nil || ep.TargetRef.Kind != "Pod" {
+				continue
+			}
+			// Readiness is deliberately not consulted: a pod that is momentarily
+			// unready is still configured to be reached this way, and exposure is
+			// a question about configuration.
+			//
+			// A Service spans several slices, so the same pod can be listed twice
+			// and would otherwise produce the exposure twice.
+			if id := key + "/" + ep.TargetRef.Name; !seen[id] {
+				seen[id] = true
+				result[key] = append(result[key], ep.TargetRef.Name)
+			}
 		}
 	}
 	return result, nil

@@ -34,8 +34,10 @@ rules:
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list"]
-  - apiGroups: [""]
-    resources: ["endpoints"]
+  # EndpointSlice, not the deprecated Endpoints: it does not truncate at 1000
+  # addresses, which would drop pods out of exposure detection.
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
     verbs: ["get", "list"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]

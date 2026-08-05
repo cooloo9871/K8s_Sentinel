@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -93,23 +94,33 @@ func virtualService(ns, name string, gateways []interface{}, destHost string) *u
 	}}
 }
 
-// A Service with an Endpoints object naming the pod, which is the chain every
+// A Service with an EndpointSlice naming the pod, which is the chain every
 // exposure type resolves through.
 func servedPod(ns, svc, pod string) []runtime.Object {
-	return []runtime.Object{
-		&corev1.Service{
+	return append(
+		[]runtime.Object{&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: svc, Namespace: ns},
 			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+		}},
+		endpointSlice(ns, svc, svc+"-abc", pod),
+	)
+}
+
+func endpointSlice(ns, svc, name string, pods ...string) runtime.Object {
+	eps := make([]discoveryv1.Endpoint, 0, len(pods))
+	for _, p := range pods {
+		eps = append(eps, discoveryv1.Endpoint{
+			Addresses: []string{"10.0.0.1"},
+			TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: p, Namespace: ns},
+		})
+	}
+	return &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels:    map[string]string{discoveryv1.LabelServiceName: svc},
 		},
-		&corev1.Endpoints{
-			ObjectMeta: metav1.ObjectMeta{Name: svc, Namespace: ns},
-			Subsets: []corev1.EndpointSubset{{
-				Addresses: []corev1.EndpointAddress{{
-					IP:        "10.0.0.1",
-					TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: pod, Namespace: ns},
-				}},
-			}},
-		},
+		Endpoints: eps,
 	}
 }
 
@@ -214,5 +225,61 @@ func TestMissingRouteCRDsAreNotAnError(t *testing.T) {
 	// into one — or into a failure that loses the other exposure types.
 	if exps := s.listPodExposures(context.Background())["shop/web-1"]; len(exps) != 0 {
 		t.Errorf("got %v, want none", exposureTypes(exps))
+	}
+}
+
+// externalIPs is reachable from outside whatever the Service type says, and a
+// ClusterIP Service carrying one used to report no exposure at all.
+func TestExternalIPsOnAClusterIPServiceIsAnExposure(t *testing.T) {
+	objs := servedPod("shop", "web", "web-1")
+	svc := objs[0].(*corev1.Service)
+	svc.Spec.ExternalIPs = []string{"203.0.113.10"}
+	svc.Spec.Ports = []corev1.ServicePort{{Port: 80}}
+
+	s := &Store{typed: k8sfake.NewSimpleClientset(objs...), client: routeClient()}
+	exps := s.listPodExposures(context.Background())["shop/web-1"]
+	if len(exps) != 1 || exps[0].Type != "externalip" {
+		t.Fatalf("got %v, want one externalip exposure", exposureTypes(exps))
+	}
+	if exps[0].Address != "203.0.113.10:80" {
+		t.Errorf("address = %q, want the external address and port", exps[0].Address)
+	}
+}
+
+// externalIPs can sit alongside a NodePort, and each is a separate way in.
+func TestExternalIPsAndNodePortAreBothReported(t *testing.T) {
+	objs := servedPod("shop", "web", "web-1")
+	svc := objs[0].(*corev1.Service)
+	svc.Spec.Type = corev1.ServiceTypeNodePort
+	svc.Spec.ExternalIPs = []string{"203.0.113.10"}
+	svc.Spec.Ports = []corev1.ServicePort{{Port: 80, NodePort: 31906}}
+
+	s := &Store{typed: k8sfake.NewSimpleClientset(objs...), client: routeClient()}
+	types := exposureTypes(s.listPodExposures(context.Background())["shop/web-1"])
+	if len(types) != 2 {
+		t.Fatalf("got %v, want both paths", types)
+	}
+}
+
+// A Service's endpoints span several slices, and the same pod appearing in two
+// of them must not produce the exposure twice.
+func TestPodListedInSeveralSlicesIsCountedOnce(t *testing.T) {
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "shop"},
+		Spec: corev1.ServiceSpec{
+			Type:  corev1.ServiceTypeNodePort,
+			Ports: []corev1.ServicePort{{Port: 80, NodePort: 31906}},
+		},
+	}
+	s := &Store{
+		typed: k8sfake.NewSimpleClientset(
+			svc,
+			endpointSlice("shop", "web", "web-aaa", "web-1"),
+			endpointSlice("shop", "web", "web-bbb", "web-1"),
+		),
+		client: routeClient(),
+	}
+	if exps := s.listPodExposures(context.Background())["shop/web-1"]; len(exps) != 1 {
+		t.Errorf("got %v, want one", exposureTypes(exps))
 	}
 }

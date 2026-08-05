@@ -36,7 +36,9 @@ var (
 // answer different questions and only the first is usually being asked: where do
 // I reach this pod from outside, and only then, what carries it there.
 type Exposure struct {
-	Type string `json:"type"` // "nodeport" | "loadbalancer" | "ingress" | "gateway" | "istio" | "hostnetwork" | "hostport"
+	// "nodeport" | "loadbalancer" | "externalip" | "ingress" | "gateway" |
+	// "istio" | "hostnetwork" | "hostport"
+	Type string `json:"type"`
 	// What reaches the pod from outside — a port, an address, a hostname.
 	Address string `json:"address"`
 	// What routes it there: the object in the path and the Service behind it.
@@ -83,6 +85,20 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 	// 1. NodePort / LoadBalancer services — direct L4 exposure
 	if svcs, err := s.typed.CoreV1().Services("").List(ctx, metav1.ListOptions{}); err == nil {
 		for _, svc := range svcs.Items {
+			// externalIPs is reachable from outside whatever the type says, and it
+			// can sit alongside a NodePort or LoadBalancer, so it is its own path
+			// rather than a case of the switch. A ClusterIP Service carrying one
+			// used to report no exposure at all.
+			for _, extIP := range svc.Spec.ExternalIPs {
+				for _, p := range svc.Spec.Ports {
+					addForService(svc.Namespace, svc.Name, Exposure{
+						Type:    "externalip",
+						Address: fmt.Sprintf("%s:%d", extIP, p.Port),
+						Via:     svc.Name,
+					})
+				}
+			}
+
 			switch svc.Spec.Type {
 			case corev1.ServiceTypeNodePort:
 				for _, p := range svc.Spec.Ports {
