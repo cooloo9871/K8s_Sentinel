@@ -682,8 +682,11 @@ export function NetworkTopologyPage() {
         {/* Side panel — node or edge detail */}
         {(selectedNode || selectedEdge) && (
           <div className="w-64 shrink-0">
-            <Card className="h-full">
-              <CardContent className="p-4">
+            {/* The row's height is fixed, so a panel with several exposures and a
+                list of connections has to scroll rather than run off the bottom
+                with no way to reach it. */}
+            <Card className="flex h-full flex-col overflow-hidden">
+              <CardContent className="min-h-0 flex-1 overflow-y-auto p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">
                     {selectedEdge ? 'Connection Detail'
@@ -799,22 +802,24 @@ export function NetworkTopologyPage() {
                                 .map(([title, list]) => (
                                   <div key={title}>
                                     <span className="text-muted-foreground">{title}</span>
-                                    <div className="mt-1 flex flex-col gap-0.5">
+                                    <div className="mt-1 flex flex-col gap-1.5">
+                                      {/* Two lines, not two columns: a pod name is
+                                          longer than this panel is wide, so side by
+                                          side left the ports in a sliver against a
+                                          name wrapped over three lines. */}
                                       {list.map(p => (
-                                        <div key={p.key} className="flex items-baseline justify-between gap-2">
-                                          <span className="break-all font-mono text-[11px]">{p.name}</span>
-                                          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                                            {p.ports}
-                                          </span>
+                                        <div key={p.key}>
+                                          <div className="break-all font-mono text-[11px]">{p.name}</div>
+                                          {p.ports && (
+                                            <div className="font-mono text-[10px] text-muted-foreground">
+                                              {p.ports}
+                                            </div>
+                                          )}
                                         </div>
                                       ))}
                                     </div>
                                   </div>
                                 ))}
-                              <p className="text-[10px] leading-snug text-muted-foreground">
-                                Observed in the last 15 minutes, in-cluster and external alike — this
-                                is traffic that happened, not configuration.
-                              </p>
                             </>
                           )
                         })()}
