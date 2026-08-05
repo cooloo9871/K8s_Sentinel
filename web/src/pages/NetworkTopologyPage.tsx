@@ -46,7 +46,6 @@ interface TopologyEdge {
   // The policy that denied the traffic, when one can be identified
   deniedBy?: string
   healthProbe?: boolean
-  nodeToNode?: boolean
   // Aggregated per-port breakdown (count-desc); ephemeral ports appear as "dynamic"
   ports?: { port: string; count: number }[]
   // L7 (populated from Cilium/Hubble data)
@@ -287,17 +286,11 @@ export function NetworkTopologyPage() {
   // On, because a 15-minute window shown without refreshing goes stale silently.
   // Off is available for reading the graph undisturbed.
   const [autoRefresh, setAutoRefresh] = useState(true)
-  // Node-to-node is mostly Cilium's health probing and tunnel chatter, but a
-  // hostNetwork workload's traffic is indistinguishable from it — it has no
-  // address of its own. Hidden by default, reachable when that is what you are
-  // looking for.
-  const [hideNodeToNode, setHideNodeToNode] = useState(true)
-
   // Shared by the graph and the detail panel, so the panel never lists a
   // connection the graph is not drawing.
   const isVisibleEdge = useCallback((e: TopologyEdge) =>
-    (!hideProbes || !e.healthProbe) && (!hideNodeToNode || !e.nodeToNode),
-  [hideProbes, hideNodeToNode])
+    !hideProbes || !e.healthProbe,
+  [hideProbes])
   // Show only pods with a declared exposure path (attack-surface audit view)
   const [exposedOnly, setExposedOnly] = useState(false)
   // Hover focus: highlight the hovered node's edges, dim everything else
@@ -543,7 +536,7 @@ export function NetworkTopologyPage() {
             <Button variant="outline" size="sm" className="h-8 text-sm font-normal">
               <IconAdjustmentsHorizontal size={14} className="mr-1.5" />
               View
-              {(hideSystem || hideProbes || hideNodeToNode || exposedOnly) && (
+              {(hideSystem || hideProbes || exposedOnly) && (
                 <span className="ml-1.5 size-1.5 rounded-full bg-primary" />
               )}
             </Button>
@@ -552,7 +545,6 @@ export function NetworkTopologyPage() {
             {([
               { label: 'Hide kube-system', checked: hideSystem, set: setHideSystem },
               { label: 'Hide health probes', checked: hideProbes, set: setHideProbes },
-              { label: 'Hide node-to-node', checked: hideNodeToNode, set: setHideNodeToNode },
               { label: 'Exposed only', checked: exposedOnly, set: setExposedOnly },
               { label: 'Auto refresh', checked: autoRefresh, set: setAutoRefresh },
             ] as const).map(o => (

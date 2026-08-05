@@ -186,10 +186,10 @@ func TestInboundTrafficViaCiliumHostReachesTheGraph(t *testing.T) {
 	}
 }
 
-// Node-to-node is mostly Cilium's plumbing, but a hostNetwork workload's traffic
-// is indistinguishable from it — so it is flagged for the UI to hide rather than
-// dropped, which would have made that workload invisible.
-func TestNodeToNodeIsFlaggedNotDropped(t *testing.T) {
+// Traffic between two node addresses is Cilium's own plumbing — inter-node
+// health probing and tunnel chatter — not a workload's traffic, so it is never
+// drawn.
+func TestNodeToNodeIsNotDrawn(t *testing.T) {
 	store := k8s.NewStore(nil, nil, nil, "")
 	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{{
 		Key: "a", SrcIP: "10.0.1.1", DstIP: "10.0.2.1",
@@ -200,11 +200,8 @@ func TestNodeToNodeIsFlaggedNotDropped(t *testing.T) {
 	}}
 
 	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
-	if len(resp.Edges) != 1 {
-		t.Fatalf("got %d edges, want the edge kept for the UI to decide on", len(resp.Edges))
-	}
-	if !resp.Edges[0].NodeToNode {
-		t.Error("a node-to-node edge was not flagged as such")
+	if len(resp.Edges) != 0 {
+		t.Errorf("got %d edges, want node-to-node plumbing left undrawn", len(resp.Edges))
 	}
 }
 
