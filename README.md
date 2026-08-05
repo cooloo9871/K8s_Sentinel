@@ -114,7 +114,9 @@ Graphs live pod network connections from Cilium Hubble flows.
   Known gaps: Gateway API `TCPRoute` / `TLSRoute` / `UDPRoute`, and controller-specific CRDs that are neither Ingress nor Gateway API — Traefik `IngressRoute`, Contour `HTTPProxy`, Emissary `Mapping`, Gloo `VirtualService`, `CiliumEnvoyConfig`. A workload exposed only through one of those carries no badge. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
 - **L7 detail** — HTTP method, path and status code on edges where Cilium's proxy is in the path
 - Traffic arriving from outside is identified by Cilium's `reserved:world` identity rather than by its address, so a connection SNATed to a node's `cilium_host` still reads as external — labelled **world via `<node>`**, with the detail panel explaining that the address is the node's and how to keep the client's
-- Node-to-node traffic is left out: that is Cilium's own health probing and tunnel chatter. Node-to-pod is not, because that is how the outside reaches a workload
+- Node-to-node traffic is hidden by default — mostly Cilium's own health probing and tunnel chatter — but only hidden, not dropped. A **hostNetwork** pod has no address of its own, so its traffic carries the node's and is indistinguishable from that chatter; untick **Hide node-to-node** to see it. Node-to-pod is always shown, because that is how the outside reaches a workload
+
+- A **hostNetwork** pod never appears as its own node. It shares the node's IP with the kubelet, the API server and every other hostNetwork pod there, and a flow carries only that address — so attributing one to a particular pod would be a guess. Its traffic shows as the node's
 - Dagre auto-layout, pod search, and a namespace filter that takes several at once. Auto refresh every 60 seconds, and it can be turned off. The poll is silent — it does not replace the graph with a loading state, and only redraws when it brings something new, so a count ticking up neither blanks the view nor moves the camera
 
 ### Notifications

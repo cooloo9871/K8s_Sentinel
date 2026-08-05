@@ -186,9 +186,10 @@ func TestInboundTrafficViaCiliumHostReachesTheGraph(t *testing.T) {
 	}
 }
 
-// The chatter that hiding cilium_host was meant to suppress is between node
-// addresses, and that is still suppressed — by what it is, not by hiding one end.
-func TestNodeToNodeChatterStaysOut(t *testing.T) {
+// Node-to-node is mostly Cilium's plumbing, but a hostNetwork workload's traffic
+// is indistinguishable from it — so it is flagged for the UI to hide rather than
+// dropped, which would have made that workload invisible.
+func TestNodeToNodeIsFlaggedNotDropped(t *testing.T) {
 	store := k8s.NewStore(nil, nil, nil, "")
 	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{{
 		Key: "a", SrcIP: "10.0.1.1", DstIP: "10.0.2.1",
@@ -199,8 +200,11 @@ func TestNodeToNodeChatterStaysOut(t *testing.T) {
 	}}
 
 	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
-	if len(resp.Edges) != 0 {
-		t.Errorf("got %d edges, want none — node to node is plumbing", len(resp.Edges))
+	if len(resp.Edges) != 1 {
+		t.Fatalf("got %d edges, want the edge kept for the UI to decide on", len(resp.Edges))
+	}
+	if !resp.Edges[0].NodeToNode {
+		t.Error("a node-to-node edge was not flagged as such")
 	}
 }
 

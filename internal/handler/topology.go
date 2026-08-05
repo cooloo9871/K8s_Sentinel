@@ -43,8 +43,13 @@ type TopologyEdge struct {
 	// The kubelet checking the destination pod, rather than traffic between
 	// workloads. Reported instead of dropped so the UI can offer it as a choice —
 	// it is the traffic a whitelist ingress policy silently blocks.
-	HealthProbe bool       `json:"healthProbe,omitempty"`
-	Ports       []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
+	HealthProbe bool `json:"healthProbe,omitempty"`
+	// Both ends are node addresses. Mostly Cilium's own plumbing — health probes
+	// and tunnel chatter — but a hostNetwork workload's traffic looks the same,
+	// because it has no address of its own. Dropping these outright hid that
+	// workload's traffic entirely, so it is a choice rather than a rule.
+	NodeToNode bool       `json:"nodeToNode,omitempty"`
+	Ports      []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
 	// L7 fields (populated from Cilium/Hubble data)
 	L7Type     string `json:"l7Type,omitempty"`
 	HTTPMethod string `json:"httpMethod,omitempty"`
@@ -159,6 +164,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 	type edgeVal struct {
 		count       int
 		healthProbe bool
+		nodeToNode  bool
 		lastSeen    time.Time
 		destIP      string
 		deniedBy    string
@@ -232,13 +238,8 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		if dstID == "" {
 			continue // skip: node-internal IP
 		}
-		// Node to node is Cilium's own plumbing — health probes and tunnel
-		// chatter between cilium_host addresses. Node to pod is not: that is how
-		// traffic from outside reaches a workload, which is the whole point of
-		// showing it.
-		if srcNode.Kind == "node" && dstNode.Kind == "node" {
-			continue
-		}
+
+		nodePair := srcNode.Kind == "node" && dstNode.Kind == "node"
 
 		if _, ok := nodeSet[srcID]; !ok {
 			nodeSet[srcID] = srcNode
@@ -255,6 +256,9 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			edgeMap[key] = ev
 		}
 		ev.count += e.Count
+		if nodePair {
+			ev.nodeToNode = true
+		}
 		if e.LastSeen.After(ev.lastSeen) {
 			ev.lastSeen = e.LastSeen
 		}
@@ -360,6 +364,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			Blocked:     k.blocked,
 			DeniedBy:    ev.deniedBy,
 			HealthProbe: ev.healthProbe,
+			NodeToNode:  ev.nodeToNode,
 			Ports:       portStats(ev.ports),
 			L7Type:      ev.l7Type,
 			HTTPMethod:  ev.httpMethod,
