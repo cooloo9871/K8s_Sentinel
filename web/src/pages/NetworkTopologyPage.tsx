@@ -838,12 +838,6 @@ export function NetworkTopologyPage() {
                         )}
                       </>
                     )}
-                    <div className="pt-1 text-[11px] text-muted-foreground">
-                      {(() => {
-                        const n = rawEdges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length
-                        return `${n} connection${n !== 1 ? 's' : ''}`
-                      })()}
-                    </div>
                   </div>
                 )}
 
@@ -873,6 +867,10 @@ export function NetworkTopologyPage() {
                         {(to.ip ?? selectedEdge.destIp) && (
                           <div className="font-mono text-muted-foreground">{to.ip ?? selectedEdge.destIp}</div>
                         )}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Count</span>
+                        <div className="mt-0.5">{selectedEdge.count} connection{selectedEdge.count !== 1 ? 's' : ''}</div>
                       </div>
                       {selectedEdge.ports && selectedEdge.ports.length > 0 && (
                         <div>
