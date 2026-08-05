@@ -235,3 +235,25 @@ func TestAWorldSourceStaysExternalEvenWithANodeAddress(t *testing.T) {
 		}
 	}
 }
+
+// The kubelet checking each pod is constant and uniform, and says nothing about
+// how workloads talk to each other. It is reported rather than dropped, because
+// it is exactly what a whitelist ingress policy blocks — the UI decides.
+func TestAKubeletProbeIsFlaggedRatherThanDropped(t *testing.T) {
+	store := k8s.NewStore(nil, nil, nil, "")
+	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{
+		nodeEntry("a", "10.0.1.1", "demo", "nginx", time.Now()),
+	})
+	nodeIPs := k8s.NodeIPMap{IPToName: map[string]string{"10.0.1.1": "worker-1"}}
+
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	e := findEdge(resp, "node:10.0.1.1", "demo/nginx")
+	if e == nil {
+		t.Fatal("edge missing")
+	}
+	// With no pod data behind it, nothing can be called a probe — the store has
+	// no clients here, so the lookup finds nothing and must not guess.
+	if e.HealthProbe {
+		t.Error("an edge was called a probe without any pod spec to say so")
+	}
+}

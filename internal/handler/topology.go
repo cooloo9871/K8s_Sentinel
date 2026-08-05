@@ -39,8 +39,12 @@ type TopologyEdge struct {
 	// Which policy denied the traffic. Named by Hubble correlation when an
 	// explicit deny rule fired, otherwise resolved from the policies that
 	// govern the pod. Empty when neither can identify one.
-	DeniedBy string     `json:"deniedBy,omitempty"`
-	Ports    []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
+	DeniedBy string `json:"deniedBy,omitempty"`
+	// The kubelet checking the destination pod, rather than traffic between
+	// workloads. Reported instead of dropped so the UI can offer it as a choice —
+	// it is the traffic a whitelist ingress policy silently blocks.
+	HealthProbe bool       `json:"healthProbe,omitempty"`
+	Ports       []PortStat `json:"ports,omitempty"` // per-port breakdown, count-desc
 	// L7 fields (populated from Cilium/Hubble data)
 	L7Type     string `json:"l7Type,omitempty"`
 	HTTPMethod string `json:"httpMethod,omitempty"`
@@ -153,16 +157,17 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		blocked  bool
 	}
 	type edgeVal struct {
-		count      int
-		lastSeen   time.Time
-		destIP     string
-		deniedBy   string
-		ports      map[string]int
-		l7Type     string
-		httpMethod string
-		httpURL    string
-		httpStatus uint32
-		dnsQuery   string
+		count       int
+		healthProbe bool
+		lastSeen    time.Time
+		destIP      string
+		deniedBy    string
+		ports       map[string]int
+		l7Type      string
+		httpMethod  string
+		httpURL     string
+		httpStatus  uint32
+		dnsQuery    string
 	}
 	edgeMap := make(map[edgeKey]*edgeVal)
 
@@ -268,6 +273,10 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		}
 		if e.Port != "" {
 			ev.ports[normalizePort(e.Port)] += e.Count
+			if srcNode.Kind == "node" && e.DstPod != "" &&
+				k8sStore.IsHealthProbe(ctx, srcNode.Label, e.DstNs, e.DstPod, e.Port) {
+				ev.healthProbe = true
+			}
 		}
 		if e.L7Type != "" {
 			ev.l7Type = e.L7Type
@@ -343,19 +352,20 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			suffix = ":blocked"
 		}
 		edges = append(edges, TopologyEdge{
-			ID:         k.src + "->" + k.dst + suffix,
-			Source:     k.src,
-			Target:     k.dst,
-			DestIP:     ev.destIP,
-			Count:      ev.count,
-			Blocked:    k.blocked,
-			DeniedBy:   ev.deniedBy,
-			Ports:      portStats(ev.ports),
-			L7Type:     ev.l7Type,
-			HTTPMethod: ev.httpMethod,
-			HTTPURL:    ev.httpURL,
-			HTTPStatus: ev.httpStatus,
-			DNSQuery:   ev.dnsQuery,
+			ID:          k.src + "->" + k.dst + suffix,
+			Source:      k.src,
+			Target:      k.dst,
+			DestIP:      ev.destIP,
+			Count:       ev.count,
+			Blocked:     k.blocked,
+			DeniedBy:    ev.deniedBy,
+			HealthProbe: ev.healthProbe,
+			Ports:       portStats(ev.ports),
+			L7Type:      ev.l7Type,
+			HTTPMethod:  ev.httpMethod,
+			HTTPURL:     ev.httpURL,
+			HTTPStatus:  ev.httpStatus,
+			DNSQuery:    ev.dnsQuery,
 		})
 	}
 

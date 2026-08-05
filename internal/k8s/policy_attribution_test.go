@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
@@ -220,5 +221,58 @@ func TestDenialEventCarriesTheSourceContainer(t *testing.T) {
 	}
 	if evt.PolicyName != "deny-tg-to-echo" {
 		t.Errorf("policy = %q, want deny-tg-to-echo", evt.PolicyName)
+	}
+}
+
+// A probe is recognised by two things together: it comes from the node the pod
+// runs on, and it targets a port one of the pod's probes declares. Either alone
+// is ordinary traffic.
+func TestIsHealthProbeNeedsBothTheNodeAndThePort(t *testing.T) {
+	typed := k8sfake.NewSimpleClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "nginx", Namespace: "demo"},
+		Spec: corev1.PodSpec{
+			NodeName: "worker-1",
+			Containers: []corev1.Container{{
+				Name: "nginx",
+				ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromInt32(8080)},
+				}},
+			}},
+		},
+	})
+	s := &Store{typed: typed, client: emptyPolicyClient()}
+	ctx := context.Background()
+
+	if !s.IsHealthProbe(ctx, "worker-1", "demo", "nginx", "8080") {
+		t.Error("the kubelet on the pod's own node, on its probe port, was not recognised")
+	}
+	if s.IsHealthProbe(ctx, "worker-2", "demo", "nginx", "8080") {
+		t.Error("another node reaching the probe port is not the kubelet checking this pod")
+	}
+	if s.IsHealthProbe(ctx, "worker-1", "demo", "nginx", "443") {
+		t.Error("the same node on a different port is ordinary traffic")
+	}
+}
+
+// A named probe port has to be resolved against the container's own port
+// declarations, or every probe written that way would go unrecognised.
+func TestIsHealthProbeResolvesANamedPort(t *testing.T) {
+	typed := k8sfake.NewSimpleClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "demo"},
+		Spec: corev1.PodSpec{
+			NodeName: "worker-1",
+			Containers: []corev1.Container{{
+				Name:  "api",
+				Ports: []corev1.ContainerPort{{Name: "health", ContainerPort: 9090}},
+				LivenessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("health")},
+				}},
+			}},
+		},
+	})
+	s := &Store{typed: typed, client: emptyPolicyClient()}
+
+	if !s.IsHealthProbe(context.Background(), "worker-1", "demo", "api", "9090") {
+		t.Error("a named probe port was not resolved to its container port")
 	}
 }

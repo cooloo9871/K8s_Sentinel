@@ -4,11 +4,14 @@ import (
 	"context"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // Hubble only names a policy when an explicit ingressDeny/egressDeny rule fired.
@@ -48,6 +51,15 @@ type attributionData struct {
 	// one out would be a guess. An absent key means the pod was not in the cache
 	// at all — a different problem, worth telling apart.
 	podContainer map[string]string // "ns/pod" → container names, comma-separated
+	// What it takes to recognise a kubelet health probe: the node the pod runs
+	// on, and the ports its probes target. A connection from that node to one of
+	// those ports is the kubelet checking the pod, not traffic worth graphing.
+	podProbes map[string]podProbeTargets // "ns/pod"
+}
+
+type podProbeTargets struct {
+	node  string
+	ports map[string]bool
 }
 
 // cachedAttribution refreshes policy selectors and pod labels at most every 30s,
@@ -73,6 +85,7 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 	d := attributionData{
 		podLabels:    map[string]map[string]string{},
 		podContainer: map[string]string{},
+		podProbes:    map[string]podProbeTargets{},
 	}
 	if s.typed == nil || s.client == nil {
 		return d
@@ -96,6 +109,18 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 				names = append(names, c.Name)
 			}
 			d.podContainer[key] = strings.Join(names, ", ")
+
+			probe := podProbeTargets{node: p.Spec.NodeName, ports: map[string]bool{}}
+			for _, c := range p.Spec.Containers {
+				for _, pr := range []*corev1.Probe{c.LivenessProbe, c.ReadinessProbe, c.StartupProbe} {
+					if port := probePort(pr, c); port != "" {
+						probe.ports[port] = true
+					}
+				}
+			}
+			if len(probe.ports) > 0 {
+				d.podProbes[key] = probe
+			}
 		}
 	}
 
@@ -246,4 +271,44 @@ func (s *Store) PodContainer(ctx context.Context, podNs, pod string) string {
 		log.Printf("attribution: pod %s absent from a cache of %d pods — no container name for its flows", key, len(d.podContainer))
 	}
 	return name
+}
+
+// probePort returns the port a probe targets, resolving a named port against the
+// container's own declarations. Exec probes have no port and are not network
+// traffic at all.
+func probePort(p *corev1.Probe, c corev1.Container) string {
+	var target intstr.IntOrString
+	switch {
+	case p == nil:
+		return ""
+	case p.HTTPGet != nil:
+		target = p.HTTPGet.Port
+	case p.TCPSocket != nil:
+		target = p.TCPSocket.Port
+	case p.GRPC != nil:
+		return strconv.Itoa(int(p.GRPC.Port))
+	default:
+		return ""
+	}
+	if target.Type == intstr.Int {
+		return strconv.Itoa(int(target.IntVal))
+	}
+	for _, cp := range c.Ports {
+		if cp.Name == target.StrVal {
+			return strconv.Itoa(int(cp.ContainerPort))
+		}
+	}
+	return ""
+}
+
+// IsHealthProbe reports whether a connection is the kubelet checking a pod:
+// coming from the node that pod runs on, to a port one of its probes targets.
+// Both conditions matter — the same port reached from anywhere else is ordinary
+// traffic, and the same node reaching another port is not a probe.
+func (s *Store) IsHealthProbe(ctx context.Context, srcNode, podNs, pod, port string) bool {
+	if srcNode == "" || pod == "" || port == "" {
+		return false
+	}
+	probe, ok := s.cachedAttribution(ctx).podProbes[podNs+"/"+pod]
+	return ok && probe.node == srcNode && probe.ports[port]
 }

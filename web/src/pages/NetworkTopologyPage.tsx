@@ -41,6 +41,7 @@ interface TopologyEdge {
   blocked: boolean
   // The policy that denied the traffic, when one can be identified
   deniedBy?: string
+  healthProbe?: boolean
   // Aggregated per-port breakdown (count-desc); ephemeral ports appear as "dynamic"
   ports?: { port: string; count: number }[]
   // L7 (populated from Cilium/Hubble data)
@@ -238,6 +239,10 @@ export function NetworkTopologyPage() {
   // System namespaces are mostly control-plane noise (coredns, operators);
   // hidden by default, and auto-shown when kube-system is explicitly selected.
   const [hideSystem, setHideSystem] = useState(true)
+  // The kubelet checking each pod is constant, uniform and says nothing about
+  // how workloads talk to each other, so it is out of the way by default —
+  // available because it is exactly what a whitelist ingress policy blocks.
+  const [hideProbes, setHideProbes] = useState(true)
   // Show only pods with a declared exposure path (attack-surface audit view)
   const [exposedOnly, setExposedOnly] = useState(false)
   // Hover focus: highlight the hovered node's edges, dim everything else
@@ -285,6 +290,8 @@ export function NetworkTopologyPage() {
   useEffect(() => {
     const podQ = podSearch.trim().toLowerCase()
 
+    const visibleEdges = hideProbes ? rawEdges.filter(e => !e.healthProbe) : rawEdges
+
     // Hide kube-system unless the user explicitly filters to it
     const effectiveHide = hideSystem && nsFilter !== 'kube-system'
     const scopedNodes = effectiveHide
@@ -292,8 +299,8 @@ export function NetworkTopologyPage() {
       : rawNodes
     const scopedIds = new Set(scopedNodes.map(n => n.id))
     const scopedEdges = effectiveHide
-      ? rawEdges.filter(e => scopedIds.has(e.source) && scopedIds.has(e.target))
-      : rawEdges
+      ? visibleEdges.filter(e => scopedIds.has(e.source) && scopedIds.has(e.target))
+      : visibleEdges
 
     // "Primary" nodes: pods matching the filter criteria.
     // external and node kinds are never seeds — they are pulled in by
@@ -369,7 +376,7 @@ export function NetworkTopologyPage() {
     setTimeout(() => reactFlowRef.current?.fitView(), 100)
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
-  }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, exposedOnly, setNodes, setEdges])
+  }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, hideProbes, exposedOnly, setNodes, setEdges])
 
   // Hover / selection focus: highlight the focused node's edges + neighbors,
   // dim everything else. Labels appear only on focused edges.
@@ -470,6 +477,14 @@ export function NetworkTopologyPage() {
             className="size-3.5"
           />
           Hide kube-system
+        </label>
+        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+          <Checkbox
+            checked={hideProbes}
+            onCheckedChange={v => setHideProbes(v === true)}
+            className="size-3.5"
+          />
+          Hide health probes
         </label>
         <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
           <Checkbox
