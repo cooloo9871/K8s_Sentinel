@@ -75,12 +75,6 @@ function endpointName(node: TopologyNode | undefined, fallback: string): string 
   return node?.label ?? fallback
 }
 
-function ports(e: TopologyEdge): string {
-  return (e.ports ?? [])
-    .map(p => `${p.port === 'dynamic' ? 'dynamic' : p.port}×${p.count}`)
-    .join('  ')
-}
-
 function PodNode({ data }: { data: TopologyNode }) {
   const exposed = (data.exposures?.length ?? 0) > 0
   // External traffic arriving at a pod with no declared exposure path is a
@@ -776,53 +770,6 @@ export function NetworkTopologyPage() {
                             </div>
                           </div>
                         )}
-                        {/* Configuration answers "who could reach this". Only the
-                            flows answer "who did". Keeping them apart is what was
-                            missing: a pod reached over its ClusterIP shows nothing
-                            under Exposure, correctly, and used to show nothing at
-                            all. Ordered by volume, since that is what a summary is
-                            for. */}
-                        {(() => {
-                          const byId = Object.fromEntries(rawNodes.map(n => [n.id, n]))
-                          const peers = (dir: 'in' | 'out') => rawEdges
-                            .filter(isVisibleEdge)
-                            .filter(e => (dir === 'in' ? e.target : e.source) === selectedNode.id)
-                            .sort((a, b) => b.count - a.count)
-                            .map(e => {
-                              const id = dir === 'in' ? e.source : e.target
-                              return { key: e.id, name: endpointName(byId[id], id), ports: ports(e) }
-                            })
-                          const inbound = peers('in')
-                          const outbound = peers('out')
-                          if (inbound.length === 0 && outbound.length === 0) return null
-                          return (
-                            <>
-                              {([['Connections in', inbound], ['Connections out', outbound]] as const)
-                                .filter(([, list]) => list.length > 0)
-                                .map(([title, list]) => (
-                                  <div key={title}>
-                                    <span className="text-muted-foreground">{title}</span>
-                                    <div className="mt-1 flex flex-col gap-1.5">
-                                      {/* Two lines, not two columns: a pod name is
-                                          longer than this panel is wide, so side by
-                                          side left the ports in a sliver against a
-                                          name wrapped over three lines. */}
-                                      {list.map(p => (
-                                        <div key={p.key}>
-                                          <div className="break-all font-mono text-[11px]">{p.name}</div>
-                                          {p.ports && (
-                                            <div className="font-mono text-[10px] text-muted-foreground">
-                                              {p.ports}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                            </>
-                          )
-                        })()}
                         {selectedNode.extInbound && !(selectedNode.exposures?.length) && (
                           <div className="mt-1 rounded bg-red-50 px-2 py-1.5 text-[11px] font-medium text-red-600">
                             ⚠ Receiving external traffic without any declared exposure path
