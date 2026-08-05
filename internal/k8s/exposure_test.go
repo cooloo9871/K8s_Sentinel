@@ -380,3 +380,36 @@ func TestIngressSchemeFollowsItsTLSBlock(t *testing.T) {
 		}
 	}
 }
+
+// A pod can be reachable several ways at once, and the widest reach is the one
+// worth reading first: an address on the internet is a different problem from a
+// port that first needs access to a node.
+func TestExposuresAreOrderedWidestFirst(t *testing.T) {
+	exps := []Exposure{
+		{Type: "hostport"},
+		{Type: "nodeport"},
+		{Type: "gateway"},
+		{Type: "externalip"},
+	}
+	sortByReach(exps)
+
+	want := []string{"gateway", "externalip", "nodeport", "hostport"}
+	if got := exposureTypes(exps); len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if exps[i].Type != want[i] {
+			t.Fatalf("order = %v, want %v", exposureTypes(exps), want)
+		}
+	}
+}
+
+// Two paths of equal reach keep the order they were found in, so re-reading does
+// not shuffle the panel.
+func TestEqualReachKeepsDetectionOrder(t *testing.T) {
+	exps := []Exposure{{Type: "ingress", Address: "a"}, {Type: "gateway", Address: "b"}}
+	sortByReach(exps)
+	if exps[0].Address != "a" || exps[1].Address != "b" {
+		t.Errorf("order changed: %+v", exps)
+	}
+}

@@ -71,6 +71,10 @@ func TestDedupFillsFieldsMissingFromTheStoredEvent(t *testing.T) {
 	next.DropReason = "POLICY_DENY"
 	s.Add(next)
 
+	// The store writes asynchronously; without this the test can finish while a
+	// write is landing and race with the cleanup of its own temporary directory.
+	s.WaitForFlush()
+
 	evts := s.List()
 	if len(evts) != 1 {
 		t.Fatalf("got %d events, want 1 deduped", len(evts))

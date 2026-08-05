@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -71,6 +72,9 @@ func (s *Store) CachedPodExposures(ctx context.Context) map[string][]Exposure {
 	s.exposureMu.RUnlock()
 
 	fresh := s.listPodExposures(ctx)
+	for _, exps := range fresh {
+		sortByReach(exps)
+	}
 	s.exposureMu.Lock()
 	s.exposureData = fresh
 	s.exposureExpiry = time.Now().Add(30 * time.Second)
@@ -511,4 +515,28 @@ func ingressScheme(ing networkingv1.Ingress, host string) string {
 		}
 	}
 	return "HTTP · 80"
+}
+
+// exposureReach ranks how far an entry point reaches, so a pod with several is
+// read widest-first. The order matters for an audit: an address on the internet
+// is a different problem from a port that first needs access to a node.
+func exposureReach(kind string) int {
+	switch kind {
+	case "loadbalancer", "gateway", "istio", "ingress":
+		return 0 // routed from wherever the address resolves
+	case "externalip":
+		return 1 // an address the cluster claims on its own network
+	case "nodeport":
+		return 2 // needs reachability to some node
+	default:
+		return 3 // hostPort, hostNetwork — needs a specific node
+	}
+}
+
+// sortByReach orders in place, keeping detection order within a rank so repeated
+// reads do not shuffle.
+func sortByReach(exps []Exposure) {
+	sort.SliceStable(exps, func(i, j int) bool {
+		return exposureReach(exps[i].Type) < exposureReach(exps[j].Type)
+	})
 }

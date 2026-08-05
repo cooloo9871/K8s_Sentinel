@@ -95,7 +95,11 @@ type Store struct {
 	path     string
 	flushGen uint64     // incremented each flush; goroutine skips write if stale
 	flushMu  sync.Mutex // serialises the stale-check + rename to eliminate TOCTOU
-	cfg      RetentionConfig
+	// Tracks flushes still in flight. Writing is asynchronous, which is right for
+	// a long-lived process and invisible to it — but a test that ends while a
+	// write is landing races with its own cleanup, so it needs a way to wait.
+	flushWG sync.WaitGroup
+	cfg     RetentionConfig
 }
 
 func NewStore(path string) *Store {
@@ -179,7 +183,9 @@ func (s *Store) flush() {
 	snapshot := make([]Event, len(s.evts))
 	copy(snapshot, s.evts)
 	cfgSnap := s.cfg
+	s.flushWG.Add(1)
 	go func() {
+		defer s.flushWG.Done()
 		data, err := json.Marshal(eventFile{Events: snapshot, Retention: &cfgSnap})
 		if err != nil {
 			log.Printf("security-store: flush marshal: %v", err)
@@ -338,4 +344,11 @@ func (s *Store) Run(ctx context.Context, k8sStore *k8s.Store) {
 			s.Add(evt)
 		}
 	}
+}
+
+// WaitForFlush blocks until every flush started so far has finished. Test-only:
+// nothing in the running program needs it, and a test that ends mid-write would
+// otherwise race with the removal of its own temporary directory.
+func (s *Store) WaitForFlush() {
+	s.flushWG.Wait()
 }

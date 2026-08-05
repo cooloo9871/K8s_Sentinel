@@ -68,6 +68,19 @@ interface TopologyResponse {
 
 // ── Custom node: pod ───────────────────────────────────────────────────────
 
+// What to call an endpoint. An external node's label is its address, so naming
+// it twice says nothing; the kind is the useful half.
+function endpointName(node: TopologyNode | undefined, fallback: string): string {
+  if (node?.kind === 'external' && node.label === node.ip) return 'External'
+  return node?.label ?? fallback
+}
+
+function ports(e: TopologyEdge): string {
+  return (e.ports ?? [])
+    .map(p => `${p.port === 'dynamic' ? 'dynamic' : p.port}×${p.count}`)
+    .join('  ')
+}
+
 function PodNode({ data }: { data: TopologyNode }) {
   const exposed = (data.exposures?.length ?? 0) > 0
   // External traffic arriving at a pod with no declared exposure path is a
@@ -267,6 +280,12 @@ export function NetworkTopologyPage() {
   // address of its own. Hidden by default, reachable when that is what you are
   // looking for.
   const [hideNodeToNode, setHideNodeToNode] = useState(true)
+
+  // Shared by the graph and the detail panel, so the panel never lists a
+  // connection the graph is not drawing.
+  const isVisibleEdge = useCallback((e: TopologyEdge) =>
+    (!hideProbes || !e.healthProbe) && (!hideNodeToNode || !e.nodeToNode),
+  [hideProbes, hideNodeToNode])
   // Show only pods with a declared exposure path (attack-surface audit view)
   const [exposedOnly, setExposedOnly] = useState(false)
   // Hover focus: highlight the hovered node's edges, dim everything else
@@ -324,8 +343,7 @@ export function NetworkTopologyPage() {
   useEffect(() => {
     const podQ = podSearch.trim().toLowerCase()
 
-    const visibleEdges = rawEdges.filter(e =>
-      (!hideProbes || !e.healthProbe) && (!hideNodeToNode || !e.nodeToNode))
+    const visibleEdges = rawEdges.filter(isVisibleEdge)
 
     // Hide kube-system unless the user explicitly filters to it
     const effectiveHide = hideSystem && !nsFilter.includes('kube-system')
@@ -416,7 +434,7 @@ export function NetworkTopologyPage() {
     }
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
-  }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, hideProbes, hideNodeToNode, exposedOnly, setNodes, setEdges])
+  }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, isVisibleEdge, exposedOnly, setNodes, setEdges])
 
   // Hover / selection focus: highlight the focused node's edges + neighbors,
   // dim everything else. Labels appear only on focused edges.
@@ -710,7 +728,12 @@ export function NetworkTopologyPage() {
                         )}
                         {selectedNode.exposures && selectedNode.exposures.length > 0 && (
                           <div>
-                            <span className="text-muted-foreground">Exposure</span>
+                            <span className="text-muted-foreground">
+                              Exposure
+                              {selectedNode.exposures.length > 1 && (
+                                <span className="ml-1">· {selectedNode.exposures.length} ways in</span>
+                              )}
+                            </span>
                             {/* Said out loud because the heading alone reads as
                                 "how the traffic you are looking at arrived", and
                                 it is not that: it is every way in from outside,
@@ -750,6 +773,51 @@ export function NetworkTopologyPage() {
                             </div>
                           </div>
                         )}
+                        {/* Configuration answers "who could reach this". Only the
+                            flows answer "who did". Keeping them apart is what was
+                            missing: a pod reached over its ClusterIP shows nothing
+                            under Exposure, correctly, and used to show nothing at
+                            all. Ordered by volume, since that is what a summary is
+                            for. */}
+                        {(() => {
+                          const byId = Object.fromEntries(rawNodes.map(n => [n.id, n]))
+                          const peers = (dir: 'in' | 'out') => rawEdges
+                            .filter(isVisibleEdge)
+                            .filter(e => (dir === 'in' ? e.target : e.source) === selectedNode.id)
+                            .sort((a, b) => b.count - a.count)
+                            .map(e => {
+                              const id = dir === 'in' ? e.source : e.target
+                              return { key: e.id, name: endpointName(byId[id], id), ports: ports(e) }
+                            })
+                          const inbound = peers('in')
+                          const outbound = peers('out')
+                          if (inbound.length === 0 && outbound.length === 0) return null
+                          return (
+                            <>
+                              {([['Connections in', inbound], ['Connections out', outbound]] as const)
+                                .filter(([, list]) => list.length > 0)
+                                .map(([title, list]) => (
+                                  <div key={title}>
+                                    <span className="text-muted-foreground">{title}</span>
+                                    <div className="mt-1 flex flex-col gap-0.5">
+                                      {list.map(p => (
+                                        <div key={p.key} className="flex items-baseline justify-between gap-2">
+                                          <span className="break-all font-mono text-[11px]">{p.name}</span>
+                                          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                                            {p.ports}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              <p className="text-[10px] leading-snug text-muted-foreground">
+                                Observed in the last 15 minutes, in-cluster and external alike — this
+                                is traffic that happened, not configuration.
+                              </p>
+                            </>
+                          )
+                        })()}
                         {selectedNode.extInbound && !(selectedNode.exposures?.length) && (
                           <div className="mt-1 rounded bg-red-50 px-2 py-1.5 text-[11px] font-medium text-red-600">
                             ⚠ Receiving external traffic without any declared exposure path
@@ -805,9 +873,7 @@ export function NetworkTopologyPage() {
                   // and then the IP said the same thing twice. Name what it is
                   // instead, and keep the address on the line below.
                   const endpoint = (node: TopologyNode | undefined, fallback: string) => {
-                    const name = node?.kind === 'external' && node.label === node.ip
-                      ? 'External'
-                      : node?.label ?? fallback
+                    const name = endpointName(node, fallback)
                     const ip = node?.ip && node.ip !== name ? node.ip : undefined
                     return { name, ip }
                   }
