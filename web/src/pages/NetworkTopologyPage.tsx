@@ -157,31 +157,49 @@ interface EdgeVisualData {
 // current focus target. Labels are hidden by default (they dominate visual
 // clutter on dense graphs) and appear only on the focused node's edges;
 // blocked edges always keep their label. Unrelated edges dim under focus.
-function edgeVisuals(e: Edge, focusId: string | null): Edge {
+// hoverEdgeId lifts one line out of the picture: thicker, lit, and labelled. An
+// edge hover deliberately does not dim everything else the way a node hover does
+// — the point is to read one line among the others, not to hide them.
+function edgeVisuals(e: Edge, focusId: string | null, hoverEdgeId: string | null): Edge {
   const d = (e.data ?? {}) as unknown as EdgeVisualData
+  const hovered = e.id === hoverEdgeId
   const focused = !focusId || e.source === focusId || e.target === focusId
-  const dimmed = !!focusId && !focused
+  const dimmed = !!focusId && !focused && !hovered
+  const colour = d.blocked ? '#ef4444' : d.color
+  const glow = hovered ? { filter: `drop-shadow(0 0 4px ${colour})` } : {}
+
   if (d.blocked) {
     return {
       ...e,
       label: `×${d.count} ✕`,
       animated: false,
-      style: { stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '5 3', opacity: dimmed ? 0.12 : 1 },
-      labelStyle: { fontSize: 10, fill: '#ef4444', fontWeight: 600, opacity: dimmed ? 0.2 : 1 },
+      style: {
+        stroke: colour,
+        strokeWidth: hovered ? 3 : 1.5,
+        strokeDasharray: '5 3',
+        opacity: dimmed ? 0.12 : 1,
+        ...glow,
+      },
+      labelStyle: { fontSize: 10, fill: colour, fontWeight: 600, opacity: dimmed ? 0.2 : 1 },
       labelBgStyle: { fill: '#fef2f2', borderRadius: 4 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: '#ef4444', width: 18, height: 18 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: colour, width: 18, height: 18 },
     }
   }
-  const showLabel = !!focusId && focused
+  const showLabel = hovered || (!!focusId && focused)
   const l7badge = d.l7Type ? ` [${d.l7Type}]` : ''
   return {
     ...e,
     label: showLabel ? `×${d.count}${l7badge}` : undefined,
     animated: !dimmed,
-    style: { stroke: d.color, strokeWidth: d.l7Type ? 2 : 1.5, opacity: dimmed ? 0.12 : 1 },
+    style: {
+      stroke: colour,
+      strokeWidth: hovered ? (d.l7Type ? 3.5 : 3) : d.l7Type ? 2 : 1.5,
+      opacity: dimmed ? 0.12 : 1,
+      ...glow,
+    },
     labelStyle: { fontSize: 10, fill: d.l7Type ? '#3b82f6' : '#6b7280', fontWeight: d.l7Type ? 600 : 400 },
     labelBgStyle: { fill: d.l7Type ? '#eff6ff' : '#f9fafb', borderRadius: 4 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: d.color, width: 18, height: 18 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: colour, width: 18, height: 18 },
   }
 }
 
@@ -197,7 +215,7 @@ function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyN
       target: e.target,
       data: { count: e.count, blocked: e.blocked, l7Type: e.l7Type, color },
     }
-    return edgeVisuals(base, null)
+    return edgeVisuals(base, null, null)
   })
 }
 
@@ -284,6 +302,7 @@ export function NetworkTopologyPage() {
   const [exposedOnly, setExposedOnly] = useState(false)
   // Hover focus: highlight the hovered node's edges, dim everything else
   const [hoverId, setHoverId] = useState<string | null>(null)
+  const [hoverEdgeId, setHoverEdgeId] = useState<string | null>(null)
   const adjacencyRef = useRef<Record<string, Set<string>>>({})
 
   // Raw data from API — source of truth for filtering
@@ -434,12 +453,12 @@ export function NetworkTopologyPage() {
   // dim everything else. Labels appear only on focused edges.
   useEffect(() => {
     const focusId = hoverId ?? selectedNode?.id ?? null
-    setEdges(eds => eds.map(e => edgeVisuals(e, focusId)))
+    setEdges(eds => eds.map(e => edgeVisuals(e, focusId, hoverEdgeId)))
     setNodes(nds => nds.map(n => {
       const dim = !!focusId && n.id !== focusId && !adjacencyRef.current[focusId]?.has(n.id)
       return { ...n, style: { ...(n.style ?? {}), opacity: dim ? 0.25 : 1 } }
     }))
-  }, [hoverId, selectedNode, setEdges, setNodes])
+  }, [hoverId, hoverEdgeId, selectedNode, setEdges, setNodes])
 
   const matchCount = useMemo(() => {
     const podQ = podSearch.trim().toLowerCase()
@@ -661,6 +680,9 @@ export function NetworkTopologyPage() {
               onEdgeClick={onEdgeClick}
               onNodeMouseEnter={(_: React.MouseEvent, n: { id: string }) => setHoverId(n.id)}
               onNodeMouseLeave={() => setHoverId(null)}
+              onEdgeMouseEnter={(_: React.MouseEvent, e: { id: string }) => setHoverEdgeId(e.id)}
+              onEdgeMouseLeave={() => setHoverEdgeId(null)}
+              onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); setHoverId(null) }}
               onInit={(instance: any) => { reactFlowRef.current = instance }}
               nodeTypes={nodeTypes}
               fitView
