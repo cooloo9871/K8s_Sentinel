@@ -493,7 +493,7 @@ export function NetworkTopologyPage() {
     )
     return {
       chips: ([
-        { kind: 'pod', label: 'Pod', swatch: 'border-primary/40 bg-primary/10' },
+        { kind: 'pod', label: 'Pod', swatch: 'border-primary/40 bg-background' },
         { kind: 'node', label: 'Node', swatch: 'border-blue-400 bg-blue-50' },
         { kind: 'linklocal', label: 'Link-local', swatch: 'border-slate-400 bg-slate-100' },
         { kind: 'external', label: 'External', swatch: 'border-amber-400 bg-amber-50' },
