@@ -61,29 +61,21 @@ export function QuarantinePage() {
         </Button>
       </div>
 
-      {/* What quarantine does and does not do. Someone arriving at a list of
-          contained pods needs to know the container is still running — that is
-          the whole point of containing rather than killing — and that the state
-          lives on the pod, so it survives a Sentinel restart and can be undone
-          without this page. */}
       <Card className="mb-4">
         <CardContent className="p-4 text-sm">
           <p>
-            A quarantined pod is cut off from the network but left running, so the
-            process, its memory and its open files are still there to examine.
+            A quarantined pod is cut off from the network but keeps running — its process,
+            memory and open files stay intact for investigation.
           </p>
           <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-muted-foreground">
-            <li>Nothing reaches it and it reaches nothing — except the kubelet's
-              health probes, which keep it from being restarted and replaced by a
-              fresh, uncontained pod.</li>
-            <li>The state is the label <code className="font-mono">sentinel.io/quarantine=true</code> on
-              the pod, so it survives a Sentinel restart, and{' '}
-              <code className="font-mono">kubectl label pod … sentinel.io/quarantine-</code> releases
-              it without this page.</li>
+            <li>All traffic in and out is blocked, except the kubelet's health probes —
+              without those the pod would be restarted and replaced by a fresh, uncontained one.</li>
+            <li>The state is the pod's <code className="font-mono">sentinel.io/quarantine=true</code>{' '}
+              label, so it survives a Sentinel restart.</li>
             <li>One cluster-wide policy, <code className="font-mono">sentinel-quarantine</code>,
-              selects that label. It is created the first time it is needed.</li>
-            <li>A pod that is deleted and recreated comes back uncontained — the
-              new pod is not the one that was quarantined.</li>
+              selects that label. Created the first time it is needed.</li>
+            <li>A pod that is deleted and recreated comes back without the label, and so
+              without the quarantine.</li>
           </ul>
         </CardContent>
       </Card>
