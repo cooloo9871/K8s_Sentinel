@@ -22,7 +22,7 @@ interface TopologyNode {
   label: string
   pod: string
   namespace: string
-  kind: 'pod' | 'external' | 'node'
+  kind: 'pod' | 'external' | 'node' | 'linklocal'
   ip?: string
   viaNode?: string
   // Static attack-surface paths (NodePort/LB/Ingress/hostNetwork), pod nodes only
@@ -125,9 +125,26 @@ function ExternalNode({ data }: { data: TopologyNode }) {
   )
 }
 
+// ── Custom node: link-local address ────────────────────────────────────────
+
+// Link-local traffic never crossed the cluster boundary. It is drawn plainly
+// rather than in the external node's amber, which is what made a pod's own
+// sidecar plumbing read as an intrusion.
+function LinkLocalNode({ data }: { data: TopologyNode }) {
+  return (
+    <div className="rounded-lg border border-slate-400 bg-slate-100 px-3 py-2 shadow-sm min-w-[110px] text-center">
+      <Handle type="target" position={Position.Left} className="!bg-slate-500" />
+      <div className="text-[10px] text-slate-600 mb-0.5">Link-local</div>
+      <div className="text-xs font-medium font-mono">{data.label}</div>
+      <Handle type="source" position={Position.Right} className="!bg-slate-500" />
+    </div>
+  )
+}
+
 const nodeTypes: NodeTypes = {
   pod: PodNode as any,
   node: NodeHostNode as any,
+  linklocal: LinkLocalNode as any,
   external: ExternalNode as any,
 }
 
@@ -207,6 +224,7 @@ function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyN
     const targetKind = nodeMap[e.target]?.kind ?? 'external'
     const color = targetKind === 'external' ? '#f59e0b'
       : targetKind === 'node' ? '#3b82f6'
+      : targetKind === 'linklocal' ? '#64748b'
       : '#6366f1'
     const base: Edge = {
       id: e.id,
@@ -579,6 +597,10 @@ export function NetworkTopologyPage() {
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded border border-amber-400 bg-amber-50 inline-block" />
             External
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded border border-slate-400 bg-slate-100 inline-block" />
+            Link-local
           </span>
           <span className="flex items-center gap-1">
             <IconWorld size={12} className="text-amber-500" />

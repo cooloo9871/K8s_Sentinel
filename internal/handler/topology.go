@@ -53,6 +53,11 @@ type TopologyEdge struct {
 	DNSQuery   string `json:"dnsQuery,omitempty"`
 }
 
+// metadataServiceIP is the cloud instance metadata endpoint, the one link-local
+// address worth naming: reaching it is a known exfiltration and credential-theft
+// path, so an operator should be able to see what a pod is talking to.
+const metadataServiceIP = "169.254.169.254"
+
 // denialStillLive is how recently a drop must have been seen to count as
 // happening now. Comfortably above the 30s the UI polls at, and far below the
 // buffer window, so a denial that has genuinely stopped still gives way.
@@ -194,6 +199,20 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 		}
 		if ip == "" {
 			return "", TopologyNode{}
+		}
+		// Link-local before anything else: it is the most specific thing that can
+		// be known about an address, and it rules out every other reading.
+		// Classifying it as external was not merely a wrong label — it made the pod
+		// light up with "receiving external traffic without any declared exposure
+		// path", a security warning about traffic that by definition never came
+		// from outside.
+		if k8s.IsLinkLocal(ip) {
+			id := "ll:" + ip
+			label := ip
+			if ip == metadataServiceIP {
+				label = "cloud metadata"
+			}
+			return id, TopologyNode{ID: id, Label: label, Kind: "linklocal", IP: ip}
 		}
 		if isWorld {
 			id := "ext:" + ip

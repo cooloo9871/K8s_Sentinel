@@ -763,6 +763,15 @@ func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
 	return result
 }
 
+// IsLinkLocal reports whether the address is link-local — 169.254.0.0/16 or
+// fe80::/10. RFC 3927 addresses are not routable beyond the local link, so one
+// can never be a client from outside the cluster, whatever else is unknown
+// about it.
+func IsLinkLocal(ip string) bool {
+	parsed := net.ParseIP(ip)
+	return parsed != nil && parsed.IsLinkLocalUnicast()
+}
+
 // IPInCIDRs returns true when ip falls within any of the given CIDR ranges.
 func IPInCIDRs(ip string, cidrs []string) bool {
 	parsed := net.ParseIP(ip)
