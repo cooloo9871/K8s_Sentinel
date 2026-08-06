@@ -118,6 +118,14 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 						probe.ports[port] = true
 					}
 				}
+				// A lifecycle hook is kubelet traffic too — see hookPort.
+				if c.Lifecycle != nil {
+					for _, h := range []*corev1.LifecycleHandler{c.Lifecycle.PostStart, c.Lifecycle.PreStop} {
+						if port := hookPort(h, c); port != "" {
+							probe.ports[port] = true
+						}
+					}
+				}
 			}
 			if len(probe.ports) > 0 {
 				d.podProbes[key] = probe
@@ -301,23 +309,43 @@ func (s *Store) PodContainer(ctx context.Context, podNs, pod string) string {
 	return name
 }
 
-// probePort returns the port a probe targets, resolving a named port against the
-// container's own declarations. Exec probes have no port and are not network
-// traffic at all.
+// probePort returns the port a probe targets. Exec probes have no port and are
+// not network traffic at all.
 func probePort(p *corev1.Probe, c corev1.Container) string {
-	var target intstr.IntOrString
 	switch {
 	case p == nil:
 		return ""
 	case p.HTTPGet != nil:
-		target = p.HTTPGet.Port
+		return resolvePort(p.HTTPGet.Port, c)
 	case p.TCPSocket != nil:
-		target = p.TCPSocket.Port
+		return resolvePort(p.TCPSocket.Port, c)
 	case p.GRPC != nil:
+		// Always numeric — a gRPC probe has no named-port form.
 		return strconv.Itoa(int(p.GRPC.Port))
-	default:
+	}
+	return ""
+}
+
+// hookPort returns the port a lifecycle hook targets.
+//
+// postStart and preStop with an httpGet action have the kubelet make a request
+// to the container, from the pod's own node — the same traffic a probe produces
+// and indistinguishable from one on the wire. Without this a preStop hook drew
+// an unexplained node-to-pod edge that no filter could hide, exactly as the
+// sidecar's readiness probe did.
+//
+// Exec and sleep hooks are not network traffic. tcpSocket exists in the API but
+// the kubelet does not implement it, so there is nothing to match.
+func hookPort(h *corev1.LifecycleHandler, c corev1.Container) string {
+	if h == nil || h.HTTPGet == nil {
 		return ""
 	}
+	return resolvePort(h.HTTPGet.Port, c)
+}
+
+// resolvePort renders a target port, resolving a named one against the
+// container's own declarations — which is where the kubelet looks it up too.
+func resolvePort(target intstr.IntOrString, c corev1.Container) string {
 	if target.Type == intstr.Int {
 		return strconv.Itoa(int(target.IntVal))
 	}
