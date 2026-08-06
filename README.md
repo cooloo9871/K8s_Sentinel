@@ -50,6 +50,54 @@ Each layer does what only it can do:
 - The list shows what is easy to miss in raw YAML: whether a policy carries **L7** rules, and which direction it puts into **default deny**
 - Policy denials become Security Events, fire webhook alerts, reach syslog and show as red edges in Network Topology
 
+#### Quarantine
+
+Cut a suspect pod off from the network **without killing it**, so the process, its
+memory and its open files are still there to examine. Killing the process is what
+Tetragon's `Sigkill` already does; deleting the pod is worse, because the
+Deployment hands back a replacement and the evidence goes with it.
+
+- **Quarantine** from a Security Event, in the expanded detail — it contains the one pod that event names
+- **Policies → Quarantine** lists what is contained, with who asked and when, and releases it
+- On **Network Topology** a contained pod carries a red border and a lock
+
+One label and one standing policy, not a policy per pod:
+
+```
+pod labelled  sentinel.io/quarantine=true
+      +
+CCNP sentinel-quarantine  selects that label
+```
+
+A CiliumNetworkPolicy selects endpoints by label anyway, so a per-pod policy would
+need a unique label as well. This way there is one object to read, one to undo, and
+**the cluster holds the state** — a Sentinel restart cannot lose track of who is
+contained, and `kubectl label pod … sentinel.io/quarantine-` releases a pod without
+the UI. The standing policy is created the first time it is needed and left in
+place afterwards; with nothing labelled it selects no endpoints and has no effect.
+
+The policy's shape carries one decision worth knowing about:
+
+```yaml
+ingress:
+  - fromEntities: [host, health]   # the kubelet's probes still get through
+egressDeny:
+  - toEntities: [all]              # a deny beats any allow
+```
+
+**Ingress from the node stays open on purpose.** Block it and the kubelet's probes
+fail, then readiness, then liveness — the container is restarted and the Deployment
+hands back a fresh, uncontained pod. The containment and the evidence would go in
+one move.
+
+A pod that is deleted and recreated comes back without the label, and so without
+the quarantine: the new pod is not the one that was contained.
+
+> **Manual only.** Automatic quarantine on a policy violation is deliberately not
+> here. The Tracing Policy form defaults to whitelist mode, where anything *not*
+> listed fires, so one mis-scoped policy could contain an entire Deployment in
+> seconds.
+
 #### Admission Policy (ValidatingAdmissionPolicy)
 
 - Manage native Kubernetes VAP resources and bindings, via YAML editor or a UI builder that generates CEL
@@ -79,11 +127,14 @@ Each layer does what only it can do:
 Graphs live pod network connections from Cilium Hubble flows.
 
 - **A 15-minute window.** The graph shows what is happening now: a connection that stops falls off, and one that resumes reappears. Fifteen rather than five so a workload that only talks every few minutes does not make its edge flicker
-- **Node kinds** — Pod (neutral), Node (blue), External IP (amber). The three carry distinct hues so a glance separates workloads from infrastructure from what is outside the cluster. Service ClusterIPs are not drawn: a VIP is an intermediate routing concept, not an endpoint, and under Cilium the destination is already rewritten to the backend pod before the flow is observed
-- **Edges** — solid for allowed traffic, red dashed for policy-denied. A denial that is still arriving wins over the allowed traffic it rides on, which is what an **L7 denial** always looks like: the connection is permitted and only the request is refused, so Hubble reports both verdicts at once
+- **Node kinds** — Pod (neutral), Node (blue), Link-local (slate), External IP (amber). Distinct hues so a glance separates workloads from infrastructure from what is outside the cluster. The legend lists only the kinds actually on the canvas. Service ClusterIPs are not drawn: a VIP is an intermediate routing concept, not an endpoint, and under Cilium the destination is already rewritten to the backend pod before the flow is observed
+- **Link-local** (`169.254.0.0/16`, `fe80::/10`) is its own kind rather than external. Those addresses are not routable beyond the local link, so one can never be a client from outside — calling them external also made the pod light up as receiving unexplained external traffic, which is a pod's own sidecar plumbing reported as an intrusion. `169.254.169.254` is named **cloud metadata**: reaching it is a known credential-theft path, and an Istio sidecar probes it at startup to detect the platform
+- A **quarantined** pod carries a red border and a lock, with the reason in the detail panel
+- **Edges** take the colour of what they point at: indigo inside the cluster (pod or node — the node cards already say which), slate to link-local, amber to outside, red dashed for policy-denied. A denial that is still arriving wins over the allowed traffic it rides on, which is what an **L7 denial** always looks like: the connection is permitted and only the request is refused, so Hubble reports both verdicts at once
 - Click a red edge for the policy that denied it. Where no policy can be named, it says so rather than inventing one — a default-deny drop has no rule to attribute, and the policy may also have been deleted
 - **Aggregated per source/destination pair** with a per-port breakdown in the detail panel, so ephemeral client ports do not fan out into parallel lines
-- **Hover focus** — labels appear only on the hovered node's edges and unrelated traffic dims out; **Hide kube-system** (on by default) removes control-plane noise
+- **Hover focus** — labels appear only on the hovered node's edges and unrelated traffic dims out; hovering an edge makes it glow, and clicking the canvas clears the selection
+- **View** gathers the toggles into one panel, with a dot on the trigger when any of them is hiding something: **Hide kube-system** (on), **Hide health probes** (on), **Exposed only**, **Auto refresh**
 - **Exposure badges** — pods reachable from outside are marked, with each path listed. Every entry point is followed to the pods behind it, not just recorded:
 
   | Type | Resolved from |
@@ -92,7 +143,7 @@ Graphs live pod network connections from Cilium Hubble flows.
   | `externalip` | `spec.externalIPs`, which is reachable whatever the type says and can sit alongside the others |
   | `ingress` | Ingress rules and default backend, any controller |
   | `gateway` | Gateway API `HTTPRoute` / `GRPCRoute` `backendRefs`, including cross-namespace ones |
-  | `istio` | `VirtualService` destinations — only where a real Gateway is attached, since `mesh` alone is sidecar traffic and exposes nothing |
+  | `istio` | `VirtualService` destinations, met with the hosts and ports its **Gateway** publishes — only where a real Gateway is attached, since `mesh` alone is sidecar traffic and exposes nothing |
   | `hostnetwork` / `hostport` | pod and container spec |
 
   Each one is shown as the chain of objects between the outside and the pod, rather than a joined-up sentence — the hops name what you would edit to close the path:
@@ -114,12 +165,16 @@ Graphs live pod network connections from Cilium Hubble flows.
 
   Every entry point resolves through **Service → EndpointSlice → Pod**. EndpointSlice rather than the deprecated Endpoints API, which truncates at 1000 addresses per object — enough to drop pods out of a large Service, in the one place a missing pod reads as "not reachable".
 
+  For Istio, reading the `VirtualService` alone is not enough. Its `hosts: ["*"]` means *every host the attached Gateway serves* — a wildcard relative to the Gateway, not an address — and the hostname and port exist only on the Gateway. The two are met and **the more specific wins**, which is what Istio itself resolves to; a `VirtualService` naming a host its Gateway does not serve is inert in Istio and is not reported as a path at all. A Gateway that cannot be read falls back to the `VirtualService`'s own hosts rather than dropping the row.
+
   Gateway API and Istio are optional: without the CRDs the lookup is skipped rather than failing.
 
   Known gaps: Gateway API `TCPRoute` / `TLSRoute` / `UDPRoute`, and controller-specific CRDs that are neither Ingress nor Gateway API — Traefik `IngressRoute`, Contour `HTTPProxy`, Emissary `Mapping`, Gloo `VirtualService`, `CiliumEnvoyConfig`. A workload exposed only through one of those carries no badge. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
 - **L7 detail** — HTTP method, path and status code on edges where Cilium's proxy is in the path
 - Traffic arriving from outside is identified by Cilium's `reserved:world` identity rather than by its address, so a connection SNATed to a node's `cilium_host` still reads as external — labelled **world via `<node>`**, with the detail panel explaining that the address is the node's and how to keep the client's
-- Node-to-node traffic is hidden by default — mostly Cilium's own health probing and tunnel chatter — but only hidden, not dropped. A **hostNetwork** pod has no address of its own, so its traffic carries the node's and is indistinguishable from that chatter; untick **Hide node-to-node** to see it. Node-to-pod is always shown, because that is how the outside reaches a workload
+- **Traffic between two node addresses is never drawn.** It is Cilium's own plumbing — inter-node health probing and tunnel chatter — and never a workload's traffic. Node-to-pod is always shown, because that is how the outside reaches a workload
+- **ICMP error messages do not become edges.** An unreachable or time-exceeded report names the *reporter* as the source, so drawing one states the opposite of what happened: a pod whose metadata lookup went nowhere appeared to be receiving traffic from an unknown address. Echo request and reply are kept — a ping is real traffic, and a ping sweep is worth seeing
+- **Kubelet probes** are recognised and hidden by default. Detection needs both the source node *and* a port the pod declares, so the same port reached from anywhere else is ordinary traffic. It covers `httpGet` / `tcpSocket` / `grpc` probes, named ports resolved against the container's own declarations, `postStart` and `preStop` httpGet lifecycle hooks, and **native sidecars** — restartable init containers, which is how Istio injects its proxy on Kubernetes 1.29+, and where its readiness probe on 15021 lives. `kubectl port-forward` arrives from the node too and is deliberately **not** hidden: that is a person reaching into a pod
 
 - A **hostNetwork** pod never appears as its own node. It shares the node's IP with the kubelet, the API server and every other hostNetwork pod there, and a flow carries only that address — so attributing one to a particular pod would be a guess. Its traffic shows as the node's
 - Dagre auto-layout, pod search, and a namespace filter that takes several at once. Auto refresh every 60 seconds, and it can be turned off. The poll is silent — it does not replace the graph with a loading state, and only redraws when it brings something new, so a count ticking up neither blanks the view nor moves the camera
@@ -133,13 +188,24 @@ Graphs live pod network connections from Cilium Hubble flows.
 - A network denial names the workload that **attempted** the connection, the same way a process or file event names the pod that acted, and carries its containers. All of them are listed when a pod has several: they share one network namespace, so the flow cannot say which opened the connection
 - **Only policies that exist are ever named.** A drop Hubble cannot correlate is attributed by asking which of your policies govern that pod in that direction; if none match, no event is recorded rather than one naming nothing
 - Expand a row for the triggering file path, connection endpoints, process UID, policy name, drop reason and more
+- **Filters** — search by pod, several namespaces at once, and one panel for **Severity** (Warning, Critical) and **Rule** (Process, File, Network). Every group is multi-select, and nothing ticked in a group means no filter for that group
+- **Quarantine this pod** on an expanded row — see [Quarantine](#quarantine). Every event from a contained pod shows a lock and offers no second button
 - **Pause / Resume** freezes the view while buffering new events with an unread count
 - **Export CSV**
 - Default retention: 500 warnings, 300 criticals, 7-day TTL (adjustable in Settings)
 
+> **Alerts and syslog fire once per event, matching this list.** All three used to
+> read the raw event stream and each decide for itself what counted as distinct, so
+> a pod retrying a denied connection was one row here, a webhook every cooldown
+> period, and a syslog line per attempt. This store is the only arbiter now: it
+> publishes an event the first time it records one, and a repeat folded into an
+> existing row notifies nobody. The alert cooldown still applies on top, keyed on
+> the same identity — it catches repeats spaced further apart than the 30-second
+> folding window, and can no longer swallow *different* events from one pod.
+
 #### Admission Events
 
-- ValidatingAdmissionPolicy violations, filterable by source, namespace and severity
+- ValidatingAdmissionPolicy violations, with several namespaces selectable at once and one panel for **Severity** and **Source**. The audit log alone is the default view
 - **Critical** for `Deny` (request blocked) and **Warning** for `Audit` (request allowed but recorded)
 - Sourced from Kubernetes Warning Events (no setup) or the **kube-apiserver audit webhook** (full coverage, setup required)
 - 30-second deduplication, persisted; default 500 events with a 30-day TTL
@@ -152,6 +218,7 @@ Graphs live pod network connections from Cilium Hubble flows.
 
 ### Settings
 
+- The running version is shown at the bottom of the sidebar, so a `kubectl rollout restart` can be confirmed from the UI
 - **Users** — local accounts with JWT sessions and revocation on logout, Admin / Viewer roles, session timeout
 - **Event Retention** — Security Events (warning and critical caps, TTL 1–90 days) and Admission Events (cap, TTL 1–365 days)
 - **Alerts** — push Security and Admission events to Slack, Teams, Discord or any webhook, with filters and cooldown
@@ -405,20 +472,27 @@ Add to the kube-apiserver flags:
 
 ## RBAC
 
+`create` on `pods/exec` is what reaches the Tetragon and Cilium agents, and
+`patch` on `pods` is what applies the quarantine label. Both are broad: `create`
+on `pods/exec` means Sentinel can run a command in any container in the cluster,
+which is the direct cost of collecting flows by running `hubble observe` inside
+cilium-agent.
+
 | API Group | Resources | Verbs |
 |---|---|---|
 | `cilium.io` | `tracingpolicies`, `tracingpoliciesnamespaced` | CRUD |
 | `cilium.io` | `ciliumnetworkpolicies`, `ciliumclusterwidenetworkpolicies` | CRUD |
 | `cilium.io` | `ciliumnodes` | get, list |
 | `admissionregistration.k8s.io` | `validatingadmissionpolicies`, `validatingadmissionpolicybindings` | CRUD |
-| `""` (core) | `namespaces`, `pods`, `pods/log`, `pods/exec` | get, list, watch, create |
+| `""` (core) | `namespaces` | get, list |
+| `""` (core) | `pods`, `pods/log`, `pods/exec` | get, list, watch, create, **patch** |
 | `""` (core) | `events` | get, list, watch |
 | `""` (core) | `nodes`, `services` | get, list |
 | `discovery.k8s.io` | `endpointslices` | get, list |
 | `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get, list |
 | `networking.k8s.io` | `ingresses` | get, list |
 | `gateway.networking.k8s.io` | `gateways`, `httproutes`, `grpcroutes` | get, list |
-| `networking.istio.io` | `virtualservices` | get, list |
+| `networking.istio.io` | `virtualservices`, `gateways` | get, list |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 
 ---
