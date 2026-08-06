@@ -157,10 +157,8 @@ export function AdmissionEventsPage() {
                           : <Badge className="font-medium bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">Warning</Badge>
                         }
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={e.source === 'audit' ? 'default' : 'secondary'}>
-                          {e.source === 'audit' ? 'audit log' : 'k8s event'}
-                        </Badge>
+                      <TableCell className="text-sm">
+                        {e.source === 'audit' ? 'audit log' : 'k8s event'}
                       </TableCell>
                       <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
                       <TableCell className="text-sm">
