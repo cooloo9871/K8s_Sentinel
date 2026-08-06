@@ -240,8 +240,10 @@ function edgeVisuals(e: Edge, focusId: string | null, hoverEdgeId: string | null
 function layoutEdges(apiEdges: TopologyEdge[], nodeMap: Record<string, TopologyNode>): Edge[] {
   return apiEdges.map(e => {
     const targetKind = nodeMap[e.target]?.kind ?? 'external'
+    // Pod and node destinations share a colour: both are inside the cluster, and
+    // telling them apart on the line said nothing the node cards do not already.
+    // What the colour is for is the boundary — where the traffic is going.
     const color = targetKind === 'external' ? '#f59e0b'
-      : targetKind === 'node' ? '#3b82f6'
       : targetKind === 'linklocal' ? '#64748b'
       : '#6366f1'
     const base: Edge = {
@@ -499,8 +501,7 @@ export function NetworkTopologyPage() {
       // An edge takes the colour of what it points at, so the label names the
       // destination — otherwise it reads as a second entry for the same thing.
       arrows: ([
-        { colour: '#6366f1', label: 'to Pod' },
-        { colour: '#3b82f6', label: 'to Node' },
+        { colour: '#6366f1', label: 'to Pod / Node' },
         { colour: '#64748b', label: 'to Link-local' },
         { colour: '#f59e0b', label: 'to External' },
       ] as const).filter(a => colours.has(a.colour)),
