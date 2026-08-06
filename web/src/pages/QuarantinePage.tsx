@@ -139,19 +139,11 @@ export function QuarantinePage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Release this pod?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="flex flex-col gap-2">
-                <span>
-                  <span className="font-mono font-medium">
-                    {releasing?.namespace}/{releasing?.pod}
-                  </span>{' '}
-                  goes back on the network, able to reach and be reached as before.
-                </span>
-                <span>
-                  It was contained because something it did was flagged. Releasing it does not
-                  clear that — check what happened first if you have not already.
-                </span>
-              </div>
+            <AlertDialogDescription>
+              <span className="font-mono font-medium">
+                {releasing?.namespace}/{releasing?.pod}
+              </span>{' '}
+              goes back on the network. This does not clear whatever got it contained.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

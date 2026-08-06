@@ -113,19 +113,10 @@ function QuarantineAction({ e, quarantined, onChanged }: {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Quarantine this pod?</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="flex flex-col gap-2">
-              <span>
-                <span className="font-mono font-medium">{e.namespace}/{e.pod}</span> will be cut off
-                from the network.
-              </span>
-              <span>
-                The container keeps running, so the process and its memory stay intact — nothing
-                reaches it and it reaches nothing, except the kubelet's health probes. Anything it
-                is currently serving stops.
-              </span>
-              <span>Release it again from Policies → Quarantine.</span>
-            </div>
+          <AlertDialogDescription>
+            <span className="font-mono font-medium">{e.namespace}/{e.pod}</span> loses all network
+            access. The container keeps running, so anything it serves stops. Release it from
+            Policies → Quarantine.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
