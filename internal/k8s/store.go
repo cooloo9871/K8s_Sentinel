@@ -213,6 +213,13 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	if f.IsReply {
 		return
 	}
+	// An ICMP error names the reporter as the source, so an edge built from one
+	// says something reached the pod when in fact the pod's own packet failed to
+	// reach somewhere else. Same reasoning as replies: only the request side
+	// defines a connection.
+	if f.IsICMPError() {
+		return
+	}
 	if f.SrcPod == "" && f.SrcIP == "" {
 		return
 	}

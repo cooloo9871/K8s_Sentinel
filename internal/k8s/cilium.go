@@ -34,7 +34,10 @@ type CiliumFlow struct {
 	DstPod  string `json:"dstPod"`
 	DstNs   string `json:"dstNs"`
 	// Transport
-	Protocol string `json:"protocol"` // TCP | UDP | ICMP
+	Protocol string `json:"protocol"` // TCP | UDP | ICMPv4 | ICMPv6
+	// ICMP message type, meaningful only for the ICMP protocols. Kept because the
+	// type is the whole difference between a probe and an error report.
+	ICMPType uint32 `json:"icmpType,omitempty"`
 	// L7 (only when Cilium proxy is active)
 	L7Type     string `json:"l7Type,omitempty"` // HTTP | gRPC | DNS | kafka
 	HTTPMethod string `json:"httpMethod,omitempty"`
@@ -89,6 +92,36 @@ func (f CiliumFlow) IsPolicyDenial() bool {
 // configured default alone, so a cluster running Cilium anywhere but kube-system
 // logged "Cilium detected, starting flow stream" and then failed to find an agent
 // pod every 15 seconds, forever, with an empty topology and no explanation.
+// IsICMPError reports whether the flow is an ICMP error message rather than a
+// probe: Destination Unreachable, Time Exceeded, Redirect and their kin.
+//
+// These are the network reporting back about a packet that was already sent, and
+// the reporter's address sits in the source field — so drawing one as an edge
+// states the opposite of what happened. A pod whose metadata lookup went nowhere
+// appeared to be *receiving* traffic from an unknown address, which is exactly
+// the shape of an intrusion.
+//
+// Echo request and reply are deliberately not included. A ping is real traffic
+// and a ping sweep is worth seeing.
+func (f CiliumFlow) IsICMPError() bool {
+	switch f.Protocol {
+	case "ICMPv4":
+		// 3 unreachable · 4 source quench · 5 redirect · 11 time exceeded ·
+		// 12 parameter problem
+		switch f.ICMPType {
+		case 3, 4, 5, 11, 12:
+			return true
+		}
+	case "ICMPv6":
+		// 1 unreachable · 2 packet too big · 3 time exceeded · 4 parameter problem
+		switch f.ICMPType {
+		case 1, 2, 3, 4:
+			return true
+		}
+	}
+	return false
+}
+
 func ciliumNamespaces() []string {
 	if ns := os.Getenv("CILIUM_NAMESPACE"); ns != "" {
 		return []string{ns}
@@ -236,6 +269,12 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 					SrcPort uint32 `json:"source_port"`
 					DstPort uint32 `json:"destination_port"`
 				} `json:"UDP"`
+				ICMPv4 *struct {
+					Type uint32 `json:"type"`
+				} `json:"ICMPv4"`
+				ICMPv6 *struct {
+					Type uint32 `json:"type"`
+				} `json:"ICMPv6"`
 			} `json:"l4"`
 			DropReasonDesc   string `json:"drop_reason_desc"`
 			TrafficDirection string `json:"traffic_direction"` // "INGRESS" | "EGRESS"
@@ -336,6 +375,12 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 		flow.Protocol = "UDP"
 		flow.SrcPort = f.L4.UDP.SrcPort
 		flow.DstPort = f.L4.UDP.DstPort
+	} else if f.L4.ICMPv4 != nil {
+		flow.Protocol = "ICMPv4"
+		flow.ICMPType = f.L4.ICMPv4.Type
+	} else if f.L4.ICMPv6 != nil {
+		flow.Protocol = "ICMPv6"
+		flow.ICMPType = f.L4.ICMPv6.Type
 	}
 
 	// L7 application layer
