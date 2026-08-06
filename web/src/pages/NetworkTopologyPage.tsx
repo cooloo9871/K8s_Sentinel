@@ -151,15 +151,33 @@ const nodeTypes: NodeTypes = {
 // ── Layout helper ──────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Which column each kind starts in, left to right: workloads, then what they
+// reach through, then what is outside.
+const KIND_COLUMN: Record<TopologyNode['kind'], number> = {
+  pod: 80,
+  node: 380,
+  linklocal: 530,
+  external: 680,
+}
+
+// layoutNodes places every node, whatever its kind.
+//
+// It used to filter into three hardcoded buckets, so a node of any other kind
+// was dropped here — before dagre ever saw it. That is what made link-local
+// invisible: the kind, its component and its legend entry all existed, but its
+// nodes never reached the canvas, and the edges pointing at them went with them.
+// Deriving the column from the kind means adding one cannot silently lose it.
 function layoutNodes(apiNodes: TopologyNode[]): any[] {
-  const pods = apiNodes.filter(n => n.kind === 'pod')
-  const nodes = apiNodes.filter(n => n.kind === 'node')
-  const externals = apiNodes.filter(n => n.kind === 'external')
-  return [
-    ...pods.map((n, i) => ({ id: n.id, type: 'pod', position: { x: 80, y: 80 + i * 100 }, data: n })),
-    ...nodes.map((n, i) => ({ id: n.id, type: 'node', position: { x: 380, y: 80 + i * 100 }, data: n })),
-    ...externals.map((n, i) => ({ id: n.id, type: 'external', position: { x: 680, y: 80 + i * 80 }, data: n })),
-  ]
+  const rows: Record<string, number> = {}
+  return apiNodes.map(n => {
+    const row = rows[n.kind] = (rows[n.kind] ?? -1) + 1
+    return {
+      id: n.id,
+      type: n.kind,
+      position: { x: KIND_COLUMN[n.kind] ?? KIND_COLUMN.external, y: 80 + row * 100 },
+      data: n,
+    }
+  })
 }
 
 interface EdgeVisualData {
@@ -380,10 +398,10 @@ export function NetworkTopologyPage() {
       : visibleEdges
 
     // "Primary" nodes: pods matching the filter criteria.
-    // external and node kinds are never seeds — they are pulled in by
-    // connections to/from primary nodes (they have no namespace).
+    // Every other kind is pulled in by a connection to a primary node rather
+    // than seeding the graph itself — none of them has a namespace to filter on.
     const isPrimary = (n: TopologyNode): boolean => {
-      if (n.kind === 'external' || n.kind === 'node') return false
+      if (n.kind !== 'pod') return false
       if (nsFilter.length > 0 && !nsFilter.includes(n.namespace)) return false
       if (exposedOnly && !(n.exposures?.length)) return false
       if (podQ) {
@@ -399,7 +417,7 @@ export function NetworkTopologyPage() {
     const noFilter = nsFilter.length === 0 && !podQ && !exposedOnly
     const primaryIds = new Set(
       noFilter
-        ? scopedNodes.filter(n => n.kind !== 'external' && n.kind !== 'node').map(n => n.id)
+        ? scopedNodes.filter(n => n.kind === 'pod').map(n => n.id)
         : scopedNodes.filter(isPrimary).map(n => n.id)
     )
 
@@ -459,6 +477,37 @@ export function NetworkTopologyPage() {
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
   }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, isVisibleEdge, exposedOnly, setNodes, setEdges])
+
+  // The legend describes the canvas, so an entry appears only when something it
+  // describes is on it. A fixed list put "Link-local" in front of a graph that
+  // had none — and, in the other direction, left the colour of an edge pointing
+  // at a node unexplained. Reading the rendered nodes and edges keeps both
+  // honest without a list to remember to update.
+  const legend = useMemo(() => {
+    const kinds = new Set(nodes.map(n => (n.data as TopologyNode).kind))
+    const colours = new Set(
+      edges.filter(e => !(e.data as EdgeVisualData | undefined)?.blocked)
+        .map(e => (e.data as EdgeVisualData | undefined)?.color)
+    )
+    return {
+      chips: ([
+        { kind: 'pod', label: 'Pod', swatch: 'border-primary/40 bg-primary/10' },
+        { kind: 'node', label: 'Node', swatch: 'border-blue-400 bg-blue-50' },
+        { kind: 'linklocal', label: 'Link-local', swatch: 'border-slate-400 bg-slate-100' },
+        { kind: 'external', label: 'External', swatch: 'border-amber-400 bg-amber-50' },
+      ] as const).filter(c => kinds.has(c.kind)),
+      // An edge takes the colour of what it points at, so the label names the
+      // destination — otherwise it reads as a second entry for the same thing.
+      arrows: ([
+        { colour: '#6366f1', label: 'to Pod' },
+        { colour: '#3b82f6', label: 'to Node' },
+        { colour: '#64748b', label: 'to Link-local' },
+        { colour: '#f59e0b', label: 'to External' },
+      ] as const).filter(a => colours.has(a.colour)),
+      exposed: nodes.some(n => ((n.data as TopologyNode).exposures?.length ?? 0) > 0),
+      blocked: edges.some(e => (e.data as EdgeVisualData | undefined)?.blocked),
+    }
+  }, [nodes, edges])
 
   // Hover / selection focus: highlight the focused node's edges + neighbors,
   // dim everything else. Labels appear only on focused edges.
@@ -586,38 +635,30 @@ export function NetworkTopologyPage() {
           </span>
         )}
         <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-primary/40 bg-primary/10 inline-block" />
-            Pod
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-blue-400 bg-blue-50 inline-block" />
-            Node
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-amber-400 bg-amber-50 inline-block" />
-            External
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded border border-slate-400 bg-slate-100 inline-block" />
-            Link-local
-          </span>
-          <span className="flex items-center gap-1">
-            <IconWorld size={12} className="text-amber-500" />
-            Exposed
-          </span>
-          <span className="flex items-center gap-1">
-            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#6366f1" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#6366f1" /></svg>
-            Pod
-          </span>
-          <span className="flex items-center gap-1">
-            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#f59e0b" strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill="#f59e0b" /></svg>
-            External
-          </span>
-          <span className="flex items-center gap-1">
-            <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 3" /><polygon points="22,1 28,4 22,7" fill="#ef4444" /></svg>
-            Blocked
-          </span>
+          {legend.chips.map(c => (
+            <span key={c.label} className="flex items-center gap-1.5">
+              <span className={`size-2.5 rounded border inline-block ${c.swatch}`} />
+              {c.label}
+            </span>
+          ))}
+          {legend.exposed && (
+            <span className="flex items-center gap-1">
+              <IconWorld size={12} className="text-amber-500" />
+              Exposed
+            </span>
+          )}
+          {legend.arrows.map(a => (
+            <span key={a.label} className="flex items-center gap-1">
+              <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke={a.colour} strokeWidth="1.5" /><polygon points="22,1 28,4 22,7" fill={a.colour} /></svg>
+              {a.label}
+            </span>
+          ))}
+          {legend.blocked && (
+            <span className="flex items-center gap-1">
+              <svg width="28" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 3" /><polygon points="22,1 28,4 22,7" fill="#ef4444" /></svg>
+              Blocked
+            </span>
+          )}
         </div>
       </div>
 
