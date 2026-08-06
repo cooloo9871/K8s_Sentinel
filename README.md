@@ -271,17 +271,26 @@ git clone https://github.com/cooloo9871/K8s_Sentinel.git
 cd K8s_Sentinel
 ```
 
-**Option A — Kubernetes Job** (no local helm needed)
+**Option A — Kubernetes Job** — installs Tetragon and K8s Sentinel, no local
+helm needed. Runs in the cluster, so it needs egress to `helm.cilium.io` and
+`raw.githubusercontent.com`.
 
 ```bash
 kubectl apply -f deploy/install-job.yaml
 kubectl logs -n kube-system job/sentinel-installer -f
 ```
 
-**Option B — local script**
+**Option B — local script** — the same two steps, run from your machine.
 
 ```bash
 bash deploy/install.sh
+```
+
+**Option C — manifests only** — when Tetragon is already installed. One file,
+no kustomize:
+
+```bash
+kubectl apply -f deploy/sentinel.yaml
 ```
 
 ### Container image
@@ -290,7 +299,7 @@ bash deploy/install.sh
 ghcr.io/cooloo9871/sentinel:latest
 ```
 
-Per-version tags are listed under [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases). For production, pin a version in `deploy/base/deployment.yaml` (for example `:v0.9.8`) instead of `:latest` so deployments are reproducible.
+Per-version tags are listed under [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases). For production, pin a version in `deploy/sentinel.yaml` (for example `:v0.24.0`) instead of `:latest` so deployments are reproducible.
 
 ### Access the UI
 

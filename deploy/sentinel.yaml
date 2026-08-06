@@ -1,0 +1,175 @@
+# K8s Sentinel — everything needed to run it.
+#
+# Applies in order: the namespace first, then what lives in it. The RBAC is
+# cluster-scoped because the console reads workloads, policies and flows across
+# every namespace.
+#
+#   kubectl apply -f deploy/sentinel.yaml
+#
+# Tetragon is a separate prerequisite — see deploy/install-job.yaml for a
+# one-shot installer that does both.
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinel-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentinel
+  namespace: sentinel-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sentinel
+rules:
+  - apiGroups: ["cilium.io"]
+    resources: ["tracingpolicies", "tracingpoliciesnamespaced"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnetworkpolicies", "ciliumclusterwidenetworkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "create"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "deployments", "daemonsets", "statefulsets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+  # EndpointSlice, not the deprecated Endpoints: it does not truncate at 1000
+  # addresses, which would drop pods out of exposure detection.
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+  # Gateway API and Istio routes, for resolving which pods are reachable from
+  # outside. Both are optional: absent CRDs answer NotFound, which is skipped.
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "httproutes", "grpcroutes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.istio.io"]
+    resources: ["virtualservices", "gateways"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+    resourceNames: ["cilium-config", "kube-proxy"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sentinel
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sentinel
+subjects:
+  - kind: ServiceAccount
+    name: sentinel
+    namespace: sentinel-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel
+  namespace: sentinel-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinel
+  template:
+    metadata:
+      labels:
+        app: sentinel
+    spec:
+      serviceAccountName: sentinel
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sentinel
+          image: ghcr.io/cooloo9871/sentinel:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 200m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data/sentinel
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel
+  namespace: sentinel-system
+spec:
+  selector:
+    app: sentinel
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP

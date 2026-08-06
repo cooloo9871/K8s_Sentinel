@@ -44,11 +44,8 @@ spec:
             - |
               set -e
 
-              # Install git (Alpine-based image)
-              apk add --no-cache git > /dev/null 2>&1
-
               # ── Tetragon ────────────────────────────────────────────
-              echo "[1/4] Tetragon"
+              echo "[1/2] Tetragon"
               if kubectl get daemonset tetragon -n kube-system > /dev/null 2>&1; then
                 echo "  already installed, skipping"
               else
@@ -61,18 +58,12 @@ spec:
                 echo "  ready"
               fi
 
-              # ── Clone repo ──────────────────────────────────────────
-              echo "[2/4] Cloning K8s Sentinel repository"
-              git clone --depth=1 https://github.com/cooloo9871/Sentinel.git /tmp/sentinel
-
-              # ── Namespace ───────────────────────────────────────────
-              echo "[3/4] Creating sentinel-system namespace"
-              kubectl create namespace sentinel-system \
-                --dry-run=client -o yaml | kubectl apply -f -
-
-              # ── K8s Sentinel ──────────────────────────────────────────────
-              echo "[4/4] Deploying K8s Sentinel"
-              kubectl apply -k /tmp/sentinel/deploy/base/
+              # ── K8s Sentinel ────────────────────────────────────────
+              # One manifest, fetched directly. The namespace is in it, and
+              # cloning the repository just to read one file needed git in the
+              # image and pointed at a repository name that has since changed.
+              echo "[2/2] Deploying K8s Sentinel"
+              kubectl apply -f https://raw.githubusercontent.com/cooloo9871/K8s_Sentinel/main/deploy/sentinel.yaml
               kubectl rollout status deployment/sentinel \
                 -n sentinel-system --timeout=120s
 

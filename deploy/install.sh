@@ -62,12 +62,10 @@ fi
 
 # ── Sentinel ──────────────────────────────────────────────────────────────────
 
-echo "[sentinel] creating namespace..."
-kubectl get namespace sentinel-system &>/dev/null \
-  || kubectl create namespace sentinel-system
-
+# The namespace is the first document in the manifest, so there is nothing to
+# create up front.
 echo "[sentinel] applying manifests..."
-kubectl apply -k "${SCRIPT_DIR}/base/"
+kubectl apply -f "${SCRIPT_DIR}/sentinel.yaml"
 
 echo "[sentinel] waiting for deployment to be ready..."
 kubectl rollout status deployment/sentinel -n sentinel-system --timeout=120s
