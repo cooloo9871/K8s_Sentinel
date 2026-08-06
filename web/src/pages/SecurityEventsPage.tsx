@@ -90,6 +90,11 @@ function DetailRow({ e }: { e: DisplayEvent }) {
       })
     }
   }
+  // Repeats of the same event are folded into one row, so without this the row
+  // gives no hint that it stands for more than a single occurrence.
+  if (e.count > 1) {
+    items.push({ label: 'Occurrences', value: `${e.count} (most recent shown)` })
+  }
   if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
   if (e.function)   items.push({ label: 'Function',  value: e.function })
   if (e.dropReason) items.push({ label: 'Drop Reason', value: e.dropReason })
@@ -173,6 +178,9 @@ export function SecurityEventsPage() {
     return true
   })
 
+  // Rows and occurrences are different numbers: a row folds in every repeat of
+  // the same event within the dedup window.
+  const occurrences = filtered.reduce((n, e) => n + (e.count || 1), 0)
   const warningCount = filtered.filter(e => e.severity === 'warning').length
   const criticalCount = filtered.filter(e => e.severity === 'critical').length
   const isFiltered = severities.length > 0 || ruleTypes.length > 0 ||
@@ -273,6 +281,11 @@ export function SecurityEventsPage() {
         <div className="flex items-center gap-6 border-b px-5 py-3 text-sm">
           <span className="text-muted-foreground">
             {filtered.length} events{isFiltered ? ' (filtered)' : ''}
+            {occurrences > filtered.length && (
+              <span title="Repeats of the same event are folded into one row">
+                {' '}· {occurrences} occurrences
+              </span>
+            )}
           </span>
           <div className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-amber-400" />
@@ -331,6 +344,14 @@ export function SecurityEventsPage() {
                           <span className="font-mono text-sm font-medium truncate" title={e.binary ?? ''}>
                             {e.binary ? e.binary.split('/').pop() : '—'}
                           </span>
+                          {e.count > 1 && (
+                            <span
+                              className="shrink-0 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground"
+                              title={`Seen ${e.count} times — repeats of the same event are folded into one row`}
+                            >
+                              ×{e.count}
+                            </span>
+                          )}
                         </div>
                         {e.filePath && (
                           <p className="truncate font-mono text-xs text-muted-foreground" title={e.filePath}>

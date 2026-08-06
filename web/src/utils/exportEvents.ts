@@ -15,13 +15,16 @@ function userLabel(uid: number | undefined): string {
 }
 
 const COLUMNS = [
-  'Time', 'Severity', 'Rule', 'Namespace', 'Pod', 'Binary',
+  // Count is how many times this event repeated; the list folds repeats into one
+  // row, so an export without it understates what happened.
+  'Time', 'Count', 'Severity', 'Rule', 'Namespace', 'Pod', 'Binary',
   'Policy', 'Node', 'User', 'File Op', 'File Path', 'Destination', 'Source',
 ]
 
 function toRow(e: DisplayEvent): string[] {
   return [
     e.time,
+    String(e.count || 1),
     e.severity.toUpperCase(),
     ruleType(e.function ?? ''),
     e.namespace,
