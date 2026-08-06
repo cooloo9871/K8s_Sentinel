@@ -7,6 +7,7 @@ import {
   Sidebar,
   SidebarHeader,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
@@ -150,6 +151,12 @@ export function AppSidebar() {
           )
         })}
       </SidebarContent>
+
+      <SidebarFooter>
+        <span className="px-2 text-[11px] text-muted-foreground">
+          {import.meta.env.VITE_APP_VERSION ?? 'dev'}
+        </span>
+      </SidebarFooter>
     </Sidebar>
   )
 }

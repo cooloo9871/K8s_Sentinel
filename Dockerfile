@@ -1,10 +1,13 @@
 # Stage 1: build React
 FROM docker.io/library/node:20-alpine AS frontend
+# Stamped into the UI. Defaults to "dev" so a build without it says so rather
+# than claiming a version it is not.
+ARG VERSION=dev
 WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm ci
 COPY web/ ./
-RUN npm run build
+RUN VITE_APP_VERSION=$VERSION npm run build
 
 # Stage 2: build Go binary
 FROM docker.io/library/golang:1.26-alpine AS backend
