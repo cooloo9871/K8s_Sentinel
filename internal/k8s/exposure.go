@@ -32,6 +32,10 @@ var (
 		{Group: "networking.istio.io", Version: "v1", Resource: "virtualservices"},
 		{Group: "networking.istio.io", Version: "v1beta1", Resource: "virtualservices"},
 	}
+	istioGatewayGVRs = []schema.GroupVersionResource{
+		{Group: "networking.istio.io", Version: "v1", Resource: "gateways"},
+		{Group: "networking.istio.io", Version: "v1beta1", Resource: "gateways"},
+	}
 )
 
 // ExposureHop is one Kubernetes object standing between the outside and the pod.
@@ -404,6 +408,7 @@ func (s *Store) gatewayListeners(ctx context.Context) map[string]string {
 // traffic inside the cluster and exposes nothing externally — counting those
 // would mark most of a meshed cluster as externally reachable.
 func (s *Store) addIstioExposures(ctx context.Context, add func(ns, svc string, e Exposure)) {
+	gatewayIndex := s.istioGateways(ctx)
 	for _, gvr := range istioVirtualServiceGVRs {
 		list, err := s.client.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -421,10 +426,13 @@ func (s *Store) addIstioExposures(ctx context.Context, add func(ns, svc string, 
 				continue
 			}
 
-			hosts, _, _ := unstructured.NestedStringSlice(vs.Object, "spec", "hosts")
-			host := "*"
-			if len(hosts) > 0 {
-				host = strings.Join(hosts, ", ")
+			vsHosts, _, _ := unstructured.NestedStringSlice(vs.Object, "spec", "hosts")
+			// What the outside can actually reach, and on which port — which the
+			// VirtualService alone cannot say. Falls back to the VirtualService's
+			// own hosts when the Gateway cannot be read.
+			reach := istioReach(external, vs.GetNamespace(), vsHosts, gatewayIndex)
+			if len(reach) == 0 {
+				continue // no Gateway serves these hosts, so nothing is exposed
 			}
 			for _, section := range []string{"http", "tcp", "tls"} {
 				routes, _, _ := unstructured.NestedSlice(vs.Object, "spec", section)
@@ -444,24 +452,180 @@ func (s *Store) addIstioExposures(ctx context.Context, add func(ns, svc string, 
 						if svc == "" {
 							continue
 						}
-						hops := make([]ExposureHop, 0, len(external)+2)
-						for _, g := range external {
-							hops = append(hops, ExposureHop{Kind: "Gateway", Name: g})
+						for _, r := range reach {
+							add(ns, svc, Exposure{
+								Type:    "istio",
+								Address: r.host,
+								Detail:  r.detail,
+								Hops: []ExposureHop{
+									{Kind: "Gateway", Name: r.gateway},
+									{Kind: "VirtualService", Name: qualified(vs.GetNamespace(), vs.GetName())},
+									servicePort(ns, svc, 0),
+								},
+							})
 						}
-						hops = append(hops,
-							ExposureHop{Kind: "VirtualService", Name: qualified(vs.GetNamespace(), vs.GetName())},
-							servicePort(ns, svc, 0))
-						add(ns, svc, Exposure{
-							Type:    "istio",
-							Address: host,
-							Hops:    hops,
-						})
 					}
 				}
 			}
 		}
 		return // the first served version answered; do not double-count
 	}
+}
+
+// ── Istio Gateway resolution ───────────────────────────────────────────────
+
+// istioServer is one `servers` entry of an Istio Gateway: the hostnames it
+// accepts and the port it accepts them on.
+type istioServer struct {
+	hosts    []string
+	port     int64
+	protocol string
+}
+
+// istioGateways indexes every Istio Gateway by "namespace/name".
+//
+// A VirtualService says which Gateways carry it but not what those Gateways
+// publish, so without reading them there is no way to know the hostname or the
+// port the outside actually uses.
+func (s *Store) istioGateways(ctx context.Context) map[string][]istioServer {
+	out := map[string][]istioServer{}
+	for _, gvr := range istioGatewayGVRs {
+		list, err := s.client.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			continue
+		}
+		for _, gw := range list.Items {
+			raw, _, _ := unstructured.NestedSlice(gw.Object, "spec", "servers")
+			servers := make([]istioServer, 0, len(raw))
+			for _, sv := range raw {
+				m, ok := sv.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				hosts, _, _ := unstructured.NestedStringSlice(m, "hosts")
+				port, _, _ := unstructured.NestedInt64(m, "port", "number")
+				proto, _, _ := unstructured.NestedString(m, "port", "protocol")
+				servers = append(servers, istioServer{hosts: hosts, port: port, protocol: proto})
+			}
+			out[qualified(gw.GetNamespace(), gw.GetName())] = servers
+		}
+		return out // the first served version answered; do not double-count
+	}
+	return out
+}
+
+// istioReachEntry is one externally reachable address a VirtualService produces.
+type istioReachEntry struct {
+	host    string
+	detail  string
+	gateway string
+}
+
+// istioReach works out what the outside can actually reach, by meeting each
+// VirtualService host with the hosts its Gateways publish.
+//
+// A VirtualService's `hosts: ["*"]` does not mean "reachable under any name" —
+// it means every host the attached Gateway serves. Reporting it verbatim, which
+// is what this used to do, showed a bare "*" for a gateway published at
+// "*.test.com", which says nothing about what is exposed.
+//
+// When a Gateway cannot be read — absent, or no RBAC for it — the
+// VirtualService's own hosts are reported rather than dropping the exposure:
+// something is still published, and saying so imprecisely beats saying nothing.
+func istioReach(gatewayRefs []string, vsNs string, vsHosts []string, gateways map[string][]istioServer) []istioReachEntry {
+	if len(vsHosts) == 0 {
+		vsHosts = []string{"*"}
+	}
+	var out []istioReachEntry
+	seen := map[string]bool{}
+	for _, ref := range gatewayRefs {
+		ns, name := splitGatewayRef(ref, vsNs)
+		key := qualified(ns, name)
+		servers, known := gateways[key]
+		if !known {
+			for _, h := range vsHosts {
+				if id := key + "|" + h; !seen[id] {
+					seen[id] = true
+					out = append(out, istioReachEntry{host: h, gateway: key})
+				}
+			}
+			continue
+		}
+		for _, sv := range servers {
+			svHosts := sv.hosts
+			if len(svHosts) == 0 {
+				svHosts = []string{"*"}
+			}
+			for _, gh := range svHosts {
+				for _, vh := range vsHosts {
+					host := narrowHost(gh, vh)
+					if host == "" {
+						continue // the two cannot both match; Istio ignores the route
+					}
+					detail := ""
+					if sv.port > 0 {
+						detail = fmt.Sprintf("%s · %d", strings.ToUpper(sv.protocol), sv.port)
+						if sv.protocol == "" {
+							detail = fmt.Sprintf("port %d", sv.port)
+						}
+					}
+					if id := key + "|" + host + "|" + detail; !seen[id] {
+						seen[id] = true
+						out = append(out, istioReachEntry{host: host, detail: detail, gateway: key})
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// splitGatewayRef resolves a VirtualService's Gateway reference. A bare name
+// means the VirtualService's own namespace; "namespace/name" names another; the
+// legacy FQDN form is name.namespace.svc.cluster.local.
+func splitGatewayRef(ref, defaultNs string) (ns, name string) {
+	if before, after, found := strings.Cut(ref, "/"); found {
+		return before, after
+	}
+	if parts := strings.Split(ref, "."); len(parts) > 1 {
+		return parts[1], parts[0]
+	}
+	return defaultNs, ref
+}
+
+// narrowHost returns the hostname actually reachable when a VirtualService host
+// meets a Gateway server host, or "" when the two cannot both match — in which
+// case Istio ignores the route and it exposes nothing.
+//
+// The more specific of the two wins, which is what Istio itself resolves to.
+func narrowHost(gatewayHost, vsHost string) string {
+	// A Gateway host may be namespace-qualified — "ns/host", "./host", "*/host".
+	if _, after, found := strings.Cut(gatewayHost, "/"); found {
+		gatewayHost = after
+	}
+	switch {
+	case gatewayHost == "" || gatewayHost == "*":
+		return vsHost
+	case vsHost == "" || vsHost == "*":
+		return gatewayHost
+	case gatewayHost == vsHost:
+		return gatewayHost
+	case wildcardCovers(gatewayHost, vsHost):
+		return vsHost
+	case wildcardCovers(vsHost, gatewayHost):
+		return gatewayHost
+	}
+	return ""
+}
+
+// wildcardCovers reports whether a "*.suffix" pattern matches the given host.
+// Istio's wildcard covers subdomains only, not the bare suffix itself.
+func wildcardCovers(pattern, host string) bool {
+	suffix, ok := strings.CutPrefix(pattern, "*.")
+	if !ok {
+		return false
+	}
+	return strings.HasSuffix(host, "."+suffix)
 }
 
 // splitIstioHost reads a destination host, which may be a bare Service name or

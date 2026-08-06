@@ -50,6 +50,8 @@ func routeClient(objs ...runtime.Object) *dynfake.FakeDynamicClient {
 			grpcRouteGVR:               "GRPCRouteList",
 			istioVirtualServiceGVRs[0]: "VirtualServiceList",
 			istioVirtualServiceGVRs[1]: "VirtualServiceList",
+			istioGatewayGVRs[0]:        "GatewayList",
+			istioGatewayGVRs[1]:        "GatewayList",
 			cnpGVR:                     "CiliumNetworkPolicyList",
 			ccnpGVR:                    "CiliumClusterwideNetworkPolicyList",
 		},
