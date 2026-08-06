@@ -151,6 +151,25 @@ const nodeTypes: NodeTypes = {
 // ── Layout helper ──────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// What each kind is called in the detail panel. A single map rather than a
+// chain of conditionals ending in "Pod": that ending is what titled a
+// link-local address "Pod Detail" and put a Pod badge on it, and it would do
+// the same to the next kind added.
+const KIND_LABEL: Record<TopologyNode['kind'], { title: string; badge: string }> = {
+  pod: { title: 'Pod Detail', badge: 'Pod' },
+  node: { title: 'Node Detail', badge: 'Node' },
+  linklocal: { title: 'Link-local Detail', badge: 'Link-local' },
+  external: { title: 'External IP', badge: 'External IP' },
+}
+
+// Minimap swatches, following the node cards rather than the edge colours.
+const MINIMAP_COLOUR: Record<TopologyNode['kind'], string> = {
+  pod: '#6366f1',
+  node: '#3b82f6',
+  linklocal: '#64748b',
+  external: '#f59e0b',
+}
+
 // Which column each kind starts in, left to right: workloads, then what they
 // reach through, then what is outside.
 const KIND_COLUMN: Record<TopologyNode['kind'], number> = {
@@ -753,7 +772,7 @@ export function NetworkTopologyPage() {
             >
               <Background gap={16} size={1} />
               <Controls />
-              <MiniMap nodeColor={n => n.type === 'external' ? '#f59e0b' : n.type === 'node' ? '#64748b' : '#6366f1'} />
+              <MiniMap nodeColor={n => MINIMAP_COLOUR[n.type as TopologyNode['kind']] ?? MINIMAP_COLOUR.pod} />
             </ReactFlow>
           )}
         </div>
@@ -769,9 +788,8 @@ export function NetworkTopologyPage() {
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">
                     {selectedEdge ? 'Connection Detail'
-                      : selectedNode?.kind === 'external' ? 'External IP'
-                      : selectedNode?.kind === 'node' ? 'Node Detail'
-                      : 'Pod Detail'}
+                      : selectedNode ? KIND_LABEL[selectedNode.kind].title
+                      : ''}
                   </span>
                   <button
                     type="button"
@@ -787,8 +805,8 @@ export function NetworkTopologyPage() {
                     <div>
                       <span className="text-muted-foreground">Type</span>
                       <div className="mt-0.5">
-                        <Badge variant={selectedNode.kind === 'external' || selectedNode.kind === 'node' ? 'secondary' : 'default'} className="text-[10px]">
-                          {selectedNode.kind === 'external' ? 'External IP' : selectedNode.kind === 'node' ? 'Node' : 'Pod'}
+                        <Badge variant={selectedNode.kind === 'pod' ? 'default' : 'secondary'} className="text-[10px]">
+                          {KIND_LABEL[selectedNode.kind].badge}
                         </Badge>
                       </div>
                     </div>
@@ -879,6 +897,26 @@ export function NetworkTopologyPage() {
                         <span className="text-muted-foreground">IP Address</span>
                         <div className="mt-0.5 font-mono font-medium">{selectedNode.label}</div>
                       </div>
+                    )}
+                    {selectedNode.kind === 'linklocal' && (
+                      <>
+                        <div>
+                          <span className="text-muted-foreground">Address</span>
+                          <div className="mt-0.5 font-mono font-medium break-all">{selectedNode.ip}</div>
+                        </div>
+                        <p className="text-[10px] leading-snug text-muted-foreground">
+                          A link-local address is not routable beyond the local link (RFC 3927),
+                          so this is not a client from outside the cluster.
+                        </p>
+                        {selectedNode.ip === '169.254.169.254' && (
+                          <div className="rounded bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-700">
+                            The cloud instance metadata service. Reaching it is a known
+                            credential-theft path, so it is worth knowing which workload asks and
+                            why — on bare metal nothing answers, and an Istio sidecar probes it at
+                            startup to detect the platform.
+                          </div>
+                        )}
+                      </>
                     )}
                     {selectedNode.kind === 'node' && (
                       <>
