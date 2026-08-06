@@ -142,3 +142,55 @@ func TestARepeatBeyondTheWindowIsANewEvent(t *testing.T) {
 		t.Errorf("got %d notifications, want 2 — the repeat was outside the fold window", len(got))
 	}
 }
+
+// The store rejecting an event and the notification feed announcing it is the
+// exact divergence this feed exists to remove, so the drops have to be silent
+// too. A retention cap of zero for a severity throws every one of them away.
+func TestAnEventTheCapRejectsNotifiesNobody(t *testing.T) {
+	s := newTestStore(t)
+	s.SetRetention(RetentionConfig{MaxWarnings: 0, MaxCriticals: 300, TTLDays: 7})
+	ch, unsub := s.SubscribeFirstSightings()
+	defer unsub()
+
+	// Action "monitor" makes this a warning, and warnings have no slots.
+	s.Add(k8s.TetragonEvent{
+		Type: "kprobe", PolicyName: "watch", Function: "sys_execve", Action: "monitor",
+		Namespace: "demo", Pod: "client", Binary: "/bin/sh",
+		Time: time.Now().UTC().Format(time.RFC3339Nano),
+	})
+
+	if rows := len(s.List()); rows != 0 {
+		t.Fatalf("got %d rows, want the cap to have rejected it", rows)
+	}
+	if got := drain(ch); len(got) != 0 {
+		t.Errorf("got %d notifications for an event the store threw away", len(got))
+	}
+}
+
+// A timestamp the store cannot parse used to be kept verbatim on the row: the
+// TTL filter then dropped the event while the feed still announced it, and the
+// dedup window could never match the row again.
+func TestAnUnreadableTimestampIsStampedNotDropped(t *testing.T) {
+	s := newTestStore(t)
+	ch, unsub := s.SubscribeFirstSightings()
+	defer unsub()
+
+	for i := 0; i < 3; i++ {
+		s.Add(k8s.TetragonEvent{
+			Type: "kprobe", PolicyName: "watch", Function: "sys_execve", Action: "monitor",
+			Namespace: "demo", Pod: "client", Binary: "/bin/sh",
+			Time: "not a timestamp",
+		})
+	}
+
+	rows := s.List()
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want one — the repeats must still fold together", len(rows))
+	}
+	if rows[0].Count != 3 {
+		t.Errorf("count = %d, want 3", rows[0].Count)
+	}
+	if got := drain(ch); len(got) != 1 {
+		t.Errorf("got %d notifications, want 1", len(got))
+	}
+}

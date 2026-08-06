@@ -247,7 +247,13 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 	severity := raw.Severity()
 	t, err := parseTime(raw.Time)
 	if err != nil {
+		// A timestamp this store cannot read poisons everything downstream: the
+		// TTL filter below drops the event on the way in, the dedup window can
+		// never match the row again so every repeat opens a new one, and the
+		// first-sighting feed said it had been recorded regardless. Stamp it
+		// with arrival time and carry on.
 		t = time.Now().UTC()
+		raw.Time = t.Format(time.RFC3339Nano)
 	}
 
 	s.mu.Lock()
@@ -306,6 +312,15 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 	}
 	// Expire events older than TTL first, then cap — so cap sees only valid events
 	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.TTLDays)
+	// Whether the store will actually keep this one. Both filters below can drop
+	// it — an event older than the TTL, or a severity whose retention cap is zero
+	// — and notifying about a row that does not exist is precisely the
+	// divergence the first-sighting feed exists to prevent.
+	slots := s.cfg.MaxWarnings
+	if severity == "critical" {
+		slots = s.cfg.MaxCriticals
+	}
+	recorded := t.After(cutoff) && slots > 0
 	withNew := append([]Event{newEvt}, s.evts...)
 	filtered := withNew[:0]
 	for _, e := range withNew {
@@ -318,7 +333,9 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 	s.flush()
 	s.mu.Unlock()
 	s.broadcast(newEvt)
-	s.broadcastFirst(raw)
+	if recorded {
+		s.broadcastFirst(raw)
+	}
 }
 
 func (s *Store) List() []Event {
