@@ -6,25 +6,24 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
+import { FilterPopover, matchesFilter } from '../components/FilterPopover'
 import { RelativeTime } from '../components/RelativeTime'
 import { formatTWTime } from '../utils/time'
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react'
 
-type SeverityFilter = 'all' | 'warning' | 'critical'
-type SourceFilter = 'all' | 'audit' | 'k8s-event'
-
 export function AdmissionEventsPage() {
   const { events } = useAdmissionEvents()
   const [search, setSearch] = useState('')
-  const [nsFilter, setNsFilter] = useState('all')
-  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('audit')
+  const [namespaceFilter, setNamespaceFilter] = useState<string[]>([])
+  // Empty means no filter, except for the source: the audit log is the intended
+  // view, so it starts selected. Clearing it shows both sources.
+  const [severities, setSeverities] = useState<string[]>([])
+  const [sources, setSources] = useState<string[]>(['audit'])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const sourceVisible = sourceFilter === 'all' ? events : events.filter(e => e.source === sourceFilter)
+  // Offer only the namespaces the chosen sources actually have events in.
+  const sourceVisible = events.filter(e => matchesFilter(sources, e.source))
   const namespaces = [...new Set(sourceVisible.map(e => e.namespace).filter(Boolean))].sort()
 
   const toggle = (id: string) =>
@@ -35,9 +34,9 @@ export function AdmissionEventsPage() {
     })
 
   const filtered = events.filter(e => {
-    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
-    if (severityFilter !== 'all' && e.severity !== severityFilter) return false
-    if (sourceFilter !== 'all' && e.source !== sourceFilter) return false
+    if (!matchesScopeFilter('namespaced', e.namespace, namespaceFilter)) return false
+    if (!matchesFilter(severities, e.severity)) return false
+    if (!matchesFilter(sources, e.source)) return false
     if (search) {
       const q = search.toLowerCase()
       if (!e.involvedName.toLowerCase().includes(q) &&
@@ -49,7 +48,10 @@ export function AdmissionEventsPage() {
 
   const warningCount = filtered.filter(e => e.severity === 'warning').length
   const criticalCount = filtered.filter(e => e.severity === 'critical').length
-  const isFiltered = severityFilter !== 'all' || sourceFilter !== 'audit' || nsFilter !== 'all' || search.trim() !== ''
+  // The audit log on its own is the default view, so it is not "filtered".
+  const auditOnly = sources.length === 1 && sources[0] === 'audit'
+  const isFiltered = severities.length > 0 || !auditOnly ||
+    namespaceFilter.length > 0 || search.trim() !== ''
 
   return (
     <>
@@ -63,41 +65,34 @@ export function AdmissionEventsPage() {
         <Input placeholder="Search name or policy..."
           value={search} onChange={e => setSearch(e.target.value)}
           className="h-8 w-56 text-sm" />
-        <Select value={nsFilter} onValueChange={setNsFilter}>
-          <SelectTrigger className="h-8 w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All Namespaces</SelectItem>
-              {namespaces.map(ns => <SelectItem key={ns} value={ns}>{ns}</SelectItem>)}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <Select value={severityFilter} onValueChange={v => setSeverityFilter(v as SeverityFilter)}>
-          <SelectTrigger className="h-8 w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All Events</SelectItem>
-              <SelectItem value="warning">Warning Only</SelectItem>
-              <SelectItem value="critical">Critical Only</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <Select value={sourceFilter} onValueChange={v => { setSourceFilter(v as SourceFilter); setNsFilter('all') }}>
-          <SelectTrigger className="h-8 w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All Sources</SelectItem>
-              <SelectItem value="audit">Audit Log</SelectItem>
-              <SelectItem value="k8s-event">K8s Event</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <ScopeFilter
+          value={namespaceFilter}
+          onChange={setNamespaceFilter}
+          namespaces={namespaces}
+          includeCluster={false}
+        />
+        <FilterPopover sections={[
+          {
+            label: 'Severity',
+            value: severities,
+            onChange: setSeverities,
+            options: [
+              { key: 'warning', label: 'Warning' },
+              { key: 'critical', label: 'Critical' },
+            ],
+          },
+          {
+            label: 'Source',
+            value: sources,
+            // Narrowing the source can strip the namespaces already picked of
+            // any meaning, so the namespace choice is cleared with it.
+            onChange: v => { setSources(v); setNamespaceFilter([]) },
+            options: [
+              { key: 'audit', label: 'Audit log' },
+              { key: 'k8s-event', label: 'K8s event' },
+            ],
+          },
+        ]} />
       </div>
 
       <Card className="overflow-x-hidden">

@@ -7,15 +7,12 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
+import { FilterPopover, matchesFilter } from '../components/FilterPopover'
 import { useSecurityEvents, type DisplayEvent, type Severity } from '../layout/SecurityEventsProvider'
 import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
 import { RelativeTime } from '../components/RelativeTime'
-
-type FilterType = 'all' | 'warning' | 'critical'
 
 function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
   if (!fn) return null
@@ -153,8 +150,10 @@ export function SecurityEventsPage() {
       setDisplayEvents(allEvents)
     }
   }
-  const [filter, setFilter] = useState<FilterType>('all')
-  const [nsFilter, setNsFilter] = useState('all')
+  // Empty means no filter, for both — see matchesFilter.
+  const [severities, setSeverities] = useState<string[]>([])
+  const [ruleTypes, setRuleTypes] = useState<string[]>([])
+  const [namespaceFilter, setNamespaceFilter] = useState<string[]>([])
   const [podSearch, setPodSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
@@ -167,16 +166,17 @@ export function SecurityEventsPage() {
   const eventKey = (e: DisplayEvent) => e.id
 
   const filtered = events.filter((e) => {
-    if (filter === 'warning' && e.severity !== 'warning') return false
-    if (filter === 'critical' && e.severity !== 'critical') return false
-    if (nsFilter !== 'all' && e.namespace !== nsFilter) return false
+    if (!matchesFilter(severities, e.severity)) return false
+    if (!matchesFilter(ruleTypes, ruleType(e.function ?? ''))) return false
+    if (!matchesScopeFilter('namespaced', e.namespace, namespaceFilter)) return false
     if (podSearch.trim() && !e.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
     return true
   })
 
   const warningCount = filtered.filter(e => e.severity === 'warning').length
   const criticalCount = filtered.filter(e => e.severity === 'critical').length
-  const isFiltered = filter !== 'all' || nsFilter !== 'all' || podSearch.trim() !== ''
+  const isFiltered = severities.length > 0 || ruleTypes.length > 0 ||
+    namespaceFilter.length > 0 || podSearch.trim() !== ''
 
   const toggle = (key: string) =>
     setExpanded(prev => {
@@ -231,31 +231,33 @@ export function SecurityEventsPage() {
           onChange={(e) => setPodSearch(e.target.value)}
           className="h-8 w-56 text-sm"
         />
-        <Select value={nsFilter} onValueChange={setNsFilter}>
-          <SelectTrigger className="h-8 w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All Namespaces</SelectItem>
-              {namespaces.map(ns => (
-                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
-          <SelectTrigger className="h-8 w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All Events</SelectItem>
-              <SelectItem value="warning">Warning Only</SelectItem>
-              <SelectItem value="critical">Critical Only</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <ScopeFilter
+          value={namespaceFilter}
+          onChange={setNamespaceFilter}
+          namespaces={namespaces}
+          includeCluster={false}
+        />
+        <FilterPopover sections={[
+          {
+            label: 'Severity',
+            value: severities,
+            onChange: setSeverities,
+            options: [
+              { key: 'warning', label: 'Warning' },
+              { key: 'critical', label: 'Critical' },
+            ],
+          },
+          {
+            label: 'Rule',
+            value: ruleTypes,
+            onChange: setRuleTypes,
+            options: [
+              { key: 'Process', label: 'Process' },
+              { key: 'File', label: 'File' },
+              { key: 'Network', label: 'Network' },
+            ],
+          },
+        ]} />
       </div>
 
       {error && (
