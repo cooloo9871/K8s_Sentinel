@@ -3,6 +3,10 @@ import { IconLock, IconRefresh } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table'
 import { quarantineApi, type QuarantinedPod } from '../api/client'
@@ -14,6 +18,10 @@ export function QuarantinePage() {
   const [pods, setPods] = useState<QuarantinedPod[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
+  // Confirmed like quarantine is, and for the sharper version of the same
+  // reason: an accidental release puts a possibly compromised workload back on
+  // the network.
+  const [releasing, setReleasing] = useState<QuarantinedPod | null>(null)
   const toast = useToast()
   const { user } = useAuth()
   const canEdit = user?.role === 'admin'
@@ -31,6 +39,7 @@ export function QuarantinePage() {
   useEffect(() => { load() }, [load])
 
   const release = async (p: QuarantinedPod) => {
+    setReleasing(null)
     setBusy(p.namespace + '/' + p.pod)
     try {
       await quarantineApi.release(p.namespace, p.pod)
@@ -119,7 +128,7 @@ export function QuarantinePage() {
                             type="button"
                             className="text-sm text-primary hover:underline disabled:opacity-50"
                             disabled={busy === key}
-                            onClick={() => release(p)}
+                            onClick={() => setReleasing(p)}
                           >
                             Release
                           </button>
@@ -133,6 +142,37 @@ export function QuarantinePage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!releasing} onOpenChange={open => !open && setReleasing(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release this pod?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="flex flex-col gap-2">
+                <span>
+                  <span className="font-mono font-medium">
+                    {releasing?.namespace}/{releasing?.pod}
+                  </span>{' '}
+                  goes back on the network, able to reach and be reached as before.
+                </span>
+                <span>
+                  It was contained because something it did was flagged. Releasing it does not
+                  clear that — check what happened first if you have not already.
+                </span>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => releasing && release(releasing)}
+            >
+              Release
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

@@ -12,6 +12,10 @@ import { FilterPopover, matchesFilter } from '../components/FilterPopover'
 import { useSecurityEvents, type DisplayEvent, type Severity } from '../layout/SecurityEventsProvider'
 import { quarantineApi } from '../api/client'
 import { IconLock } from '@tabler/icons-react'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import { formatTWTime } from '../utils/time'
@@ -60,6 +64,7 @@ function QuarantineAction({ e, quarantined, onChanged }: {
   onChanged: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [asking, setAsking] = useState(false)
   const toast = useToast()
   const { user } = useAuth()
 
@@ -90,16 +95,45 @@ function QuarantineAction({ e, quarantined, onChanged }: {
     }
   }
 
+  // Confirmed first: this cuts a running workload off the network, and the
+  // button sits inside a row you opened to read rather than to act. The dialog
+  // names the pod, because the row that was expanded is not necessarily the row
+  // still under the pointer.
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="mt-2 h-7 w-fit border-red-300 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-      disabled={busy}
-      onClick={run}
-    >
-      {busy ? 'Quarantining…' : 'Quarantine this pod'}
-    </Button>
+    <AlertDialog open={asking} onOpenChange={setAsking}>
+      <Button
+        variant="outline"
+        size="sm"
+        className="mt-2 h-7 w-fit border-red-300 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+        disabled={busy}
+        onClick={() => setAsking(true)}
+      >
+        {busy ? 'Quarantining…' : 'Quarantine this pod'}
+      </Button>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Quarantine this pod?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="flex flex-col gap-2">
+              <span>
+                <span className="font-mono font-medium">{e.namespace}/{e.pod}</span> will be cut off
+                from the network.
+              </span>
+              <span>
+                The container keeps running, so the process and its memory stay intact — nothing
+                reaches it and it reaches nothing, except the kubelet's health probes. Anything it
+                is currently serving stops.
+              </span>
+              <span>Release it again from Policies → Quarantine.</span>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={run}>Quarantine</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
