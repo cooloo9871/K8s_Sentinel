@@ -11,21 +11,24 @@ import (
 
 	"github.com/cooloo9871/sentinel/internal/admission"
 	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/security"
 )
 
 // Dispatcher streams Tetragon events and forwards matching ones to rsyslog servers.
 type Dispatcher struct {
-	store    *Store
-	k8s      *k8s.Store
+	store *Store
+	// The security store rather than the raw broadcast, so forwarded volume
+	// matches the events list. See alert.Dispatcher for the reasoning.
+	events   *security.Store
 	admStore *admission.Store
 	mu       sync.Mutex
 	writers  map[string]*gosyslog.Writer // keyed by config ID
 }
 
-func NewDispatcher(store *Store, k8s *k8s.Store, admStore *admission.Store) *Dispatcher {
+func NewDispatcher(store *Store, events *security.Store, admStore *admission.Store) *Dispatcher {
 	return &Dispatcher{
 		store:    store,
-		k8s:      k8s,
+		events:   events,
 		admStore: admStore,
 		writers:  make(map[string]*gosyslog.Writer),
 	}
@@ -37,7 +40,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 }
 
 func (d *Dispatcher) runTetragon(ctx context.Context) {
-	ch, unsub := d.k8s.SubscribeTetragon()
+	ch, unsub := d.events.SubscribeFirstSightings()
 	defer unsub()
 	for {
 		select {
@@ -46,9 +49,6 @@ func (d *Dispatcher) runTetragon(ctx context.Context) {
 		case evt, ok := <-ch:
 			if !ok {
 				return
-			}
-			if !evt.IsSecurityEvent() {
-				continue
 			}
 			d.dispatch(evt)
 		}

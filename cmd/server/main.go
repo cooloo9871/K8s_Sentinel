@@ -68,11 +68,11 @@ func main() {
 	go securityStore.Run(ctx, store)
 
 	alerts := alert.NewStore(data("alerts.json"))
-	dispatcher := alert.NewDispatcher(alerts, store, admissionStore)
+	dispatcher := alert.NewDispatcher(alerts, securityStore, admissionStore)
 	go dispatcher.Run(ctx)
 
 	rsyslogs := rsyslog.NewStore(data("rsyslog.json"))
-	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, store, admissionStore)
+	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, securityStore, admissionStore)
 	go rsyslogDispatch.Run(ctx)
 
 	cfg := handler.Config{

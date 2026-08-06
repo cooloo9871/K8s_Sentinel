@@ -13,6 +13,7 @@ import (
 
 	"github.com/cooloo9871/sentinel/internal/admission"
 	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/sentinel/internal/security"
 )
 
 // slackAttachment adds a colored left border in Slack (warning=yellow, danger=red).
@@ -108,18 +109,21 @@ func buildPayload(p *WebhookPayload) {
 
 // Dispatcher watches the Tetragon event stream and fires webhook alerts.
 type Dispatcher struct {
-	store    *Store
-	k8s      *k8s.Store
+	store *Store
+	// The security store, not the raw Tetragon broadcast: it is what decides
+	// which events are distinct, and alert volume has to agree with the list the
+	// operator is looking at.
+	events   *security.Store
 	admStore *admission.Store
 	mu       sync.Mutex
 	last     map[string]time.Time // cooldown tracking
 	client   *http.Client
 }
 
-func NewDispatcher(store *Store, k8s *k8s.Store, admStore *admission.Store) *Dispatcher {
+func NewDispatcher(store *Store, events *security.Store, admStore *admission.Store) *Dispatcher {
 	return &Dispatcher{
 		store:    store,
-		k8s:      k8s,
+		events:   events,
 		admStore: admStore,
 		last:     make(map[string]time.Time),
 		client:   &http.Client{Timeout: 10 * time.Second},
@@ -151,7 +155,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 }
 
 func (d *Dispatcher) runTetragon(ctx context.Context) {
-	ch, unsub := d.k8s.SubscribeTetragon()
+	ch, unsub := d.events.SubscribeFirstSightings()
 	defer unsub()
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
@@ -164,9 +168,6 @@ func (d *Dispatcher) runTetragon(ctx context.Context) {
 		case evt, ok := <-ch:
 			if !ok {
 				return
-			}
-			if !evt.IsSecurityEvent() {
-				continue
 			}
 			d.dispatch(evt)
 		}
@@ -207,7 +208,8 @@ func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
 		if evtName == "" {
 			evtName = evt.InvolvedName
 		}
-		key := CooldownKey(rule.ID, evt.Namespace, evtName, "admission", evt.PolicyName)
+		key := CooldownKey(rule.ID, strings.Join(
+			[]string{"admission", evt.Namespace, evtName, evt.PolicyName}, "|"))
 		d.mu.Lock()
 		skip := WithinCooldown(d.last, key, rule.CooldownMin)
 		if !skip {
@@ -304,7 +306,9 @@ func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
 		if !rule.Matches(severity, evt.Namespace, evt.PolicyName) {
 			continue
 		}
-		key := CooldownKey(rule.ID, evt.Namespace, evt.Pod, evt.Function, evt.PolicyName)
+		// Same identity the events list uses, so the cooldown suppresses repeats
+		// of one event rather than different events from one pod.
+		key := CooldownKey(rule.ID, security.Fingerprint(evt))
 		d.mu.Lock()
 		skip := WithinCooldown(d.last, key, rule.CooldownMin)
 		if !skip {

@@ -58,17 +58,35 @@ func collapseEphemeralPort(addr string) string {
 	return addr
 }
 
+// Fingerprint renders what this store treats as one and the same event.
+//
+// It is exported because alerting and syslog forwarding have to agree with the
+// events list about what a distinct event is. They used to answer that question
+// separately and coarsely, so the console folded a hundred identical denials
+// into one row while the webhook fired a hundred times — and, worse, an alert
+// cooldown keyed only on the pod swallowed denials to *different* destinations
+// as though they were repeats.
+//
+// The client-side port is collapsed because the kernel picks a fresh one per
+// connection; comparing it verbatim would make every retry a new event.
+func Fingerprint(e k8s.TetragonEvent) string {
+	return strings.Join([]string{
+		e.Namespace, e.Pod, e.Binary, e.Function, e.PolicyName, e.Action,
+		e.FilePath, e.FileOp, e.NetDest, collapseEphemeralPort(e.NetSrc),
+	}, "|")
+}
+
+// storedFingerprint is Fingerprint for an event already in the store. Kept next
+// to it so the two shapes cannot describe identity differently.
+func storedFingerprint(e Event) string {
+	return strings.Join([]string{
+		e.Namespace, e.Pod, e.Binary, e.Function, e.PolicyName, e.Action,
+		e.FilePath, e.FileOp, e.NetDest, collapseEphemeralPort(e.NetSrc),
+	}, "|")
+}
+
 func sameEvent(a Event, b k8s.TetragonEvent) bool {
-	return a.Namespace == b.Namespace &&
-		a.Binary == b.Binary &&
-		a.Pod == b.Pod &&
-		a.Function == b.Function &&
-		a.PolicyName == b.PolicyName &&
-		a.Action == b.Action &&
-		a.FilePath == b.FilePath &&
-		a.FileOp == b.FileOp &&
-		a.NetDest == b.NetDest &&
-		collapseEphemeralPort(a.NetSrc) == collapseEphemeralPort(b.NetSrc)
+	return storedFingerprint(a) == Fingerprint(b)
 }
 
 type eventFile struct {
@@ -89,12 +107,16 @@ func DefaultRetentionConfig() RetentionConfig {
 
 // Store holds Tetragon kprobe events with file persistence and SSE fanout.
 type Store struct {
-	mu       sync.RWMutex
-	evts     []Event // newest-first
-	subs     map[chan Event]struct{}
-	path     string
-	flushGen uint64     // incremented each flush; goroutine skips write if stale
-	flushMu  sync.Mutex // serialises the stale-check + rename to eliminate TOCTOU
+	mu   sync.RWMutex
+	evts []Event // newest-first
+	subs map[chan Event]struct{}
+	// Subscribers that want only the events that opened a new row. The SSE feed
+	// needs every update so the count ticks; alerting and syslog want one
+	// notification per distinct event, which is what the list shows.
+	firstSubs map[chan k8s.TetragonEvent]struct{}
+	path      string
+	flushGen  uint64     // incremented each flush; goroutine skips write if stale
+	flushMu   sync.Mutex // serialises the stale-check + rename to eliminate TOCTOU
 	// Tracks flushes still in flight. Writing is asynchronous, which is right for
 	// a long-lived process and invisible to it — but a test that ends while a
 	// write is landing races with its own cleanup, so it needs a way to wait.
@@ -105,10 +127,11 @@ type Store struct {
 func NewStore(path string) *Store {
 	cfg := DefaultRetentionConfig()
 	s := &Store{
-		evts: make([]Event, 0, cfg.MaxWarnings+cfg.MaxCriticals),
-		subs: make(map[chan Event]struct{}),
-		path: path,
-		cfg:  cfg,
+		evts:      make([]Event, 0, cfg.MaxWarnings+cfg.MaxCriticals),
+		subs:      make(map[chan Event]struct{}),
+		firstSubs: make(map[chan k8s.TetragonEvent]struct{}),
+		path:      path,
+		cfg:       cfg,
 	}
 	s.load()
 	return s
@@ -295,6 +318,7 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 	s.flush()
 	s.mu.Unlock()
 	s.broadcast(newEvt)
+	s.broadcastFirst(raw)
 }
 
 func (s *Store) List() []Event {
@@ -315,6 +339,34 @@ func (s *Store) Subscribe() (<-chan Event, func()) {
 		delete(s.subs, ch)
 		s.mu.Unlock()
 		close(ch)
+	}
+}
+
+// SubscribeFirstSightings delivers each event the first time it is recorded.
+// A repeat folded into an existing row does not appear — the row already stands
+// for it, and a subscriber that acted on every occurrence would report a volume
+// the events list contradicts.
+func (s *Store) SubscribeFirstSightings() (<-chan k8s.TetragonEvent, func()) {
+	ch := make(chan k8s.TetragonEvent, 256)
+	s.mu.Lock()
+	s.firstSubs[ch] = struct{}{}
+	s.mu.Unlock()
+	return ch, func() {
+		s.mu.Lock()
+		delete(s.firstSubs, ch)
+		s.mu.Unlock()
+		close(ch)
+	}
+}
+
+func (s *Store) broadcastFirst(e k8s.TetragonEvent) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for ch := range s.firstSubs {
+		select {
+		case ch <- e:
+		default:
+		}
 	}
 }
 

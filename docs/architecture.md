@@ -68,7 +68,15 @@ handler 只負責把結果轉成 JSON。
 為什麼要對每個 Pod 各開一條：**每個 agent 只看得到自己節點的事件**，少連一個節點就是
 那個節點的事件全部消失。
 
-訂閱者：`security.Store`（保存）、`alert.Dispatcher`、`rsyslog.Dispatcher`。
+訂閱者只有 `security.Store`。
+
+**alert 與 rsyslog 不訂閱這條原始流**，而是訂閱 `security.Store.SubscribeFirstSightings()`
+—— 只在事件**開出新的一列**時收到通知。原本三者各自讀原始流，於是同一筆重試迴圈在畫面上是
+一列、在 webhook 上是幾百則。現在「什麼算一個事件」只有一個裁判：`security.Fingerprint`。
+
+alert 的 cooldown 沒有被取代 —— 去重窗口只有 30 秒，間隔更長的重複仍會開新列，cooldown
+負責的正是這一段。兩者現在用**同一個 identity**，所以 cooldown 只會壓制同一件事的重複，
+不會再把同一個 pod 的不同事件互相蓋掉。
 
 > **已知重複**：`StartDiscoveryLoop` 沒有訂閱這個廣播，而是自己再開一條
 > `StreamTetragonEvents`。所以每個節點實際上有**兩條** `tetra getevents`。改成訂閱會

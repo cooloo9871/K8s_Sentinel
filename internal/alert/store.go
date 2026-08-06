@@ -164,8 +164,11 @@ func contains(slice []string, s string) bool {
 }
 
 // CooldownKey returns a dedup key combining rule ID and event identity.
-func CooldownKey(ruleID, namespace, pod, function, policy string) string {
-	return ruleID + "|" + namespace + "|" + pod + "|" + function + "|" + policy
+// CooldownKey scopes a cooldown to one rule and one event identity. The identity
+// comes from whoever owns the notion of "the same event" — security.Fingerprint
+// for runtime events — so the cooldown can never be coarser than the list.
+func CooldownKey(ruleID, identity string) string {
+	return ruleID + "|" + identity
 }
 
 // WithinCooldown reports whether the key was fired within the cooldown window.
