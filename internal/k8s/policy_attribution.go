@@ -104,14 +104,15 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 		for _, p := range pods.Items {
 			key := p.Namespace + "/" + p.Name
 			d.podLabels[key] = p.Labels
-			names := make([]string, 0, len(p.Spec.Containers))
-			for _, c := range p.Spec.Containers {
+			running := runningContainers(p)
+			names := make([]string, 0, len(running))
+			for _, c := range running {
 				names = append(names, c.Name)
 			}
 			d.podContainer[key] = strings.Join(names, ", ")
 
 			probe := podProbeTargets{node: p.Spec.NodeName, ports: map[string]bool{}}
-			for _, c := range p.Spec.Containers {
+			for _, c := range running {
 				for _, pr := range []*corev1.Probe{c.LivenessProbe, c.ReadinessProbe, c.StartupProbe} {
 					if port := probePort(pr, c); port != "" {
 						probe.ports[port] = true
@@ -167,6 +168,30 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 		collect(list.Items, true)
 	}
 	return d
+}
+
+// runningContainers returns the containers that live for the pod's whole life:
+// its ordinary containers, plus native sidecars.
+//
+// A native sidecar is an init container with restartPolicy Always — a
+// Kubernetes 1.29 feature, and how Istio injects its proxy on recent clusters.
+// It shares the pod's network namespace and carries probes of its own, so
+// reading spec.containers alone missed the sidecar's readiness probe on 15021
+// entirely: the kubelet checking it looked like ordinary workload traffic that
+// no filter could hide. The same omission left the sidecar out of the container
+// list reported for the pod's flows.
+//
+// Ordinary init containers are excluded: they have finished by the time any
+// flow is observed, and Kubernetes only permits probes on restartable ones.
+func runningContainers(p corev1.Pod) []corev1.Container {
+	out := make([]corev1.Container, 0, len(p.Spec.Containers)+1)
+	out = append(out, p.Spec.Containers...)
+	for _, c := range p.Spec.InitContainers {
+		if c.RestartPolicy != nil && *c.RestartPolicy == corev1.ContainerRestartPolicyAlways {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // matches reports whether this policy selects the given pod. Cilium's selector
