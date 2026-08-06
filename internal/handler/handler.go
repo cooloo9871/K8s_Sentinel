@@ -78,6 +78,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/vap-bindings/{name}", getVAPBinding(cfg.Store))
 		r.Get("/api/cnp", listCNP(cfg.Store))
 		r.Get("/api/cnp/{name}", getCNP(cfg.Store))
+		r.Get("/api/quarantine", listQuarantined(cfg.Store))
 
 		// Admin-only (writes)
 		r.Group(func(r chi.Router) {
@@ -107,6 +108,8 @@ func New(cfg Config) http.Handler {
 			r.Post("/api/vap-bindings", applyVAPBinding(cfg.Store))
 			r.Put("/api/vap-bindings/{name}", applyVAPBinding(cfg.Store))
 			r.Delete("/api/vap-bindings/{name}", deleteVAPBinding(cfg.Store))
+			r.Post("/api/quarantine", quarantinePod(cfg.Store))
+			r.Delete("/api/quarantine/{namespace}/{pod}", releasePod(cfg.Store))
 			r.Post("/api/cnp", applyCNP(cfg.Store))
 			r.Put("/api/cnp/{name}", applyCNP(cfg.Store))
 			r.Delete("/api/cnp/{name}", deleteCNP(cfg.Store))
