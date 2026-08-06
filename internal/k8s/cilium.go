@@ -84,14 +84,6 @@ func (f CiliumFlow) IsPolicyDenial() bool {
 	return strings.Contains(strings.ToUpper(f.DropReason), "POLICY")
 }
 
-// ciliumNamespaces lists where to look for Cilium, in order. An explicit
-// CILIUM_NAMESPACE is taken as the only answer; otherwise the three places the
-// chart is commonly installed are all searched.
-//
-// Detection used to search all three while every exec afterwards targeted the
-// configured default alone, so a cluster running Cilium anywhere but kube-system
-// logged "Cilium detected, starting flow stream" and then failed to find an agent
-// pod every 15 seconds, forever, with an empty topology and no explanation.
 // IsICMPError reports whether the flow is an ICMP error message rather than a
 // probe: Destination Unreachable, Time Exceeded, Redirect and their kin.
 //
@@ -122,6 +114,14 @@ func (f CiliumFlow) IsICMPError() bool {
 	return false
 }
 
+// ciliumNamespaces lists where to look for Cilium, in order. An explicit
+// CILIUM_NAMESPACE is taken as the only answer; otherwise the three places the
+// chart is commonly installed are all searched.
+//
+// Detection used to search all three while every exec afterwards targeted the
+// configured default alone, so a cluster running Cilium anywhere but kube-system
+// logged "Cilium detected, starting flow stream" and then failed to find an agent
+// pod every 15 seconds, forever, with an empty topology and no explanation.
 func ciliumNamespaces() []string {
 	if ns := os.Getenv("CILIUM_NAMESPACE"); ns != "" {
 		return []string{ns}
@@ -340,6 +340,7 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 	if flow.NodeName == "" {
 		flow.NodeName = env.NodeName
 	}
+	flow.NodeName = bareNodeName(flow.NodeName)
 	if flow.Time == "" {
 		flow.Time = env.Time
 	}
@@ -403,6 +404,19 @@ func parseCiliumFlow(line string) (CiliumFlow, bool) {
 	}
 
 	return flow, true
+}
+
+// bareNodeName drops the cluster qualifier Hubble puts in front of the node.
+//
+// Hubble reports node_name as "cluster-name/node-name", so a Security Event from
+// a network rule named its node "default/w1" while a Tetragon event on the same
+// node named it "w1". One cluster is all this console looks at, so the qualifier
+// says nothing and only made the two disagree.
+func bareNodeName(name string) string {
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		return name[i+1:]
+	}
+	return name
 }
 
 func verdictLabel(v string) string {
