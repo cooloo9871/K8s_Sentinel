@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,5 +192,20 @@ func TestReleaseClearsTheDenialsItCaused(t *testing.T) {
 	}
 	if !left["allowed"] {
 		t.Error("allowed traffic was cleared — only the denials are stale")
+	}
+}
+
+// Events outlive the pods that raised them, so the button is still on an event
+// whose workload was replaced hours ago. "pods not found" alone reads like a
+// bug in Sentinel rather than a fact about the cluster.
+func TestQuarantiningAGonePodSaysWhy(t *testing.T) {
+	s := quarantineStore() // no pods at all
+
+	err := s.Quarantine(context.Background(), "demo", "long-gone", "andy")
+	if err == nil {
+		t.Fatal("quarantining a pod that does not exist reported success")
+	}
+	if !strings.Contains(err.Error(), "no longer exists") {
+		t.Errorf("error = %q, want it to say the pod is gone", err)
 	}
 }

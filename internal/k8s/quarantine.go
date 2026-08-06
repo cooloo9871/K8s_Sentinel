@@ -142,10 +142,21 @@ func (s *Store) patchPod(ctx context.Context, namespace, pod, patch string) erro
 	}
 	_, err := s.typed.CoreV1().Pods(namespace).Patch(
 		ctx, pod, types.MergePatchType, []byte(patch), metav1.PatchOptions{})
-	if err != nil {
-		return fmt.Errorf("patch pod %s/%s: %w", namespace, pod, err)
+	switch {
+	case err == nil:
+		return nil
+	case k8serrors.IsNotFound(err):
+		// The commonest refusal by far: events outlive the pods that raised them,
+		// so the button is still there on an event whose workload was replaced
+		// hours ago. "not found" alone reads like a bug in Sentinel.
+		return fmt.Errorf("pod %s/%s no longer exists — it was probably replaced since this event",
+			namespace, pod)
+	case k8serrors.IsForbidden(err):
+		return fmt.Errorf("not allowed to label pod %s/%s — the ClusterRole needs pods/patch: %w",
+			namespace, pod, err)
+	default:
+		return fmt.Errorf("label pod %s/%s: %w", namespace, pod, err)
 	}
-	return nil
 }
 
 // ListQuarantined returns every contained pod, read from the cluster rather than

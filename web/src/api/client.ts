@@ -5,7 +5,17 @@ const api = axios.create({ baseURL: '/api', withCredentials: true })
 
 api.interceptors.response.use(
   (res) => res,
-  (err) => Promise.reject(err)
+  (err) => {
+    // The server says why it refused — writeError sends {"error": "..."} and
+    // http.Error sends a bare string — but axios replaces message with
+    // "Request failed with status code 400". Callers were each digging the real
+    // one out by hand, in three different shapes, and the newest one was not
+    // digging at all: it reported the status code and nothing else.
+    const data = err?.response?.data
+    const detail = typeof data === 'string' ? data.trim() : data?.error
+    if (detail) err.message = detail
+    return Promise.reject(err)
+  }
 )
 
 export const policyApi = {
