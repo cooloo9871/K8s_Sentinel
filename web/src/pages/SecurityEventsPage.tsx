@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -11,6 +11,7 @@ import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
 import { FilterPopover, matchesFilter } from '../components/FilterPopover'
 import { useSecurityEvents, type DisplayEvent, type Severity } from '../layout/SecurityEventsProvider'
 import { quarantineApi } from '../api/client'
+import { IconLock } from '@tabler/icons-react'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import { formatTWTime } from '../utils/time'
@@ -53,20 +54,35 @@ function SeverityBadge({ severity }: { severity: Severity }) {
 // QuarantineAction cuts the pod off from the network without killing it. It is
 // offered per event rather than as a standing rule: this contains the one pod
 // the event names, chosen by a person, and changes nothing about future events.
-function QuarantineAction({ e }: { e: DisplayEvent }) {
+function QuarantineAction({ e, quarantined, onChanged }: {
+  e: DisplayEvent
+  quarantined: boolean
+  onChanged: () => void
+}) {
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState(false)
   const toast = useToast()
   const { user } = useAuth()
 
-  if (user?.role !== 'admin' || !e.pod || !e.namespace) return null
+  if (!e.pod || !e.namespace) return null
+
+  // Containment is a fact about the pod, not about the event being read, so
+  // every event that pod produced says so — and none of them offers to do it
+  // again.
+  if (quarantined) {
+    return (
+      <p className="mt-2 flex items-center gap-1 text-xs text-red-600">
+        <IconLock size={12} /> This pod is quarantined. Release it from the Quarantine page.
+      </p>
+    )
+  }
+  if (user?.role !== 'admin') return null
 
   const run = async () => {
     setBusy(true)
     try {
       await quarantineApi.add(e.namespace, e.pod)
-      setDone(true)
       toast.success(`${e.pod} quarantined — network cut off, container left running`)
+      onChanged()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Could not quarantine ${e.pod}`)
     } finally {
@@ -74,13 +90,6 @@ function QuarantineAction({ e }: { e: DisplayEvent }) {
     }
   }
 
-  if (done) {
-    return (
-      <p className="mt-2 text-xs text-muted-foreground">
-        Quarantined. Release it from the Quarantine page.
-      </p>
-    )
-  }
   return (
     <Button
       variant="outline"
@@ -94,7 +103,11 @@ function QuarantineAction({ e }: { e: DisplayEvent }) {
   )
 }
 
-function DetailRow({ e }: { e: DisplayEvent }) {
+function DetailRow({ e, quarantined, onChanged }: {
+  e: DisplayEvent
+  quarantined: boolean
+  onChanged: () => void
+}) {
   const items: { label: string; value: string }[] = []
 
   if (e.filePath) {
@@ -154,7 +167,7 @@ function DetailRow({ e }: { e: DisplayEvent }) {
             </div>
           ))}
         </div>
-        <QuarantineAction e={e} />
+        <QuarantineAction e={e} quarantined={quarantined} onChanged={onChanged} />
       </TableCell>
     </TableRow>
   )
@@ -203,6 +216,20 @@ export function SecurityEventsPage() {
   const [ruleTypes, setRuleTypes] = useState<string[]>([])
   const [namespaceFilter, setNamespaceFilter] = useState<string[]>([])
   const [podSearch, setPodSearch] = useState('')
+  // Which pods are contained, keyed "namespace/pod". Held once for the page
+  // rather than per row: quarantine is a property of the pod, and every event
+  // that pod produced has to agree about it.
+  const [quarantined, setQuarantined] = useState<Set<string>>(new Set())
+  const loadQuarantined = useCallback(async () => {
+    try {
+      const list = await quarantineApi.list()
+      setQuarantined(new Set(list.map(p => `${p.namespace}/${p.pod}`)))
+    } catch {
+      // Leave the last known set: claiming nothing is contained would offer to
+      // quarantine pods that already are.
+    }
+  }, [])
+  useEffect(() => { loadQuarantined() }, [loadQuarantined])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const namespaces = [...new Set(events.map(e => e.namespace).filter(Boolean))].sort()
@@ -225,6 +252,9 @@ export function SecurityEventsPage() {
   const criticalCount = filtered.filter(e => e.severity === 'critical').length
   const isFiltered = severities.length > 0 || ruleTypes.length > 0 ||
     namespaceFilter.length > 0 || podSearch.trim() !== ''
+
+  const isQuarantined = (e: DisplayEvent) =>
+    !!e.pod && quarantined.has(`${e.namespace}/${e.pod}`)
 
   const toggle = (key: string) =>
     setExpanded(prev => {
@@ -395,6 +425,9 @@ export function SecurityEventsPage() {
                       <TableCell className="text-sm truncate" title={e.namespace}>{e.namespace || '—'}</TableCell>
                       <TableCell className="text-sm">
                         <div className="truncate" title={e.pod + (e.container ? ' / ' + e.container : '')}>
+                          {isQuarantined(e) && (
+                            <IconLock size={11} className="mr-1 inline text-red-600" aria-label="Quarantined" />
+                          )}
                           {e.pod || '—'}
                           {e.container && (
                             <span className="text-xs text-muted-foreground"> / {e.container}</span>
@@ -410,7 +443,14 @@ export function SecurityEventsPage() {
                         <RelativeTime iso={e.time} />
                       </TableCell>
                     </TableRow>
-                    {expanded.has(key) && <DetailRow key={`detail-${key}`} e={e} />}
+                    {expanded.has(key) && (
+                      <DetailRow
+                        key={`detail-${key}`}
+                        e={e}
+                        quarantined={isQuarantined(e)}
+                        onChanged={loadQuarantined}
+                      />
+                    )}
                   </React.Fragment>
                   )
                 })}
