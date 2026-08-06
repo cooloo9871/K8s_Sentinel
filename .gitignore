@@ -3,3 +3,6 @@ web/node_modules/
 web/dist/
 .claude/logs/
 .playwright-mcp/
+
+# Local build output — the release binary is built inside the image
+/server

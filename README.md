@@ -293,6 +293,12 @@ no kustomize:
 kubectl apply -f deploy/sentinel.yaml
 ```
 
+### Architecture
+
+[`docs/architecture.md`](docs/architecture.md) covers how the pieces fit together
+— the two ingestion pipelines, how the topology graph decides what to draw, and
+the known limitations.
+
 ### Container image
 
 ```

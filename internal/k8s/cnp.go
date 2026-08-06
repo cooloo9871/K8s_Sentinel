@@ -49,15 +49,6 @@ func cnpResource(scope string) schema.GroupVersionResource {
 	return cnpGVR
 }
 
-// CiliumPolicyCRDAvailable reports whether the Cilium policy CRDs are installed.
-func (s *Store) CiliumPolicyCRDAvailable(ctx context.Context) bool {
-	if s.client == nil {
-		return false
-	}
-	_, err := s.client.Resource(cnpGVR).Namespace("").List(ctx, metav1.ListOptions{Limit: 1})
-	return err == nil
-}
-
 // ListCNP returns all namespaced and cluster-wide Cilium network policies.
 // Returns ErrCiliumCRDMissing when the CRDs are not installed.
 func (s *Store) ListCNP(ctx context.Context) ([]CNPRecord, error) {

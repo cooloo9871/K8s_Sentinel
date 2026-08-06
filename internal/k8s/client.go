@@ -23,11 +23,6 @@ var (
 		Version:  "v1",
 		Resource: "namespaces",
 	}
-	eventsGVR = schema.GroupVersionResource{
-		Group:    "",
-		Version:  "v1",
-		Resource: "events",
-	}
 	ciliumNodeGVR = schema.GroupVersionResource{
 		Group:    "cilium.io",
 		Version:  "v2",

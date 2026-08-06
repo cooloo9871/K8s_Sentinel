@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -535,75 +534,6 @@ func (s *Store) Delete(ctx context.Context, name, namespace string) error {
 		return fmt.Errorf("delete policy %q: %w", name, err)
 	}
 	return nil
-}
-
-// SecurityEvent is a security-relevant Kubernetes event returned by the API.
-type SecurityEvent struct {
-	Namespace         string `json:"namespace"`
-	InvolvedKind      string `json:"involvedKind"`
-	InvolvedName      string `json:"involvedName"`
-	InvolvedNamespace string `json:"involvedNamespace"`
-	Reason            string `json:"reason"`
-	Message           string `json:"message"`
-	Type              string `json:"type"`
-	Count             int64  `json:"count"`
-	FirstTime         string `json:"firstTime"`
-	LastTime          string `json:"lastTime"`
-	Source            string `json:"source"`
-}
-
-// ListSecurityEvents returns Warning-type events and Tetragon events across all namespaces.
-func (s *Store) ListSecurityEvents(ctx context.Context) ([]SecurityEvent, error) {
-	list, err := s.client.Resource(eventsGVR).Namespace("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("list events: %w", err)
-	}
-
-	var events []SecurityEvent
-	for _, item := range list.Items {
-		evType, _, _ := unstructured.NestedString(item.Object, "type")
-		source, _, _ := unstructured.NestedString(item.Object, "source", "component")
-
-		isTetragon := strings.Contains(strings.ToLower(source), "tetragon")
-		if evType != "Warning" && !isTetragon {
-			continue
-		}
-
-		reason, _, _ := unstructured.NestedString(item.Object, "reason")
-		message, _, _ := unstructured.NestedString(item.Object, "message")
-		involvedKind, _, _ := unstructured.NestedString(item.Object, "involvedObject", "kind")
-		involvedName, _, _ := unstructured.NestedString(item.Object, "involvedObject", "name")
-		involvedNS, _, _ := unstructured.NestedString(item.Object, "involvedObject", "namespace")
-		firstTime, _, _ := unstructured.NestedString(item.Object, "firstTimestamp")
-		lastTime, _, _ := unstructured.NestedString(item.Object, "lastTimestamp")
-
-		var count int64
-		if v, ok, _ := unstructured.NestedFieldNoCopy(item.Object, "count"); ok {
-			if n, ok := v.(int64); ok {
-				count = n
-			}
-		}
-
-		events = append(events, SecurityEvent{
-			Namespace:         item.GetNamespace(),
-			InvolvedKind:      involvedKind,
-			InvolvedName:      involvedName,
-			InvolvedNamespace: involvedNS,
-			Reason:            reason,
-			Message:           message,
-			Type:              evType,
-			Count:             count,
-			FirstTime:         firstTime,
-			LastTime:          lastTime,
-			Source:            source,
-		})
-	}
-
-	sort.Slice(events, func(i, j int) bool {
-		return events[i].LastTime > events[j].LastTime
-	})
-
-	return events, nil
 }
 
 // noisyLabelPrefixes are auto-generated labels that are not useful as pod selectors.

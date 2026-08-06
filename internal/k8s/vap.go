@@ -25,12 +25,6 @@ var (
 	}
 )
 
-// ExportVAPGVR returns the GVR for ValidatingAdmissionPolicy.
-func ExportVAPGVR() schema.GroupVersionResource { return vapGVR }
-
-// ExportVAPBindingGVR returns the GVR for ValidatingAdmissionPolicyBinding.
-func ExportVAPBindingGVR() schema.GroupVersionResource { return vapBindingGVR }
-
 // VAPRecord is a ValidatingAdmissionPolicy as returned by the list/get API.
 type VAPRecord struct {
 	Name            string `json:"name"`
