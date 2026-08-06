@@ -16,7 +16,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, modeApi, vapApi, cnpApi, type VAPRecord, type VAPBindingRecord, type CNPRecord } from '../api/client'
+import { policyApi, modeApi, vapApi, cnpApi, type VAPRecord, type VAPBindingRecord, type CNPRecord, quarantineApi,
+  type QuarantinedPod,
+} from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import { useSecurityEvents } from '../layout/SecurityEventsProvider'
@@ -65,6 +67,7 @@ export function DashboardPage() {
   const [vapPolicies, setVapPolicies] = useState<VAPRecord[]>([])
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
   const [cnps, setCnps] = useState<CNPRecord[]>([])
+  const [quarantined, setQuarantined] = useState<QuarantinedPod[]>([])
   // null until the first fetch; false on clusters without Cilium, where the
   // card is hidden rather than shown permanently empty.
   const [cnpAvailable, setCnpAvailable] = useState<boolean | null>(null)
@@ -89,6 +92,9 @@ export function DashboardPage() {
     cnpApi.list()
       .then(r => { setCnpAvailable(r.available); setCnps(r.policies ?? []) })
       .catch(() => setCnpAvailable(false))
+    quarantineApi.list()
+      .then(setQuarantined)
+      .catch(() => {})
     fetch('/api/tetragon/agents')
       .then(r => r.json())
       .then((d: { agents: { ready: boolean }[] }) => {
@@ -349,6 +355,62 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Quarantine — always shown, unlike the Network Policy card above, because
+          "nothing is contained" is a statement about the cluster worth making
+          rather than an absence worth hiding. The count goes red when it is not
+          zero: a contained pod is an incident in progress. */}
+      <Card>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold">Quarantine</h3>
+            <p className={`text-sm ${quarantined.length > 0 ? 'font-medium text-red-600' : 'text-muted-foreground'}`}>
+              {quarantined.length === 0
+                ? 'No pods are contained'
+                : `${quarantined.length} pod${quarantined.length !== 1 ? 's' : ''} cut off from the network`}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" className="gap-1 text-sm" onClick={() => navigate('/policies/quarantine')}>
+            View all <IconArrowRight size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {quarantined.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+              <IconLock size={36} strokeWidth={1.5} />
+              <p className="text-sm">Nothing is quarantined</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead>Pod</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead>By</TableHead>
+                  <TableHead>Quarantined</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {quarantined.slice(0, 8).map(p => (
+                  <TableRow key={`${p.namespace}/${p.pod}`}>
+                    <TableCell>{p.namespace}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      <IconLock size={11} className="mr-1 inline text-red-600" />
+                      {p.pod}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.node || '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.by || '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {p.at ? <RelativeTime iso={p.at} /> : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

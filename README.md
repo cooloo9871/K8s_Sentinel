@@ -214,7 +214,8 @@ Graphs live pod network connections from Cilium Hubble flows.
 
 - **Tetragon Agents** — per-node agent readiness (ready / total), red when any agent is not ready
 - Security and Admission event counts by severity, updating live, plus Global Protect Mode status
-- Recent Tracing Policy and Admission Policy lists
+- Recent Tracing Policy, Admission Policy and Network Policy lists
+- **Quarantine** — what is currently contained, with who asked and when. The count turns red when it is not zero, because a contained pod is an incident in progress
 
 ### Settings
 
