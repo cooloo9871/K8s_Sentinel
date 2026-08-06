@@ -50,7 +50,9 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods", "pods/log", "pods/exec"]
-    verbs: ["get", "list", "watch", "create"]
+    # patch is for the quarantine label; the rest is reading workloads and the
+    # exec used to reach the Tetragon and Cilium agents.
+    verbs: ["get", "list", "watch", "create", "patch"]
   - apiGroups: ["apps"]
     resources: ["replicasets", "deployments", "daemonsets", "statefulsets"]
     verbs: ["get", "list"]

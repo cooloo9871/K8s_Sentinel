@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld, IconAdjustmentsHorizontal } from '@tabler/icons-react'
+import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld, IconAdjustmentsHorizontal, IconLock,
+} from '@tabler/icons-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScopeFilter } from '../components/ScopeFilter'
 
@@ -32,6 +33,8 @@ interface TopologyNode {
     detail?: string
     hops?: { kind: string; name: string }[]
   }[]
+  // Cut off from the network by Sentinel, container left running
+  quarantined?: boolean
   // Derived client-side: this pod receives traffic from an ext: source
   extInbound?: boolean
 }
@@ -83,11 +86,19 @@ function PodNode({ data }: { data: TopologyNode }) {
   // is said with the globe alone — recolouring the card made a normal state
   // compete for attention with the node cards and with the one state that is an
   // alert. That one keeps its border.
-  const border = anomaly ? 'border-red-500/70' : 'border-primary/40'
+  // Quarantine outranks the anomaly border: a contained pod's edges are all
+  // denials, and "this one is cut off" explains the whole picture where
+  // "receiving unexplained external traffic" explains one edge. The lock says
+  // which of the two red borders this is.
+  const border = data.quarantined ? 'border-red-500 border-2'
+    : anomaly ? 'border-red-500/70'
+    : 'border-primary/40'
   return (
     <div className={`relative rounded-lg border ${border} bg-background px-3 py-2 shadow-sm min-w-[120px] text-center`}>
       <Handle type="target" position={Position.Left} className="!bg-primary" />
-      {anomaly
+      {data.quarantined
+        ? <IconLock size={12} className="absolute right-1 top-1 text-red-600" />
+        : anomaly
         ? <IconAlertTriangle size={12} className="absolute right-1 top-1 text-red-500" />
         : exposed && <IconWorld size={12} className="absolute right-1 top-1 text-amber-500" />}
       <div className="text-[10px] text-muted-foreground mb-0.5">{data.namespace}</div>
@@ -525,6 +536,7 @@ export function NetworkTopologyPage() {
         { colour: '#f59e0b', label: 'to External' },
       ] as const).filter(a => colours.has(a.colour)),
       exposed: nodes.some(n => ((n.data as TopologyNode).exposures?.length ?? 0) > 0),
+      quarantined: nodes.some(n => (n.data as TopologyNode).quarantined),
       blocked: edges.some(e => (e.data as EdgeVisualData | undefined)?.blocked),
     }
   }, [nodes, edges])
@@ -665,6 +677,12 @@ export function NetworkTopologyPage() {
             <span className="flex items-center gap-1">
               <IconWorld size={12} className="text-amber-500" />
               Exposed
+            </span>
+          )}
+          {legend.quarantined && (
+            <span className="flex items-center gap-1">
+              <IconLock size={12} className="text-red-600" />
+              Quarantined
             </span>
           )}
           {legend.arrows.map(a => (
@@ -871,6 +889,13 @@ export function NetworkTopologyPage() {
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        )}
+                        {selectedNode.quarantined && (
+                          <div className="rounded bg-red-50 px-2 py-1.5 text-[11px] leading-snug text-red-700">
+                            <span className="font-medium">Quarantined.</span> Cut off from the network
+                            but still running, so the process and its memory are intact. Only the
+                            kubelet's probes still reach it. Release it from the Quarantine page.
                           </div>
                         )}
                         {selectedNode.extInbound && !(selectedNode.exposures?.length) && (

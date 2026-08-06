@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input'
 import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
 import { FilterPopover, matchesFilter } from '../components/FilterPopover'
 import { useSecurityEvents, type DisplayEvent, type Severity } from '../layout/SecurityEventsProvider'
+import { quarantineApi } from '../api/client'
+import { useToast } from '../layout/AppToaster'
+import { useAuth } from '../layout/AuthContext'
 import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
 import { RelativeTime } from '../components/RelativeTime'
@@ -46,6 +49,50 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   )
 }
 
+
+// QuarantineAction cuts the pod off from the network without killing it. It is
+// offered per event rather than as a standing rule: this contains the one pod
+// the event names, chosen by a person, and changes nothing about future events.
+function QuarantineAction({ e }: { e: DisplayEvent }) {
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const toast = useToast()
+  const { user } = useAuth()
+
+  if (user?.role !== 'admin' || !e.pod || !e.namespace) return null
+
+  const run = async () => {
+    setBusy(true)
+    try {
+      await quarantineApi.add(e.namespace, e.pod)
+      setDone(true)
+      toast.success(`${e.pod} quarantined — network cut off, container left running`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Could not quarantine ${e.pod}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (done) {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Quarantined. Release it from the Quarantine page.
+      </p>
+    )
+  }
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="mt-2 h-7 w-fit border-red-300 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+      disabled={busy}
+      onClick={run}
+    >
+      {busy ? 'Quarantining…' : 'Quarantine this pod'}
+    </Button>
+  )
+}
 
 function DetailRow({ e }: { e: DisplayEvent }) {
   const items: { label: string; value: string }[] = []
@@ -107,6 +154,7 @@ function DetailRow({ e }: { e: DisplayEvent }) {
             </div>
           ))}
         </div>
+        <QuarantineAction e={e} />
       </TableCell>
     </TableRow>
   )

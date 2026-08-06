@@ -217,6 +217,40 @@ ClusterIP **不算** exposure，這是刻意的。
 
 ---
 
+## 6.5 Quarantine
+
+把可疑的 pod 從網路上切斷，但**不殺掉它** —— 行程、記憶體、開啟的檔案都留著可以檢查。
+殺掉行程 Tetragon 的 Sigkill 已經能做；刪掉 pod 更糟，Deployment 會重建。
+
+機制是 **一個 label + 一條常駐政策**，不是每個 pod 產生一條政策：
+
+```
+pod 打上 sentinel.io/quarantine=true
+        +
+CCNP sentinel-quarantine 選擇這個 label
+```
+
+CNP 本來就是用 label 選 endpoint，所以「一個 pod 一條政策」終究也得先給它一個獨有的
+label —— 那不如就一條。這樣**叢集是真相來源**，Sentinel 重啟不會忘記誰被隔離，
+`kubectl label pod … sentinel.io/quarantine-` 也能繞過 UI 解除。
+
+政策的形狀有一個關鍵決定：
+
+```yaml
+ingress:
+  - fromEntities: [host, health]   # 放行 kubelet 探針
+egressDeny:
+  - toEntities: [all]              # deny 蓋過任何 allow
+```
+
+**ingress 必須放行節點。** 全部擋掉的話 kubelet 探針失敗 → readiness 失敗 → liveness 失敗
+→ 容器重啟 → Deployment 給你一個**新的、沒有被隔離的 pod**，隔離和證據一起消失。
+
+觸發方式**只有手動**（Security Events 上的按鈕）。自動化刻意還沒做：policy builder 預設是
+白名單模式（清單以外全部觸發），一條範圍沒抓好的政策可以在幾秒內隔離整個 Deployment。
+
+---
+
 ## 7. 儲存
 
 | 資料 | 位置 |

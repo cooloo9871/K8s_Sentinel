@@ -285,3 +285,20 @@ export const cnpApi = {
   delete: (name: string, scope: string, namespace: string): Promise<void> =>
     api.delete(`/cnp/${name}`, { params: { scope, namespace } }),
 }
+
+export interface QuarantinedPod {
+  namespace: string
+  pod: string
+  node?: string
+  by?: string
+  at?: string
+}
+
+export const quarantineApi = {
+  list: (): Promise<QuarantinedPod[]> =>
+    api.get('/quarantine').then((r) => r.data),
+  add: (namespace: string, pod: string): Promise<void> =>
+    api.post('/quarantine', { namespace, pod }),
+  release: (namespace: string, pod: string): Promise<void> =>
+    api.delete(`/quarantine/${namespace}/${pod}`),
+}

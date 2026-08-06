@@ -30,6 +30,7 @@ const GROUPS: NavGroup[] = [
       { to: '/policies/templates', label: 'Templates' },
       { to: '/policies/admission', label: 'Admission Policy' },
       { to: '/policies/network', label: 'Network Policy' },
+      { to: '/policies/quarantine', label: 'Quarantine' },
     ],
   },
   {

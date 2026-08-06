@@ -20,6 +20,7 @@ import { AlertsPage } from './pages/AlertsPage'
 
 import { AdmissionEventsPage } from './pages/AdmissionEventsPage'
 import { VAPPage } from './pages/VAPPage'
+import { QuarantinePage } from './pages/QuarantinePage'
 import { CNPPage } from './pages/CNPPage'
 import { RsyslogPage } from './pages/RsyslogPage'
 import { SecurityRetentionPage } from './pages/SecurityRetentionPage'
@@ -62,6 +63,7 @@ function AppRoutes() {
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
           <Route path="/policies/admission" element={<VAPPage />} />
           <Route path="/policies/network" element={<CNPPage />} />
+          <Route path="/policies/quarantine" element={<QuarantinePage />} />
           <Route path="/network/topology" element={<NetworkTopologyPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

@@ -21,6 +21,9 @@ type TopologyNode struct {
 	// rewritten on the way, so the UI can say the IP is not the client's.
 	ViaNode   string         `json:"viaNode,omitempty"`
 	Exposures []k8s.Exposure `json:"exposures,omitempty"` // static attack-surface paths (pod nodes only)
+	// Cut off from the network by Sentinel. Its edges are all denials, so without
+	// saying so the graph shows a pod nothing can reach and gives no reason.
+	Quarantined bool `json:"quarantined,omitempty"`
 }
 
 // PortStat is one destination port's share of an aggregated edge.
@@ -363,6 +366,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			if exp := exposures[n.ID]; len(exp) > 0 {
 				n.Exposures = exp
 			}
+			n.Quarantined = k8sStore.IsQuarantined(ctx, n.Namespace, n.Pod)
 		}
 		nodes = append(nodes, n)
 	}
