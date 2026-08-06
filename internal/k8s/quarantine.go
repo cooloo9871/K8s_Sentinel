@@ -130,6 +130,9 @@ func (s *Store) Release(ctx context.Context, namespace, pod string) error {
 		return err
 	}
 	s.invalidateAttribution()
+	// The denials in the topology buffer were caused by the policy just lifted,
+	// so they describe a state that no longer exists.
+	s.PruneBlockedFor(namespace, pod)
 	return nil
 }
 

@@ -319,6 +319,30 @@ func (s *Store) PruneCiliumTopo(keys []string) {
 	s.ciliumTopoMu.Unlock()
 }
 
+// PruneBlockedFor drops the recorded denials involving a pod.
+//
+// Used when quarantine is lifted. Those drops are the ones Sentinel itself
+// caused, and releasing the pod is the moment it knows they have stopped —
+// there is no reason to wait for evidence. Left to age out instead, the graph
+// went on reporting "Blocked by policy" for up to the whole fifteen-minute
+// window after the pod was already reachable, and could name no policy for it
+// either: the one that dropped the traffic no longer selects the pod.
+func (s *Store) PruneBlockedFor(namespace, pod string) {
+	if pod == "" {
+		return
+	}
+	s.ciliumTopoMu.Lock()
+	defer s.ciliumTopoMu.Unlock()
+	for k, e := range s.ciliumTopo {
+		if e.Verdict != "dropped" {
+			continue
+		}
+		if (e.SrcNs == namespace && e.SrcPod == pod) || (e.DstNs == namespace && e.DstPod == pod) {
+			delete(s.ciliumTopo, k)
+		}
+	}
+}
+
 // ListCiliumTopoEntries returns the topology entries seen within the window.
 func (s *Store) ListCiliumTopoEntries() []CiliumTopoEntry {
 	cutoff := time.Now().Add(-ciliumTopoWindow)

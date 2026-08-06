@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -149,5 +150,46 @@ func TestQuarantineNeedsAPod(t *testing.T) {
 	s := quarantineStore()
 	if err := s.Quarantine(context.Background(), "demo", "", "andy"); err == nil {
 		t.Error("an empty pod name was accepted")
+	}
+}
+
+// The graph went on saying "Blocked by policy" for up to the whole fifteen-minute
+// window after a pod was released — and could name no policy for it, because the
+// one that dropped the traffic no longer selected the pod. Releasing is the
+// moment Sentinel knows those drops have stopped.
+func TestReleaseClearsTheDenialsItCaused(t *testing.T) {
+	s := quarantineStore(suspectPod())
+	now := time.Now()
+	s.SeedCiliumTopoForTest([]CiliumTopoEntry{
+		{Key: "in", SrcPod: "client", SrcNs: "demo", DstPod: "compromised", DstNs: "demo",
+			Verdict: "dropped", Count: 5, LastSeen: now},
+		{Key: "out", SrcPod: "compromised", SrcNs: "demo", DstPod: "api", DstNs: "demo",
+			Verdict: "dropped", Count: 3, LastSeen: now},
+		// Another pod's denial is none of this pod's business.
+		{Key: "other", SrcPod: "unrelated", SrcNs: "demo", DstPod: "api", DstNs: "demo",
+			Verdict: "dropped", Count: 1, LastSeen: now},
+		// And traffic that was allowed still happened.
+		{Key: "allowed", SrcPod: "compromised", SrcNs: "demo", DstPod: "dns", DstNs: "kube-system",
+			Verdict: "allowed", Count: 9, LastSeen: now},
+	})
+
+	if err := s.Release(context.Background(), "demo", "compromised"); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	left := map[string]bool{}
+	for _, e := range s.ListCiliumTopoEntries() {
+		left[e.Key] = true
+	}
+	for _, gone := range []string{"in", "out"} {
+		if left[gone] {
+			t.Errorf("denial %q survived release, so the graph still reports the pod as blocked", gone)
+		}
+	}
+	if !left["other"] {
+		t.Error("another pod's denial was cleared")
+	}
+	if !left["allowed"] {
+		t.Error("allowed traffic was cleared — only the denials are stale")
 	}
 }
