@@ -186,7 +186,9 @@ export function UsersPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
-            <AlertDialogDescription>Delete "{deleteTarget}"? This cannot be undone.</AlertDialogDescription>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget}</strong>?
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
