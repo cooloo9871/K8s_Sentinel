@@ -42,14 +42,17 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
         // double-counting when both matchArgs and matchBinaries are present.
         let parsedFromMatchArgs = false
 
-        // Current format: matchArgs index:0 with Postfix or NotPostfix operator
+        // Equal / NotEqual is what the builder writes. Postfix / NotPostfix is
+        // what it wrote before absolute paths were required, and policies saved
+        // then are still in clusters — reading only the current pair would leave
+        // processMode unset on those, so a blacklist would reopen as a whitelist
+        // and invert on save.
         const matchArgsIdx0 = (sel.matchArgs ?? []).filter((a: any) => a.index === 0)
         for (const ma of matchArgsIdx0) {
-          if (ma.operator === 'NotPostfix') result.processMode = 'whitelist'
-          else if (ma.operator === 'Postfix') result.processMode = 'blacklist'
+          if (ma.operator === 'NotEqual' || ma.operator === 'NotPostfix') result.processMode = 'whitelist'
+          else if (ma.operator === 'Equal' || ma.operator === 'Postfix') result.processMode = 'blacklist'
           for (const bin of ma.values ?? []) {
-            // Restore leading '/' stripped by formToYaml so the form shows
-            // absolute paths (e.g. 'bin/bash' → '/bin/bash').
+            // Older policies hold the path with its leading slash stripped.
             if (bin) result.process!.push({ binaries: [bin.startsWith('/') ? bin : '/' + bin] })
           }
           parsedFromMatchArgs = true

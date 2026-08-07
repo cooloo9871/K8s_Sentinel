@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { PolicyRecord, CreatePolicyPayload, Mode } from './types'
+import type { PolicyRecord, CreatePolicyPayload, Mode, PolicyFormInput } from './types'
 
 const api = axios.create({ baseURL: '/api', withCredentials: true })
 
@@ -37,8 +37,12 @@ export const policyApi = {
   setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
     api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
 
-  preview: (form: CreatePolicyPayload): Promise<string> =>
-    api.post('/policies/preview', form).then((r) => r.data.yaml),
+  // Renders the YAML the server would apply, using the same builder that applies
+  // it. The body shape has to match the handler, which reads {form, action} —
+  // this posted the form at the top level and nothing called it, so nothing
+  // noticed until the preview was pointed at it.
+  preview: (form: PolicyFormInput, action: string): Promise<string> =>
+    api.post('/policies/preview', { form, action }).then((r) => r.data.yaml),
 }
 
 export const modeApi = {

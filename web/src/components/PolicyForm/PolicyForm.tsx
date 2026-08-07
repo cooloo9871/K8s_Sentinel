@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { policyApi } from '../../api/client'
 import { NamespaceSelect } from '../NamespaceSelect'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,7 +16,6 @@ import {
 } from '@/components/ui/select'
 import { ProcessSection } from './ProcessSection'
 import { FileSection } from './FileSection'
-import { formToYaml } from '../../utils/formToYaml'
 import type { PolicyFormInput } from '../../api/types'
 
 type LabelEntry = { key: string; value: string }
@@ -29,13 +29,41 @@ interface Props {
 }
 
 export function PolicyForm({ namespaces, action, value, onChange }: Props) {
-  const yamlPreview = useMemo(() => {
-    if (!value.name) return ''
-    try {
-      return formToYaml(value, action)
-    } catch {
-      return ''
+  // Rendered by the server, with the same builder that applies the policy.
+  // Generating it here as well meant two implementations of one thing, and when
+  // they disagreed the YAML shown was not the YAML applied — the form submits
+  // the form, and the server builds from that.
+  //
+  // Debounced, so typing does not fire a request per keystroke, and sequenced,
+  // so a slow early response cannot overwrite a newer one.
+  const [yamlPreview, setYamlPreview] = useState('')
+  const [previewError, setPreviewError] = useState('')
+  const previewSeq = useRef(0)
+
+  useEffect(() => {
+    if (!value.name) {
+      setYamlPreview('')
+      setPreviewError('')
+      return
     }
+    const seq = ++previewSeq.current
+    const timer = setTimeout(() => {
+      policyApi.preview(value, action)
+        .then(yaml => {
+          if (seq !== previewSeq.current) return
+          setYamlPreview(yaml)
+          setPreviewError('')
+        })
+        .catch((e: Error) => {
+          if (seq !== previewSeq.current) return
+          // The builder refuses some inputs — a relative binary path, say — and
+          // saying so here is more use than a blank panel, since this is where
+          // you are looking while typing it.
+          setPreviewError(e.message || 'Could not render the policy')
+          setYamlPreview('')
+        })
+    }, 300)
+    return () => clearTimeout(timer)
   }, [value, action])
 
   const processBinaries = value.process?.map((p) => p.binaries[0] ?? '') ?? []
@@ -230,7 +258,9 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
         </div>
         <CardContent className="min-h-0 flex-1 p-0">
           <pre className="h-full min-h-[420px] overflow-auto rounded-b-xl bg-[#1e1e1e] p-4 font-mono text-xs leading-relaxed text-[#d4d4d4]">
-            {yamlPreview}
+            {previewError
+              ? <span className="text-red-400">{previewError}</span>
+              : yamlPreview}
           </pre>
         </CardContent>
       </Card>
