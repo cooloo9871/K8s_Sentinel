@@ -95,7 +95,7 @@ export function FileSection({ rules, onChange }: Props) {
                   className="h-8 text-sm"
                 />
                 {bin && !bin.startsWith('/') && (
-                  <span className="shrink-0 text-xs text-amber-600">full path required</span>
+                  <span className="shrink-0 text-xs text-amber-600">Absolute paths required</span>
                 )}
                 <Button
                   variant="ghost"
