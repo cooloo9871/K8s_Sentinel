@@ -221,10 +221,10 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="whitelist">
-                      NotEqual — Whitelist
+                      Whitelist
                     </SelectItem>
                     <SelectItem value="blacklist">
-                      Equal — Blacklist
+                      Blacklist
                     </SelectItem>
                   </SelectGroup>
                 </SelectContent>
