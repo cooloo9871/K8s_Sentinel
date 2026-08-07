@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
@@ -60,10 +59,6 @@ export function PolicyEditPage() {
   )
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(!isNew)
-  // True when the loaded policy uses rules the form cannot represent (network
-  // kprobes). The Form tab is then locked so a save cannot silently drop them.
-  const [formUnsupported, setFormUnsupported] = useState(false)
-
   const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
 
   // Clear the prefill from browser history after consuming it once.
@@ -93,7 +88,9 @@ export function PolicyEditPage() {
           if (parsed) {
             setFormValues(parsed)
           } else {
-            setFormUnsupported(true)
+            // The form cannot represent every policy — a network kprobe, or an
+            // execve rule matching everything. Opening as YAML is how a save is
+            // kept from writing back only the part the form could show.
             setMode('yaml')
           }
         })
@@ -214,15 +211,6 @@ export function PolicyEditPage() {
         </div>
       </div>
 
-      {formUnsupported && (
-        <Alert className="mb-4">
-          <AlertDescription className="text-xs">
-            This policy contains network rules, which are now managed as{' '}
-            <span className="font-medium">CiliumNetworkPolicy</span> rather than in this form.
-            It has opened as YAML so a save cannot drop those rules.
-          </AlertDescription>
-        </Alert>
-      )}
       {mode === 'form' ? (
         <PolicyForm
           namespaces={namespaces}
