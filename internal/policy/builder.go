@@ -1,6 +1,9 @@
 package policy
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Build converts PolicyFormInput into a TracingPolicy CRD object.
 // action must be ActionPost ("Post") or ActionSigkill ("Sigkill").
@@ -23,29 +26,39 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		tp.Spec.PodSelector = &LabelSelector{MatchLabels: input.PodSelector}
 	}
 
-	// Process rules: ONE sys_execve kprobe with all values combined.
-	// Whitelist (default): NotPostfix — kill anything whose path does NOT end with a listed suffix.
-	// Blacklist: Postfix — kill anything whose path ends with a listed suffix.
+	// Process rules: ONE sys_execve kprobe with all values combined, matched
+	// exactly against the absolute path.
 	//
-	// Strip the leading '/' from each binary value so the suffix matches both
-	// absolute paths (/cgichild.sh) and relative-path calls (cgichild.sh).
-	// e.g. "/cgichild.sh" → "cgichild.sh" matches both "cgichild.sh" and "/cgichild.sh"
-	//      "/usr/bin/cat" → "usr/bin/cat" matches "/usr/bin/cat" only (path-specific)
+	// Suffix matching was the previous design, so that a binary invoked by a
+	// relative path still matched. It also meant a whitelist could be walked
+	// straight past: NotPostfix "usr/sbin/nginx" allows anything ending in that,
+	// so a binary at /tmp/usr/sbin/nginx runs. Keeping the leading slash would
+	// not have helped — that path ends with "/usr/sbin/nginx" too. The operator
+	// was the problem, not the slash.
+	//
+	// Absolute paths only, therefore, and matched with Equal. A relative name is
+	// rejected rather than quietly widened: "nginx" as a whitelist entry means
+	// any binary called nginx anywhere, which is not what someone typing a
+	// program name is asking for.
 	var allBinaries []string
 	for _, r := range input.Process {
 		for _, b := range r.Binaries {
-			if len(b) > 0 && b[0] == '/' {
-				b = b[1:]
+			b = strings.TrimSpace(b)
+			if b == "" { // skip empty strings that would break Tetragon validation
+				continue
 			}
-			if b != "" { // skip empty strings that would break Tetragon validation
-				allBinaries = append(allBinaries, b)
+			if !strings.HasPrefix(b, "/") {
+				return TracingPolicy{}, fmt.Errorf(
+					"process rule %q must be an absolute path: a bare name would match that "+
+						"binary anywhere, including a copy dropped in /tmp", b)
 			}
+			allBinaries = append(allBinaries, b)
 		}
 	}
 	if len(allBinaries) > 0 {
-		processOp := "NotPostfix"
+		processOp := "NotEqual"
 		if input.ProcessMode == "blacklist" {
-			processOp = "Postfix"
+			processOp = "Equal"
 		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:    "sys_execve",

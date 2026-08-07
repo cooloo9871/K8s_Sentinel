@@ -154,7 +154,13 @@ export function DiscoveryPage() {
       } catch { /* continue */ }
     }
     setCreatingFor(null)
-    const binaries = wl.binaries ?? []
+    // Absolute paths only — see the policy builder. Tetragon reports the resolved
+    // binary so these are normally absolute, but the pod-spec fallback used when
+    // the process cache is unavailable can hand back a bare command, which the
+    // form would refuse on save.
+    const observed = wl.binaries ?? []
+    const binaries = observed.filter(b => b.startsWith('/'))
+    const skipped = observed.length - binaries.length
     const prefill: PolicyFormInput = {
       name: `${wl.workloadName}-policy`,
       namespace: wl.namespace || 'default',
@@ -163,7 +169,9 @@ export function DiscoveryPage() {
       process: binaries.length > 0 ? binaries.map(b => ({ binaries: [b] })) : undefined,
     }
     navigate('/policies/tracing/new', { state: { prefill } })
-    toast.success('Policy pre-filled.')
+    toast.success(skipped > 0
+      ? `Policy pre-filled. ${skipped} entr${skipped !== 1 ? 'ies' : 'y'} left out — no absolute path was observed for them.`
+      : 'Policy pre-filled.')
   }
 
   return (

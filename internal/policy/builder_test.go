@@ -1,6 +1,7 @@
 package policy_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cooloo9871/sentinel/internal/policy"
@@ -54,12 +55,12 @@ func TestBuildMultipleProcessRulesCombined(t *testing.T) {
 		t.Fatal("expected matchArgs for process rule")
 	}
 	// No ProcessMode set means whitelist, which acts on anything NOT listed.
-	if args[0].Operator != "NotPostfix" {
-		t.Errorf("operator = %q, want NotPostfix (whitelist is the default)", args[0].Operator)
+	if args[0].Operator != "NotEqual" {
+		t.Errorf("operator = %q, want NotEqual (whitelist is the default)", args[0].Operator)
 	}
-	// The leading '/' is stripped on purpose so the suffix match covers both
-	// absolute and relative invocations.
-	want := []string{"bin/bash", "bin/sh"}
+	// The path is matched exactly, as typed. Suffix matching let a whitelist be
+	// walked past by a binary at a path ending in an allowed one.
+	want := []string{"/bin/bash", "/bin/sh"}
 	if len(args[0].Values) != len(want) {
 		t.Fatalf("binaries = %v, want %v", args[0].Values, want)
 	}
@@ -70,7 +71,7 @@ func TestBuildMultipleProcessRulesCombined(t *testing.T) {
 	}
 }
 
-// Blacklist inverts the operator: act on paths that DO end with a listed suffix.
+// Blacklist inverts the operator: act on paths that ARE one of those listed.
 func TestBuildProcessBlacklistOperator(t *testing.T) {
 	got, err := policy.Build(policy.PolicyFormInput{
 		Name:        "block-shells",
@@ -80,8 +81,39 @@ func TestBuildProcessBlacklistOperator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if op := got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Operator; op != "Postfix" {
-		t.Errorf("operator = %q, want Postfix", op)
+	if op := got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Operator; op != "Equal" {
+		t.Errorf("operator = %q, want Equal", op)
+	}
+}
+
+// A bare name is refused rather than quietly widened. As a whitelist entry it
+// would mean "any binary called nginx, anywhere" — including one dropped in
+// /tmp — which is not what someone typing a program name is asking for.
+func TestBuildRejectsARelativeBinaryPath(t *testing.T) {
+	_, err := policy.Build(policy.PolicyFormInput{
+		Name:    "allow-nginx",
+		Process: []policy.ProcessRule{{Binaries: []string{"nginx"}}},
+	}, policy.ActionSigkill)
+	if err == nil {
+		t.Fatal("a bare binary name was accepted")
+	}
+	if !strings.Contains(err.Error(), "absolute path") {
+		t.Errorf("error = %q, want it to say an absolute path is required", err)
+	}
+}
+
+// Surrounding space is a typo, not a different path.
+func TestBuildTrimsBinaryPaths(t *testing.T) {
+	got, err := policy.Build(policy.PolicyFormInput{
+		Name:    "allow-nginx",
+		Process: []policy.ProcessRule{{Binaries: []string{"  /usr/sbin/nginx  ", ""}}},
+	}, policy.ActionSigkill)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	vals := got.Spec.KProbes[0].Selectors[0].MatchArgs[0].Values
+	if len(vals) != 1 || vals[0] != "/usr/sbin/nginx" {
+		t.Errorf("values = %v, want the trimmed path alone", vals)
 	}
 }
 

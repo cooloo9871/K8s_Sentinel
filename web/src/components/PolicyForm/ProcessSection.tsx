@@ -17,10 +17,17 @@ export function ProcessSection({ binaries, onChange }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
+      {/* Absolute paths only, matched exactly. A bare name would have to be
+          matched as a suffix, and a whitelist of suffixes is walked past by a
+          binary at a path ending in an allowed one. */}
+      <p className="text-xs text-muted-foreground">
+        Absolute paths, matched exactly — a program name on its own is not accepted.
+        Behavior Discovery lists the paths each workload actually runs.
+      </p>
       {binaries.map((b, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
-            placeholder="/cat  (matches /bin/cat, /usr/bin/cat, ...)"
+            placeholder="/usr/bin/cat"
             value={b}
             onChange={(e) => update(i, e.target.value)}
             className="h-8 text-sm"

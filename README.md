@@ -24,7 +24,7 @@ Each layer does what only it can do:
 
 - Create, edit and delete **TracingPolicy** resources, cluster-wide or namespace-scoped
 - Filter the list by namespace and scope
-- **Process Rules** — control which binaries may execute (whitelist / blacklist)
+- **Process Rules** — control which binaries may execute (whitelist / blacklist). **Absolute paths, matched exactly.** A bare program name is refused: it would have to be matched as a suffix, and a whitelist of suffixes is walked straight past by a binary at a path ending in an allowed one — `/tmp/usr/sbin/nginx` satisfies a rule meant for `/usr/sbin/nginx`. Behavior Discovery lists the paths each workload actually runs, so the exact value does not have to be guessed
 - **File Rules** — control which paths may be accessed, optionally restricted to reads or writes, with per-rule process exceptions
 - Switch each policy between **Monitoring** (observe) and **Protect** (block) mode, or flip every policy at once with **Global Protect Mode**
 - **Created By** records who created each policy; resources applied with `kubectl` show as `k8s-apply`
