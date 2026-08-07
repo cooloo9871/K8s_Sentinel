@@ -5,6 +5,43 @@ import type { PolicyFormInput } from '../api/types'
  * Parses a TracingPolicy YAML string back into PolicyFormInput.
  * Returns null if the YAML cannot be parsed or doesn't match the expected schema.
  */
+// The form models a subset of TracingPolicy: a list of binaries, a list of file
+// paths, one action, and nothing else. Anything outside that subset is dropped
+// when the form saves, so a policy carrying it must stay in the YAML editor.
+//
+// Counting the rules the form managed to read is not enough on its own. The
+// monitor-all-file template parses its paths cleanly and would still have been
+// mangled: its `return: true` and `returnArg` are not modelled at all, and its
+// second selector matches with Postfix, which the form would rewrite as Prefix —
+// turning ".bashrc" into a rule that matches nothing.
+const KPROBE_UNSUPPORTED = ['return', 'returnArg', 'message', 'tags']
+const SELECTOR_UNSUPPORTED = [
+  'matchNamespaces', 'matchCapabilities', 'matchPIDs', 'matchReturnArgs',
+  'matchNamespaceChanges', 'matchCapabilityChanges',
+]
+
+/** Operators the form can read back on the argument it matches paths against. */
+const PROCESS_OPERATORS = ['Equal', 'NotEqual', 'Postfix', 'NotPostfix']
+const FILE_OPERATORS = ['Prefix', 'NotPrefix']
+
+function representable(kp: any, argOperators: string[]): boolean {
+  if (KPROBE_UNSUPPORTED.some(k => kp[k] !== undefined)) return false
+  for (const sel of kp.selectors ?? []) {
+    if (SELECTOR_UNSUPPORTED.some(k => sel[k] !== undefined)) return false
+    // The form writes exactly one action, with nothing beside it — an argError,
+    // a rateLimit or a second action would not survive the round trip.
+    const actions = sel.matchActions ?? []
+    if (actions.length > 1) return false
+    if (actions.some((a: any) => Object.keys(a).length > 1)) return false
+    // matchBinaries is read only as per-rule exceptions, which is NotIn.
+    if ((sel.matchBinaries ?? []).some((mb: any) => mb.operator !== 'NotIn')) return false
+    for (const ma of sel.matchArgs ?? []) {
+      if (ma.index === 0 && !argOperators.includes(ma.operator)) return false
+    }
+  }
+  return true
+}
+
 export function yamlToForm(rawYaml: string): PolicyFormInput | null {
   if (!rawYaml.trim()) return null
 
@@ -46,6 +83,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
 
     // Match sys_execve and any arch-prefixed variant (__x64_sys_execve, __arm64_sys_execve…)
     if (call === 'sys_execve' || call.includes('sys_execve')) {
+      if (!representable(kp, PROCESS_OPERATORS)) return null
       for (const sel of selectors) {
         // Track whether matchArgs index:0 was already parsed to avoid
         // double-counting when both matchArgs and matchBinaries are present.
@@ -90,6 +128,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
       call === 'sys_write' ||
       call === 'sys_openat'
     ) {
+      if (!representable(kp, FILE_OPERATORS)) return null
       for (const sel of selectors) {
         const exceptBins: string[] = (sel.matchBinaries ?? [])
           .filter((mb: any) => mb.operator === 'NotIn')

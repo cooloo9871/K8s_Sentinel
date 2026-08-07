@@ -114,8 +114,11 @@ export function PolicyEditPage() {
         else await policyApi.update(name!, payload)
         toast.success('Policy applied')
         navigate('/policies/tracing')
-      } catch {
-        toast.error('Failed to apply policy')
+      } catch (e) {
+        // The builder refuses some forms — no rules, a relative binary path —
+        // and says which. The interceptor puts that on the error; reporting a
+        // fixed string instead leaves the reason on the floor.
+        toast.error(e instanceof Error && e.message ? e.message : 'Failed to apply policy')
       } finally {
         setLoading(false)
       }
@@ -137,8 +140,8 @@ export function PolicyEditPage() {
         else await policyApi.update(name!, payload)
         toast.success('Policy applied')
         navigate('/policies/tracing')
-      } catch {
-        toast.error('Failed to apply YAML')
+      } catch (e) {
+        toast.error(e instanceof Error && e.message ? e.message : 'Failed to apply YAML')
       } finally {
         setLoading(false)
       }

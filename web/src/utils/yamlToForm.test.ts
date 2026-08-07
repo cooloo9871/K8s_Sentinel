@@ -138,3 +138,92 @@ spec:
     expect(yamlToForm(ok)?.process?.[0].binaries).toEqual(['/usr/sbin/nginx'])
   })
 })
+
+// The built-in monitor-all-file template. Its paths parse cleanly, so counting
+// rules alone let it into the form — where saving would have dropped its
+// `return`/`returnArg` and rewritten its Postfix selector as Prefix, turning
+// ".bashrc" into a rule matching nothing.
+describe('yamlToForm — fidelity, not just rule count', () => {
+  const fileKprobe = (extra: string, selector: string) => `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: t
+spec:
+  kprobes:
+    - call: security_file_permission
+      syscall: false
+${extra}      args:
+        - index: 0
+          type: file
+      selectors:
+${selector}`
+
+  const prefixSelector = `        - matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /etc/shadow
+          matchActions:
+            - action: Post
+`
+
+  it('accepts a file rule it can express in full', () => {
+    expect(yamlToForm(fileKprobe('', prefixSelector))?.file?.[0].paths).toEqual(['/etc/shadow'])
+  })
+
+  it('refuses a kprobe carrying return and returnArg', () => {
+    const withReturn = `      return: true
+      returnArg:
+        index: 0
+        type: int
+`
+    expect(yamlToForm(fileKprobe(withReturn, prefixSelector))).toBeNull()
+  })
+
+  it('refuses a Postfix file selector, which it would rewrite as Prefix', () => {
+    const postfix = `        - matchArgs:
+            - index: 0
+              operator: Postfix
+              values:
+                - .bashrc
+          matchActions:
+            - action: Post
+`
+    expect(yamlToForm(fileKprobe('', postfix))).toBeNull()
+  })
+
+  it('refuses a kprobe carrying a message or tags', () => {
+    expect(yamlToForm(fileKprobe('      message: "sensitive file"\n', prefixSelector))).toBeNull()
+    expect(yamlToForm(fileKprobe('      tags: ["observability"]\n', prefixSelector))).toBeNull()
+  })
+
+  it('refuses selector matchers it does not model', () => {
+    const withNamespaces = `        - matchNamespaces:
+            - namespace: Pid
+              operator: In
+              values:
+                - host_ns
+          matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /etc/shadow
+          matchActions:
+            - action: Post
+`
+    expect(yamlToForm(fileKprobe('', withNamespaces))).toBeNull()
+  })
+
+  it('refuses an action carrying more than the action itself', () => {
+    const override = `        - matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /etc/shadow
+          matchActions:
+            - action: Override
+              argError: -1
+`
+    expect(yamlToForm(fileKprobe('', override))).toBeNull()
+  })
+})
