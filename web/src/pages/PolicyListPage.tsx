@@ -367,7 +367,6 @@ export function PolicyListPage() {
             <AlertDialogTitle>Delete Policy</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
-              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

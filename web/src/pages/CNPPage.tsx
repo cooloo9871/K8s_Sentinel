@@ -714,10 +714,9 @@ export function CNPPage() {
       <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete network policy?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Policy</AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="font-mono">{deleteTarget?.name}</span>
-              {deleteTarget?.scope === 'cluster' ? ' (cluster-wide)' : ` in ${deleteTarget?.namespace}`} will be removed.
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
               {deleteTarget?.defaultDeny
                 ? ' Traffic it was restricting becomes allowed again.'
                 : ''}
