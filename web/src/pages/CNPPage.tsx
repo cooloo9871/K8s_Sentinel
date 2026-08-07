@@ -717,9 +717,6 @@ export function CNPPage() {
             <AlertDialogTitle>Delete Policy</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
-              {deleteTarget?.defaultDeny
-                ? ' Traffic it was restricting becomes allowed again.'
-                : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
