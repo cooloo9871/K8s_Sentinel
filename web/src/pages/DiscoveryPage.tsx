@@ -1,9 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { IconFolder, IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +9,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
 import { useDiscovery } from '../layout/DiscoveryProvider'
 import type { PodProfile, WorkloadProfile } from '../layout/DiscoveryProvider'
 import { useToast } from '../layout/AppToaster'
@@ -129,7 +127,7 @@ export function DiscoveryPage() {
   const toast = useToast()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const [nsFilter, setNsFilter] = useState('all')
+  const [nsFilter, setNsFilter] = useState<string[]>([])
   const [podSearch, setPodSearch] = useState('')
   const [groupByNs, setGroupByNs] = useState(false)
   const [clearDialog, setClearDialog] = useState(false)
@@ -138,7 +136,7 @@ export function DiscoveryPage() {
   const namespaces = [...new Set(profiles.map(p => p.namespace))].sort()
 
   const filtered = profiles.filter(p => {
-    if (nsFilter !== 'all' && p.namespace !== nsFilter) return false
+    if (!matchesScopeFilter('namespaced', p.namespace, nsFilter)) return false
     if (podSearch.trim() && !p.pod.toLowerCase().includes(podSearch.trim().toLowerCase())) return false
     return true
   })
@@ -186,19 +184,13 @@ export function DiscoveryPage() {
       </div>
 
       <div className="mb-4 flex items-center gap-2">
-        <Select value={nsFilter} onValueChange={setNsFilter}>
-          <SelectTrigger className="h-9 w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">All Namespaces</SelectItem>
-              {namespaces.map(ns => (
-                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <ScopeFilter
+          value={nsFilter}
+          onChange={setNsFilter}
+          namespaces={namespaces}
+          includeCluster={false}
+          className="h-9 w-44 justify-between text-sm font-normal"
+        />
         <div className="relative">
           <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
