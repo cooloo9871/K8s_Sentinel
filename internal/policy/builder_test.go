@@ -265,3 +265,19 @@ func TestBuildYAMLRoundtrip(t *testing.T) {
 		t.Errorf("name after roundtrip = %q, want roundtrip", out.Metadata.Name)
 	}
 }
+
+// A form with nothing in it produced spec: {}. Applied over an existing policy
+// that replaces working rules with a policy that does nothing, and reports
+// success — which is how the monitor-all-exec template could have been wiped.
+func TestBuildRejectsAPolicyWithNoRules(t *testing.T) {
+	_, err := policy.Build(policy.PolicyFormInput{
+		Name:        "empty",
+		PodSelector: map[string]string{"app": "web"},
+	}, policy.ActionPost)
+	if err == nil {
+		t.Fatal("a form with no rules produced a policy")
+	}
+	if !strings.Contains(err.Error(), "at least one") {
+		t.Errorf("error = %q, want it to say a rule is required", err)
+	}
+}

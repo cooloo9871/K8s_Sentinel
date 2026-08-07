@@ -30,8 +30,17 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
   }
 
   const kprobes: any[] = doc.spec?.kprobes ?? []
+  // How many rules the form managed to take from the policy. A kprobe the form
+  // cannot represent has to send the whole policy to the YAML editor instead —
+  // loading it into a form that shows none of it means saving writes the policy
+  // back with those rules gone. That is what happened to the monitor-all-exec
+  // template: an execve kprobe with no matchArgs matches everything, which a
+  // form built around a list of binaries has no way to express, so it opened
+  // empty and would have saved as spec: {}.
+  let rulesBefore = 0
 
   for (const kp of kprobes) {
+    rulesBefore = result.process!.length + result.file!.length
     const call: string = kp.call ?? ''
     const selectors: any[] = kp.selectors ?? []
 
@@ -105,6 +114,10 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
           }
         }
       }
+    }
+
+    if (result.process!.length + result.file!.length === rulesBefore) {
+      return null // this kprobe contributed nothing the form can show
     }
   }
 

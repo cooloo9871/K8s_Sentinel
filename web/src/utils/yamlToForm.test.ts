@@ -56,3 +56,85 @@ describe('yamlToForm — process rules', () => {
     expect(form?.process?.[0].binaries).toEqual(['/bin/bash'])
   })
 })
+
+// The monitor-all-exec template. An execve kprobe with no matchArgs matches
+// every execution, which a form built around a list of binaries cannot express.
+// Loading it into the form showed nothing, and saving would have written the
+// policy back as spec: {} — the rules silently gone.
+describe('yamlToForm — policies the form cannot represent', () => {
+  it('refuses an execve kprobe that matches everything', () => {
+    const monitorAll = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: monitor-all-exec
+spec:
+  podSelector: {}
+  kprobes:
+    - call: sys_execve
+      syscall: true
+      args:
+        - index: 0
+          type: string
+      selectors:
+        - matchActions:
+            - action: Post
+`
+    expect(yamlToForm(monitorAll)).toBeNull()
+  })
+
+  // One representable rule must not carry an unrepresentable one into the form,
+  // where saving would drop it.
+  it('refuses a policy where only some kprobes fit the form', () => {
+    const mixed = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: mixed
+spec:
+  kprobes:
+    - call: sys_execve
+      syscall: true
+      args:
+        - index: 0
+          type: string
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: NotEqual
+              values:
+                - /bin/bash
+          matchActions:
+            - action: Sigkill
+    - call: sys_execve
+      syscall: true
+      selectors:
+        - matchActions:
+            - action: Post
+`
+    expect(yamlToForm(mixed)).toBeNull()
+  })
+
+  // The one it can represent still opens in the form.
+  it('accepts a policy it can show in full', () => {
+    const ok = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: allow-nginx
+spec:
+  kprobes:
+    - call: sys_execve
+      syscall: true
+      args:
+        - index: 0
+          type: string
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: NotEqual
+              values:
+                - /usr/sbin/nginx
+          matchActions:
+            - action: Sigkill
+`
+    expect(yamlToForm(ok)?.process?.[0].binaries).toEqual(['/usr/sbin/nginx'])
+  })
+})

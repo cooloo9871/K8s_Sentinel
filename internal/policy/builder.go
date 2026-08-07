@@ -189,5 +189,10 @@ buildKProbe:
 		})
 	}
 
+	// A policy with no rules is not a policy: applied over an existing one it
+	// replaces working rules with spec: {} and reports success.
+	if len(tp.Spec.KProbes) == 0 {
+		return TracingPolicy{}, fmt.Errorf("a policy needs at least one process or file rule")
+	}
 	return tp, nil
 }
