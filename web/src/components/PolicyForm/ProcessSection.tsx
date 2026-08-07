@@ -22,7 +22,6 @@ export function ProcessSection({ binaries, onChange }: Props) {
           binary at a path ending in an allowed one. */}
       <p className="text-xs text-muted-foreground">
         Absolute paths, matched exactly — a program name on its own is not accepted.
-        Behavior Discovery lists the paths each workload actually runs.
       </p>
       {binaries.map((b, i) => (
         <div key={i} className="flex items-center gap-2">

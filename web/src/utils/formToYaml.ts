@@ -38,18 +38,22 @@ export function formToYaml(input: PolicyFormInput, action: string): string {
     doc.spec.podSelector = { matchLabels: input.podSelector }
   }
 
-  // Process rules: ONE sys_execve kprobe with all values combined.
-  // Whitelist (default): NotPostfix — kill anything NOT ending with a listed suffix.
-  // Blacklist: Postfix — kill anything ending with a listed suffix.
-  // Strip leading '/' so the suffix matches both absolute (/cgichild.sh) and
-  // relative-path calls (cgichild.sh). e.g. "/usr/bin/cat" → "usr/bin/cat"
+  // Process rules: ONE sys_execve kprobe with all values combined, matched
+  // exactly against the absolute path.
+  //
+  // Must stay in step with Build in internal/policy/builder.go, which is what
+  // actually gets applied — this only draws the preview. They disagreed once,
+  // and the preview showed a rule the cluster never received.
+  //
+  // Suffix matching was the previous design. A whitelist of suffixes is walked
+  // straight past: NotPostfix "usr/sbin/nginx" allows anything ending in that,
+  // so a binary at /tmp/usr/sbin/nginx runs.
   const allBinaries = (input.process ?? [])
     .flatMap((r) => r.binaries)
-    .filter(Boolean)
-    .map((b) => b.startsWith('/') ? b.slice(1) : b)
-    .filter(Boolean)
+    .map((b) => b.trim())
+    .filter((b) => b.startsWith('/'))
   if (allBinaries.length > 0) {
-    const processOp = input.processMode === 'blacklist' ? 'Postfix' : 'NotPostfix'
+    const processOp = input.processMode === 'blacklist' ? 'Equal' : 'NotEqual'
     doc.spec.kprobes.push({
       call: 'sys_execve',
       syscall: true,

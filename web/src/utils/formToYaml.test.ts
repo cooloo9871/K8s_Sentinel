@@ -3,21 +3,23 @@ import { formToYaml } from './formToYaml'
 import type { PolicyFormInput } from '../api/types'
 
 describe('formToYaml', () => {
-  it('generates one sys_execve kprobe with slash-stripped NotPostfix values', () => {
+  it('generates one sys_execve kprobe matching absolute paths exactly', () => {
     const input: PolicyFormInput = {
       name: 'block-shells',
-      process: [{ binaries: ['/bash'] }, { binaries: ['/sh'] }],
+      process: [{ binaries: ['/bin/bash'] }, { binaries: ['/bin/sh'] }],
     }
     const out = formToYaml(input, 'Post')
     expect(out).toContain('kind: TracingPolicy')
     expect(out).toContain('sys_execve')
-    // Default mode is whitelist → NotPostfix
-    expect(out).toContain('NotPostfix')
-    // The leading '/' is stripped on purpose so suffix matching catches both
-    // absolute and relative invocations (/bin/bash and ./bash alike).
-    expect(out).toContain('- bash')
-    expect(out).toContain('- sh')
-    expect(out).not.toContain('- /bash')
+    // Default mode is whitelist → NotEqual. This has to match what
+    // internal/policy/builder.go produces: that is what reaches the cluster,
+    // while this only draws the preview.
+    expect(out).toContain('NotEqual')
+    expect(out).not.toContain('Postfix')
+    // The path is kept as typed. Suffix matching let a whitelist be walked past
+    // by a binary at a path ending in an allowed one.
+    expect(out).toContain('- /bin/bash')
+    expect(out).toContain('- /bin/sh')
     expect(out).not.toContain('matchBinaries')
     // Only ONE kprobe definition — no duplicate
     expect(out.split('sys_execve').length - 1).toBe(1)
