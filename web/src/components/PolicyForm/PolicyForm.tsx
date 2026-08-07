@@ -36,9 +36,14 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   //
   // Debounced, so typing does not fire a request per keystroke, and sequenced,
   // so a slow early response cannot overwrite a newer one.
+  //
+  // The debounce is for typing, not for arriving: applying it to the first
+  // render left the panel blank for a third of a second every time the page was
+  // opened, which read as the page being slow.
   const [yamlPreview, setYamlPreview] = useState('')
   const [previewError, setPreviewError] = useState('')
   const previewSeq = useRef(0)
+  const rendered = useRef(false)
 
   useEffect(() => {
     if (!value.name) {
@@ -47,6 +52,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
       return
     }
     const seq = ++previewSeq.current
+    const delay = rendered.current ? 300 : 0
+    rendered.current = true
     const timer = setTimeout(() => {
       policyApi.preview(value, action)
         .then(yaml => {
@@ -62,7 +69,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
           setPreviewError(e.message || 'Could not render the policy')
           setYamlPreview('')
         })
-    }, 300)
+    }, delay)
     return () => clearTimeout(timer)
   }, [value, action])
 
