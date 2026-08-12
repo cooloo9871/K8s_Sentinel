@@ -129,7 +129,7 @@ func getNetworkTopology(k8sStore *k8s.Store) http.HandlerFunc {
 
 		// Static exposure paths (NodePort/LB/Ingress/hostNetwork) per pod
 		exposures := k8sStore.CachedPodExposures(r.Context())
-		nodeIPMap := k8sStore.ListNodeIPMap(r.Context())
+		nodeIPMap := k8sStore.CachedNodeIPMap(r.Context())
 
 		writeJSON(w, http.StatusOK, buildCiliumTopology(r.Context(), k8sStore, ipMap, nodeIPMap, exposures, partialResolution))
 	}

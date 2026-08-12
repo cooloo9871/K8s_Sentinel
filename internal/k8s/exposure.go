@@ -9,7 +9,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -124,7 +123,7 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 	}
 
 	// 1. NodePort / LoadBalancer services — direct L4 exposure
-	if svcs, err := s.typed.CoreV1().Services("").List(ctx, metav1.ListOptions{}); err == nil {
+	if svcs, err := s.typed.CoreV1().Services("").List(ctx, fromCache); err == nil {
 		for _, svc := range svcs.Items {
 			// externalIPs is reachable from outside whatever the type says, and it
 			// can sit alongside a NodePort or LoadBalancer, so it is its own path
@@ -182,7 +181,7 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 	}
 
 	// 2. Ingress backends — L7 exposure via the ingress controller
-	if ings, err := s.typed.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{}); err == nil {
+	if ings, err := s.typed.NetworkingV1().Ingresses("").List(ctx, fromCache); err == nil {
 		for _, ing := range ings.Items {
 			ingHop := ExposureHop{Kind: "Ingress", Name: qualified(ing.Namespace, ing.Name)}
 
@@ -221,7 +220,7 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 	}
 
 	// 3. hostNetwork / hostPort pods — reachable directly on the node
-	if pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{}); err == nil {
+	if pods, err := s.typed.CoreV1().Pods("").List(ctx, fromCache); err == nil {
 		for _, p := range pods.Items {
 			key := p.Namespace + "/" + p.Name
 			if p.Spec.HostNetwork {
@@ -268,7 +267,7 @@ func (s *Store) addGatewayRouteExposures(ctx context.Context, add func(ns, svc s
 	listeners := s.gatewayListeners(ctx)
 
 	for _, gvr := range []schema.GroupVersionResource{httpRouteGVR, grpcRouteGVR} {
-		list, err := s.client.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
+		list, err := s.client.Resource(gvr).Namespace("").List(ctx, fromCache)
 		if err != nil {
 			continue // CRD not installed, or no permission — neither is an error here
 		}
@@ -371,7 +370,7 @@ func gatewayHops(
 // name a section still gets an answer.
 func (s *Store) gatewayListeners(ctx context.Context) map[string]string {
 	out := map[string]string{}
-	list, err := s.client.Resource(gatewayGVR).Namespace("").List(ctx, metav1.ListOptions{})
+	list, err := s.client.Resource(gatewayGVR).Namespace("").List(ctx, fromCache)
 	if err != nil {
 		return out
 	}
@@ -410,7 +409,7 @@ func (s *Store) gatewayListeners(ctx context.Context) map[string]string {
 func (s *Store) addIstioExposures(ctx context.Context, add func(ns, svc string, e Exposure)) {
 	gatewayIndex := s.istioGateways(ctx)
 	for _, gvr := range istioVirtualServiceGVRs {
-		list, err := s.client.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
+		list, err := s.client.Resource(gvr).Namespace("").List(ctx, fromCache)
 		if err != nil {
 			continue
 		}
@@ -490,7 +489,7 @@ type istioServer struct {
 func (s *Store) istioGateways(ctx context.Context) map[string][]istioServer {
 	out := map[string][]istioServer{}
 	for _, gvr := range istioGatewayGVRs {
-		list, err := s.client.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
+		list, err := s.client.Resource(gvr).Namespace("").List(ctx, fromCache)
 		if err != nil {
 			continue
 		}

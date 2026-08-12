@@ -439,7 +439,8 @@ func (s *Store) findAllCiliumPods(ctx context.Context) (string, []string, error)
 	for _, ns := range ciliumNamespaces() {
 		for _, sel := range []string{"k8s-app=cilium", "app.kubernetes.io/name=cilium", "app=cilium"} {
 			list, err := s.typed.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
-				LabelSelector: sel,
+				LabelSelector:   sel,
+				ResourceVersion: fromCache.ResourceVersion,
 			})
 			if err != nil || len(list.Items) == 0 {
 				continue

@@ -174,7 +174,8 @@ func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- Te
 func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
 	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
 		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{
-			LabelSelector: sel,
+			LabelSelector:   sel,
+			ResourceVersion: fromCache.ResourceVersion,
 		})
 		if err != nil {
 			continue

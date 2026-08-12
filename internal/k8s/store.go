@@ -86,6 +86,11 @@ type Store struct {
 	// Pods already reported as missing from the attribution cache, so the warning
 	// is logged once each rather than once per flow.
 	warnedPods sync.Map
+
+	// Node address map cache — see CachedNodeIPMap.
+	nodeIPMu     sync.RWMutex
+	nodeIPData   *NodeIPMap
+	nodeIPExpiry time.Time
 }
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the
@@ -461,6 +466,8 @@ func (s *Store) CachedClusterIPs(ctx context.Context) (map[string]IPInfo, error)
 func (s *Store) List(ctx context.Context) ([]PolicyRecord, error) {
 	var records []PolicyRecord
 
+	// Not fromCache: the editor navigates straight back to this list after
+	// applying, and a watch cache lagging by a moment reads as the save failing.
 	clusterList, err := s.client.Resource(tracingPolicyGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("list TracingPolicy: %w", err)
@@ -588,7 +595,7 @@ outer:
 
 // ListNamespaces returns all namespace names in the cluster.
 func (s *Store) ListNamespaces(ctx context.Context) ([]string, error) {
-	list, err := s.client.Resource(namespaceGVR).List(ctx, metav1.ListOptions{})
+	list, err := s.client.Resource(namespaceGVR).List(ctx, fromCache)
 	if err != nil {
 		return nil, fmt.Errorf("list namespaces: %w", err)
 	}
@@ -612,7 +619,7 @@ type IPInfo struct {
 func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 	result := make(map[string]IPInfo)
 
-	pods, podErr := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	pods, podErr := s.typed.CoreV1().Pods("").List(ctx, fromCache)
 	if podErr == nil {
 		for _, p := range pods.Items {
 			// Skip hostNetwork pods — they share the node IP, which causes
@@ -632,7 +639,7 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 		}
 	}
 
-	svcs, svcErr := s.typed.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+	svcs, svcErr := s.typed.CoreV1().Services("").List(ctx, fromCache)
 	if svcErr == nil {
 		for _, svc := range svcs.Items {
 			if svc.Spec.ClusterIP != "" && svc.Spec.ClusterIP != "None" {
@@ -664,6 +671,35 @@ type NodeIPMap struct {
 	PodCIDRs []string // all pod CIDRs across all nodes
 }
 
+// CachedNodeIPMap returns the node address map, refreshed at most every 30
+// seconds like the other lookups.
+//
+// It was the one uncached list on the topology path, so it ran twice — nodes and
+// CiliumNodes — on every poll of every open tab, while everything else beside it
+// was served from a cache. Node addresses change when a node joins or leaves,
+// which is not something worth two API calls a minute per viewer.
+func (s *Store) CachedNodeIPMap(ctx context.Context) NodeIPMap {
+	s.nodeIPMu.RLock()
+	if s.nodeIPData != nil && time.Now().Before(s.nodeIPExpiry) {
+		d := *s.nodeIPData
+		s.nodeIPMu.RUnlock()
+		return d
+	}
+	s.nodeIPMu.RUnlock()
+
+	fresh := s.ListNodeIPMap(ctx)
+	// An empty map means the lookup failed. Caching that would classify every
+	// node address as external for the next 30 seconds.
+	if len(fresh.IPToName) == 0 {
+		return fresh
+	}
+	s.nodeIPMu.Lock()
+	s.nodeIPData = &fresh
+	s.nodeIPExpiry = time.Now().Add(30 * time.Second)
+	s.nodeIPMu.Unlock()
+	return fresh
+}
+
 // ListNodeIPMap returns node IPs — physical and cilium_host — and pod CIDRs,
 // used to tell node addresses from external ones in the topology graph.
 func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
@@ -671,7 +707,7 @@ func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
 	if s.typed == nil {
 		return result
 	}
-	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodes, err := s.typed.CoreV1().Nodes().List(ctx, fromCache)
 	if err == nil {
 		for _, node := range nodes.Items {
 			for _, addr := range node.Status.Addresses {
@@ -690,7 +726,7 @@ func (s *Store) ListNodeIPMap(ctx context.Context) NodeIPMap {
 	// node.Spec.PodCIDR. The authoritative per-node pod CIDRs and the
 	// cilium_host (CiliumInternalIP) addresses live in the CiliumNode CR.
 	if s.client != nil {
-		cnList, cnErr := s.client.Resource(ciliumNodeGVR).List(ctx, metav1.ListOptions{})
+		cnList, cnErr := s.client.Resource(ciliumNodeGVR).List(ctx, fromCache)
 		if cnErr == nil {
 			for _, cn := range cnList.Items {
 				spec, _, _ := unstructured.NestedMap(cn.Object, "spec")
@@ -1016,7 +1052,7 @@ func (s *Store) ListServicePodNames(ctx context.Context) (map[string][]string, e
 	// 1.33, and a single Endpoints object truncates at 1000 addresses — which
 	// would silently drop the rest of a large Service's pods out of exposure
 	// detection, the one place a missing pod reads as "not reachable".
-	list, err := s.typed.DiscoveryV1().EndpointSlices("").List(ctx, metav1.ListOptions{})
+	list, err := s.typed.DiscoveryV1().EndpointSlices("").List(ctx, fromCache)
 	if err != nil {
 		return nil, err
 	}

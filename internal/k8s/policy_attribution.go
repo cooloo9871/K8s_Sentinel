@@ -9,7 +9,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -91,7 +90,7 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 		return d
 	}
 
-	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, fromCache)
 	switch {
 	case err != nil:
 		// Previously discarded. A failed list leaves both policy attribution and
@@ -169,10 +168,10 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 		}
 	}
 
-	if list, err := s.client.Resource(cnpGVR).Namespace("").List(ctx, metav1.ListOptions{}); err == nil {
+	if list, err := s.client.Resource(cnpGVR).Namespace("").List(ctx, fromCache); err == nil {
 		collect(list.Items, false)
 	}
-	if list, err := s.client.Resource(ccnpGVR).List(ctx, metav1.ListOptions{}); err == nil {
+	if list, err := s.client.Resource(ccnpGVR).List(ctx, fromCache); err == nil {
 		collect(list.Items, true)
 	}
 	return d

@@ -5,8 +5,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type resolvedPod struct {
@@ -49,7 +47,7 @@ func (r *containerResolver) resolve(ctx context.Context, s *Store, containerID s
 		return c.pod, c.namespace, c.container
 	}
 
-	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, fromCache)
 	if err != nil {
 		return
 	}
@@ -77,6 +75,14 @@ func (r *containerResolver) resolve(ctx context.Context, s *Store, containerID s
 				container = cs.Name
 			}
 		}
+	}
+	// Remember that this ID is not a running container, or it never gets cached
+	// and the next event carrying it lists every pod again. Container IDs that
+	// resolve to nothing are ordinary — a container that has already exited, or
+	// runc acting on a sandbox — so under churn this was a full pod list per
+	// event, each one a quorum read.
+	if pod == "" {
+		r.cache[containerID] = resolvedPod{cachedAt: time.Now()}
 	}
 	return
 }

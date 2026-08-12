@@ -336,6 +336,9 @@ Admission Events 用的是同一個 `ScopeFilter`。
 3. **audit webhook 未認證** —— `/api/admission-events/webhook` 是公開的，可以偽造事件；
    配上保留上限還能把真實事件擠掉。加認證需要同步改 kube-apiserver 的 audit webhook 設定
 4. **沒有 informer** —— 每個快取各自週期性 full LIST 全部 pod（歸因 30s、ClusterIPs 30s、
-   workload 60s），`ListNodeIPMap` 甚至完全沒快取，每次拓樸輪詢都是 2 次 list
+   exposures 30s、workload 60s、runc 解析 30s）。五條路徑各自呼叫，沒有共用。
+   v0.34.0 已經讓這些 LIST 走 apiserver 的 watch cache（`ResourceVersion: "0"`）而不是
+   etcd quorum read，並把 `ListNodeIPMap` 加上快取 —— 但**同一份 pod 清單被抓五次這件事還在**，
+   真正的解法是共用一個 informer
 5. **兩條 Tetragon 事件流**（見 §3.1）
 6. **認證弱點**（見 §8）

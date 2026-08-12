@@ -195,7 +195,7 @@ func (s *Store) populateWorkloadInfo(ctx context.Context) {
 		return
 	}
 	// 1. List all ReplicaSets to build RS → Deployment mapping.
-	rsList, err := s.typed.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{})
+	rsList, err := s.typed.AppsV1().ReplicaSets("").List(ctx, fromCache)
 	if err != nil {
 		fmt.Printf("[sentinel-discovery] workload info: list replicasets: %v (check RBAC for apps/replicasets)\n", err)
 		return
@@ -255,7 +255,7 @@ func (s *Store) seedFromPodSpecs(ctx context.Context) {
 	if s.typed == nil {
 		return
 	}
-	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, fromCache)
 	if err != nil {
 		return
 	}

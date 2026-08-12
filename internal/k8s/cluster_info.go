@@ -81,7 +81,7 @@ func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
 	}
 
 	// ── 4. Node IPs + pod CIDR fallback ──────────────────────────────────────
-	nodes, err := s.typed.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodes, err := s.typed.CoreV1().Nodes().List(ctx, fromCache)
 	if err == nil {
 		for _, node := range nodes.Items {
 			// Collect InternalIP (and ExternalIP) for every node
