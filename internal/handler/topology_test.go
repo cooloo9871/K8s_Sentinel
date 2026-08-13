@@ -78,6 +78,12 @@ func TestNewerDenialReplacesAllowedTraffic(t *testing.T) {
 	if !e.Blocked {
 		t.Error("edge is not blocked; the newer denial should have replaced the allowed flow")
 	}
+	// One verdict per pair holds this way round too. The graph relies on it: it
+	// draws what it is given, and used to carry its own "blocked wins" filter to
+	// second-guess this — which would have overridden the rule above.
+	if len(resp.Edges) != 1 {
+		t.Errorf("got %d edges, want 1 — the pair must not render twice", len(resp.Edges))
+	}
 }
 
 // Of the two, a denial is the one worth surfacing.
