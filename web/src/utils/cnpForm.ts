@@ -214,7 +214,7 @@ export function validateCNPForm(input: CNPFormInput): string[] {
   // must not get through is neither — an empty endpointSelector on a
   // cluster-wide policy governs every endpoint in the cluster.
   if (Object.keys(subjectMatchLabels(input)).length === 0) {
-    errors.push('Applies to needs at least one label.')
+    errors.push('Applies to needs a label or a namespace.')
   }
   errors.push(...labelRowErrors(input.subject, 'Applies to'))
 
@@ -229,8 +229,11 @@ export function validateCNPForm(input: CNPFormInput): string[] {
         errors.push(`${at}${r.peerEntity || 'The entity'} is not a Cilium entity.`)
       }
     } else {
-      if (Object.keys(toMatchLabels(r.peerLabels)).length === 0) {
-        errors.push(`${at}${side} needs at least one label.`)
+      // A namespace alone is a complete peer, the same way it is a complete
+      // subject: it names everything in that namespace. Only neither is
+      // refused — a peer selecting nothing is a rule that does nothing.
+      if (Object.keys(peerMatchLabels(r)).length === 0) {
+        errors.push(`${at}${side} needs a label or a namespace.`)
       }
       errors.push(...labelRowErrors(r.peerLabels, `${at}${side}`))
     }

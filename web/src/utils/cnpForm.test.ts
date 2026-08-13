@@ -202,8 +202,8 @@ describe('validateCNPForm', () => {
     const errors = validateCNPForm(emptyForm()).join(' ')
     expect(errors).toContain('Name is required')
     expect(errors).toContain('Namespace is required')
-    expect(errors).toContain('Applies to needs at least one label')
-    expect(errors).toContain('From needs at least one label')
+    expect(errors).toContain('Applies to needs a label or a namespace')
+    expect(errors).toContain('From needs a label or a namespace')
   })
 
   // A half-typed row selects nothing, which is the failure this form exists to
@@ -527,5 +527,27 @@ describe('subject namespace field', () => {
     }))
     expect(parsed?.subjectNamespace).toBe('ingress-nginx')
     expect(parsed?.subject).toEqual([{ key: 'app', value: 'api' }])
+  })
+})
+
+// The peer takes a namespace on its own too — "anything in kube-system" — and
+// only refuses when it would select nothing at all.
+describe('peer namespace alone', () => {
+  const peerOnlyNs = (ns: string) => ({
+    ...base,
+    rules: [rule({ peerLabels: [{ key: '', value: '' }], peerNamespace: ns })],
+  })
+
+  it('accepts a peer that is only a namespace', () => {
+    expect(validateCNPForm(peerOnlyNs('kube-system'))).toEqual([])
+  })
+
+  it('writes it as the selector', () => {
+    expect(cnpFormToYaml(peerOnlyNs('kube-system')))
+      .toContain('io.kubernetes.pod.namespace: kube-system')
+  })
+
+  it('still refuses a peer that selects nothing', () => {
+    expect(validateCNPForm(peerOnlyNs('')).join(' ')).toContain('needs a label or a namespace')
   })
 })
