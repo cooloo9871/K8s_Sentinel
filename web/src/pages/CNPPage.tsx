@@ -114,12 +114,10 @@ function Field({ label, required, hint, className, children }: {
  * Mode lives here rather than on the policy because it decides whether this
  * direction goes default-deny, and the two directions can differ.
  */
-function RuleSection({ direction, section, onChange, scope, namespace, clusterNamespaces }: {
+function RuleSection({ direction, section, onChange, clusterNamespaces }: {
   direction: CNPDirection
   section: CNPSection
   onChange: (next: CNPSection) => void
-  scope: CNPScope
-  namespace: string
   clusterNamespaces: string[]
 }) {
   const setRules = (next: (rules: CNPRule[]) => CNPRule[]) =>
@@ -227,11 +225,7 @@ function RuleSection({ direction, section, onChange, scope, namespace, clusterNa
                       namespaces={clusterNamespaces}
                       value={r.peerNamespace}
                       onChange={v => updateRule(i, r => ({ ...r, peerNamespace: v }))}
-                      // What leaving it unset actually means, said on the
-                      // option rather than in a line underneath.
-                      noneLabel={scope === 'namespaced'
-                        ? (namespace || 'Same namespace')
-                        : 'Any namespace'}
+                      clearLabel="Leave unset"
                     />
                   </Field>
                 </>
@@ -596,9 +590,7 @@ export function CNPPage() {
                     namespaces={clusterNamespaces}
                     value={form.subjectNamespace}
                     onChange={v => setField('subjectNamespace', v)}
-                    noneLabel={form.scope === 'namespaced'
-                      ? (form.namespace || 'Same namespace')
-                      : 'Any namespace'}
+                    clearLabel="Leave unset"
                   />
                 </Field>
 
@@ -606,16 +598,12 @@ export function CNPPage() {
                   direction="ingress"
                   section={form.ingress}
                   onChange={next => setField('ingress', next)}
-                  scope={form.scope}
-                  namespace={form.namespace}
                   clusterNamespaces={clusterNamespaces}
                 />
                 <RuleSection
                   direction="egress"
                   section={form.egress}
                   onChange={next => setField('egress', next)}
-                  scope={form.scope}
-                  namespace={form.namespace}
                   clusterNamespaces={clusterNamespaces}
                 />
 
