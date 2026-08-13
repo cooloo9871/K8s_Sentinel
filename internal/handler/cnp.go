@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
 // listCNP returns all Cilium network policies plus an availability flag so the

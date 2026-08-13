@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/cooloo9871/sentinel/internal/admission"
-	"github.com/cooloo9871/sentinel/internal/security"
+	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
+	"github.com/cooloo9871/K8s_Sentinel/internal/security"
 )
 
 func getSecurityRetention(store *security.Store) http.HandlerFunc {

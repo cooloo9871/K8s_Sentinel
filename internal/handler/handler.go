@@ -8,12 +8,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/cooloo9871/sentinel/internal/admission"
-	"github.com/cooloo9871/sentinel/internal/alert"
-	"github.com/cooloo9871/sentinel/internal/auth"
-	"github.com/cooloo9871/sentinel/internal/k8s"
-	"github.com/cooloo9871/sentinel/internal/rsyslog"
-	"github.com/cooloo9871/sentinel/internal/security"
+	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
+	"github.com/cooloo9871/K8s_Sentinel/internal/alert"
+	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
+	"github.com/cooloo9871/K8s_Sentinel/internal/security"
 )
 
 // Config holds dependencies for all handlers.

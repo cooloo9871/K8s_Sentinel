@@ -20,7 +20,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/yaml"
 
-	"github.com/cooloo9871/sentinel/internal/policy"
+	"github.com/cooloo9871/K8s_Sentinel/internal/policy"
 )
 
 const annotationCreatedBy = "sentinel.io/created-by"

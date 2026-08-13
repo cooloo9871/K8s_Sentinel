@@ -373,7 +373,7 @@ the known limitations.
 ghcr.io/cooloo9871/sentinel:latest
 ```
 
-Per-version tags are listed under [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases). For production, pin a version in `deploy/sentinel.yaml` (for example `:v0.24.0`) instead of `:latest` so deployments are reproducible.
+Per-version tags are listed under [Releases](https://github.com/cooloo9871/K8s_Sentinel/releases). For production, pin a version in `deploy/sentinel.yaml` (for example `:v0.34.0`) instead of `:latest` so deployments are reproducible.
 
 ### Access the UI
 

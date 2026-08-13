@@ -10,14 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cooloo9871/sentinel/internal/admission"
-	"github.com/cooloo9871/sentinel/internal/alert"
-	"github.com/cooloo9871/sentinel/internal/auth"
-	"github.com/cooloo9871/sentinel/internal/handler"
-	"github.com/cooloo9871/sentinel/internal/rsyslog"
-	"github.com/cooloo9871/sentinel/internal/security"
-	k8sclient "github.com/cooloo9871/sentinel/internal/k8s"
-	sentinelweb "github.com/cooloo9871/sentinel/web"
+	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
+	"github.com/cooloo9871/K8s_Sentinel/internal/alert"
+	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
+	"github.com/cooloo9871/K8s_Sentinel/internal/handler"
+	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
+	"github.com/cooloo9871/K8s_Sentinel/internal/security"
+	k8sclient "github.com/cooloo9871/K8s_Sentinel/internal/k8s"
+	sentinelweb "github.com/cooloo9871/K8s_Sentinel/web"
 )
 
 func main() {

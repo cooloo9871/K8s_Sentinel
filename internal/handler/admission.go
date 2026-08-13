@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cooloo9871/sentinel/internal/admission"
+	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
 )
 
 // admissionWebhook receives K8s audit events from the kube-apiserver audit webhook.

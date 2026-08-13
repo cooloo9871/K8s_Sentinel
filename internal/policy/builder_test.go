@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cooloo9871/sentinel/internal/policy"
+	"github.com/cooloo9871/K8s_Sentinel/internal/policy"
 	"sigs.k8s.io/yaml"
 )
 

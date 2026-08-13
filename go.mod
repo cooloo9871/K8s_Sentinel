@@ -1,4 +1,4 @@
-module github.com/cooloo9871/sentinel
+module github.com/cooloo9871/K8s_Sentinel
 
 go 1.26
 

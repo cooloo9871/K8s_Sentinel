@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
 // findEdge returns the single edge between two pods, or nil.

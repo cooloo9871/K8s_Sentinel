@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
 // Two attempts at the same denied destination differ only by the kernel-assigned

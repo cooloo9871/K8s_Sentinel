@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
 const dedupWindowSecs = 30 // dedup window is fixed by design

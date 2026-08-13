@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cooloo9871/sentinel/internal/admission"
-	"github.com/cooloo9871/sentinel/internal/k8s"
-	"github.com/cooloo9871/sentinel/internal/security"
+	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/security"
 )
 
 // slackAttachment adds a colored left border in Slack (warning=yellow, danger=red).

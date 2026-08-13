@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/cooloo9871/sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
 func listQuarantined(store *k8s.Store) http.HandlerFunc {

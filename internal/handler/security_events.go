@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/cooloo9871/sentinel/internal/security"
+	"github.com/cooloo9871/K8s_Sentinel/internal/security"
 )
 
 func listSecurityEvents(store *security.Store) http.HandlerFunc {

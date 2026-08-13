@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/cooloo9871/sentinel/internal/rsyslog"
+	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
 )
 
 func listRsyslog(store *rsyslog.Store) http.HandlerFunc {

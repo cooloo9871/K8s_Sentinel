@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cooloo9871/sentinel/internal/auth"
+	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 )
 
 // Logging out is supposed to put the token on the blocklist so a copy of the
