@@ -159,189 +159,189 @@ function RuleSection({ direction, section, onChange, scope, namespace, clusterNa
           <Button variant="outline" size="sm" onClick={addRule}>+ Add rule</Button>
         </div>
       ) : (
-                  <div className="flex flex-col gap-3 border-t pt-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Rules</Label>
-                      <Button variant="outline" size="sm" onClick={addRule}>+ Add rule</Button>
-                    </div>
-  
-                    {section.rules.map((r: CNPRule, i: number) => (
-                      <div key={i} className="flex flex-col gap-3 rounded-md border p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
-                          {/* The last rule can go too: emptying a direction is how
-                              it is left out of the policy. */}
-                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                            onClick={() => removeRule(i)}>
-                            Remove
-                          </Button>
-                        </div>
-  
-                        <Field
-                          label={`${peerLabel(direction)} — kind`}
-                          hint={r.peerKind === 'entity'
-                            ? 'A reserved Cilium identity, which has no labels to select.'
-                            : undefined}
-                        >
-                          <Select value={r.peerKind}
-                            onValueChange={v => updateRule(i, r => ({ ...r, peerKind: v as PeerKind }))}>
-                            <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectGroup>
-                                <SelectItem value="labels">Labels</SelectItem>
-                                <SelectItem value="entity">Entity</SelectItem>
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-  
-                        {r.peerKind === 'entity' ? (
-                          <Field label={peerLabel(direction)} required>
-                            <Select value={r.peerEntity}
-                              onValueChange={v => updateRule(i, r => ({ ...r, peerEntity: v }))}>
-                              <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectGroup>
-                                  {ENTITIES.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                                </SelectGroup>
-                              </SelectContent>
-                            </Select>
-                          </Field>
-                        ) : (
-                          <>
-                            <LabelRows
-                              title={peerLabel(direction)}
-                              required
-                              pairs={r.peerLabels}
-                              onChange={pairs => updateRule(i, r => ({ ...r, peerLabels: pairs }))}
-                            />
-                            {/* A namespaced policy's selector matches only its own
-                                namespace, so reaching CoreDNS or anything else
-                                elsewhere needs this. It writes the namespace as a
-                                label, which is how Cilium expresses it. */}
-                            <Field label="Peer namespace">
-                              <NamespaceSelect
-                                // The cluster's namespaces, not the ones that
-                                // happen to hold a policy: the peer is usually
-                                // somewhere without one — kube-system for CoreDNS.
-                                namespaces={clusterNamespaces}
-                                value={r.peerNamespace}
-                                onChange={v => updateRule(i, r => ({ ...r, peerNamespace: v }))}
-                                // What leaving it unset actually means, said on the
-                                // option rather than in a line underneath.
-                                noneLabel={scope === 'namespaced'
-                                  ? (namespace || 'Same namespace')
-                                  : 'Any namespace'}
-                              />
-                            </Field>
-                          </>
-                        )}
-  
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs">Ports</Label>
-                            <Button variant="outline" size="sm" className="h-7 text-xs"
-                              onClick={() => updateRule(i, r => ({ ...r, ports: [...r.ports, emptyPort()] }))}>
-                              + Add port
-                            </Button>
-                          </div>
-                          {r.ports.length === 0 ? (
-                            <p className="text-[11px] text-muted-foreground">No port restriction.</p>
-                          ) : r.ports.map((p, pi) => (
-                            <div key={pi} className="flex items-center gap-2">
-                              <Input value={p.port} className="h-8 flex-1 font-mono text-sm"
-                                onChange={e => updateRule(i, r => ({
-                                  ...r,
-                                  ports: r.ports.map((q, qi) => qi === pi ? { ...q, port: e.target.value } : q),
-                                }))} />
-                              <Select value={p.protocol}
-                                onValueChange={v => updateRule(i, r => ({
-                                  ...r,
-                                  ports: r.ports.map((q, qi) => qi === pi ? { ...q, protocol: v } : q),
-                                }))}>
-                                <SelectTrigger className="h-8 w-24 text-sm"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    {PROTOCOLS.map(pr => <SelectItem key={pr} value={pr}>{pr}</SelectItem>)}
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-destructive hover:text-destructive"
-                                onClick={() => updateRule(i, r => ({
-                                  ...r, ports: r.ports.filter((_, qi) => qi !== pi),
-                                }))}>
-                                Remove
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-  
-                        <div className="flex flex-col gap-2 border-t pt-3">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs">
-                              L7 — HTTP rules
-                              {/* Kept only on a blacklist, where it says why the
-                                  controls below are disabled. */}
-                              {section.mode === 'blacklist' && (
-                                <span className="font-normal text-muted-foreground"> (whitelist only)</span>
-                              )}
-                            </Label>
-                            <Button variant="outline" size="sm" className="h-7 text-xs"
-                              disabled={section.mode === 'blacklist'}
-                              onClick={() => updateRule(i, r => ({ ...r, http: [...r.http, emptyHttp()] }))}>
-                              + Add HTTP rule
-                            </Button>
-                          </div>
-                          {r.http.length === 0 ? (
-                            <p className="text-[11px] text-muted-foreground">No HTTP rule.</p>
-                          ) : r.http.map((h, hi) => (
-                            <div key={hi} className="flex items-end gap-2">
-                              <div className="flex flex-1 flex-col gap-1">
-                                <span className="text-[11px] text-muted-foreground">Method</span>
-                                <Select value={h.method || 'any'}
-                                  onValueChange={v => updateRule(i, r => ({
-                                    ...r,
-                                    http: r.http.map((q, qi) => qi === hi ? { ...q, method: v === 'any' ? '' : v } : q),
-                                  }))}
-                                  disabled={section.mode === 'blacklist'}>
-                                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectGroup>
-                                      <SelectItem value="any">Any method</SelectItem>
-                                      {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                                    </SelectGroup>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="flex flex-1 flex-col gap-1">
-                                <span className="text-[11px] text-muted-foreground">Path</span>
-                                <Input value={h.path}
-                                  onChange={e => updateRule(i, r => ({
-                                    ...r,
-                                    http: r.http.map((q, qi) => qi === hi ? { ...q, path: e.target.value } : q),
-                                  }))}
-                                  disabled={section.mode === 'blacklist'}
-                                  className="h-8 font-mono text-sm" />
-                              </div>
-                              <Button variant="ghost" size="sm"
-                                className="h-8 px-2 text-xs text-destructive hover:text-destructive"
-                                onClick={() => updateRule(i, r => ({
-                                  ...r, http: r.http.filter((_, qi) => qi !== hi),
-                                }))}>
-                                Remove
-                              </Button>
-                            </div>
-                          ))}
-                          {r.http.length > 1 && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Alternatives — a request matching any of them matches the rule.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-  
+        <div className="flex flex-col gap-3 border-t pt-4">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Rules</Label>
+            <Button variant="outline" size="sm" onClick={addRule}>+ Add rule</Button>
+          </div>
+
+          {section.rules.map((r: CNPRule, i: number) => (
+            <div key={i} className="flex flex-col gap-3 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
+                {/* The last rule can go too: emptying a direction is how
+                    it is left out of the policy. */}
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                  onClick={() => removeRule(i)}>
+                  Remove
+                </Button>
+              </div>
+
+              <Field
+                label={`${peerLabel(direction)} — kind`}
+                hint={r.peerKind === 'entity'
+                  ? 'A reserved Cilium identity, which has no labels to select.'
+                  : undefined}
+              >
+                <Select value={r.peerKind}
+                  onValueChange={v => updateRule(i, r => ({ ...r, peerKind: v as PeerKind }))}>
+                  <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="labels">Labels</SelectItem>
+                      <SelectItem value="entity">Entity</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              {r.peerKind === 'entity' ? (
+                <Field label={peerLabel(direction)} required>
+                  <Select value={r.peerEntity}
+                    onValueChange={v => updateRule(i, r => ({ ...r, peerEntity: v }))}>
+                    <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {ENTITIES.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : (
+                <>
+                  <LabelRows
+                    title={peerLabel(direction)}
+                    required
+                    pairs={r.peerLabels}
+                    onChange={pairs => updateRule(i, r => ({ ...r, peerLabels: pairs }))}
+                  />
+                  {/* A namespaced policy's selector matches only its own
+                      namespace, so reaching CoreDNS or anything else
+                      elsewhere needs this. It writes the namespace as a
+                      label, which is how Cilium expresses it. */}
+                  <Field label="Peer namespace">
+                    <NamespaceSelect
+                      // The cluster's namespaces, not the ones that
+                      // happen to hold a policy: the peer is usually
+                      // somewhere without one — kube-system for CoreDNS.
+                      namespaces={clusterNamespaces}
+                      value={r.peerNamespace}
+                      onChange={v => updateRule(i, r => ({ ...r, peerNamespace: v }))}
+                      // What leaving it unset actually means, said on the
+                      // option rather than in a line underneath.
+                      noneLabel={scope === 'namespaced'
+                        ? (namespace || 'Same namespace')
+                        : 'Any namespace'}
+                    />
+                  </Field>
+                </>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Ports</Label>
+                  <Button variant="outline" size="sm" className="h-7 text-xs"
+                    onClick={() => updateRule(i, r => ({ ...r, ports: [...r.ports, emptyPort()] }))}>
+                    + Add port
+                  </Button>
+                </div>
+                {r.ports.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">No port restriction.</p>
+                ) : r.ports.map((p, pi) => (
+                  <div key={pi} className="flex items-center gap-2">
+                    <Input value={p.port} className="h-8 flex-1 font-mono text-sm"
+                      onChange={e => updateRule(i, r => ({
+                        ...r,
+                        ports: r.ports.map((q, qi) => qi === pi ? { ...q, port: e.target.value } : q),
+                      }))} />
+                    <Select value={p.protocol}
+                      onValueChange={v => updateRule(i, r => ({
+                        ...r,
+                        ports: r.ports.map((q, qi) => qi === pi ? { ...q, protocol: v } : q),
+                      }))}>
+                      <SelectTrigger className="h-8 w-24 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {PROTOCOLS.map(pr => <SelectItem key={pr} value={pr}>{pr}</SelectItem>)}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                      onClick={() => updateRule(i, r => ({
+                        ...r, ports: r.ports.filter((_, qi) => qi !== pi),
+                      }))}>
+                      Remove
+                    </Button>
                   </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-2 border-t pt-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">
+                    L7 — HTTP rules
+                    {/* Kept only on a blacklist, where it says why the
+                        controls below are disabled. */}
+                    {section.mode === 'blacklist' && (
+                      <span className="font-normal text-muted-foreground"> (whitelist only)</span>
+                    )}
+                  </Label>
+                  <Button variant="outline" size="sm" className="h-7 text-xs"
+                    disabled={section.mode === 'blacklist'}
+                    onClick={() => updateRule(i, r => ({ ...r, http: [...r.http, emptyHttp()] }))}>
+                    + Add HTTP rule
+                  </Button>
+                </div>
+                {r.http.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">No HTTP rule.</p>
+                ) : r.http.map((h, hi) => (
+                  <div key={hi} className="flex items-end gap-2">
+                    <div className="flex flex-1 flex-col gap-1">
+                      <span className="text-[11px] text-muted-foreground">Method</span>
+                      <Select value={h.method || 'any'}
+                        onValueChange={v => updateRule(i, r => ({
+                          ...r,
+                          http: r.http.map((q, qi) => qi === hi ? { ...q, method: v === 'any' ? '' : v } : q),
+                        }))}
+                        disabled={section.mode === 'blacklist'}>
+                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="any">Any method</SelectItem>
+                            {HTTP_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-1">
+                      <span className="text-[11px] text-muted-foreground">Path</span>
+                      <Input value={h.path}
+                        onChange={e => updateRule(i, r => ({
+                          ...r,
+                          http: r.http.map((q, qi) => qi === hi ? { ...q, path: e.target.value } : q),
+                        }))}
+                        disabled={section.mode === 'blacklist'}
+                        className="h-8 font-mono text-sm" />
+                    </div>
+                    <Button variant="ghost" size="sm"
+                      className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                      onClick={() => updateRule(i, r => ({
+                        ...r, http: r.http.filter((_, qi) => qi !== hi),
+                      }))}>
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                {r.http.length > 1 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Alternatives — a request matching any of them matches the rule.
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+
+        </div>
       )}
     </div>
   )
