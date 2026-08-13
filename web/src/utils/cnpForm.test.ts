@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   cnpFormToYaml, validateCNPForm, tryParseCNPForm, toMatchLabels, toLabelPairs,
   emptyForm, emptyRule, type CNPFormInput, type CNPRule,
- } from './cnpForm'
+} from './cnpForm'
 
 function rule(over: Partial<CNPRule> = {}): CNPRule {
   return { ...emptyRule(), ...over }
@@ -451,5 +451,41 @@ describe('cross-namespace peers', () => {
       { key: 'k8s-app', value: 'kube-dns' },
       { key: 'namespace', value: 'kube-system' },
     ])
+  })
+})
+
+// The peer namespace is a field of its own now. It has to reach the YAML as the
+// label Cilium reads, and come back out of it into the same field rather than
+// reappearing as a label row the form would then write twice.
+describe('peer namespace field', () => {
+  const withPeerNs = (ns: string) => ({
+    ...emptyForm(),
+    name: 'allow-dns', scope: 'namespaced' as const, namespace: 'net-lab',
+    subject: [{ key: 'app', value: 'traffic-generator' }],
+    direction: 'egress' as const, mode: 'whitelist' as const,
+    rules: [{
+      ...emptyRule(),
+      peerLabels: [{ key: 'k8s-app', value: 'kube-dns' }],
+      peerNamespace: ns,
+    }],
+  })
+
+  it('writes the namespace into the peer selector', () => {
+    const yaml = cnpFormToYaml(withPeerNs('kube-system'))
+    expect(yaml).toContain('io.kubernetes.pod.namespace: kube-system')
+    expect(yaml).toContain('k8s-app: kube-dns')
+  })
+
+  // Empty means Cilium's default, which is the policy's own namespace. Writing
+  // the key with an empty value would select nothing at all.
+  it('omits the namespace when none is chosen', () => {
+    expect(cnpFormToYaml(withPeerNs(''))).not.toContain('io.kubernetes.pod.namespace')
+  })
+
+  it('reads the namespace back into its own field', () => {
+    const parsed = tryParseCNPForm(cnpFormToYaml(withPeerNs('kube-system')))
+    expect(parsed?.rules[0].peerNamespace).toBe('kube-system')
+    // And not left among the labels, or saving would write it from both places.
+    expect(parsed?.rules[0].peerLabels).toEqual([{ key: 'k8s-app', value: 'kube-dns' }])
   })
 })

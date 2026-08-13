@@ -59,6 +59,11 @@ export interface HttpRule {
 export interface CNPRule {
   peerKind: PeerKind
   peerLabels: LabelPair[]
+  // Which namespace the peer is in. Its own field rather than a label row,
+  // because a namespaced policy matches only its own namespace unless this is
+  // set, and "add a row keyed namespace" is not something anyone finds.
+  // Empty means the policy's own namespace, which is Cilium's default.
+  peerNamespace: string
   peerEntity: string
   ports: PortEntry[]
   http: HttpRule[]
@@ -91,6 +96,7 @@ export function emptyRule(): CNPRule {
   return {
     peerKind: 'labels',
     peerLabels: [emptyLabel()],
+    peerNamespace: '',
     peerEntity: 'world',
     ports: [],
     http: [],
@@ -111,6 +117,15 @@ const NAMESPACE_KEY = 'io.kubernetes.pod.namespace'
 const NAMESPACE_ALIASES = new Set(['namespace', 'ns'])
 
 /** Turns the form's label rows into a Cilium matchLabels map. */
+/** The peer selector: its labels, plus the namespace when one is chosen. */
+export function peerMatchLabels(rule: CNPRule): Record<string, string> {
+  const labels = toMatchLabels(rule.peerLabels)
+  if (rule.peerNamespace.trim()) {
+    labels[NAMESPACE_KEY] = rule.peerNamespace.trim()
+  }
+  return labels
+}
+
 export function toMatchLabels(pairs: LabelPair[]): Record<string, string> {
   const out: Record<string, string> = {}
   for (const p of pairs) {
@@ -265,7 +280,7 @@ function toCiliumRule(r: CNPRule, direction: CNPDirection): Rule {
   if (r.peerKind === 'entity') {
     out = isIngress ? { fromEntities: [r.peerEntity] } : { toEntities: [r.peerEntity] }
   } else {
-    const endpoints = [{ matchLabels: toMatchLabels(r.peerLabels) }]
+    const endpoints = [{ matchLabels: peerMatchLabels(r) }]
     out = isIngress ? { fromEndpoints: endpoints } : { toEndpoints: endpoints }
   }
 
@@ -378,7 +393,11 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
       const labels = endpoints[0].matchLabels
       if (!labels || Object.keys(labels).length === 0) return null
       rule.peerKind = 'labels'
-      rule.peerLabels = toLabelPairs(labels)
+      // The namespace is edited in its own field, so it is lifted out of the
+      // labels rather than shown as a row the form would write back twice.
+      const { [NAMESPACE_KEY]: peerNs, ...rest } = labels
+      rule.peerNamespace = peerNs ?? ''
+      rule.peerLabels = toLabelPairs(rest)
     } else if (entities?.length === 1) {
       rule.peerKind = 'entity'
       rule.peerEntity = entities[0]

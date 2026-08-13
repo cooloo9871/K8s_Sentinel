@@ -367,9 +367,6 @@ export function CNPPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <Field
                     label="Direction"
-                    hint={form.direction === 'ingress'
-                      ? 'Rules name who may reach it.'
-                      : 'Rules name what it may reach.'}
                   >
                     <Select value={form.direction} onValueChange={v => setField('direction', v as CNPDirection)}>
                       <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
@@ -391,8 +388,8 @@ export function CNPPage() {
                       <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="blacklist">Blacklist — deny</SelectItem>
-                          <SelectItem value="whitelist">Whitelist — allow only</SelectItem>
+                          <SelectItem value="blacklist">Blacklist</SelectItem>
+                          <SelectItem value="whitelist">Whitelist</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -448,22 +445,33 @@ export function CNPPage() {
                           </Select>
                         </Field>
                       ) : (
-                        <LabelRows
-                          title={peerLabel(form.direction)}
-                          required
-                          // The one thing about Cilium selectors that catches
-                          // everyone: a namespaced policy matches peers in its
-                          // own namespace unless the namespace is named. The
-                          // form has always accepted a "namespace" row and
-                          // rewritten it to io.kubernetes.pod.namespace; nothing
-                          // said so, so the capability was unreachable in
-                          // practice.
-                          hint={form.scope === 'namespaced'
-                            ? `A peer in another namespace needs a "namespace" row — without one this matches only peers in ${form.namespace || 'this policy\'s namespace'}.`
-                            : 'Add a "namespace" row to restrict the peer to one namespace.'}
-                          pairs={r.peerLabels}
-                          onChange={pairs => updateRule(i, r => ({ ...r, peerLabels: pairs }))}
-                        />
+                        <>
+                          <LabelRows
+                            title={peerLabel(form.direction)}
+                            required
+                            pairs={r.peerLabels}
+                            onChange={pairs => updateRule(i, r => ({ ...r, peerLabels: pairs }))}
+                          />
+                          {/* A namespaced policy's selector matches only its own
+                              namespace, so reaching CoreDNS or anything else
+                              elsewhere needs this. It writes the namespace as a
+                              label, which is how Cilium expresses it. */}
+                          <Field label="Peer namespace">
+                            <NamespaceSelect
+                              // The cluster's namespaces, not the ones that
+                              // happen to hold a policy: the peer is usually
+                              // somewhere without one — kube-system for CoreDNS.
+                              namespaces={clusterNamespaces}
+                              value={r.peerNamespace}
+                              onChange={v => updateRule(i, r => ({ ...r, peerNamespace: v }))}
+                              // What leaving it unset actually means, said on the
+                              // option rather than in a line underneath.
+                              noneLabel={form.scope === 'namespaced'
+                                ? `Same namespace (${form.namespace || 'this policy'})`
+                                : 'Any namespace'}
+                            />
+                          </Field>
+                        </>
                       )}
 
                       <div className="flex flex-col gap-2">
@@ -475,7 +483,7 @@ export function CNPPage() {
                           </Button>
                         </div>
                         {r.ports.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground">No port restriction — every port.</p>
+                          <p className="text-[11px] text-muted-foreground">No port restriction.</p>
                         ) : r.ports.map((p, pi) => (
                           <div key={pi} className="flex items-center gap-2">
                             <Input value={p.port} className="h-8 flex-1 font-mono text-sm"
@@ -522,9 +530,7 @@ export function CNPPage() {
                           </Button>
                         </div>
                         {r.http.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground">
-                            No HTTP rule — every request on the ports above.
-                          </p>
+                          <p className="text-[11px] text-muted-foreground">No HTTP rule.</p>
                         ) : r.http.map((h, hi) => (
                           <div key={hi} className="flex items-end gap-2">
                             <div className="flex flex-1 flex-col gap-1">
@@ -572,11 +578,11 @@ export function CNPPage() {
                     </div>
                   ))}
 
-                  <p className="text-[11px] text-muted-foreground">
-                    {form.mode === 'blacklist'
-                      ? 'HTTP is whitelist-only — Cilium deny rules match on L3/L4.'
-                      : 'HTTP is optional per rule, and needs a port and the Cilium proxy.'}
-                  </p>
+                  {form.mode === 'blacklist' && (
+                    <p className="text-[11px] text-muted-foreground">
+                      HTTP is whitelist-only — Cilium deny rules match on L3/L4.
+                    </p>
+                  )}
                 </div>
 
                 {formErrors.length > 0 && (
