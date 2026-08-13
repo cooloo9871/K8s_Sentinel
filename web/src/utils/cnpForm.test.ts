@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   cnpFormToYaml, validateCNPForm, tryParseCNPForm, toMatchLabels, toLabelPairs,
-  emptyForm, emptyRule, type CNPFormInput, type CNPRule,
+  emptyForm, emptyRule, emptySection,
+  type CNPFormInput, type CNPRule, type CNPMode, type CNPDirection,
 } from './cnpForm'
 
 function rule(over: Partial<CNPRule> = {}): CNPRule {
@@ -15,13 +16,33 @@ const base: CNPFormInput = {
   comment: '',
   subject: [{ key: 'app', value: 'traffic-generator' }],
   subjectNamespace: '',
-  direction: 'egress',
-  mode: 'blacklist',
-  rules: [rule({
-    peerLabels: [{ key: 'app', value: 'echo-server' }],
-    ports: [{ port: '80', protocol: 'TCP' }],
-  })],
+  ingress: emptySection(),
+  egress: {
+    mode: 'blacklist',
+    rules: [rule({
+      peerLabels: [{ key: 'app', value: 'echo-server' }],
+      ports: [{ port: '80', protocol: 'TCP' }],
+    })],
+  },
 }
+
+// Most cases are about one direction. This keeps them to their subject, and
+// leaves the other direction as the empty section a parse reads back.
+function only(
+  direction: CNPDirection,
+  mode: CNPMode,
+  rules: CNPRule[],
+  over: Partial<CNPFormInput> = {},
+): CNPFormInput {
+  return {
+    ...base,
+    ingress: direction === 'ingress' ? { mode, rules } : emptySection(),
+    egress: direction === 'egress' ? { mode, rules } : emptySection(),
+    ...over,
+  }
+}
+
+const baseRules = base.egress.rules
 
 describe('toMatchLabels', () => {
   it('drops blank rows and keeps the filled ones', () => {
@@ -67,7 +88,7 @@ describe('cnpFormToYaml', () => {
   })
 
   it('puts the peer on the from side for an ingress rule', () => {
-    const out = cnpFormToYaml({ ...base, direction: 'ingress' })
+    const out = cnpFormToYaml(only('ingress', 'blacklist', baseRules))
     expect(out).toContain('ingressDeny')
     expect(out).toContain('fromEndpoints')
   })
@@ -83,16 +104,11 @@ describe('cnpFormToYaml', () => {
 
   // A CNP has one endpointSelector, so every rule shares the subject.
   it('emits one entry per rule under a single selector', () => {
-    const out = cnpFormToYaml({
-      ...base,
-      mode: 'whitelist',
-      direction: 'ingress',
-      rules: [
-        rule({ peerLabels: [{ key: 'app', value: 'frontend' }], ports: [{ port: '80', protocol: 'TCP' }] }),
-        rule({ peerLabels: [{ key: 'app', value: 'admin' }], ports: [{ port: '8080', protocol: 'TCP' }] }),
-        rule({ peerKind: 'entity', peerEntity: 'world' }),
-      ],
-    })
+    const out = cnpFormToYaml(only('ingress', 'whitelist', [
+      rule({ peerLabels: [{ key: 'app', value: 'frontend' }], ports: [{ port: '80', protocol: 'TCP' }] }),
+      rule({ peerLabels: [{ key: 'app', value: 'admin' }], ports: [{ port: '8080', protocol: 'TCP' }] }),
+      rule({ peerKind: 'entity', peerEntity: 'world' }),
+    ]))
     expect((out.match(/endpointSelector/g) ?? []).length).toBe(1)
     expect((out.match(/fromEndpoints/g) ?? []).length).toBe(2)
     expect(out).toContain('fromEntities')
@@ -100,17 +116,14 @@ describe('cnpFormToYaml', () => {
   })
 
   it('emits every port of a rule', () => {
-    const out = cnpFormToYaml({
-      ...base,
-      rules: [rule({
-        peerLabels: [{ key: 'app', value: 'echo-server' }],
-        ports: [
-          { port: '80', protocol: 'TCP' },
-          { port: '443', protocol: 'TCP' },
-          { port: '53', protocol: 'UDP' },
-        ],
-      })],
-    })
+    const out = cnpFormToYaml(only('egress', 'blacklist', [rule({
+      peerLabels: [{ key: 'app', value: 'echo-server' }],
+      ports: [
+        { port: '80', protocol: 'TCP' },
+        { port: '443', protocol: 'TCP' },
+        { port: '53', protocol: 'UDP' },
+      ],
+    })]))
     expect(out).toContain('protocol: UDP')
     expect((out.match(/- port:/g) ?? []).length).toBe(3)
   })
@@ -119,11 +132,11 @@ describe('cnpFormToYaml', () => {
   // direction, denying far more than what was written.
   it('opts out of default-deny for a blacklist, in the rule direction only', () => {
     expect(cnpFormToYaml(base)).toContain('egress: false')
-    expect(cnpFormToYaml({ ...base, direction: 'ingress' })).toContain('ingress: false')
+    expect(cnpFormToYaml(only('ingress', 'blacklist', baseRules))).toContain('ingress: false')
   })
 
   it('uses the allow sections and leaves default-deny alone for a whitelist', () => {
-    const out = cnpFormToYaml({ ...base, mode: 'whitelist' })
+    const out = cnpFormToYaml(only('egress', 'whitelist', baseRules))
     expect(out).toContain('egress:')
     expect(out).not.toContain('egressDeny')
     expect(out).not.toContain('enableDefaultDeny')
@@ -144,15 +157,11 @@ describe('cnpFormToYaml', () => {
   })
 
   it('attaches an HTTP rule under toPorts', () => {
-    const out = cnpFormToYaml({
-      ...base,
-      mode: 'whitelist',
-      rules: [rule({
-        peerLabels: [{ key: 'app', value: 'echo' }],
-        ports: [{ port: '80', protocol: 'TCP' }],
-        http: [{ method: 'GET', path: '/api/.*' }],
-      })],
-    })
+    const out = cnpFormToYaml(only('egress', 'whitelist', [rule({
+      peerLabels: [{ key: 'app', value: 'echo' }],
+      ports: [{ port: '80', protocol: 'TCP' }],
+      http: [{ method: 'GET', path: '/api/.*' }],
+    })]))
     expect(out).toContain('method: GET')
     expect(out).toContain('path: /api/.*')
   })
@@ -160,19 +169,15 @@ describe('cnpFormToYaml', () => {
   // Cilium's rules.http is a list of alternatives, so several entries belong
   // under one toPorts.
   it('emits every HTTP entry of a rule', () => {
-    const out = cnpFormToYaml({
-      ...base,
-      mode: 'whitelist',
-      rules: [rule({
-        peerLabels: [{ key: 'app', value: 'echo' }],
-        ports: [{ port: '80', protocol: 'TCP' }],
-        http: [
-          { method: 'GET', path: '/api/.*' },
-          { method: 'POST', path: '/submit' },
-          { method: '', path: '/public' },
-        ],
-      })],
-    })
+    const out = cnpFormToYaml(only('egress', 'whitelist', [rule({
+      peerLabels: [{ key: 'app', value: 'echo' }],
+      ports: [{ port: '80', protocol: 'TCP' }],
+      http: [
+        { method: 'GET', path: '/api/.*' },
+        { method: 'POST', path: '/submit' },
+        { method: '', path: '/public' },
+      ],
+    })]))
     expect((out.match(/- method:|- path:/g) ?? []).length).toBe(3)
     expect(out).toContain('method: POST')
     // A blank method means any method, so only the path is written.
@@ -180,16 +185,50 @@ describe('cnpFormToYaml', () => {
   })
 
   it('omits toPorts entirely when no port is given', () => {
-    expect(cnpFormToYaml({
-      ...base,
-      rules: [rule({ peerLabels: [{ key: 'app', value: 'echo' }] })],
-    })).not.toContain('toPorts')
+    expect(cnpFormToYaml(only('egress', 'blacklist', [
+      rule({ peerLabels: [{ key: 'app', value: 'echo' }] }),
+    ]))).not.toContain('toPorts')
   })
 
   it('returns nothing when the form is invalid', () => {
     expect(cnpFormToYaml({ ...base, subject: [] })).toBe('')
     expect(cnpFormToYaml({ ...base, name: 'Bad_Name' })).toBe('')
-    expect(cnpFormToYaml({ ...base, rules: [] })).toBe('')
+    expect(cnpFormToYaml({ ...base, ingress: emptySection(), egress: emptySection() })).toBe('')
+  })
+})
+
+// One policy covering both ways is ordinary — "this pod talks to the database
+// and nothing else reaches it" is a single intent, and splitting it across two
+// policies makes it easy to delete half of it.
+describe('cnpFormToYaml — both directions', () => {
+  const bothWays = {
+    ...base,
+    ingress: { mode: 'whitelist' as const, rules: [rule({ peerLabels: [{ key: 'app', value: 'frontend' }] })] },
+    egress: { mode: 'whitelist' as const, rules: [rule({ peerLabels: [{ key: 'app', value: 'db' }] })] },
+  }
+
+  it('writes both sections into one policy', () => {
+    const out = cnpFormToYaml(bothWays)
+    expect(out).toContain('fromEndpoints')
+    expect(out).toContain('toEndpoints')
+    // Still one policy, anchored on one subject.
+    expect((out.match(/endpointSelector/g) ?? []).length).toBe(1)
+  })
+
+  // enableDefaultDeny is keyed by direction, so denying one way must not touch
+  // what the other way was written to do.
+  it('opts out of default-deny only for the direction that is a blacklist', () => {
+    const out = cnpFormToYaml({ ...bothWays, egress: { mode: 'blacklist', rules: bothWays.egress.rules } })
+    expect(out).toContain('egressDeny')
+    expect(out).toContain('egress: false')
+    expect(out).not.toContain('ingress: false')
+  })
+
+  // An empty ingress: [] would switch the endpoint to default-deny for a
+  // direction nobody filled in.
+  it('leaves an empty section out of the manifest', () => {
+    const out = cnpFormToYaml(base)
+    expect(out).not.toContain('ingress')
   })
 })
 
@@ -221,74 +260,80 @@ describe('validateCNPForm', () => {
   })
 
   it('catches an empty or out-of-range port row', () => {
-    expect(validateCNPForm({
-      ...base,
-      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], ports: [{ port: '', protocol: 'TCP' }] })],
-    }).join(' ')).toContain('is empty')
+    expect(validateCNPForm(only('egress', 'blacklist', [
+      rule({ peerLabels: [{ key: 'a', value: 'b' }], ports: [{ port: '', protocol: 'TCP' }] }),
+    ])).join(' ')).toContain('is empty')
 
-    expect(validateCNPForm({
-      ...base,
-      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], ports: [{ port: '70000', protocol: 'TCP' }] })],
-    }).join(' ')).toContain('between 1 and 65535')
+    expect(validateCNPForm(only('egress', 'blacklist', [
+      rule({ peerLabels: [{ key: 'a', value: 'b' }], ports: [{ port: '70000', protocol: 'TCP' }] }),
+    ])).join(' ')).toContain('between 1 and 65535')
   })
 
   it('does not ask a cluster-wide policy for a namespace', () => {
     expect(validateCNPForm({ ...base, scope: 'cluster', namespace: '' })).toEqual([])
   })
 
-  // With several rules the operator needs to know which one is wrong.
-  it('numbers the rule a problem is in', () => {
+  // With several rules the operator needs to know which one is wrong — and now
+  // which direction it is in, since both can carry rules.
+  it('names the direction and numbers the rule a problem is in', () => {
+    const errors = validateCNPForm(only('egress', 'blacklist', [
+      rule({ peerLabels: [{ key: 'app', value: 'ok' }] }),
+      rule({ peerLabels: [] }),
+    ])).join(' ')
+    expect(errors).toContain('Egress rule 2:')
+    expect(errors).not.toContain('Egress rule 1:')
+  })
+
+  // A complaint about one direction must not read as though it were the other.
+  it('tells the two directions apart', () => {
     const errors = validateCNPForm({
       ...base,
-      rules: [
-        rule({ peerLabels: [{ key: 'app', value: 'ok' }] }),
-        rule({ peerLabels: [] }),
-      ],
+      ingress: { mode: 'whitelist', rules: [rule({ peerLabels: [] })] },
     }).join(' ')
-    expect(errors).toContain('Rule 2:')
-    expect(errors).not.toContain('Rule 1:')
+    expect(errors).toContain('Ingress: From needs a label or a namespace')
+    expect(errors).not.toContain('Egress')
   })
 
   it('refuses an entity it does not know', () => {
-    expect(validateCNPForm({
-      ...base,
-      rules: [rule({ peerKind: 'entity', peerEntity: 'outside' })],
-    }).join(' ')).toContain('not a Cilium entity')
+    expect(validateCNPForm(only('egress', 'blacklist', [
+      rule({ peerKind: 'entity', peerEntity: 'outside' }),
+    ])).join(' ')).toContain('not a Cilium entity')
   })
 
   // Cilium rejects an HTTP rule inside egressDeny/ingressDeny, so say why here
   // rather than letting the apply fail with an API server error.
   it('refuses HTTP rules on a blacklist, with the reason', () => {
-    expect(validateCNPForm({
-      ...base,
-      rules: [rule({
-        peerLabels: [{ key: 'a', value: 'b' }],
-        ports: [{ port: '80', protocol: 'TCP' }],
-        http: [{ method: 'GET', path: '' }],
-      })],
-    }).join(' ')).toContain('L3/L4 only')
+    expect(validateCNPForm(only('egress', 'blacklist', [rule({
+      peerLabels: [{ key: 'a', value: 'b' }],
+      ports: [{ port: '80', protocol: 'TCP' }],
+      http: [{ method: 'GET', path: '' }],
+    })])).join(' ')).toContain('L3/L4 only')
   })
 
   it('requires a port for an HTTP rule to attach to', () => {
-    expect(validateCNPForm({
-      ...base,
-      mode: 'whitelist',
-      rules: [rule({ peerLabels: [{ key: 'a', value: 'b' }], http: [{ method: '', path: '/x' }] })],
-    }).join(' ')).toContain('needs at least one port')
+    expect(validateCNPForm(only('egress', 'whitelist', [
+      rule({ peerLabels: [{ key: 'a', value: 'b' }], http: [{ method: '', path: '/x' }] }),
+    ])).join(' ')).toContain('needs at least one port')
   })
 
   // A row with neither is what leaving HTTP out already does, so it looks like a
   // restriction and is not.
   it('catches an HTTP row with neither a method nor a path', () => {
-    expect(validateCNPForm({
-      ...base,
-      mode: 'whitelist',
-      rules: [rule({
-        peerLabels: [{ key: 'a', value: 'b' }],
-        ports: [{ port: '80', protocol: 'TCP' }],
-        http: [{ method: '', path: '' }],
-      })],
-    }).join(' ')).toContain('is empty')
+    expect(validateCNPForm(only('egress', 'whitelist', [rule({
+      peerLabels: [{ key: 'a', value: 'b' }],
+      ports: [{ port: '80', protocol: 'TCP' }],
+      http: [{ method: '', path: '' }],
+    })])).join(' ')).toContain('is empty')
+  })
+
+  // Emptying one direction is how the operator says "this policy is one-way".
+  it('accepts a policy with rules in one direction only', () => {
+    expect(validateCNPForm({ ...base, ingress: emptySection() })).toEqual([])
+  })
+
+  it('still requires a rule somewhere', () => {
+    expect(validateCNPForm({ ...base, ingress: emptySection(), egress: emptySection() }).join(' '))
+      .toContain('At least one rule is required')
   })
 })
 
@@ -298,22 +343,30 @@ describe('tryParseCNPForm', () => {
   it('round-trips every field', () => {
     const forms: CNPFormInput[] = [
       base,
-      { ...base, direction: 'ingress' },
-      { ...base, mode: 'whitelist' },
+      only('ingress', 'blacklist', baseRules),
+      only('egress', 'whitelist', baseRules),
       { ...base, comment: 'why this exists' },
       { ...base, scope: 'cluster', namespace: '' },
       { ...base, subject: [{ key: 'app', value: 'api' }, { key: 'env', value: 'prod' }] },
-      { ...base, rules: [rule({ peerKind: 'entity', peerEntity: 'world' })] },
+      only('egress', 'blacklist', [rule({ peerKind: 'entity', peerEntity: 'world' })]),
+      only('ingress', 'whitelist', [
+        rule({
+          peerLabels: [{ key: 'app', value: 'frontend' }],
+          ports: [{ port: '80', protocol: 'TCP' }, { port: '443', protocol: 'TCP' }],
+          http: [{ method: 'GET', path: '/api/.*' }, { method: 'POST', path: '/submit' }],
+        }),
+        rule({ peerLabels: [{ key: 'app', value: 'admin' }], ports: [{ port: '8080', protocol: 'TCP' }] }),
+      ]),
+      // Both directions at once, in either combination of modes.
       {
-        ...base, mode: 'whitelist', direction: 'ingress',
-        rules: [
-          rule({
-            peerLabels: [{ key: 'app', value: 'frontend' }],
-            ports: [{ port: '80', protocol: 'TCP' }, { port: '443', protocol: 'TCP' }],
-            http: [{ method: 'GET', path: '/api/.*' }, { method: 'POST', path: '/submit' }],
-          }),
-          rule({ peerLabels: [{ key: 'app', value: 'admin' }], ports: [{ port: '8080', protocol: 'TCP' }] }),
-        ],
+        ...base,
+        ingress: { mode: 'whitelist', rules: [rule({ peerLabels: [{ key: 'app', value: 'frontend' }] })] },
+        egress: { mode: 'whitelist', rules: [rule({ peerLabels: [{ key: 'app', value: 'db' }] })] },
+      },
+      {
+        ...base,
+        ingress: { mode: 'blacklist', rules: [rule({ peerKind: 'entity', peerEntity: 'world' })] },
+        egress: { mode: 'whitelist', rules: [rule({ peerLabels: [{ key: 'app', value: 'db' }] })] },
       },
     ]
     for (const form of forms) {
@@ -330,7 +383,9 @@ describe('tryParseCNPForm', () => {
     expect(tryParseCNPForm(yaml)).toBeNull()
   })
 
-  it('refuses both directions in one policy', () => {
+  // The mode belongs to the direction, so one direction holding both an allow
+  // and a deny section has nowhere to go in the form.
+  it('refuses an allow and a deny in the same direction', () => {
     expect(tryParseCNPForm(`apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -346,10 +401,55 @@ spec:
     - fromEndpoints:
         - matchLabels:
             role: frontend
-  egress:
+  ingressDeny:
+    - fromEndpoints:
+        - matchLabels:
+            role: other
+`)).toBeNull()
+  })
+
+  // The opposite case: two directions is what the form now expresses, so it must
+  // open rather than fall back to YAML.
+  it('reads both directions of a hand-written policy', () => {
+    const parsed = tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector:
+    matchLabels:
+      role: backend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            role: frontend
+  egressDeny:
     - toEndpoints:
         - matchLabels:
             role: db
+`)
+    expect(parsed?.ingress.mode).toBe('whitelist')
+    expect(parsed?.ingress.rules[0].peerLabels).toEqual([{ key: 'role', value: 'frontend' }])
+    expect(parsed?.egress.mode).toBe('blacklist')
+    expect(parsed?.egress.rules[0].peerLabels).toEqual([{ key: 'role', value: 'db' }])
+  })
+
+  // A policy with neither section governs nothing, and the form would open blank.
+  it('refuses a policy with no rules at all', () => {
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector:
+    matchLabels:
+      role: backend
 `)).toBeNull()
   })
 
@@ -459,16 +559,18 @@ describe('cross-namespace peers', () => {
 // label Cilium reads, and come back out of it into the same field rather than
 // reappearing as a label row the form would then write twice.
 describe('peer namespace field', () => {
-  const withPeerNs = (ns: string) => ({
+  const withPeerNs = (ns: string): CNPFormInput => ({
     ...emptyForm(),
-    name: 'allow-dns', scope: 'namespaced' as const, namespace: 'net-lab',
+    name: 'allow-dns', scope: 'namespaced', namespace: 'net-lab',
     subject: [{ key: 'app', value: 'traffic-generator' }],
-    direction: 'egress' as const, mode: 'whitelist' as const,
-    rules: [{
-      ...emptyRule(),
-      peerLabels: [{ key: 'k8s-app', value: 'kube-dns' }],
-      peerNamespace: ns,
-    }],
+    ingress: emptySection(),
+    egress: {
+      mode: 'whitelist',
+      rules: [rule({
+        peerLabels: [{ key: 'k8s-app', value: 'kube-dns' }],
+        peerNamespace: ns,
+      })],
+    },
   })
 
   it('writes the namespace into the peer selector', () => {
@@ -485,9 +587,9 @@ describe('peer namespace field', () => {
 
   it('reads the namespace back into its own field', () => {
     const parsed = tryParseCNPForm(cnpFormToYaml(withPeerNs('kube-system')))
-    expect(parsed?.rules[0].peerNamespace).toBe('kube-system')
+    expect(parsed?.egress.rules[0].peerNamespace).toBe('kube-system')
     // And not left among the labels, or saving would write it from both places.
-    expect(parsed?.rules[0].peerLabels).toEqual([{ key: 'k8s-app', value: 'kube-dns' }])
+    expect(parsed?.egress.rules[0].peerLabels).toEqual([{ key: 'k8s-app', value: 'kube-dns' }])
   })
 })
 
@@ -533,10 +635,9 @@ describe('subject namespace field', () => {
 // The peer takes a namespace on its own too — "anything in kube-system" — and
 // only refuses when it would select nothing at all.
 describe('peer namespace alone', () => {
-  const peerOnlyNs = (ns: string) => ({
-    ...base,
-    rules: [rule({ peerLabels: [{ key: '', value: '' }], peerNamespace: ns })],
-  })
+  const peerOnlyNs = (ns: string) => only('egress', 'blacklist', [
+    rule({ peerLabels: [{ key: '', value: '' }], peerNamespace: ns }),
+  ])
 
   it('accepts a peer that is only a namespace', () => {
     expect(validateCNPForm(peerOnlyNs('kube-system'))).toEqual([])

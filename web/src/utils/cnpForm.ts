@@ -69,6 +69,23 @@ export interface CNPRule {
   http: HttpRule[]
 }
 
+/**
+ * One direction of a policy: its rules, and the mode they are written in.
+ *
+ * The mode belongs here rather than to the policy because it decides whether
+ * that direction goes default-deny — an `ingress` section does, `ingressDeny`
+ * does not, and enableDefaultDeny is itself keyed by direction. It cannot sit on
+ * a rule either: two rules in one direction cannot be one allow and one deny.
+ */
+export interface CNPSection {
+  mode: CNPMode
+  rules: CNPRule[]
+}
+
+export function emptySection(mode: CNPMode = 'whitelist'): CNPSection {
+  return { mode, rules: [] }
+}
+
 export interface CNPFormInput {
   name: string
   scope: CNPScope
@@ -80,9 +97,19 @@ export interface CNPFormInput {
   // ingress-nginx" — and Cilium expresses it as a label, which is not something
   // anyone types from memory. Empty leaves the selector to its labels alone.
   subjectNamespace: string
-  direction: CNPDirection
-  mode: CNPMode
-  rules: CNPRule[]
+  // Both directions, either of which may be empty. A section with no rules is
+  // left out of the manifest entirely, so filling in one is the same policy the
+  // form produced when it could only express one.
+  ingress: CNPSection
+  egress: CNPSection
+}
+
+/** The two sections, paired with the direction each one writes. */
+export function sectionsOf(input: CNPFormInput): { direction: CNPDirection; section: CNPSection }[] {
+  return [
+    { direction: 'ingress', section: input.ingress },
+    { direction: 'egress', section: input.egress },
+  ]
 }
 
 export function emptyLabel(): LabelPair {
@@ -111,8 +138,9 @@ export function emptyRule(): CNPRule {
 export function emptyForm(): CNPFormInput {
   return {
     name: '', scope: 'namespaced', namespace: '', comment: '',
-    subject: [emptyLabel()], subjectNamespace: '', direction: 'ingress', mode: 'whitelist',
-    rules: [emptyRule()],
+    subject: [emptyLabel()], subjectNamespace: '',
+    ingress: { mode: 'whitelist', rules: [emptyRule()] },
+    egress: emptySection(),
   }
 }
 
@@ -218,11 +246,27 @@ export function validateCNPForm(input: CNPFormInput): string[] {
   }
   errors.push(...labelRowErrors(input.subject, 'Applies to'))
 
-  if (input.rules.length === 0) errors.push('At least one rule is required.')
+  if (input.ingress.rules.length + input.egress.rules.length === 0) {
+    errors.push('At least one rule is required.')
+  }
 
-  const side = peerLabel(input.direction)
-  input.rules.forEach((r, i) => {
-    const at = input.rules.length > 1 ? `Rule ${i + 1}: ` : ''
+  for (const { direction, section } of sectionsOf(input)) {
+    errors.push(...sectionErrors(direction, section))
+  }
+  return errors
+}
+
+/** What stops one direction from producing rules Cilium would accept. */
+function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
+  const errors: string[] = []
+  const side = peerLabel(direction)
+  // Which direction a complaint is about, once both can carry rules.
+  const where = direction === 'ingress' ? 'Ingress' : 'Egress'
+
+  section.rules.forEach((r, i) => {
+    const at = section.rules.length > 1
+      ? `${where} rule ${i + 1}: `
+      : `${where}: `
 
     if (r.peerKind === 'entity') {
       if (!ENTITIES.includes(r.peerEntity)) {
@@ -267,7 +311,7 @@ export function validateCNPForm(input: CNPFormInput): string[] {
       // Cilium deny rules match on L3/L4 only. An HTTP rule under egressDeny or
       // ingressDeny is rejected by the API server, so refuse it here with a
       // reason instead of letting the apply fail.
-      if (input.mode === 'blacklist') {
+      if (section.mode === 'blacklist') {
         errors.push(`${at}HTTP rules cannot be combined with a blacklist — Cilium deny rules match on L3/L4 only.`)
       }
       // An L7 rule lives under toPorts, so there has to be a port to attach it to.
@@ -326,23 +370,30 @@ function toCiliumRule(r: CNPRule, direction: CNPDirection): Rule {
 export function cnpFormToYaml(input: CNPFormInput): string {
   if (validateCNPForm(input).length > 0) return ''
 
-  const isIngress = input.direction === 'ingress'
-  const rules = input.rules.map(r => toCiliumRule(r, input.direction))
-
   const spec: Record<string, unknown> = {
     endpointSelector: { matchLabels: subjectMatchLabels(input) },
   }
   if (input.comment?.trim()) spec.description = input.comment.trim()
 
-  if (input.mode === 'blacklist') {
-    // Without this, adding a deny rule would also switch the endpoint to
-    // default-deny for the whole direction — denying far more than the rules
-    // the operator wrote.
-    spec.enableDefaultDeny = { [input.direction]: false }
-    spec[isIngress ? 'ingressDeny' : 'egressDeny'] = rules
-  } else {
-    spec[isIngress ? 'ingress' : 'egress'] = rules
+  // A section with no rules is left out entirely: writing an empty ingress: []
+  // would switch the endpoint to default-deny for a direction the operator did
+  // not fill in.
+  const defaultDenyOff: Record<string, boolean> = {}
+  for (const { direction, section } of sectionsOf(input)) {
+    if (section.rules.length === 0) continue
+    const rules = section.rules.map(r => toCiliumRule(r, direction))
+    if (section.mode === 'blacklist') {
+      // Without this, adding a deny rule would also switch the endpoint to
+      // default-deny for the whole direction — denying far more than the rules
+      // the operator wrote. Keyed per direction, so denying egress does not
+      // touch what was written for ingress.
+      defaultDenyOff[direction] = false
+      spec[direction === 'ingress' ? 'ingressDeny' : 'egressDeny'] = rules
+    } else {
+      spec[direction] = rules
+    }
   }
+  if (Object.keys(defaultDenyOff).length > 0) spec.enableDefaultDeny = defaultDenyOff
 
   const clusterWide = input.scope === 'cluster'
   return yaml.dump({
@@ -385,21 +436,47 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
   if (!spec || !subjectLabels || Object.keys(subjectLabels).length === 0) return null
   const { [NAMESPACE_KEY]: subjectNs, ...subjectRest } = subjectLabels
 
-  // Exactly one rule section: a policy mixing allow with deny, or covering both
-  // directions, is not something this form can show.
-  const sections: { key: string; direction: CNPDirection; mode: CNPMode }[] = [
-    { key: 'ingressDeny', direction: 'ingress', mode: 'blacklist' },
-    { key: 'egressDeny', direction: 'egress', mode: 'blacklist' },
-    { key: 'ingress', direction: 'ingress', mode: 'whitelist' },
-    { key: 'egress', direction: 'egress', mode: 'whitelist' },
-  ]
-  const present = sections.filter(s => Array.isArray(spec[s.key]))
-  if (present.length !== 1) return null
-  const section = present[0]
-  const ciliumRules = spec[section.key] as Rule[]
-  if (ciliumRules.length === 0) return null
+  // Each direction reads independently. What the form cannot show is one
+  // direction carrying both an allow and a deny section — the mode is a property
+  // of the direction, so there is nowhere to put two of them. Covering both
+  // directions is ordinary and no longer a reason to fall back to YAML.
+  const parsed: Record<CNPDirection, CNPSection> = {
+    ingress: emptySection(),
+    egress: emptySection(),
+  }
+  for (const direction of ['ingress', 'egress'] as CNPDirection[]) {
+    const allowKey = direction
+    const denyKey = direction === 'ingress' ? 'ingressDeny' : 'egressDeny'
+    const hasAllow = Array.isArray(spec[allowKey])
+    const hasDeny = Array.isArray(spec[denyKey])
+    if (hasAllow && hasDeny) return null
+    if (!hasAllow && !hasDeny) continue
 
-  const isIngress = section.direction === 'ingress'
+    const rules = parseRules(spec[hasDeny ? denyKey : allowKey] as Rule[], direction)
+    if (rules === null) return null
+    parsed[direction] = { mode: hasDeny ? 'blacklist' : 'whitelist', rules }
+  }
+  // A policy with neither section governs nothing, and the form would open blank.
+  if (parsed.ingress.rules.length + parsed.egress.rules.length === 0) return null
+
+  return {
+    name: doc.metadata?.name ?? '',
+    scope: clusterWide ? 'cluster' : 'namespaced',
+    namespace: clusterWide ? '' : (doc.metadata?.namespace ?? ''),
+    comment: typeof spec.description === 'string' ? spec.description : '',
+    // Lifted into its own field, so it does not also show as a label row and
+    // get written from both places.
+    subject: toLabelPairs(subjectRest),
+    subjectNamespace: subjectNs ?? '',
+    ingress: parsed.ingress,
+    egress: parsed.egress,
+  }
+}
+
+/** One section's Cilium rules as form rules, or null when one cannot be shown. */
+function parseRules(ciliumRules: Rule[], direction: CNPDirection): CNPRule[] | null {
+  if (ciliumRules.length === 0) return null
+  const isIngress = direction === 'ingress'
   const rules: CNPRule[] = []
   for (const cr of ciliumRules) {
     const endpoints = isIngress ? cr.fromEndpoints : cr.toEndpoints
@@ -437,18 +514,5 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
     }
     rules.push(rule)
   }
-
-  return {
-    name: doc.metadata?.name ?? '',
-    scope: clusterWide ? 'cluster' : 'namespaced',
-    namespace: clusterWide ? '' : (doc.metadata?.namespace ?? ''),
-    comment: typeof spec.description === 'string' ? spec.description : '',
-    // Lifted into its own field, so it does not also show as a label row and
-    // get written from both places.
-    subject: toLabelPairs(subjectRest),
-    subjectNamespace: subjectNs ?? '',
-    direction: section.direction,
-    mode: section.mode,
-    rules,
-  }
+  return rules
 }

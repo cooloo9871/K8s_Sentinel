@@ -38,14 +38,15 @@ Each layer does what only it can do:
 #### Network Policy (Cilium)
 
 - Manage **CiliumNetworkPolicy** and **CiliumClusterwideNetworkPolicy** through a form builder, with a raw YAML editor for anything the form cannot express
-- A policy is anchored on **one** `endpointSelector`, which is what the form shows: **Applies to**, **Direction** and **Mode** belong to the policy, while each rule contributes a peer with its own ports and HTTP rules
-- **Mode** is the choice that matters, and it is named for what it does rather than as Allow/Deny:
+- A policy is anchored on **one** `endpointSelector`, which is what the form shows: **Applies to** belongs to the policy, while each rule contributes a peer with its own ports and HTTP rules
+- **Ingress and egress are separate sections of the same policy**, and either may be left empty. "This pod reaches the database and nothing else reaches it" is one intent, so it is one policy — a section with no rules is left out of the manifest entirely, rather than written as an empty `ingress: []` that would switch the endpoint to default-deny for a direction nobody filled in
+- **Mode** is per direction, and it is named for what it does rather than as Allow/Deny. It has to be per direction because it decides whether that direction goes default-deny, and `enableDefaultDeny` is itself keyed by direction:
   - **Blacklist** — blocks only what the rules name; everything else is untouched. Writes `ingressDeny`/`egressDeny` with `enableDefaultDeny: false` for that direction, so one deny rule does not lock the whole direction down
   - **Whitelist** — permits only what the rules name and **drops everything else** reaching the endpoint, because in Cilium an allow section switches the endpoint to default-deny for that direction
 - **Scope** — namespaced, or cluster-wide. A namespaced policy's `endpointSelector` only ever matches its own namespace, so governing pods elsewhere requires `CiliumClusterwideNetworkPolicy`
 - Labels are **Key / Value** fields, not free text: a mistyped `app=web` does not fail, it selects nothing
 - A peer is either **Labels** or an **Entity** — `world`, `cluster`, `host`, `remote-node` and the rest, for peers that have no labels to select
-- **A peer in another namespace has to name it.** A namespaced policy's `toEndpoints`/`fromEndpoints` match only its own namespace, so allowing egress to CoreDNS from another namespace needs the namespace as a label alongside the selector. Add a row keyed `namespace` (or `ns`) and the form writes `io.kubernetes.pod.namespace` — without it the rule selects nothing and the traffic is dropped by the default deny the allow section created
+- **A peer in another namespace has to name it.** A namespaced policy's `toEndpoints`/`fromEndpoints` match only its own namespace, so allowing egress to CoreDNS in `kube-system` needs the namespace alongside the selector — without it the rule selects nothing and the traffic is dropped by the default deny the allow section created. Each rule has its own **namespace** field for this, and so does **Applies to**; both write `io.kubernetes.pod.namespace`, which nobody types from memory. A namespace on its own is a complete selector — it names everything in that namespace
 - Ports are rows with a protocol each; **L7 HTTP rules** are a list of alternatives (method and path), and are disabled under Blacklist because Cilium deny rules match on L3/L4 only
 - Policies built here carry `sentinel.io/builder: "true"`, so **Edit** reopens the form; anything else opens as YAML, since a hand-written policy can hold rules the form cannot show
 - The list shows what is easy to miss in raw YAML: whether a policy carries **L7** rules, and which direction it puts into **default deny**
