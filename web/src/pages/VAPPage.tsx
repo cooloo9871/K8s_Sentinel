@@ -375,7 +375,7 @@ function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
   ]
 }
 
-function generatePolicyYaml(
+export function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
   replicaRules: ReplicaRule[], applyTo: LabelApplyTo = 'all',
   resourceLimitRules: ResourceLimitRule[] = [],
@@ -457,7 +457,7 @@ function generatePolicyYaml(
 
 // Binding builder --------------------------------------------------------------
 
-function generateBindingYaml(
+export function generateBindingYaml(
   name: string, policyName: string, namespace: string, actions: ValidationAction[],
 ): string {
   const safeName   = name.trim()       || 'my-binding'
@@ -564,7 +564,8 @@ function parseExpressionToHostAccessPart(expr: string): HostAccessCheckType | nu
   return null
 }
 
-function tryParseBuilderPolicy(rawYaml: string): {
+// Exported for its tests.
+export function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType; applyTo: LabelApplyTo
   labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
   resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
@@ -623,11 +624,27 @@ function tryParseBuilderPolicy(rawYaml: string): {
       : hostAccessParsed !== null ? 'host-access'
       : 'label'
     const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
-    return { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule }
+    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule }
+
+    // The builder may only open a policy it can reproduce: saving regenerates
+    // the whole manifest, so whatever these fields cannot show — a hand-tuned
+    // matchConstraints, matchConditions, failurePolicy: Ignore — is deleted on
+    // save, not preserved. Regenerate from the parsed state and demand the spec
+    // come out identical; anything else opens in the YAML editor, which shows it.
+    if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
+    const regen = yaml.load(generatePolicyYaml(
+      result.name, ruleType, result.labelRules, imageRules, replicaRules,
+      applyTo, resourceLimitRules, securityContextRule, hostAccessRule,
+    )) as Record<string, unknown> | undefined
+    if (!regen || yaml.dump(regen.spec, { sortKeys: true }) !== yaml.dump(doc.spec, { sortKeys: true })) {
+      return null
+    }
+    return result
   } catch { return null }
 }
 
-function tryParseBuilderBinding(rawYaml: string): {
+// Exported for its tests.
+export function tryParseBuilderBinding(rawYaml: string): {
   name: string; policyName: string; namespace: string; actions: ValidationAction[]
 } | null {
   try {
@@ -643,12 +660,23 @@ function tryParseBuilderBinding(rawYaml: string): {
       matchResources?: { namespaceSelector?: { matchLabels?: Record<string, string> } }
     }
     const ns = spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
-    return {
+    const result = {
       name: meta?.name ?? '',
       policyName: spec?.policyName ?? '',
       actions: (spec?.validationActions ?? ['Deny']) as ValidationAction[],
       namespace: ns,
     }
+    // Same bar as the policy: the form may only open a binding it can
+    // reproduce, or a paramRef or objectSelector added by hand would be
+    // silently deleted on the next save.
+    if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
+    const regen = yaml.load(generateBindingYaml(
+      result.name, result.policyName, result.namespace, result.actions,
+    )) as Record<string, unknown> | undefined
+    if (!regen || yaml.dump(regen.spec, { sortKeys: true }) !== yaml.dump(doc.spec, { sortKeys: true })) {
+      return null
+    }
+    return result
   } catch { return null }
 }
 

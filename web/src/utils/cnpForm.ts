@@ -417,9 +417,16 @@ export function cnpFormToYaml(input: CNPFormInput): string {
 
 interface ParsedDoc {
   kind?: string
-  metadata?: { name?: string; namespace?: string; annotations?: Record<string, unknown> }
+  metadata?: {
+    name?: string
+    namespace?: string
+    annotations?: Record<string, unknown>
+    labels?: Record<string, unknown>
+  }
   spec?: Record<string, unknown>
+  specs?: unknown
 }
+
 
 /**
  * Reads a policy this form generated back into form state, so editing it can
@@ -437,11 +444,21 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
   const clusterWide = doc?.kind === 'CiliumClusterwideNetworkPolicy'
   if (doc?.kind !== 'CiliumNetworkPolicy' && !clusterWide) return null
   if (String(doc.metadata?.annotations?.[BUILDER_ANNOTATION]) !== 'true') return null
+  // Neither of these is re-emitted: the specs form holds several policies in
+  // one object, and the form writes no metadata labels.
+  if (doc.specs !== undefined) return null
+  if (Object.keys(doc.metadata?.labels ?? {}).length > 0) return null
 
   const spec = doc.spec
   const subjectLabels = (spec?.endpointSelector as { matchLabels?: Record<string, string> } | undefined)?.matchLabels
   if (!spec || !subjectLabels || Object.keys(subjectLabels).length === 0) return null
   const { [NAMESPACE_KEY]: subjectNs, ...subjectRest } = subjectLabels
+  // Only a cluster-wide policy has a field for the subject's namespace — a
+  // namespaced one is confined to its own, so the form stopped asking. Opening
+  // a namespaced policy that carries the label anyway would turn it into
+  // invisible state: written back on every save, shown nowhere, impossible to
+  // remove. The YAML editor shows it, so such a policy falls back there.
+  if (!clusterWide && subjectNs) return null
 
   // Each direction reads independently. What the form cannot show is one
   // direction carrying both an allow and a deny section — the mode is a property
@@ -466,7 +483,7 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
   // A policy with neither section governs nothing, and the form would open blank.
   if (parsed.ingress.rules.length + parsed.egress.rules.length === 0) return null
 
-  return {
+  const result: CNPFormInput = {
     name: doc.metadata?.name ?? '',
     scope: clusterWide ? 'cluster' : 'namespaced',
     namespace: clusterWide ? '' : (doc.metadata?.namespace ?? ''),
@@ -478,6 +495,18 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
     ingress: parsed.ingress,
     egress: parsed.egress,
   }
+
+  // The invariant behind all of this: the form may only open a policy it can
+  // reproduce, because saving regenerates the whole manifest — whatever the
+  // fields cannot show is deleted on save, not preserved. Rather than
+  // enumerating every such shape (toCIDR peers, DNS rules, matchExpressions, a
+  // port range, enableDefaultDeny that disagrees with the mode, ...), generate
+  // what this form state saves as and demand the spec come out identical.
+  const regen = yaml.load(cnpFormToYaml(result)) as ParsedDoc | undefined
+  if (!regen || yaml.dump(regen.spec, { sortKeys: true }) !== yaml.dump(spec, { sortKeys: true })) {
+    return null
+  }
+  return result
 }
 
 /** One section's Cilium rules as form rules, or null when one cannot be shown. */

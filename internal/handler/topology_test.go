@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -39,6 +41,16 @@ func entry(key, verdict string, seen time.Time) k8s.CiliumTopoEntry {
 	}
 }
 
+// requireOneEdge pins what every dual-verdict case relies on: whatever the two
+// verdicts' timing, the pair renders once. The graph draws every edge it is
+// given and keeps no verdict arbitration of its own.
+func requireOneEdge(t *testing.T, resp TopologyResponse) {
+	t.Helper()
+	if len(resp.Edges) != 1 {
+		t.Errorf("got %d edges, want 1 — the pair must not render twice", len(resp.Edges))
+	}
+}
+
 // The case that sent an operator looking: the policy was deleted, traffic now
 // flows, and the graph still showed a red edge — because "blocked wins" also
 // suppressed the allowed edge that replaced it, for as long as the 24h buffer
@@ -57,9 +69,7 @@ func TestNewerAllowedTrafficReplacesAStaleDenial(t *testing.T) {
 	if e.Blocked {
 		t.Error("edge is still blocked; the newer allowed flow should have replaced the denial")
 	}
-	if len(resp.Edges) != 1 {
-		t.Errorf("got %d edges, want 1 — the pair must not render twice", len(resp.Edges))
-	}
+	requireOneEdge(t, resp)
 }
 
 // The reverse still has to work, or applying a policy would not turn the edge red
@@ -78,12 +88,7 @@ func TestNewerDenialReplacesAllowedTraffic(t *testing.T) {
 	if !e.Blocked {
 		t.Error("edge is not blocked; the newer denial should have replaced the allowed flow")
 	}
-	// One verdict per pair holds this way round too. The graph relies on it: it
-	// draws what it is given, and used to carry its own "blocked wins" filter to
-	// second-guess this — which would have overridden the rule above.
-	if len(resp.Edges) != 1 {
-		t.Errorf("got %d edges, want 1 — the pair must not render twice", len(resp.Edges))
-	}
+	requireOneEdge(t, resp)
 }
 
 // Of the two, a denial is the one worth surfacing.
@@ -101,6 +106,7 @@ func TestTieGoesToTheDenial(t *testing.T) {
 	if !e.Blocked {
 		t.Error("a tie should render as blocked")
 	}
+	requireOneEdge(t, resp)
 }
 
 // An L7 denial means L3/L4 passed: the connection is permitted and only the
@@ -122,9 +128,7 @@ func TestALiveL7DenialWinsOverTheAllowedConnection(t *testing.T) {
 	if !e.Blocked {
 		t.Error("the live denial was hidden by the allowed connection it rides on")
 	}
-	if len(resp.Edges) != 1 {
-		t.Errorf("got %d edges, want 1", len(resp.Edges))
-	}
+	requireOneEdge(t, resp)
 }
 
 // The case the recency rule was written for still has to work: once a policy is
@@ -142,6 +146,31 @@ func TestADenialThatStoppedGivesWayToCurrentTraffic(t *testing.T) {
 	}
 	if e.Blocked {
 		t.Error("a denial that stopped ten minutes ago is still shown")
+	}
+	requireOneEdge(t, resp)
+}
+
+// The UI compares payloads across polls to decide whether anything changed
+// before it re-lays the graph out. Nodes and edges come out of maps, so left
+// unsorted they reshuffle on every request — every poll looked like news, and
+// the re-layout threw away wherever the reader had dragged the nodes.
+func TestResponseOrderIsDeterministic(t *testing.T) {
+	now := time.Now()
+	entries := make([]k8s.CiliumTopoEntry, 0, 8)
+	for i := 0; i < 8; i++ {
+		e := entry(fmt.Sprintf("k%d", i), "allowed", now)
+		e.SrcPod = fmt.Sprintf("client-%d", i)
+		entries = append(entries, e)
+	}
+	resp := build(t, entries)
+	if len(resp.Edges) != 8 {
+		t.Fatalf("got %d edges, want 8", len(resp.Edges))
+	}
+	if !sort.SliceIsSorted(resp.Nodes, func(i, j int) bool { return resp.Nodes[i].ID < resp.Nodes[j].ID }) {
+		t.Error("nodes are not sorted by ID, so their order changes from poll to poll")
+	}
+	if !sort.SliceIsSorted(resp.Edges, func(i, j int) bool { return resp.Edges[i].ID < resp.Edges[j].ID }) {
+		t.Error("edges are not sorted by ID, so their order changes from poll to poll")
 	}
 }
 

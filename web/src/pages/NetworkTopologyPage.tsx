@@ -293,6 +293,17 @@ const NODE_HEIGHT = 60
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyDagreLayout(nodes: any[], edges: any[]): any[] {
+  try {
+    return dagreLayout(nodes, edges)
+  } catch {
+    // The nodes come in already carrying column positions, which is a readable
+    // graph — a layout engine hiccup must not take the whole page with it.
+    return nodes
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function dagreLayout(nodes: any[], edges: any[]): any[] {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({
@@ -466,9 +477,12 @@ export function NetworkTopologyPage() {
     // Visible = anything reachable via filtered edges
     // (external nodes appear only when they have a connection)
     // Mark pods receiving traffic from an ext: source so PodNode can flag
-    // undeclared exposure (ext traffic without any exposure path).
+    // undeclared exposure (ext traffic without any exposure path). Only traffic
+    // that got through: a blocked attempt never reached the pod — that is the
+    // policy working, already drawn red — so warning "receiving external
+    // traffic" on it would report the defence as the intrusion.
     const extInboundTargets = new Set(
-      filteredEdges.filter(e => e.source.startsWith('ext:')).map(e => e.target)
+      filteredEdges.filter(e => e.source.startsWith('ext:') && !e.blocked).map(e => e.target)
     )
     const visibleNodes = scopedNodes
       .filter(n => connectedIds.has(n.id))
@@ -498,6 +512,16 @@ export function NetworkTopologyPage() {
     }
     // Clear selectedNode if it's no longer visible after filter change
     setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
+    // The panel describes what the canvas draws now, not a snapshot from the
+    // click. Same id → refreshed counts and ports; the id changes when the
+    // verdict flips (a blocked edge is a different id), so fall back to the
+    // pair before concluding the connection is gone.
+    setSelectedEdge(prev => {
+      if (!prev) return prev
+      return filteredEdges.find(e => e.id === prev.id)
+        ?? filteredEdges.find(e => e.source === prev.source && e.target === prev.target)
+        ?? null
+    })
   }, [rawNodes, rawEdges, nsFilter, podSearch, hideSystem, isVisibleEdge, exposedOnly, setNodes, setEdges])
 
   // The legend describes the canvas, so an entry appears only when something it

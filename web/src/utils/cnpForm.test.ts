@@ -438,6 +438,8 @@ spec:
     - toEndpoints:
         - matchLabels:
             role: db
+  enableDefaultDeny:
+    egress: false
 `)
     expect(parsed?.ingress.mode).toBe('whitelist')
     expect(parsed?.ingress.rules[0].peerLabels).toEqual([{ key: 'role', value: 'frontend' }])
@@ -485,6 +487,226 @@ spec:
   it('refuses another kind, and unparseable text', () => {
     expect(tryParseCNPForm('kind: NetworkPolicy')).toBeNull()
     expect(tryParseCNPForm('::: not yaml :::')).toBeNull()
+  })
+})
+
+// Saving from the form regenerates the whole manifest, so anything the parser
+// reads past is deleted on save. Every shape the fields cannot show has to be
+// refused, not skipped — these are the ones a hand edit most plausibly adds to
+// a builder-annotated policy.
+describe('tryParseCNPForm — rules the form cannot show', () => {
+  const wrap = (spec: string) => `apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+${spec}
+`
+
+  const subject = `  endpointSelector:
+    matchLabels:
+      role: backend`
+
+  it('refuses a rule carrying a peer kind the form has no field for', () => {
+    expect(tryParseCNPForm(wrap(`${subject}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+      toCIDR:
+        - 10.0.0.0/8`))).toBeNull()
+    expect(tryParseCNPForm(wrap(`${subject}
+  egress:
+    - toFQDNs:
+        - matchName: example.com`))).toBeNull()
+  })
+
+  // Both present, the old code showed the endpoints and dropped the entities.
+  it('refuses a rule naming both endpoints and entities', () => {
+    expect(tryParseCNPForm(wrap(`${subject}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+      toEntities:
+        - world`))).toBeNull()
+  })
+
+  // rules.dns is how a DNS whitelist is written. Dropping it on save would cut
+  // the pod's name resolution, since the allow section is default-deny.
+  it('refuses L7 rules other than HTTP', () => {
+    expect(tryParseCNPForm(wrap(`${subject}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+          rules:
+            dns:
+              - matchPattern: '*'`))).toBeNull()
+  })
+
+  it('refuses an HTTP entry with parts beyond method and path', () => {
+    expect(tryParseCNPForm(wrap(`${subject}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            role: frontend
+      toPorts:
+        - ports:
+            - port: '80'
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                headers:
+                  - 'X-Token: secret'`))).toBeNull()
+  })
+
+  it('refuses a port range, which the form would collapse to one port', () => {
+    expect(tryParseCNPForm(wrap(`${subject}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+      toPorts:
+        - ports:
+            - port: '8000'
+              endPort: 8999
+              protocol: TCP`))).toBeNull()
+  })
+
+  it('refuses a selector that uses matchExpressions', () => {
+    expect(tryParseCNPForm(wrap(`  endpointSelector:
+    matchLabels:
+      role: backend
+    matchExpressions:
+      - key: env
+        operator: In
+        values: [prod]
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db`))).toBeNull()
+    expect(tryParseCNPForm(wrap(`${subject}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+          matchExpressions:
+            - key: env
+              operator: Exists`))).toBeNull()
+  })
+
+  it('refuses spec fields the form does not write', () => {
+    expect(tryParseCNPForm(wrap(`${subject}
+  nodeSelector:
+    matchLabels:
+      role: infra
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db`))).toBeNull()
+  })
+
+  // The form regenerates enableDefaultDeny from the mode alone. A value that
+  // does not match would be silently rewritten — tightening or loosening the
+  // policy's default-deny on a save that changed nothing else.
+  it('refuses enableDefaultDeny that does not match the mode', () => {
+    // A whitelist the author explicitly opted out of default-deny for.
+    expect(tryParseCNPForm(wrap(`${subject}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+  enableDefaultDeny:
+    egress: false`))).toBeNull()
+    // A blacklist missing the opt-out the builder always writes.
+    expect(tryParseCNPForm(wrap(`${subject}
+  egressDeny:
+    - toEndpoints:
+        - matchLabels:
+            role: db`))).toBeNull()
+  })
+
+  // metadata.labels are not re-emitted, so a policy carrying them would lose
+  // them on save.
+  it('refuses metadata labels', () => {
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  labels:
+    team: platform
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector:
+    matchLabels:
+      role: backend
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+`)).toBeNull()
+  })
+
+  // The specs (plural) form holds several policies in one object; the form
+  // shows one.
+  it('refuses the specs form', () => {
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+specs:
+  - endpointSelector:
+      matchLabels:
+        role: backend
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              role: db
+`)).toBeNull()
+  })
+
+  // What the cluster adds on its own — server metadata and status — must not
+  // trip the strictness: every policy the builder made carries those.
+  it('still accepts a builder policy as the cluster returns it', () => {
+    const parsed = tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  uid: 5e2f1a
+  resourceVersion: '12345'
+  creationTimestamp: '2026-08-13T00:00:00Z'
+  generation: 2
+  annotations:
+    sentinel.io/builder: 'true'
+    sentinel.io/created-by: admin
+spec:
+  endpointSelector:
+    matchLabels:
+      role: backend
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            role: db
+status:
+  conditions: []
+`)
+    expect(parsed).not.toBeNull()
+    expect(parsed?.egress.rules).toHaveLength(1)
   })
 })
 
@@ -643,12 +865,37 @@ describe('subject namespace field', () => {
 
   it('reads the namespace back into its own field', () => {
     const parsed = tryParseCNPForm(cnpFormToYaml({
-      ...base,
+      ...base, scope: 'cluster', namespace: '',
       subject: [{ key: 'app', value: 'api' }],
       subjectNamespace: 'ingress-nginx',
     }))
     expect(parsed?.subjectNamespace).toBe('ingress-nginx')
     expect(parsed?.subject).toEqual([{ key: 'app', value: 'api' }])
+  })
+
+  // A namespaced policy has no field for this — the form stopped offering one
+  // when the Namespace above already confines the selector. Opening such a
+  // policy (built before that, or by hand) in the form would carry the label as
+  // invisible state: written back on every save, shown nowhere, impossible to
+  // remove. The YAML editor shows it, so that is where it opens.
+  it('refuses a namespaced policy whose subject names a namespace', () => {
+    expect(tryParseCNPForm(`apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: x
+  namespace: demo
+  annotations:
+    sentinel.io/builder: 'true'
+spec:
+  endpointSelector:
+    matchLabels:
+      app: api
+      io.kubernetes.pod.namespace: other
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app: db
+`)).toBeNull()
   })
 })
 

@@ -32,6 +32,10 @@ type PortStat struct {
 	Count int    `json:"count"`
 }
 
+// TopologyEdge is one drawn connection. The handler emits at most one edge per
+// (Source, Target) pair, carrying a single verdict — a still-arriving denial
+// wins over allowed traffic, a stopped one gives way. The UI relies on this: it
+// draws every edge it is given and keeps no verdict arbitration of its own.
 type TopologyEdge struct {
 	ID      string `json:"id"`
 	Source  string `json:"source"`
@@ -401,6 +405,13 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 			DNSQuery:    ev.dnsQuery,
 		})
 	}
+
+	// Both come out of maps, so without this the order changes on every poll.
+	// The UI compares payloads to decide whether anything changed before it
+	// re-lays the graph out — shuffled order made every poll look like news, and
+	// the re-layout threw away wherever the reader had dragged the nodes.
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
+	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 
 	return TopologyResponse{
 		Nodes:             nodes,
