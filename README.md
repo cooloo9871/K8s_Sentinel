@@ -45,6 +45,7 @@ Each layer does what only it can do:
 - **Scope** — namespaced, or cluster-wide. A namespaced policy's `endpointSelector` only ever matches its own namespace, so governing pods elsewhere requires `CiliumClusterwideNetworkPolicy`
 - Labels are **Key / Value** fields, not free text: a mistyped `app=web` does not fail, it selects nothing
 - A peer is either **Labels** or an **Entity** — `world`, `cluster`, `host`, `remote-node` and the rest, for peers that have no labels to select
+- **A peer in another namespace has to name it.** A namespaced policy's `toEndpoints`/`fromEndpoints` match only its own namespace, so allowing egress to CoreDNS from another namespace needs the namespace as a label alongside the selector. Add a row keyed `namespace` (or `ns`) and the form writes `io.kubernetes.pod.namespace` — without it the rule selects nothing and the traffic is dropped by the default deny the allow section created
 - Ports are rows with a protocol each; **L7 HTTP rules** are a list of alternatives (method and path), and are disabled under Blacklist because Cilium deny rules match on L3/L4 only
 - Policies built here carry `sentinel.io/builder: "true"`, so **Edit** reopens the form; anything else opens as YAML, since a hand-written policy can hold rules the form cannot show
 - The list shows what is easy to miss in raw YAML: whether a policy carries **L7** rules, and which direction it puts into **default deny**

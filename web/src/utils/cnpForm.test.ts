@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   cnpFormToYaml, validateCNPForm, tryParseCNPForm, toMatchLabels, toLabelPairs,
   emptyForm, emptyRule, type CNPFormInput, type CNPRule,
-} from './cnpForm'
+ } from './cnpForm'
 
 function rule(over: Partial<CNPRule> = {}): CNPRule {
   return { ...emptyRule(), ...over }
@@ -416,5 +416,40 @@ spec:
         - matchLabels:
             role: frontend
 `)).toBeNull()
+  })
+})
+
+// Selecting a peer in another namespace is the case that catches everyone: a
+// namespaced policy matches only its own namespace unless the namespace is
+// named as a label. The form accepts a short alias for the real key, which
+// nobody would guess.
+describe('cross-namespace peers', () => {
+  it('rewrites the namespace aliases to the label Cilium reads', () => {
+    for (const alias of ['namespace', 'ns']) {
+      expect(toMatchLabels([
+        { key: 'k8s-app', value: 'kube-dns' },
+        { key: alias, value: 'kube-system' },
+      ])).toEqual({
+        'k8s-app': 'kube-dns',
+        'io.kubernetes.pod.namespace': 'kube-system',
+      })
+    }
+  })
+
+  it('accepts the full key unchanged', () => {
+    expect(toMatchLabels([
+      { key: 'io.kubernetes.pod.namespace', value: 'kube-system' },
+    ])).toEqual({ 'io.kubernetes.pod.namespace': 'kube-system' })
+  })
+
+  // Reopening the policy has to show something the field would accept back.
+  it('shows the alias when reading a policy back', () => {
+    expect(toLabelPairs({
+      'k8s-app': 'kube-dns',
+      'io.kubernetes.pod.namespace': 'kube-system',
+    })).toEqual([
+      { key: 'k8s-app', value: 'kube-dns' },
+      { key: 'namespace', value: 'kube-system' },
+    ])
   })
 })

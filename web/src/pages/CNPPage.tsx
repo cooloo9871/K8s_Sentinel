@@ -451,6 +451,16 @@ export function CNPPage() {
                         <LabelRows
                           title={peerLabel(form.direction)}
                           required
+                          // The one thing about Cilium selectors that catches
+                          // everyone: a namespaced policy matches peers in its
+                          // own namespace unless the namespace is named. The
+                          // form has always accepted a "namespace" row and
+                          // rewritten it to io.kubernetes.pod.namespace; nothing
+                          // said so, so the capability was unreachable in
+                          // practice.
+                          hint={form.scope === 'namespaced'
+                            ? `A peer in another namespace needs a "namespace" row — without one this matches only peers in ${form.namespace || 'this policy\'s namespace'}.`
+                            : 'Add a "namespace" row to restrict the peer to one namespace.'}
                           pairs={r.peerLabels}
                           onChange={pairs => updateRule(i, r => ({ ...r, peerLabels: pairs }))}
                         />
