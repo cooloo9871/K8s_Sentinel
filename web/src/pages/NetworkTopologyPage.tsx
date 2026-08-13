@@ -993,7 +993,13 @@ export function NetworkTopologyPage() {
                       </div>
                       {selectedEdge.ports && selectedEdge.ports.length > 0 && (
                         <div>
-                          <span className="text-muted-foreground">Ports</span>
+                          {/* An edge is one verdict, so on a blocked edge these
+                              are the ports that were dropped — not every port
+                              the pair uses. Which is the difference between
+                              "nothing gets through" and "one port does not". */}
+                          <span className="text-muted-foreground">
+                            {selectedEdge.blocked ? 'Blocked ports' : 'Ports'}
+                          </span>
                           <div className="mt-1 flex flex-col gap-0.5">
                             {selectedEdge.ports.map(p => (
                               <div key={p.port} className="flex justify-between font-mono text-[11px]">
