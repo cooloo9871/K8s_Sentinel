@@ -75,6 +75,11 @@ export interface CNPFormInput {
   namespace: string
   comment?: string
   subject: LabelPair[]
+  // Which namespace the subject is in, as its own field. Selecting a whole
+  // namespace is a policy shape in its own right — "everything in
+  // ingress-nginx" — and Cilium expresses it as a label, which is not something
+  // anyone types from memory. Empty leaves the selector to its labels alone.
+  subjectNamespace: string
   direction: CNPDirection
   mode: CNPMode
   rules: CNPRule[]
@@ -106,7 +111,7 @@ export function emptyRule(): CNPRule {
 export function emptyForm(): CNPFormInput {
   return {
     name: '', scope: 'namespaced', namespace: '', comment: '',
-    subject: [emptyLabel()], direction: 'ingress', mode: 'whitelist',
+    subject: [emptyLabel()], subjectNamespace: '', direction: 'ingress', mode: 'whitelist',
     rules: [emptyRule()],
   }
 }
@@ -117,6 +122,15 @@ const NAMESPACE_KEY = 'io.kubernetes.pod.namespace'
 const NAMESPACE_ALIASES = new Set(['namespace', 'ns'])
 
 /** Turns the form's label rows into a Cilium matchLabels map. */
+/** The subject selector: its labels, plus the namespace when one is chosen. */
+export function subjectMatchLabels(input: CNPFormInput): Record<string, string> {
+  const labels = toMatchLabels(input.subject)
+  if (input.subjectNamespace.trim()) {
+    labels[NAMESPACE_KEY] = input.subjectNamespace.trim()
+  }
+  return labels
+}
+
 /** The peer selector: its labels, plus the namespace when one is chosen. */
 export function peerMatchLabels(rule: CNPRule): Record<string, string> {
   const labels = toMatchLabels(rule.peerLabels)
@@ -196,7 +210,10 @@ export function validateCNPForm(input: CNPFormInput): string[] {
     errors.push('Namespace is required for a namespaced policy.')
   }
 
-  if (Object.keys(toMatchLabels(input.subject)).length === 0) {
+  // A namespace alone is a complete subject: it selects everything in it. What
+  // must not get through is neither — an empty endpointSelector on a
+  // cluster-wide policy governs every endpoint in the cluster.
+  if (Object.keys(subjectMatchLabels(input)).length === 0) {
     errors.push('Applies to needs at least one label.')
   }
   errors.push(...labelRowErrors(input.subject, 'Applies to'))
@@ -310,7 +327,7 @@ export function cnpFormToYaml(input: CNPFormInput): string {
   const rules = input.rules.map(r => toCiliumRule(r, input.direction))
 
   const spec: Record<string, unknown> = {
-    endpointSelector: { matchLabels: toMatchLabels(input.subject) },
+    endpointSelector: { matchLabels: subjectMatchLabels(input) },
   }
   if (input.comment?.trim()) spec.description = input.comment.trim()
 
@@ -363,6 +380,7 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
   const spec = doc.spec
   const subjectLabels = (spec?.endpointSelector as { matchLabels?: Record<string, string> } | undefined)?.matchLabels
   if (!spec || !subjectLabels || Object.keys(subjectLabels).length === 0) return null
+  const { [NAMESPACE_KEY]: subjectNs, ...subjectRest } = subjectLabels
 
   // Exactly one rule section: a policy mixing allow with deny, or covering both
   // directions, is not something this form can show.
@@ -422,7 +440,10 @@ export function tryParseCNPForm(rawYaml: string): CNPFormInput | null {
     scope: clusterWide ? 'cluster' : 'namespaced',
     namespace: clusterWide ? '' : (doc.metadata?.namespace ?? ''),
     comment: typeof spec.description === 'string' ? spec.description : '',
-    subject: toLabelPairs(subjectLabels),
+    // Lifted into its own field, so it does not also show as a label row and
+    // get written from both places.
+    subject: toLabelPairs(subjectRest),
+    subjectNamespace: subjectNs ?? '',
     direction: section.direction,
     mode: section.mode,
     rules,

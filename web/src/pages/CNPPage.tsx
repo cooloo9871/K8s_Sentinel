@@ -364,6 +364,21 @@ export function CNPPage() {
                   onChange={pairs => setField('subject', pairs)}
                 />
 
+                {/* Selecting a whole namespace is a policy shape of its own —
+                    "everything in ingress-nginx" — and Cilium writes it as a
+                    label nobody types from memory. With no labels beside it, the
+                    namespace is the entire selector. */}
+                <Field label="Applies to namespace">
+                  <NamespaceSelect
+                    namespaces={clusterNamespaces}
+                    value={form.subjectNamespace}
+                    onChange={v => setField('subjectNamespace', v)}
+                    noneLabel={form.scope === 'namespaced'
+                      ? (form.namespace || 'Same namespace')
+                      : 'Any namespace'}
+                  />
+                </Field>
+
                 <div className="grid grid-cols-2 gap-4">
                   <Field
                     label="Direction"
@@ -378,12 +393,7 @@ export function CNPPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field
-                    label="Mode"
-                    hint={form.mode === 'blacklist'
-                      ? 'Only this traffic is blocked.'
-                      : 'Only this traffic is allowed.'}
-                  >
+                  <Field label="Mode">
                     <Select value={form.mode} onValueChange={v => setField('mode', v as CNPMode)}>
                       <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -467,7 +477,7 @@ export function CNPPage() {
                               // What leaving it unset actually means, said on the
                               // option rather than in a line underneath.
                               noneLabel={form.scope === 'namespaced'
-                                ? `Same namespace (${form.namespace || 'this policy'})`
+                                ? (form.namespace || 'Same namespace')
                                 : 'Any namespace'}
                             />
                           </Field>
@@ -578,11 +588,6 @@ export function CNPPage() {
                     </div>
                   ))}
 
-                  {form.mode === 'blacklist' && (
-                    <p className="text-[11px] text-muted-foreground">
-                      HTTP is whitelist-only — Cilium deny rules match on L3/L4.
-                    </p>
-                  )}
                 </div>
 
                 {formErrors.length > 0 && (

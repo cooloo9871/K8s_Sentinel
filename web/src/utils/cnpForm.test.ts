@@ -14,6 +14,7 @@ const base: CNPFormInput = {
   namespace: 'net-lab',
   comment: '',
   subject: [{ key: 'app', value: 'traffic-generator' }],
+  subjectNamespace: '',
   direction: 'egress',
   mode: 'blacklist',
   rules: [rule({
@@ -487,5 +488,44 @@ describe('peer namespace field', () => {
     expect(parsed?.rules[0].peerNamespace).toBe('kube-system')
     // And not left among the labels, or saving would write it from both places.
     expect(parsed?.rules[0].peerLabels).toEqual([{ key: 'k8s-app', value: 'kube-dns' }])
+  })
+})
+
+// "Everything in ingress-nginx" is a policy shape of its own. Cilium writes it
+// as a label, which is not something anyone types from memory, so the form has
+// a field for it.
+describe('subject namespace field', () => {
+  it('writes the namespace into the endpointSelector', () => {
+    const out = cnpFormToYaml({
+      ...base, scope: 'cluster', namespace: '',
+      subject: [{ key: '', value: '' }],
+      subjectNamespace: 'ingress-nginx',
+    })
+    expect(out).toContain('io.kubernetes.pod.namespace: ingress-nginx')
+  })
+
+  // A namespace on its own is a complete subject — it selects everything in it.
+  it('accepts a namespace with no labels beside it', () => {
+    expect(validateCNPForm({
+      ...base, subject: [{ key: '', value: '' }], subjectNamespace: 'ingress-nginx',
+    })).toEqual([])
+  })
+
+  // Neither is not. An empty endpointSelector on a cluster-wide policy governs
+  // every endpoint in the cluster.
+  it('still rejects a subject that selects nothing', () => {
+    expect(validateCNPForm({
+      ...base, subject: [{ key: '', value: '' }], subjectNamespace: '',
+    }).join(' ')).toContain('Applies to')
+  })
+
+  it('reads the namespace back into its own field', () => {
+    const parsed = tryParseCNPForm(cnpFormToYaml({
+      ...base,
+      subject: [{ key: 'app', value: 'api' }],
+      subjectNamespace: 'ingress-nginx',
+    }))
+    expect(parsed?.subjectNamespace).toBe('ingress-nginx')
+    expect(parsed?.subject).toEqual([{ key: 'app', value: 'api' }])
   })
 })
