@@ -243,9 +243,13 @@ export function validateCNPForm(input: CNPFormInput): string[] {
 
   // A namespace alone is a complete subject: it selects everything in it. What
   // must not get through is neither — an empty endpointSelector on a
-  // cluster-wide policy governs every endpoint in the cluster.
+  // cluster-wide policy governs every endpoint in the cluster. Only a
+  // cluster-wide policy is asked for a subject namespace, though: a namespaced
+  // one is confined to its own already, so naming one there says nothing.
   if (Object.keys(subjectMatchLabels(input)).length === 0) {
-    errors.push('Applies to needs a label or a namespace.')
+    errors.push(input.scope === 'cluster'
+      ? 'Applies to needs a label or a namespace.'
+      : 'Applies to needs at least one label.')
   }
   errors.push(...labelRowErrors(input.subject, 'Applies to'))
 

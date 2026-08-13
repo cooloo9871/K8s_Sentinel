@@ -241,7 +241,7 @@ describe('validateCNPForm', () => {
     const errors = validateCNPForm(emptyForm()).join(' ')
     expect(errors).toContain('Name is required')
     expect(errors).toContain('Namespace is required')
-    expect(errors).toContain('Applies to needs a label or a namespace')
+    expect(errors).toContain('Applies to needs at least one label')
     expect(errors).toContain('At least one rule is required')
   })
 
@@ -617,7 +617,8 @@ describe('subject namespace field', () => {
   // A namespace on its own is a complete subject — it selects everything in it.
   it('accepts a namespace with no labels beside it', () => {
     expect(validateCNPForm({
-      ...base, subject: [{ key: '', value: '' }], subjectNamespace: 'ingress-nginx',
+      ...base, scope: 'cluster', namespace: '',
+      subject: [{ key: '', value: '' }], subjectNamespace: 'ingress-nginx',
     })).toEqual([])
   })
 
@@ -627,6 +628,17 @@ describe('subject namespace field', () => {
     expect(validateCNPForm({
       ...base, subject: [{ key: '', value: '' }], subjectNamespace: '',
     }).join(' ')).toContain('Applies to')
+  })
+
+  // The field is only offered cluster-wide: a namespaced policy is confined to
+  // its own namespace already, so the message must not send the operator
+  // looking for a field that is not there.
+  it('asks a namespaced policy for a label, not a namespace', () => {
+    expect(validateCNPForm({ ...base, subject: [{ key: '', value: '' }] }).join(' '))
+      .toContain('Applies to needs at least one label')
+    expect(validateCNPForm({
+      ...base, scope: 'cluster', namespace: '', subject: [{ key: '', value: '' }],
+    }).join(' ')).toContain('Applies to needs a label or a namespace')
   })
 
   it('reads the namespace back into its own field', () => {

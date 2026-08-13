@@ -541,7 +541,16 @@ export function CNPPage() {
                       ? 'The selector can reach pods in any namespace.'
                       : 'The selector only matches pods in this namespace.'}
                   >
-                    <Select value={form.scope} onValueChange={v => setField('scope', v as CNPScope)}
+                    <Select
+                      value={form.scope}
+                      // The subject's namespace is only asked for cluster-wide.
+                      // Left behind on the way back, it would stay in the
+                      // selector with no field showing it.
+                      onValueChange={v => setForm(f => ({
+                        ...f,
+                        scope: v as CNPScope,
+                        subjectNamespace: v === 'cluster' ? f.subjectNamespace : '',
+                      }))}
                       disabled={!!editing}>
                       <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -575,24 +584,28 @@ export function CNPPage() {
                   title="Applies to"
                   required
                   hint={form.scope === 'cluster'
-                    ? 'The endpoints this policy governs. Add namespace to reach another one.'
+                    ? 'The endpoints this policy governs, in any namespace.'
                     : 'The endpoints this policy governs, within this namespace.'}
                   pairs={form.subject}
                   onChange={pairs => setField('subject', pairs)}
                 />
 
-                {/* Selecting a whole namespace is a policy shape of its own —
-                    "everything in ingress-nginx" — and Cilium writes it as a
-                    label nobody types from memory. With no labels beside it, the
-                    namespace is the entire selector. */}
-                <Field label="Applies to namespace">
-                  <NamespaceSelect
-                    namespaces={clusterNamespaces}
-                    value={form.subjectNamespace}
-                    onChange={v => setField('subjectNamespace', v)}
-                    clearLabel="Leave unset"
-                  />
-                </Field>
+                {/* Only cluster-wide. A namespaced policy's endpointSelector
+                    already matches nothing outside its own namespace, so the
+                    Namespace field above has said this — while a cluster-wide
+                    policy has no Namespace field, and "everything in
+                    ingress-nginx" is a policy shape of its own. With no labels
+                    beside it, the namespace is the entire selector. */}
+                {form.scope === 'cluster' && (
+                  <Field label="Applies to namespace">
+                    <NamespaceSelect
+                      namespaces={clusterNamespaces}
+                      value={form.subjectNamespace}
+                      onChange={v => setField('subjectNamespace', v)}
+                      clearLabel="Leave unset"
+                    />
+                  </Field>
+                )}
 
                 <RuleSection
                   direction="ingress"
