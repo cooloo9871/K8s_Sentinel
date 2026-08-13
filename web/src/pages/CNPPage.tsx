@@ -154,7 +154,7 @@ function RuleSection({ direction, section, onChange, scope, namespace, clusterNa
       {section.rules.length === 0 ? (
         <div className="flex items-center justify-between">
           <p className="text-[11px] text-muted-foreground">
-            No {direction} rules — this direction is left out of the policy.
+            No rules — this direction is left out of the policy.
           </p>
           <Button variant="outline" size="sm" onClick={addRule}>+ Add rule</Button>
         </div>
@@ -169,12 +169,12 @@ function RuleSection({ direction, section, onChange, scope, namespace, clusterNa
                       <div key={i} className="flex flex-col gap-3 rounded-md border p-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium text-muted-foreground">Rule {i + 1}</span>
-                          {section.rules.length > 1 && (
-                            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                              onClick={() => removeRule(i)}>
-                              Remove
-                            </Button>
-                          )}
+                          {/* The last rule can go too: emptying a direction is how
+                              it is left out of the policy. */}
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => removeRule(i)}>
+                            Remove
+                          </Button>
                         </div>
   
                         <Field

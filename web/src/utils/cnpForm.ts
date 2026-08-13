@@ -135,11 +135,14 @@ export function emptyRule(): CNPRule {
   }
 }
 
+// Both directions start empty. Opening with a rule already in ingress would be
+// the form choosing a direction for the operator, and the choice is the first
+// thing a network policy is about.
 export function emptyForm(): CNPFormInput {
   return {
     name: '', scope: 'namespaced', namespace: '', comment: '',
     subject: [emptyLabel()], subjectNamespace: '',
-    ingress: { mode: 'whitelist', rules: [emptyRule()] },
+    ingress: emptySection(),
     egress: emptySection(),
   }
 }

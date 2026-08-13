@@ -242,7 +242,15 @@ describe('validateCNPForm', () => {
     expect(errors).toContain('Name is required')
     expect(errors).toContain('Namespace is required')
     expect(errors).toContain('Applies to needs a label or a namespace')
-    expect(errors).toContain('From needs a label or a namespace')
+    expect(errors).toContain('At least one rule is required')
+  })
+
+  // A new policy picks neither direction for the operator, so the form opens
+  // with both empty and the first thing done is choosing one.
+  it('opens with no rules in either direction', () => {
+    const blank = emptyForm()
+    expect(blank.ingress.rules).toEqual([])
+    expect(blank.egress.rules).toEqual([])
   })
 
   // A half-typed row selects nothing, which is the failure this form exists to
