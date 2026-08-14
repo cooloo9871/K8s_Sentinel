@@ -16,6 +16,7 @@ export interface DisplayEvent {
   arguments?: string
   parentBin?: string
   function?: string
+  hook?: string
   policyName?: string
   action?: string
   processUid?: number

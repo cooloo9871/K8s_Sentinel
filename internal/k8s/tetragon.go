@@ -21,7 +21,11 @@ import (
 // denials are synthesized into the same shape so that retention, alerting and
 // syslog forwarding all work off one stream. Source records the origin.
 type TetragonEvent struct {
-	Type       string  `json:"type"`   // "exec" | "kprobe" | "policy-deny"
+	// "exec" | "kprobe" | "tracepoint" | "uprobe" | "lsm" | "policy-deny".
+	// The four hook kinds are what a TracingPolicy can attach to; they differ
+	// in how the trigger point is named, and Function carries that name in one
+	// string whichever kind it is.
+	Type       string  `json:"type"`
 	Source     string  `json:"source"` // "" (Tetragon) | "cilium"
 	Time       string  `json:"time"`
 	NodeName   string  `json:"nodeName"`
@@ -61,11 +65,15 @@ func (e TetragonEvent) Blocked() bool {
 // IsSecurityEvent reports whether the event belongs in the security event
 // stream (persisted, alerted on, forwarded to syslog) as opposed to the raw
 // process-discovery stream.
-// Both origins carry a policy name by construction: kprobe events without one
+// Every origin carries a policy name by construction: hook events without one
 // come from the base sensor and belong to process discovery, and policy
 // denials are only synthesized when Hubble can name the denying policy.
 func (e TetragonEvent) IsSecurityEvent() bool {
-	return (e.Type == "kprobe" || e.Type == "policy-deny") && e.PolicyName != ""
+	switch e.Type {
+	case "kprobe", "tracepoint", "uprobe", "lsm", "policy-deny":
+		return e.PolicyName != ""
+	}
+	return false
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
@@ -228,6 +236,36 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		return evt, true
 	}
 
+	// The other hook kinds a TracingPolicy can attach to. Same process context
+	// and pipeline as a kprobe; only the naming of the trigger point differs,
+	// and Function carries it in one string so deduplication, filtering and the
+	// detail panel work identically. Their arguments are not decoded — every
+	// hook's args mean something different, and a generic dump is noise.
+	if tp := anyMap(raw, "process_tracepoint", "processTracepoint"); tp != nil {
+		evt.Type = "tracepoint"
+		fillProcessWithParentFallback(&evt, tp)
+		evt.Function = strings.Trim(anyStr(tp, "subsys")+"/"+anyStr(tp, "event"), "/")
+		evt.PolicyName = anyStr(tp, "policy_name", "policyName")
+		evt.Action = hookAction(anyStr(tp, "action"))
+		return evt, true
+	}
+	if up := anyMap(raw, "process_uprobe", "processUprobe"); up != nil {
+		evt.Type = "uprobe"
+		fillProcessWithParentFallback(&evt, up)
+		evt.Function = strings.Trim(anyStr(up, "path")+":"+anyStr(up, "symbol"), ":")
+		evt.PolicyName = anyStr(up, "policy_name", "policyName")
+		evt.Action = hookAction(anyStr(up, "action"))
+		return evt, true
+	}
+	if lsm := anyMap(raw, "process_lsm", "processLsm"); lsm != nil {
+		evt.Type = "lsm"
+		fillProcessWithParentFallback(&evt, lsm)
+		evt.Function = anyStr(lsm, "function_name", "functionName")
+		evt.PolicyName = anyStr(lsm, "policy_name", "policyName")
+		evt.Action = hookAction(anyStr(lsm, "action"))
+		return evt, true
+	}
+
 	// process_kprobe — triggered only by active TracingPolicies.
 	kp := anyMap(raw, "process_kprobe", "processKprobe")
 	if kp == nil {
@@ -235,19 +273,7 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	}
 
 	evt.Type = "kprobe"
-
-	fillProcess(&evt, anyMap(kp, "process"))
-	// If process has no pod context (e.g. execve before the new binary is tracked),
-	// fall back to parent which is the calling shell / container entrypoint.
-	if evt.Pod == "" {
-		var parentEvt TetragonEvent
-		fillProcess(&parentEvt, anyMap(kp, "parent"))
-		if parentEvt.Pod != "" {
-			evt.Namespace = parentEvt.Namespace
-			evt.Pod = parentEvt.Pod
-			evt.Container = parentEvt.Container
-		}
-	}
+	fillProcessWithParentFallback(&evt, kp)
 	evt.Function = anyStr(kp, "function_name", "functionName")
 	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
 
@@ -298,12 +324,7 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		}
 	}
 
-	action := anyStr(kp, "action")
-	if strings.Contains(strings.ToUpper(action), "SIGKILL") {
-		evt.Action = "kill"
-	} else {
-		evt.Action = "monitor"
-	}
+	evt.Action = hookAction(anyStr(kp, "action"))
 
 	// For execve kprobes the matching is on args[0] (the binary being executed),
 	// not on process.binary (which is the calling process, e.g. bash).
@@ -320,6 +341,38 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	}
 
 	return evt, true
+}
+
+// hookAction turns Tetragon's action string into this store's verb. SIGKILL
+// killed the process; OVERRIDE forced the call to return an error, which blocks
+// the operation without killing anything — both prevented something, and both
+// must read as blocked rather than as a pure observation.
+func hookAction(action string) string {
+	a := strings.ToUpper(action)
+	switch {
+	case strings.Contains(a, "SIGKILL"):
+		return "kill"
+	case strings.Contains(a, "OVERRIDE"):
+		return "deny"
+	default:
+		return "monitor"
+	}
+}
+
+// fillProcessWithParentFallback fills the process context, falling back to the
+// parent — the calling shell or container entrypoint — when the process itself
+// has no pod yet (e.g. execve before the new binary is tracked).
+func fillProcessWithParentFallback(evt *TetragonEvent, hook map[string]any) {
+	fillProcess(evt, anyMap(hook, "process"))
+	if evt.Pod == "" {
+		var parentEvt TetragonEvent
+		fillProcess(&parentEvt, anyMap(hook, "parent"))
+		if parentEvt.Pod != "" {
+			evt.Namespace = parentEvt.Namespace
+			evt.Pod = parentEvt.Pod
+			evt.Container = parentEvt.Container
+		}
+	}
 }
 
 func fillProcess(evt *TetragonEvent, proc map[string]any) {

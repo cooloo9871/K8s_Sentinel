@@ -17,18 +17,21 @@ const dedupWindowSecs = 30 // dedup window is fixed by design
 
 // Event is a persisted, deduplicated Tetragon kprobe event.
 type Event struct {
-	ID         string  `json:"id"`
-	Time       string  `json:"time"`
-	Count      int     `json:"count"`
-	Severity   string  `json:"severity"` // "warning" | "critical"
-	Namespace  string  `json:"namespace"`
-	Pod        string  `json:"pod"`
-	Container  string  `json:"container,omitempty"`
-	NodeName   string  `json:"nodeName,omitempty"`
-	Binary     string  `json:"binary,omitempty"`
-	Arguments  string  `json:"arguments,omitempty"`
-	ParentBin  string  `json:"parentBin,omitempty"`
-	Function   string  `json:"function,omitempty"`
+	ID        string `json:"id"`
+	Time      string `json:"time"`
+	Count     int    `json:"count"`
+	Severity  string `json:"severity"` // "warning" | "critical"
+	Namespace string `json:"namespace"`
+	Pod       string `json:"pod"`
+	Container string `json:"container,omitempty"`
+	NodeName  string `json:"nodeName,omitempty"`
+	Binary    string `json:"binary,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	ParentBin string `json:"parentBin,omitempty"`
+	Function  string `json:"function,omitempty"`
+	// Which hook kind fired: "kprobe" | "tracepoint" | "uprobe" | "lsm".
+	// Empty for policy denials synthesized from Hubble — those are not hooks.
+	Hook       string  `json:"hook,omitempty"`
 	PolicyName string  `json:"policyName,omitempty"`
 	Action     string  `json:"action,omitempty"`
 	ProcessUID *uint32 `json:"processUid,omitempty"`
@@ -240,6 +243,15 @@ func (s *Store) flush() {
 }
 
 // Add ingests a Tetragon event: dedup, insert newest-first, cap, persist.
+// hookOf names the hook kind for display. A synthesized policy denial is not a
+// hook, so it stays blank there.
+func hookOf(raw k8s.TetragonEvent) string {
+	if raw.Type == "policy-deny" {
+		return ""
+	}
+	return raw.Type
+}
+
 func (s *Store) Add(raw k8s.TetragonEvent) {
 	if !raw.IsSecurityEvent() {
 		return
@@ -301,6 +313,7 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 		Arguments:  raw.Arguments,
 		ParentBin:  raw.ParentBin,
 		Function:   raw.Function,
+		Hook:       hookOf(raw),
 		PolicyName: raw.PolicyName,
 		Action:     raw.Action,
 		ProcessUID: raw.ProcessUID,

@@ -29,8 +29,11 @@ function ruleType(fn: string): 'File' | 'Network' | 'Process' | 'Kernel' | null 
   if (!fn) return null
   // All three functions of a file rule: read/write, mmap, truncate.
   if (fn.includes('file_permission') || fn.includes('mmap_file') || fn.includes('path_truncate') ||
+      fn.includes('file_open') ||
       fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
-  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp') || fn.includes('inet_csk_accept') || fn.includes('deny')) return 'Network'
+  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp') || fn.includes('inet_csk_accept') ||
+      fn.includes('socket_connect') || fn.includes('socket_bind') ||
+      fn.includes('deny')) return 'Network'
   if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
   return 'Kernel'
 }
@@ -183,6 +186,9 @@ function DetailRow({ e, quarantined, onChanged }: {
   }
   if (e.policyName) items.push({ label: 'Policy',    value: e.policyName })
   if (e.function)   items.push({ label: 'Function',  value: e.function })
+  // Which hook kind the policy attached to — kprobe, tracepoint, uprobe, lsm.
+  // What the rule governs is the badge's job; this is the how.
+  if (e.hook)       items.push({ label: 'Hook',      value: e.hook })
   if (e.dropReason) items.push({ label: 'Drop Reason', value: e.dropReason })
   if (e.nodeName)   items.push({ label: 'Node',      value: e.nodeName })
   items.push({ label: 'Time', value: formatTWTime(e.time) })

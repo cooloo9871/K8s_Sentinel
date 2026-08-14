@@ -171,12 +171,13 @@ Graphs live pod network connections from Cilium Hubble flows.
 
 ### Security Events
 
-- Live stream of Tetragon kprobe events and Cilium policy denials; persisted across restarts
+- Live stream of Tetragon events and Cilium policy denials; persisted across restarts
+- **Every hook kind a TracingPolicy can attach to lands here** — kprobes, tracepoints, uprobes and LSM hooks. The trigger point shows in one Function field whichever kind it is (`tcp_connect`, `raw_syscalls/sys_enter`, `/usr/lib/libssl.so:SSL_write`, `file_open`), and the expanded detail names the hook kind. An LSM or kprobe **Override** action — the call forced to return an error — reads as Critical, the same as a Sigkill: both prevented something
 - Warning / Critical severity, with content-based deduplication over 30 seconds. The client-side port is collapsed for that comparison, so a pod retrying a denied destination accumulates a count rather than filling the list
 - A network denial names the workload that **attempted** the connection, the same way a process or file event names the pod that acted, and carries its containers. All of them are listed when a pod has several: they share one network namespace, so the flow cannot say which opened the connection
 - **Only policies that exist are ever named.** A drop Hubble cannot correlate is attributed by asking which of your policies govern that pod in that direction; if none match, no event is recorded rather than one naming nothing
 - Expand a row for the triggering file path, connection endpoints, process UID, policy name, drop reason and more
-- **Filters** — search by pod, several namespaces at once, and one panel for **Severity** (Warning, Critical) and **Rule** (Process, File, Network). Every group is multi-select, and nothing ticked in a group means no filter for that group
+- **Filters** — search by pod, several namespaces at once, and one panel for **Severity** (Warning, Critical) and **Rule** (Process, File, Network, Kernel — the last for kernel functions outside the other three). Every group is multi-select, and nothing ticked in a group means no filter for that group
 - **Quarantine this pod** on an expanded row — see [Quarantine](#quarantine). Every event from a contained pod shows a lock and offers no second button
 - **Pause / Resume** freezes the view while buffering new events with an unread count
 - **Export CSV**
