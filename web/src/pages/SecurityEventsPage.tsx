@@ -22,12 +22,17 @@ import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
 import { RelativeTime } from '../components/RelativeTime'
 
-function ruleType(fn: string): 'File' | 'Network' | 'Process' | null {
+// Every event with a function gets a type — an unrecognised kernel function is
+// classified as Kernel rather than left untyped, so no event is invisible to
+// the rule-type filter.
+function ruleType(fn: string): 'File' | 'Network' | 'Process' | 'Kernel' | null {
   if (!fn) return null
-  if (fn.includes('file_permission') || fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
+  // All three functions of a file rule: read/write, mmap, truncate.
+  if (fn.includes('file_permission') || fn.includes('mmap_file') || fn.includes('path_truncate') ||
+      fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
   if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp') || fn.includes('inet_csk_accept') || fn.includes('deny')) return 'Network'
   if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
-  return null
+  return 'Kernel'
 }
 
 function RuleTypeBadge({ fn }: { fn: string }) {
@@ -37,6 +42,7 @@ function RuleTypeBadge({ fn }: { fn: string }) {
     File: 'bg-orange-500/15 text-orange-700',
     Network: 'bg-blue-500/15 text-blue-700',
     Process: 'bg-purple-500/15 text-purple-700',
+    Kernel: 'bg-slate-500/15 text-slate-700',
   }
   return (
     <Badge className={`${styles[type]} text-[10px] font-medium`}>{type} Rule</Badge>
@@ -358,6 +364,7 @@ export function SecurityEventsPage() {
               { key: 'Process', label: 'Process' },
               { key: 'File', label: 'File' },
               { key: 'Network', label: 'Network' },
+              { key: 'Kernel', label: 'Kernel' },
             ],
           },
         ]} />
