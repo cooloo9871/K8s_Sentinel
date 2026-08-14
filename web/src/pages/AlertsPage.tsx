@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -185,6 +185,30 @@ export function AlertsPage() {
     } finally { setTesting(null) }
   }
 
+  // Creating and editing happen on a screen of their own — the list comes back
+  // on save or cancel, the same way the policy pages do it.
+  if (isAdmin && (showForm || editTarget)) {
+    return (
+      <>
+        <div className="mb-6">
+          <h4 className="text-xl font-semibold">
+            {editTarget ? `Edit ${editTarget.name}` : 'New Alert Rule'}
+          </h4>
+        </div>
+        <Card className="max-w-2xl">
+          <CardContent className="pt-4">
+            <RuleForm
+              initial={editTarget ?? EMPTY_RULE}
+              onSave={editTarget ? handleUpdate : handleCreate}
+              onCancel={() => { setShowForm(false); setEditTarget(null) }}
+              saving={saving}
+            />
+          </CardContent>
+        </Card>
+      </>
+    )
+  }
+
   return (
     <>
       <div className="mb-6 flex items-start justify-between">
@@ -192,72 +216,53 @@ export function AlertsPage() {
           <h4 className="text-xl font-semibold">Alerts</h4>
           <p className="text-sm text-muted-foreground">Send webhook notifications for Security Events and Admission Events.</p>
         </div>
-        {isAdmin && !showForm && (
-          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Rule</Button>
+        {isAdmin && (
+          <Button onClick={() => setShowForm(true)}>+ New Rule</Button>
         )}
       </div>
 
-      {isAdmin && showForm && !editTarget && (
-        <Card className="mb-6 border-primary/40">
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">New Alert Rule</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <RuleForm initial={EMPTY_RULE}              onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
-          </CardContent>
-        </Card>
-      )}
-
-      {rules.length === 0 && !showForm && (
+      {rules.length === 0 && (
         <p className="py-10 text-center text-sm text-muted-foreground">No alert rules configured.</p>
       )}
 
       <div className="flex flex-col gap-3">
         {rules.map(rule => (
           <Card key={rule.id} className={rule.enabled ? '' : 'opacity-60'}>
-            {isAdmin && editTarget?.id === rule.id ? (
-              <CardContent className="pt-4">
-                <RuleForm initial={editTarget}                  onSave={handleUpdate} onCancel={() => setEditTarget(null)} saving={saving} />
-              </CardContent>
-            ) : (
-              <>
-                <CardHeader className="border-b pb-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium text-sm">{rule.name}</span>
-                    <Badge variant={rule.enabled ? 'default' : 'secondary'} className="text-[10px]">
-                      {rule.enabled ? 'Enabled' : 'Disabled'}
-                    </Badge>
-                    {rule.severities.map(s => (
-                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
-                    ))}
-                  </div>
-                  {isAdmin && (
-                    <div className="ml-auto flex items-center gap-2 shrink-0">
-                      <Button variant="ghost" size="sm" className="h-7 text-xs"
-                        onClick={() => handleTest(rule)} disabled={testing === rule.id}>
-                        {testing === rule.id ? 'Sending...' : 'Test'}
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs"
-                        onClick={() => { setEditTarget(rule); setShowForm(false) }}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs"
-                        onClick={() => handleToggle(rule)}>
-                        {rule.enabled ? 'Disable' : 'Enable'}
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(rule)}>Delete</Button>
-                    </div>
-                  )}
-                </CardHeader>
-                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
-                  <p className="font-mono truncate" title={rule.webhookURL}>{rule.webhookURL}</p>
-                  <div className="flex gap-4">
-                    <span>Namespaces: {rule.namespaces.length ? rule.namespaces.join(', ') : 'all'}</span>
-                    <span>Policies: {rule.policies.length ? rule.policies.join(', ') : 'all'}</span>
-                    <span>Cooldown: {rule.cooldownMin ? `${rule.cooldownMin} min` : 'none'}</span>
-                  </div>
-                </CardContent>
-              </>
-            )}
+            <CardHeader className="border-b pb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-medium text-sm">{rule.name}</span>
+                <Badge variant={rule.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                  {rule.enabled ? 'Enabled' : 'Disabled'}
+                </Badge>
+                {rule.severities.map(s => (
+                  <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                ))}
+              </div>
+              {isAdmin && (
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs"
+                    onClick={() => handleTest(rule)} disabled={testing === rule.id}>
+                    {testing === rule.id ? 'Sending...' : 'Test'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs"
+                    onClick={() => { setEditTarget(rule); setShowForm(false) }}>Edit</Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs"
+                    onClick={() => handleToggle(rule)}>
+                    {rule.enabled ? 'Disable' : 'Enable'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(rule)}>Delete</Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+              <p className="font-mono truncate" title={rule.webhookURL}>{rule.webhookURL}</p>
+              <div className="flex gap-4">
+                <span>Namespaces: {rule.namespaces.length ? rule.namespaces.join(', ') : 'all'}</span>
+                <span>Policies: {rule.policies.length ? rule.policies.join(', ') : 'all'}</span>
+                <span>Cooldown: {rule.cooldownMin ? `${rule.cooldownMin} min` : 'none'}</span>
+              </div>
+            </CardContent>
           </Card>
         ))}
       </div>

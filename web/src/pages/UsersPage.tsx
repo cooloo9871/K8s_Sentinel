@@ -80,23 +80,15 @@ export function UsersPage() {
     } catch { toast.error('Failed to update password') }
   }
 
-  return (
-    <>
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h4 className="text-xl font-semibold">Users</h4>
-          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
+  // Creating happens on a screen of its own — the list comes back on save or
+  // cancel, the same way the policy pages do it.
+  if (showForm) {
+    return (
+      <>
+        <div className="mb-6">
+          <h4 className="text-xl font-semibold">New User</h4>
         </div>
-        {me?.role === 'admin' && (
-          <Button onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ New User'}</Button>
-        )}
-      </div>
-
-      {showForm && (
-        <Card className="mb-6 border-primary/40">
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">New User</CardTitle>
-          </CardHeader>
+        <Card className="max-w-2xl">
           <CardContent className="pt-4 flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
@@ -123,7 +115,24 @@ export function UsersPage() {
             </div>
           </CardContent>
         </Card>
-      )}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h4 className="text-xl font-semibold">Users</h4>
+          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
+        </div>
+        {me?.role === 'admin' && (
+          <Button onClick={() => {
+            setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+            setShowForm(true)
+          }}>+ New User</Button>
+        )}
+      </div>
 
       <div className="flex flex-col gap-2">
         {users.map(u => (

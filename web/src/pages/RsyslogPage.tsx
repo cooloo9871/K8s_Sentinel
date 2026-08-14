@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -191,6 +191,30 @@ export function RsyslogPage() {
     } finally { setTesting(null) }
   }
 
+  // Creating and editing happen on a screen of their own — the list comes back
+  // on save or cancel, the same way the policy pages do it.
+  if (isAdmin && (showForm || editTarget)) {
+    return (
+      <>
+        <div className="mb-6">
+          <h4 className="text-xl font-semibold">
+            {editTarget ? `Edit ${editTarget.name}` : 'New rsyslog Config'}
+          </h4>
+        </div>
+        <Card className="max-w-2xl">
+          <CardContent className="pt-4">
+            <ConfigForm
+              initial={editTarget ?? EMPTY}
+              onSave={editTarget ? handleUpdate : handleCreate}
+              onCancel={() => { setShowForm(false); setEditTarget(null) }}
+              saving={saving}
+            />
+          </CardContent>
+        </Card>
+      </>
+    )
+  }
+
   return (
     <>
       <div className="mb-6 flex items-start justify-between">
@@ -198,73 +222,53 @@ export function RsyslogPage() {
           <h4 className="text-xl font-semibold">Syslog</h4>
           <p className="text-sm text-muted-foreground">Forward Security Events and Admission Events to syslog servers.</p>
         </div>
-        {isAdmin && !showForm && (
-          <Button onClick={() => { setShowForm(true); setEditTarget(null) }}>+ New Config</Button>
+        {isAdmin && (
+          <Button onClick={() => setShowForm(true)}>+ New Config</Button>
         )}
       </div>
 
-      {isAdmin && showForm && !editTarget && (
-        <Card className="mb-6 border-primary/40">
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-sm font-medium">New rsyslog Config</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <ConfigForm initial={EMPTY} onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
-          </CardContent>
-        </Card>
-      )}
-
-      {configs.length === 0 && !showForm && (
+      {configs.length === 0 && (
         <p className="py-10 text-center text-sm text-muted-foreground">No rsyslog configs configured.</p>
       )}
 
       <div className="flex flex-col gap-3">
         {configs.map(cfg => (
           <Card key={cfg.id} className={cfg.enabled ? '' : 'opacity-60'}>
-            {isAdmin && editTarget?.id === cfg.id ? (
-              <CardContent className="pt-4">
-                <ConfigForm initial={editTarget} onSave={handleUpdate}
-                  onCancel={() => setEditTarget(null)} saving={saving} />
-              </CardContent>
-            ) : (
-              <>
-                <CardHeader className="border-b pb-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium text-sm">{cfg.name}</span>
-                    <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
-                      {cfg.enabled ? 'Enabled' : 'Disabled'}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
-                    {cfg.severities.map(s => (
-                      <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
-                    ))}
-                  </div>
-                  {isAdmin && (
-                    <div className="ml-auto flex items-center gap-2 shrink-0">
-                      <Button variant="ghost" size="sm" className="h-7 text-xs"
-                        onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
-                        {testing === cfg.id ? 'Sending...' : 'Test'}
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs"
-                        onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs"
-                        onClick={() => handleToggle(cfg)}>
-                        {cfg.enabled ? 'Disable' : 'Enable'}
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(cfg)}>Delete</Button>
-                    </div>
-                  )}
-                </CardHeader>
-                <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
-                  <p className="font-mono">{cfg.host}:{cfg.port}</p>
-                  <div className="flex gap-4">
-                    <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
-                    <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
-                  </div>
-                </CardContent>
-              </>
-            )}
+            <CardHeader className="border-b pb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-medium text-sm">{cfg.name}</span>
+                <Badge variant={cfg.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                  {cfg.enabled ? 'Enabled' : 'Disabled'}
+                </Badge>
+                <Badge variant="outline" className="text-[10px] uppercase">{cfg.protocol}</Badge>
+                {cfg.severities.map(s => (
+                  <Badge key={s} variant={s === 'critical' ? 'destructive' : 'outline'} className="text-[10px] capitalize">{s}</Badge>
+                ))}
+              </div>
+              {isAdmin && (
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs"
+                    onClick={() => handleTest(cfg)} disabled={testing === cfg.id}>
+                    {testing === cfg.id ? 'Sending...' : 'Test'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs"
+                    onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs"
+                    onClick={() => handleToggle(cfg)}>
+                    {cfg.enabled ? 'Disable' : 'Enable'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(cfg)}>Delete</Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="pt-3 text-xs text-muted-foreground flex flex-col gap-1">
+              <p className="font-mono">{cfg.host}:{cfg.port}</p>
+              <div className="flex gap-4">
+                <span>Namespaces: {cfg.namespaces.length ? cfg.namespaces.join(', ') : 'all'}</span>
+                <span>Policies: {cfg.policies.length ? cfg.policies.join(', ') : 'all'}</span>
+              </div>
+            </CardContent>
           </Card>
         ))}
       </div>
