@@ -111,7 +111,7 @@ export function PolicyEditPage() {
       try {
         const payload = { source: 'form' as const, form: formValues, action }
         if (isNew) await policyApi.create(payload)
-        else await policyApi.update(name!, payload)
+        else await policyApi.update(name!, payload, namespace)
         toast.success('Policy applied')
         navigate('/policies/tracing')
       } catch (e) {
@@ -137,7 +137,7 @@ export function PolicyEditPage() {
       try {
         const payload = { source: 'yaml' as const, rawYaml: yamlContent }
         if (isNew) await policyApi.create(payload)
-        else await policyApi.update(name!, payload)
+        else await policyApi.update(name!, payload, namespace)
         toast.success('Policy applied')
         navigate('/policies/tracing')
       } catch (e) {

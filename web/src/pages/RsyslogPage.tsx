@@ -113,7 +113,7 @@ function ConfigForm({
       </div>
 
       <div className="flex justify-end gap-2 pt-1">
-        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button size="sm" onClick={() => onSave(form)}
           disabled={saving || !form.name.trim() || !form.host.trim()}>
           {saving ? 'Saving...' : 'Save'}
@@ -129,8 +129,9 @@ export function RsyslogPage() {
   const toast = useToast()
 
   const [configs, setConfigs] = useState<RsyslogConfig[]>([])
-  const [showForm, setShowForm] = useState(false)
-  const [editTarget, setEditTarget] = useState<RsyslogConfig | null>(null)
+  // Which screen is up: the list (null), the create form ('new'), or the edit
+  // form for one config. One value, so the two forms cannot both be "open".
+  const [formTarget, setFormTarget] = useState<RsyslogConfig | 'new' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
@@ -146,18 +147,18 @@ export function RsyslogPage() {
     try {
       await rsyslogApi.create(form)
       toast.success('rsyslog config created.')
-      setShowForm(false); load()
+      setFormTarget(null); load()
     } catch { toast.error('Failed to create rsyslog config') }
     finally { setSaving(false) }
   }
 
   const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
-    if (!editTarget) return
+    if (!formTarget || formTarget === 'new') return
     setSaving(true)
     try {
-      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
+      await rsyslogApi.update(formTarget.id, { ...form, id: formTarget.id })
       toast.success('rsyslog config updated.')
-      setEditTarget(null); load()
+      setFormTarget(null); load()
     } catch { toast.error('Failed to update rsyslog config') }
     finally { setSaving(false) }
   }
@@ -192,21 +193,22 @@ export function RsyslogPage() {
   }
 
   // Creating and editing happen on a screen of their own — the list comes back
-  // on save or cancel, the same way the policy pages do it.
-  if (isAdmin && (showForm || editTarget)) {
+  // on save or cancel, the same way the Network Policy editor does it.
+  if (isAdmin && formTarget) {
+    const editing = formTarget === 'new' ? null : formTarget
     return (
       <>
         <div className="mb-6">
           <h4 className="text-xl font-semibold">
-            {editTarget ? `Edit ${editTarget.name}` : 'New rsyslog Config'}
+            {editing ? `Edit ${editing.name}` : 'New rsyslog Config'}
           </h4>
         </div>
         <Card className="max-w-2xl">
           <CardContent className="pt-4">
             <ConfigForm
-              initial={editTarget ?? EMPTY}
-              onSave={editTarget ? handleUpdate : handleCreate}
-              onCancel={() => { setShowForm(false); setEditTarget(null) }}
+              initial={editing ?? EMPTY}
+              onSave={editing ? handleUpdate : handleCreate}
+              onCancel={() => setFormTarget(null)}
               saving={saving}
             />
           </CardContent>
@@ -223,7 +225,7 @@ export function RsyslogPage() {
           <p className="text-sm text-muted-foreground">Forward Security Events and Admission Events to syslog servers.</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setShowForm(true)}>+ New Config</Button>
+          <Button onClick={() => setFormTarget('new')}>+ New Config</Button>
         )}
       </div>
 
@@ -252,7 +254,7 @@ export function RsyslogPage() {
                     {testing === cfg.id ? 'Sending...' : 'Test'}
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
-                    onClick={() => { setEditTarget(cfg); setShowForm(false) }}>Edit</Button>
+                    onClick={() => setFormTarget(cfg)}>Edit</Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
                     onClick={() => handleToggle(cfg)}>
                     {cfg.enabled ? 'Disable' : 'Enable'}

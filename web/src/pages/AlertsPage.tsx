@@ -105,7 +105,7 @@ function RuleForm({
           placeholder="monitor-all-exec, monitor-all-file" />
       </div>
       <div className="flex justify-end gap-2 pt-1">
-        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button size="sm" onClick={() => onSave(form)} disabled={saving || !form.name.trim() || !form.webhookURL.trim()}>
           {saving ? 'Saving...' : 'Save'}
         </Button>
@@ -120,8 +120,9 @@ export function AlertsPage() {
   const toast = useToast()
 
   const [rules, setRules] = useState<AlertRule[]>([])
-  const [showForm, setShowForm] = useState(false)
-  const [editTarget, setEditTarget] = useState<AlertRule | null>(null)
+  // Which screen is up: the list (null), the create form ('new'), or the edit
+  // form for one rule. One value, so the two forms cannot both be "open".
+  const [formTarget, setFormTarget] = useState<AlertRule | 'new' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AlertRule | null>(null)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
@@ -139,19 +140,19 @@ export function AlertsPage() {
     try {
       await alertsApi.create(form)
       toast.success('Alert rule created.')
-      setShowForm(false)
+      setFormTarget(null)
       load()
     } catch { toast.error('Failed to create alert rule') }
     finally { setSaving(false) }
   }
 
   const handleUpdate = async (form: Omit<AlertRule, 'id'>) => {
-    if (!editTarget) return
+    if (!formTarget || formTarget === 'new') return
     setSaving(true)
     try {
-      await alertsApi.update(editTarget.id, { ...form, id: editTarget.id })
+      await alertsApi.update(formTarget.id, { ...form, id: formTarget.id })
       toast.success('Alert rule updated.')
-      setEditTarget(null)
+      setFormTarget(null)
       load()
     } catch { toast.error('Failed to update alert rule') }
     finally { setSaving(false) }
@@ -186,21 +187,22 @@ export function AlertsPage() {
   }
 
   // Creating and editing happen on a screen of their own — the list comes back
-  // on save or cancel, the same way the policy pages do it.
-  if (isAdmin && (showForm || editTarget)) {
+  // on save or cancel, the same way the Network Policy editor does it.
+  if (isAdmin && formTarget) {
+    const editing = formTarget === 'new' ? null : formTarget
     return (
       <>
         <div className="mb-6">
           <h4 className="text-xl font-semibold">
-            {editTarget ? `Edit ${editTarget.name}` : 'New Alert Rule'}
+            {editing ? `Edit ${editing.name}` : 'New Alert Rule'}
           </h4>
         </div>
         <Card className="max-w-2xl">
           <CardContent className="pt-4">
             <RuleForm
-              initial={editTarget ?? EMPTY_RULE}
-              onSave={editTarget ? handleUpdate : handleCreate}
-              onCancel={() => { setShowForm(false); setEditTarget(null) }}
+              initial={editing ?? EMPTY_RULE}
+              onSave={editing ? handleUpdate : handleCreate}
+              onCancel={() => setFormTarget(null)}
               saving={saving}
             />
           </CardContent>
@@ -217,7 +219,7 @@ export function AlertsPage() {
           <p className="text-sm text-muted-foreground">Send webhook notifications for Security Events and Admission Events.</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setShowForm(true)}>+ New Rule</Button>
+          <Button onClick={() => setFormTarget('new')}>+ New Rule</Button>
         )}
       </div>
 
@@ -245,7 +247,7 @@ export function AlertsPage() {
                     {testing === rule.id ? 'Sending...' : 'Test'}
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
-                    onClick={() => { setEditTarget(rule); setShowForm(false) }}>Edit</Button>
+                    onClick={() => setFormTarget(rule)}>Edit</Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
                     onClick={() => handleToggle(rule)}>
                     {rule.enabled ? 'Disable' : 'Enable'}

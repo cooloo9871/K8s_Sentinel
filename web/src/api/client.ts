@@ -28,8 +28,12 @@ export const policyApi = {
   create: (payload: CreatePolicyPayload): Promise<void> =>
     api.post('/policies', payload),
 
-  update: (name: string, payload: CreatePolicyPayload): Promise<void> =>
-    api.put(`/policies/${name}`, payload),
+  // The namespace the policy opened from is pinned on the request ("" for a
+  // cluster-scoped one), so the server can refuse an edit that renames the
+  // policy, moves it, or switches its kind — each would create a copy and
+  // leave the original in place.
+  update: (name: string, payload: CreatePolicyPayload, namespace?: string): Promise<void> =>
+    api.put(`/policies/${name}`, payload, { params: { namespace: namespace ?? '' } }),
 
   delete: (name: string, namespace?: string): Promise<void> =>
     api.delete(`/policies/${name}`, { params: { namespace } }),
@@ -296,6 +300,12 @@ export const cnpApi = {
     api.get('/cnp').then((r) => r.data),
   apply: (rawYaml: string): Promise<void> =>
     api.post('/cnp', { rawYaml }),
+  // An edit goes to the named route so the server can refuse a manifest that
+  // renames the policy, moves it, or switches its kind — each would create a
+  // copy and leave the original in place. A create has nothing to agree with
+  // and POSTs.
+  update: (name: string, namespace: string, scope: string, rawYaml: string): Promise<void> =>
+    api.put(`/cnp/${name}`, { rawYaml }, { params: { namespace, scope } }),
   delete: (name: string, scope: string, namespace: string): Promise<void> =>
     api.delete(`/cnp/${name}`, { params: { scope, namespace } }),
 }

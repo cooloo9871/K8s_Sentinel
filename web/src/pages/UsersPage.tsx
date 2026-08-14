@@ -20,6 +20,7 @@ export function UsersPage() {
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [creating, setCreating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   // Change password dialog
@@ -52,14 +53,22 @@ export function UsersPage() {
     } catch { toast.error('Failed to update session timeout') }
   }
 
+  // The one place the form closes, so the typed password never outlives it —
+  // cancelling must not leave credentials sitting in component state.
+  const closeForm = () => {
+    setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+  }
+
   const handleCreate = async () => {
-    if (!newUsername.trim() || !newPassword.trim()) return
+    if (!newUsername.trim() || !newPassword.trim() || creating) return
+    setCreating(true)
     try {
       await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
       toast.success(`User "${newUsername.trim()}" created.`)
-      setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+      closeForm()
       load()
     } catch { toast.error('Failed to create user') }
+    finally { setCreating(false) }
   }
 
   const handleDelete = async () => {
@@ -81,7 +90,7 @@ export function UsersPage() {
   }
 
   // Creating happens on a screen of its own — the list comes back on save or
-  // cancel, the same way the policy pages do it.
+  // cancel, the same way the Network Policy editor does it.
   if (showForm) {
     return (
       <>
@@ -110,8 +119,10 @@ export function UsersPage() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleCreate} disabled={!newUsername.trim() || !newPassword.trim()}>Create</Button>
+              <Button variant="outline" size="sm" onClick={closeForm} disabled={creating}>Cancel</Button>
+              <Button size="sm" onClick={handleCreate} disabled={creating || !newUsername.trim() || !newPassword.trim()}>
+                {creating ? 'Creating...' : 'Create'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -127,10 +138,7 @@ export function UsersPage() {
           <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
         </div>
         {me?.role === 'admin' && (
-          <Button onClick={() => {
-            setNewUsername(''); setNewPassword(''); setNewRole('viewer')
-            setShowForm(true)
-          }}>+ New User</Button>
+          <Button onClick={() => setShowForm(true)}>+ New User</Button>
         )}
       </div>
 

@@ -428,7 +428,8 @@ export function CNPPage() {
     if (!canApply) return
     setSaving(true)
     try {
-      await cnpApi.apply(outgoingYaml)
+      if (editing) await cnpApi.update(editing.name, editing.namespace, editing.scope, outgoingYaml)
+      else await cnpApi.apply(outgoingYaml)
       toast.success(editing ? 'Network policy updated.' : 'Network policy created.')
       setEditorOpen(false)
       load()

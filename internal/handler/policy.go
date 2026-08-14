@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"sigs.k8s.io/yaml"
@@ -93,7 +95,42 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 			return
 		}
 
+		// The URL says which policy is being edited; the namespace it opened
+		// from rides in the query ("" for a cluster-scoped one). A manifest or
+		// form that renames the policy, moves it, or switches it between
+		// TracingPolicy and TracingPolicyNamespaced would create a copy and
+		// leave the original in place — while the UI said the edit was saved.
+		urlName := chi.URLParam(r, "name")
+		wantNs, nsPinned := "", false
+		if v, ok := r.URL.Query()["namespace"]; ok {
+			nsPinned = true
+			if len(v) > 0 {
+				wantNs = v[0]
+			}
+		}
+
 		if req.Source == "yaml" {
+			if !checkManifestName(w, r, req.RawYAML) {
+				return
+			}
+			var manifest struct {
+				Kind     string `json:"kind"`
+				Metadata struct {
+					Namespace string `json:"namespace"`
+				} `json:"metadata"`
+			}
+			if nsPinned && yaml.Unmarshal([]byte(req.RawYAML), &manifest) == nil {
+				if manifest.Kind != "" && (manifest.Kind == "TracingPolicyNamespaced") != (wantNs != "") {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
+						"manifest kind %s does not match the policy being edited — changing it would leave the original in place; create a new policy instead", manifest.Kind)})
+					return
+				}
+				if manifest.Kind == "TracingPolicyNamespaced" && manifest.Metadata.Namespace != wantNs {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
+						"manifest is in namespace %q but this edits %q — moving would leave the original in place; create a new policy instead", manifest.Metadata.Namespace, wantNs)})
+					return
+				}
+			}
 			if err := store.ApplyRaw(r.Context(), req.RawYAML, ""); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
@@ -104,6 +141,16 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 
 		if req.Form == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "form required"})
+			return
+		}
+		if got := strings.TrimSpace(req.Form.Name); got != "" && got != urlName {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
+				"form names the policy %q but this edits %q — renaming would leave the original in place; create a new policy instead", got, urlName)})
+			return
+		}
+		if nsPinned && strings.TrimSpace(req.Form.Namespace) != wantNs {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
+				"form puts the policy in namespace %q but this edits %q — moving would leave the original in place; create a new policy instead", req.Form.Namespace, wantNs)})
 			return
 		}
 		action := req.Action

@@ -2,9 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"sigs.k8s.io/yaml"
 
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
@@ -62,6 +64,34 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 		}
 		if !checkManifestName(w, r, body.RawYaml) {
 			return
+		}
+		// Renaming is refused above; moving does the same damage sideways, and
+		// so does switching the kind. An edit sends the namespace and scope the
+		// policy opened from — a manifest saying otherwise would create a copy
+		// elsewhere and leave the original in place, while the UI said the edit
+		// was saved.
+		var manifest struct {
+			Kind     string `json:"kind"`
+			Metadata struct {
+				Namespace string `json:"namespace"`
+			} `json:"metadata"`
+		}
+		if yaml.Unmarshal([]byte(body.RawYaml), &manifest) == nil {
+			if want := r.URL.Query().Get("namespace"); want != "" {
+				if got := manifest.Metadata.Namespace; got != "" && got != want {
+					writeError(w, http.StatusBadRequest, fmt.Sprintf(
+						"manifest is in namespace %q but this edits %q — moving would leave the original in place; create a new policy instead", got, want))
+					return
+				}
+			}
+			if want := r.URL.Query().Get("scope"); want != "" && manifest.Kind != "" {
+				gotCluster := manifest.Kind == "CiliumClusterwideNetworkPolicy"
+				if gotCluster != (want == "cluster") {
+					writeError(w, http.StatusBadRequest, fmt.Sprintf(
+						"manifest kind %s does not match the policy being edited — changing it would leave the original in place; create a new policy instead", manifest.Kind))
+					return
+				}
+			}
 		}
 		if err := store.ApplyCNPRaw(r.Context(), body.RawYaml, claimsFromCtx(r).Username); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
