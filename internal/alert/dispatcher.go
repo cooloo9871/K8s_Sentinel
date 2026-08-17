@@ -46,6 +46,12 @@ type WebhookPayload struct {
 	DropReason  string            `json:"dropReason,omitempty"`
 }
 
+// ruleType labels the alert with what the rule governs. Content first — a
+// decoded destination or file path says it outright — then the function name
+// for process hooks. The rest is Kernel: a raw tracepoint or an undecoded LSM
+// hook is not a process rule, and labelling it one sent readers hunting for an
+// execution that never happened. Kept in step with the UI's classifier
+// (web/src/utils/ruleType.ts).
 func ruleType(p WebhookPayload) string {
 	if p.NetDest != "" || p.NetSrc != "" {
 		return "Network Rule"
@@ -53,7 +59,11 @@ func ruleType(p WebhookPayload) string {
 	if p.FilePath != "" {
 		return "File Rule"
 	}
-	return "Process Rule"
+	if strings.Contains(p.Function, "execve") || strings.Contains(p.Function, "bprm") ||
+		p.Function == "" {
+		return "Process Rule"
+	}
+	return "Kernel Rule"
 }
 
 func buildSlackText(p WebhookPayload) string {
