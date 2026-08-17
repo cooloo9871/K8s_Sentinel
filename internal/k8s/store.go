@@ -544,6 +544,15 @@ func (s *Store) ApplyRaw(ctx context.Context, rawYAML string, createdBy string) 
 		return fmt.Errorf("unmarshal YAML: %w", err)
 	}
 
+	// The YAML editor shows the object as the cluster returned it, so an edited
+	// manifest carries server-owned metadata. Create refuses a resourceVersion
+	// outright — before the AlreadyExists that routes to Update — so without
+	// this an edit could never save, while the same YAML passed kubectl edit.
+	// The update paths below re-read the current resourceVersion themselves.
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	obj.SetManagedFields(nil)
+
 	name := obj.GetName()
 	ns := obj.GetNamespace()
 
