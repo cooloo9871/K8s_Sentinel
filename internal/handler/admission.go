@@ -5,12 +5,32 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
 )
+
+var auditReject struct {
+	mu   sync.Mutex
+	last time.Time
+}
+
+func logAuditReject() {
+	auditReject.mu.Lock()
+	defer auditReject.mu.Unlock()
+	if time.Since(auditReject.last) < time.Minute {
+		return
+	}
+	auditReject.last = time.Now()
+	log.Printf("audit-webhook: rejected a request whose bearer token is missing or wrong — " +
+		"AUDIT_WEBHOOK_TOKEN is set here, so the kube-apiserver's audit-webhook config " +
+		"must carry the same value in its user token (see docs/audit-webhook.md); " +
+		"its audit events are NOT being recorded")
+}
 
 // admissionWebhook receives K8s audit events from the kube-apiserver audit webhook.
 // Only VAP violation events (message contains "ValidatingAdmissionPolicy") are stored.
@@ -23,6 +43,13 @@ func admissionWebhook(store *admission.Store, token string) http.HandlerFunc {
 		if token != "" {
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+				// Say what is being dropped and why. The likeliest caller is a
+				// kube-apiserver whose audit-webhook config is missing the
+				// token — without this line, its events silently stop and the
+				// access log shows only a bare 401. Throttled: the apiserver
+				// retries batches every few seconds, and one line a minute
+				// carries the same information.
+				logAuditReject()
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
