@@ -564,6 +564,32 @@ function parseExpressionToHostAccessPart(expr: string): HostAccessCheckType | nu
   return null
 }
 
+// specForCompare renders a spec for comparison against a regenerated one,
+// dropping the values the kube-apiserver defaults on persist — matchPolicy:
+// Equivalent, empty selectors, per-rule scope "*". The builder never writes
+// those, the cluster always returns them, and a rebuild-save gets them
+// defaulted right back — so they are not information the builder can lose.
+// Only the exact default values are dropped: an operator's explicit
+// non-default (matchPolicy: Exact) is a real difference a rebuild would
+// erase, and still forces the YAML editor.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function specForCompare(spec: any): string {
+  const copy = JSON.parse(JSON.stringify(spec ?? {}))
+  const emptyObj = (v: unknown) => typeof v === 'object' && v !== null && Object.keys(v).length === 0
+  for (const mc of [copy.matchConstraints, copy.matchResources]) {
+    if (!mc) continue
+    if (mc.matchPolicy === 'Equivalent') delete mc.matchPolicy
+    if (emptyObj(mc.namespaceSelector)) delete mc.namespaceSelector
+    if (emptyObj(mc.objectSelector)) delete mc.objectSelector
+    for (const rules of [mc.resourceRules, mc.excludeResourceRules]) {
+      for (const r of rules ?? []) {
+        if (r.scope === '*') delete r.scope
+      }
+    }
+  }
+  return yaml.dump(copy, { sortKeys: true })
+}
+
 // Exported for its tests.
 export function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType; applyTo: LabelApplyTo
@@ -636,7 +662,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       result.name, ruleType, result.labelRules, imageRules, replicaRules,
       applyTo, resourceLimitRules, securityContextRule, hostAccessRule,
     )) as Record<string, unknown> | undefined
-    if (!regen || yaml.dump(regen.spec, { sortKeys: true }) !== yaml.dump(doc.spec, { sortKeys: true })) {
+    if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
       return null
     }
     return result
@@ -673,7 +699,7 @@ export function tryParseBuilderBinding(rawYaml: string): {
     const regen = yaml.load(generateBindingYaml(
       result.name, result.policyName, result.namespace, result.actions,
     )) as Record<string, unknown> | undefined
-    if (!regen || yaml.dump(regen.spec, { sortKeys: true }) !== yaml.dump(doc.spec, { sortKeys: true })) {
+    if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
       return null
     }
     return result
