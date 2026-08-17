@@ -1,13 +1,5 @@
 import type { DisplayEvent } from '../layout/SecurityEventsProvider'
-
-function ruleType(fn: string): string {
-  // Keep in step with the badge on the Security Events page: a Cilium policy
-  // denial (cilium-egress-deny, cilium-ingress-deny) is a network event, and was
-  // being exported as "Process".
-  if (fn.includes('tcp_connect') || fn.includes('deny')) return 'Network'
-  if (fn.includes('security_file') || fn.includes('security_path')) return 'File'
-  return 'Process'
-}
+import { ruleType } from './ruleType'
 
 function userLabel(uid: number | undefined): string {
   if (uid === undefined) return ''
@@ -23,7 +15,7 @@ function toRow(e: DisplayEvent): string[] {
   return [
     e.time,
     e.severity.toUpperCase(),
-    ruleType(e.function ?? ''),
+    ruleType(e.function ?? '') ?? '',
     e.namespace,
     e.pod + (e.container ? ` / ${e.container}` : ''),
     e.binary ?? '',

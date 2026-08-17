@@ -21,22 +21,7 @@ import { useAuth } from '../layout/AuthContext'
 import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
 import { RelativeTime } from '../components/RelativeTime'
-
-// Every event with a function gets a type — an unrecognised kernel function is
-// classified as Kernel rather than left untyped, so no event is invisible to
-// the rule-type filter.
-function ruleType(fn: string): 'File' | 'Network' | 'Process' | 'Kernel' | null {
-  if (!fn) return null
-  // All three functions of a file rule: read/write, mmap, truncate.
-  if (fn.includes('file_permission') || fn.includes('mmap_file') || fn.includes('path_truncate') ||
-      fn.includes('file_open') ||
-      fn.includes('sys_read') || fn.includes('sys_write') || fn.includes('sys_open')) return 'File'
-  if (fn.includes('tcp_connect') || fn.includes('tcp_sendmsg') || fn.includes('udp') || fn.includes('inet_csk_accept') ||
-      fn.includes('socket_connect') || fn.includes('socket_bind') ||
-      fn.includes('deny')) return 'Network'
-  if (fn.includes('execve') || fn.includes('bprm')) return 'Process'
-  return 'Kernel'
-}
+import { ruleType } from '../utils/ruleType'
 
 function RuleTypeBadge({ fn }: { fn: string }) {
   const type = ruleType(fn)
