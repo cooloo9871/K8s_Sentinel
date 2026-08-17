@@ -26,22 +26,29 @@ func logAuditReject() {
 		return
 	}
 	auditReject.last = time.Now()
-	log.Printf("audit-webhook: rejected a request whose bearer token is missing or wrong — " +
+	log.Printf("audit-webhook: rejected a request whose token is missing or wrong — " +
 		"AUDIT_WEBHOOK_TOKEN is set here, so the kube-apiserver's audit-webhook config " +
-		"must carry the same value in its user token (see docs/audit-webhook.md); " +
-		"its audit events are NOT being recorded")
+		"must carry the same value at the end of its server URL, " +
+		"e.g. server: http://<sentinel>/api/admission-events/webhook/<token> " +
+		"(see docs/audit-webhook.md); its audit events are NOT being recorded")
 }
 
 // admissionWebhook receives K8s audit events from the kube-apiserver audit webhook.
 // Only VAP violation events (message contains "ValidatingAdmissionPolicy") are stored.
 func admissionWebhook(store *admission.Store, token string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// The audit-webhook kubeconfig carries the same token in its user entry,
-		// and the apiserver sends it as a bearer token. Compared in constant
+		// The token arrives as the webhook URL's last path segment (lifted into
+		// X-Audit-Webhook-Token before logging) — the one place a kubeconfig can
+		// reliably carry a secret to a plain-HTTP server, because client-go
+		// silently refuses to send bearer tokens over http. A bearer token is
+		// accepted too, for a Sentinel served over TLS. Compared in constant
 		// time: a timing oracle on a secret-guarding check is the classic way to
 		// leak it byte by byte.
 		if token != "" {
-			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			got := r.Header.Get("X-Audit-Webhook-Token")
+			if got == "" {
+				got = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			}
 			if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
 				// Say what is being dropped and why. The likeliest caller is a
 				// kube-apiserver whose audit-webhook config is missing the

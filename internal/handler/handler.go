@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -36,6 +37,8 @@ type Config struct {
 // New builds the HTTP handler tree.
 func New(cfg Config) http.Handler {
 	r := chi.NewRouter()
+	// Before the access logger, so the token never reaches the log.
+	r.Use(liftWebhookToken)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
@@ -129,6 +132,34 @@ func New(cfg Config) http.Handler {
 	})
 
 	return r
+}
+
+// webhookPath is the audit webhook route; a token may ride as one extra path
+// segment.
+const webhookPath = "/api/admission-events/webhook"
+
+// liftWebhookToken moves a token sent as the webhook URL's last path segment
+// into a header and rewrites the path to the plain route. In the URL because
+// that is the one place a kubeconfig can reliably carry a secret to a plain-
+// HTTP server — client-go silently refuses to send bearer tokens over http.
+// Lifted before the access logger so the secret never reaches the log, and
+// before routing so one route serves both spellings.
+func liftWebhookToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if seg, ok := strings.CutPrefix(r.URL.Path, webhookPath+"/"); ok &&
+			seg != "" && !strings.Contains(seg, "/") {
+			r.Header.Set("X-Audit-Webhook-Token", seg)
+			r.URL.Path = webhookPath
+			r.URL.RawPath = ""
+			// The access logger prints the raw RequestURI, not the parsed path —
+			// left alone, it would print the token this rewrite exists to hide.
+			r.RequestURI = webhookPath
+			if r.URL.RawQuery != "" {
+				r.RequestURI += "?" + r.URL.RawQuery
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

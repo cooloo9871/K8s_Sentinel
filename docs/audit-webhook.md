@@ -71,11 +71,8 @@ Give Sentinel the token as an environment variable, in the container spec of
               key: token
 ```
 
-And put the same value in the audit-webhook kubeconfig — the apiserver sends it
-as a bearer token. The complete file, so the nesting cannot go wrong: the token
-lives under `user:`, one level below the entry's `name:`. A token placed at the
-wrong level is not an error — kubeconfig parsing silently ignores unknown
-fields, the apiserver sends no token at all, and every delivery is rejected:
+Then put the same value at the **end of the server URL** in the audit-webhook
+kubeconfig:
 
 ```yaml
 # /etc/kubernetes/audit-webhook.yaml
@@ -84,11 +81,9 @@ kind: Config
 clusters:
   - name: sentinel
     cluster:
-      server: http://<sentinel-clusterip>/api/admission-events/webhook
+      server: http://<sentinel-clusterip>/api/admission-events/webhook/<the same value>
 users:
   - name: sentinel
-    user:
-      token: <the same value>
 contexts:
   - name: default
     context:
@@ -96,6 +91,13 @@ contexts:
       user: sentinel
 current-context: default
 ```
+
+In the URL, not as a kubeconfig `user.token` — **client-go silently refuses to
+send bearer tokens to a plain-HTTP server**. No error is raised anywhere: the
+apiserver just posts without the token and every delivery is rejected. The URL
+is sent as-is, so the token always arrives; Sentinel strips it before access
+logging, so it does not end up in its own logs. (A `user.token` does work if
+Sentinel is served over TLS — the endpoint accepts it as a bearer token too.)
 
 The apiserver reads this file at startup, so restart it after the change —
 editing the webhook kubeconfig alone does not restart the static pod; move its
@@ -138,9 +140,10 @@ kubectl -n kube-system logs kube-apiserver-<node> | grep -i audit
 
 After fixing the token in `/etc/kubernetes/audit-webhook.yaml`, restart the
 kube-apiserver the same way as above — the audit-webhook kubeconfig is read at
-startup. The most common cause of a mismatch is the token sitting at the wrong
-nesting level: it belongs under the entry's `user:` key, not beside its
-`name:`, and kubeconfig parsing ignores misplaced fields without complaint. After
+startup. The most common cause of a mismatch is carrying the token as a
+kubeconfig `user.token` instead of in the server URL: over plain HTTP,
+client-go silently drops bearer tokens, so the apiserver posts with no token
+at all and no error anywhere says why. After
 changing the flags, the kube-apiserver restarts itself (static pod) and events
 start arriving within a few seconds; the **Source** filter on Admission Events
 shows which pipeline each event came from.
