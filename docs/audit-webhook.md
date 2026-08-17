@@ -71,15 +71,39 @@ Give Sentinel the token as an environment variable, in the container spec of
               key: token
 ```
 
-And put the same value in the audit-webhook kubeconfig's user entry — the
-apiserver sends it as a bearer token:
+And put the same value in the audit-webhook kubeconfig — the apiserver sends it
+as a bearer token. The complete file, so the nesting cannot go wrong: the token
+lives under `user:`, one level below the entry's `name:`. A token placed at the
+wrong level is not an error — kubeconfig parsing silently ignores unknown
+fields, the apiserver sends no token at all, and every delivery is rejected:
 
 ```yaml
 # /etc/kubernetes/audit-webhook.yaml
+apiVersion: v1
+kind: Config
+clusters:
+  - name: sentinel
+    cluster:
+      server: http://<sentinel-clusterip>/api/admission-events/webhook
 users:
   - name: sentinel
     user:
       token: <the same value>
+contexts:
+  - name: default
+    context:
+      cluster: sentinel
+      user: sentinel
+current-context: default
+```
+
+The apiserver reads this file at startup, so restart it after the change —
+editing the webhook kubeconfig alone does not restart the static pod; move its
+manifest out and back:
+
+```bash
+sudo mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/ && sleep 5 && \
+  sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
 ```
 
 With `AUDIT_WEBHOOK_TOKEN` unset the endpoint stays open, so existing setups
@@ -113,8 +137,10 @@ kubectl -n kube-system logs kube-apiserver-<node> | grep -i audit
 ```
 
 After fixing the token in `/etc/kubernetes/audit-webhook.yaml`, restart the
-kube-apiserver (touch its static-pod manifest or restart the kubelet) — the
-audit-webhook kubeconfig is read at startup. After
+kube-apiserver the same way as above — the audit-webhook kubeconfig is read at
+startup. The most common cause of a mismatch is the token sitting at the wrong
+nesting level: it belongs under the entry's `user:` key, not beside its
+`name:`, and kubeconfig parsing ignores misplaced fields without complaint. After
 changing the flags, the kube-apiserver restarts itself (static pod) and events
 start arriving within a few seconds; the **Source** filter on Admission Events
 shows which pipeline each event came from.
