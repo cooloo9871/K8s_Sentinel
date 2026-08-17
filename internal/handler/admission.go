@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,9 +14,20 @@ import (
 
 // admissionWebhook receives K8s audit events from the kube-apiserver audit webhook.
 // Only VAP violation events (message contains "ValidatingAdmissionPolicy") are stored.
-func admissionWebhook(store *admission.Store) http.HandlerFunc {
+func admissionWebhook(store *admission.Store, token string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// This is the only route without authentication, so it is the one that must
+		// The audit-webhook kubeconfig carries the same token in its user entry,
+		// and the apiserver sends it as a bearer token. Compared in constant
+		// time: a timing oracle on a secret-guarding check is the classic way to
+		// leak it byte by byte.
+		if token != "" {
+			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		// This route sits outside the session auth, so it is the one that must
 		// not let a caller choose the allocation size. Audit batches are small;
 		// 4 MiB is already far above a Metadata-level policy's output.
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<20)

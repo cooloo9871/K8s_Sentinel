@@ -27,6 +27,10 @@ type Config struct {
 	RsyslogDispatch *rsyslog.Dispatcher
 	Admission       *admission.Store
 	Security        *security.Store
+	// Shared secret for the kube-apiserver audit webhook. When set, the webhook
+	// requires it as a bearer token; when empty, the endpoint stays open — the
+	// route predates the token and existing apiserver configs carry none.
+	AuditWebhookToken string
 }
 
 // New builds the HTTP handler tree.
@@ -35,8 +39,11 @@ func New(cfg Config) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Public (no auth — kube-apiserver audit webhook)
-	r.Post("/api/admission-events/webhook", admissionWebhook(cfg.Admission))
+	// Outside the session auth — the caller is the kube-apiserver, which has no
+	// session. With AuditWebhookToken set it requires that bearer token instead;
+	// left unprotected, anything in the cluster could forge admission events and
+	// flood the retention cap until the real ones are evicted.
+	r.Post("/api/admission-events/webhook", admissionWebhook(cfg.Admission, cfg.AuditWebhookToken))
 
 	// Public auth
 	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))

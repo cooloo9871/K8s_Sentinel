@@ -171,6 +171,7 @@ volumes:
 | `DATA_DIR` | `/data/sentinel` | Data directory; a warning is logged at startup if it is not writable |
 | `TETRAGON_NAMESPACE` | `kube-system` | Namespace where Tetragon is installed |
 | `CILIUM_NAMESPACE` | `kube-system` | Namespace where Cilium is installed |
+| `AUDIT_WEBHOOK_TOKEN` | *(unset)* | Bearer token the [audit webhook](audit-webhook.md) requires when set; unset leaves the endpoint open |
 
 ---
 

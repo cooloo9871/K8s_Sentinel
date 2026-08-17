@@ -85,6 +85,9 @@ func main() {
 		RsyslogDispatch: rsyslogDispatch,
 		Admission:       admissionStore,
 		Security:        securityStore,
+		// Optional shared secret for the audit webhook. Unset keeps the endpoint
+		// open, matching apiserver configs written before the token existed.
+		AuditWebhookToken: os.Getenv("AUDIT_WEBHOOK_TOKEN"),
 	}
 
 	mux := http.NewServeMux()

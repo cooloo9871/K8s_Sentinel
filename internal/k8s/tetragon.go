@@ -263,6 +263,28 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		evt.Function = anyStr(lsm, "function_name", "functionName")
 		evt.PolicyName = anyStr(lsm, "policy_name", "policyName")
 		evt.Action = hookAction(anyStr(lsm, "action"))
+		// The object of the call, for the hooks whose args carry one — LSM
+		// reuses the kprobe argument shapes, so the same decoders apply. Left
+		// undecoded, the detail panel's File and Destination stay blank and the
+		// only clue is the process's own command line.
+		if args, ok := lsm["args"].([]any); ok {
+			switch evt.Function {
+			case "file_open":
+				if p := fileArgPath(args, 0); p != "" {
+					evt.FilePath, evt.FileOp = p, "open"
+				}
+			case "file_permission":
+				evt.FilePath = fileArgPath(args, 0)
+				// The same mask values the security_file_permission kprobe uses.
+				if v := intArg(args, 1); v == 4 {
+					evt.FileOp = "read"
+				} else if v == 2 {
+					evt.FileOp = "write"
+				}
+			case "socket_connect", "socket_bind":
+				evt.NetDest = sockaddrArgDest(args)
+			}
+		}
 		return evt, true
 	}
 
@@ -435,6 +457,33 @@ func sockArgEndpoints(args []any, idx int) (dest, src string) {
 		return addr
 	}
 	return formatAddr("daddr", "dport"), formatAddr("saddr", "sport")
+}
+
+// sockaddrArgDest finds the sockaddr argument and formats its address:port.
+// LSM socket hooks receive a sockaddr rather than a sock, and the field names
+// vary by Tetragon version (addr/port, sin_addr/sin_port) — all are accepted.
+func sockaddrArgDest(args []any) string {
+	for _, a := range args {
+		arg, ok := a.(map[string]any)
+		if !ok {
+			continue
+		}
+		sa := anyMap(arg, "sockaddr_arg", "sockaddrArg")
+		if sa == nil {
+			continue
+		}
+		addr := anyStr(sa, "addr", "sin_addr", "sinAddr")
+		if addr == "" {
+			return ""
+		}
+		for _, k := range []string{"port", "sin_port", "sinPort"} {
+			if p, ok := sa[k].(float64); ok && p > 0 {
+				return fmt.Sprintf("%s:%d", addr, int(p))
+			}
+		}
+		return addr
+	}
+	return ""
 }
 
 func fileArgPath(args []any, idx int) string {

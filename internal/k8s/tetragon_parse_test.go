@@ -90,6 +90,61 @@ func TestKprobeOverrideAlsoReadsAsBlocked(t *testing.T) {
 	}
 }
 
+// LSM args reuse the kprobe argument shapes, and the events carry the object of
+// the call — the file being opened, the address being connected to. Left
+// undecoded, the detail panel's File and Destination stay blank and the only
+// clue is the process's own command line.
+func TestLSMFileHooksCarryThePath(t *testing.T) {
+	evt, ok := parseTetragonLog(`{"process_lsm":{` + procJSON + `,` +
+		`"function_name":"file_open","policy_name":"lsm-guard",` +
+		`"args":[{"file_arg":{"path":"/etc/shadow"}}]},"time":"2026-08-17T03:00:00Z"}`)
+	if !ok {
+		t.Fatal("LSM file_open event was dropped by the parser")
+	}
+	if evt.FilePath != "/etc/shadow" || evt.FileOp != "open" {
+		t.Errorf("filePath/fileOp = %q/%q, want /etc/shadow/open", evt.FilePath, evt.FileOp)
+	}
+
+	// file_permission carries the mask alongside: 4 is read, 2 is write — the
+	// same values the security_file_permission kprobe uses.
+	evt, ok = parseTetragonLog(`{"process_lsm":{` + procJSON + `,` +
+		`"function_name":"file_permission","policy_name":"lsm-guard",` +
+		`"args":[{"file_arg":{"path":"/etc/shadow"}},{"int_arg":4}]},"time":"2026-08-17T03:00:00Z"}`)
+	if !ok {
+		t.Fatal("LSM file_permission event was dropped by the parser")
+	}
+	if evt.FilePath != "/etc/shadow" || evt.FileOp != "read" {
+		t.Errorf("filePath/fileOp = %q/%q, want /etc/shadow/read", evt.FilePath, evt.FileOp)
+	}
+}
+
+func TestLSMSocketHooksCarryTheDestination(t *testing.T) {
+	// The sockaddr argument shape (LSM socket hooks receive a sockaddr, not a
+	// sock).
+	evt, ok := parseTetragonLog(`{"process_lsm":{` + procJSON + `,` +
+		`"function_name":"socket_connect","policy_name":"lsm-guard",` +
+		`"args":[{"sock_arg":{}},{"sockaddr_arg":{"family":"AF_INET","addr":"10.0.0.5","port":443}}]},` +
+		`"time":"2026-08-17T03:00:00Z"}`)
+	if !ok {
+		t.Fatal("LSM socket_connect event was dropped by the parser")
+	}
+	if evt.NetDest != "10.0.0.5:443" {
+		t.Errorf("netDest = %q, want 10.0.0.5:443", evt.NetDest)
+	}
+
+	// Some Tetragon versions emit the sockaddr fields as sin_addr / sin_port.
+	evt, ok = parseTetragonLog(`{"process_lsm":{` + procJSON + `,` +
+		`"function_name":"socket_bind","policy_name":"lsm-guard",` +
+		`"args":[{"sockaddr_arg":{"sin_addr":"0.0.0.0","sin_port":8080}}]},` +
+		`"time":"2026-08-17T03:00:00Z"}`)
+	if !ok {
+		t.Fatal("LSM socket_bind event was dropped by the parser")
+	}
+	if evt.NetDest != "0.0.0.0:8080" {
+		t.Errorf("netDest = %q, want 0.0.0.0:8080", evt.NetDest)
+	}
+}
+
 // The pre-existing contract, pinned: SIGKILL is a kill, and a hook event
 // without a policy name comes from the base sensor and is not a security event.
 func TestKprobeBaseline(t *testing.T) {
