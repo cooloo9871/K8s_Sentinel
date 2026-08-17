@@ -143,14 +143,29 @@ func (d *Dispatcher) TestSend(cfg Config) error {
 	}
 }
 
+// securityRuleType labels the syslog type= field with what the rule governs.
+// Kept in step with the UI classifier (web/src/utils/ruleType.ts) — this was
+// the fourth divergent copy, forwarding LSM and tracepoint events as
+// type=process while the badge, CSV and alerts said file/network/kernel.
 func securityRuleType(fn string) string {
-	if strings.Contains(fn, "tcp_connect") || strings.Contains(fn, "deny") {
-		return "network"
-	}
-	if strings.Contains(fn, "security_file") || strings.Contains(fn, "security_path") {
+	switch {
+	case fn == "":
+		// Events with no function predate the hook kinds; keep their label.
+		return "process"
+	case strings.Contains(fn, "file_permission"), strings.Contains(fn, "mmap_file"),
+		strings.Contains(fn, "path_truncate"), strings.Contains(fn, "file_open"),
+		strings.Contains(fn, "sys_read"), strings.Contains(fn, "sys_write"),
+		strings.Contains(fn, "sys_open"):
 		return "file"
+	case strings.Contains(fn, "tcp_connect"), strings.Contains(fn, "tcp_sendmsg"),
+		strings.Contains(fn, "udp"), strings.Contains(fn, "inet_csk_accept"),
+		strings.Contains(fn, "socket_connect"), strings.Contains(fn, "socket_bind"),
+		strings.Contains(fn, "deny"):
+		return "network"
+	case strings.Contains(fn, "execve"), strings.Contains(fn, "bprm"):
+		return "process"
 	}
-	return "process"
+	return "kernel"
 }
 
 func buildMessage(evt k8s.TetragonEvent, severity string) string {

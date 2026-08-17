@@ -89,3 +89,33 @@ func TestDedupFillsFieldsMissingFromTheStoredEvent(t *testing.T) {
 		t.Errorf("dropReason = %q, want it filled in", evts[0].DropReason)
 	}
 }
+
+// A row persisted before the Hook field existed refreshes forever inside the
+// dedup window without ever acquiring one — the same permanent-gap failure the
+// Container backfill beside it exists to prevent.
+func TestDedupBackfillsTheHook(t *testing.T) {
+	s := NewStore(t.TempDir() + "/events.json")
+	defer s.WaitForFlush()
+	evt := k8s.TetragonEvent{
+		Type: "kprobe", Time: time.Now().UTC().Format(time.RFC3339Nano),
+		Namespace: "demo", Pod: "web-1", Binary: "/usr/bin/curl",
+		Function: "tcp_connect", PolicyName: "net-watch", Action: "monitor",
+	}
+	s.Add(evt)
+
+	// A row from before the upgrade carries no Hook.
+	s.mu.Lock()
+	s.evts[0].Hook = ""
+	s.mu.Unlock()
+
+	evt.Time = time.Now().UTC().Format(time.RFC3339Nano)
+	s.Add(evt) // same fingerprint, inside the window → refreshes the row
+
+	got := s.List()
+	if len(got) != 1 {
+		t.Fatalf("got %d rows, want 1 — the repeat should have deduplicated", len(got))
+	}
+	if got[0].Hook != "kprobe" {
+		t.Errorf("hook = %q, want kprobe backfilled on the refreshed row", got[0].Hook)
+	}
+}

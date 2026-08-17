@@ -145,6 +145,54 @@ func TestLSMSocketHooksCarryTheDestination(t *testing.T) {
 	}
 }
 
+// Sigkill and Override are not the only ways a policy enforces. Signal sends
+// one (enforcement uses 9), and NotifyEnforcer hands the kill to the enforcer
+// program — an event carrying either describes something that was stopped, and
+// anything below critical reports the enforcement as a bystander.
+func TestEnforcingActionsReadAsBlocked(t *testing.T) {
+	for _, action := range []string{"KPROBE_ACTION_SIGNAL", "KPROBE_ACTION_NOTIFYENFORCER"} {
+		evt, ok := parseTetragonLog(`{"process_tracepoint":{` + procJSON + `,` +
+			`"subsys":"raw_syscalls","event":"sys_enter","policy_name":"tp-guard",` +
+			`"action":"` + action + `"},"time":"2026-08-17T07:00:00Z"}`)
+		if !ok {
+			t.Fatalf("%s: event was dropped by the parser", action)
+		}
+		if !evt.Blocked() || evt.Severity() != "critical" {
+			t.Errorf("%s: blocked/severity = %v/%q, want true/critical", action, evt.Blocked(), evt.Severity())
+		}
+	}
+}
+
+// The LSM branch accepts both field spellings for its own keys, so the shared
+// argument decoders must too — half-parsed, a camelCase event keeps its row but
+// loses the file path, and the two encodings of one event stop deduplicating.
+func TestLSMArgsParseInCamelCase(t *testing.T) {
+	evt, ok := parseTetragonLog(`{"processLsm":{` + procJSON + `,` +
+		`"functionName":"file_open","policyName":"lsm-guard",` +
+		`"args":[{"fileArg":{"path":"/etc/shadow"}}]},"time":"2026-08-17T07:00:00Z"}`)
+	if !ok {
+		t.Fatal("camelCase LSM event was dropped by the parser")
+	}
+	if evt.FilePath != "/etc/shadow" || evt.FileOp != "open" {
+		t.Errorf("filePath/fileOp = %q/%q, want /etc/shadow/open", evt.FilePath, evt.FileOp)
+	}
+}
+
+// An address-less sockaddr (an AF_UNIX peer, an unrecognised field name) must
+// not end the scan — the address may sit in the next argument.
+func TestSockaddrScanSurvivesAnAddresslessArg(t *testing.T) {
+	evt, ok := parseTetragonLog(`{"process_lsm":{` + procJSON + `,` +
+		`"function_name":"socket_connect","policy_name":"lsm-guard",` +
+		`"args":[{"sockaddr_arg":{"family":"AF_UNIX"}},{"sockaddr_arg":{"addr":"10.0.0.5","port":443}}]},` +
+		`"time":"2026-08-17T07:00:00Z"}`)
+	if !ok {
+		t.Fatal("LSM event was dropped by the parser")
+	}
+	if evt.NetDest != "10.0.0.5:443" {
+		t.Errorf("netDest = %q, want 10.0.0.5:443", evt.NetDest)
+	}
+}
+
 // The pre-existing contract, pinned: SIGKILL is a kill, and a hook event
 // without a policy name comes from the base sensor and is not a security event.
 func TestKprobeBaseline(t *testing.T) {

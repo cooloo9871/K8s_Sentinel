@@ -61,23 +61,37 @@ func TestAuditWebhookAcceptsTheTokenInThePath(t *testing.T) {
 	}
 }
 
+// A token is whatever follows the base path — slashes included. A base64
+// token carries them, and refusing to lift it turned every delivery into a
+// 404 with the secret printed verbatim in the access log on each retry.
+func TestAuditWebhookAcceptsATokenContainingSlashes(t *testing.T) {
+	h := New(Config{Admission: admission.NewStore(""), AuditWebhookToken: "s3/cr=t"})
+	if w := postWebhookPath(h, "/api/admission-events/webhook/s3/cr=t", ""); w.Code != http.StatusOK {
+		t.Errorf("slash token: status = %d, want 200", w.Code)
+	}
+	// And a wrong multi-segment token is refused, not routed into the void.
+	if w := postWebhookPath(h, "/api/admission-events/webhook/a/b/c", ""); w.Code != http.StatusUnauthorized {
+		t.Errorf("wrong slash token: status = %d, want 401", w.Code)
+	}
+}
+
 // The lift happens before the access logger, and has to scrub every place the
 // logger reads from — RequestURI is the raw string, unaffected by a Path
 // rewrite, and is exactly what the logger prints.
 func TestTheTokenNeverReachesTheAccessLog(t *testing.T) {
 	var seen *http.Request
 	probe := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen = r })
-	r := httptest.NewRequest(http.MethodPost, "/api/admission-events/webhook/s3cret?timeout=30s", nil)
+	r := httptest.NewRequest(http.MethodPost, "/api/admission-events/webhook/s3/cret?timeout=30s", nil)
 	liftWebhookToken(probe).ServeHTTP(httptest.NewRecorder(), r)
 
-	if seen.Header.Get("X-Audit-Webhook-Token") != "s3cret" {
-		t.Errorf("token header = %q, want s3cret", seen.Header.Get("X-Audit-Webhook-Token"))
+	if seen.Header.Get("X-Audit-Webhook-Token") != "s3/cret" {
+		t.Errorf("token header = %q, want s3/cret", seen.Header.Get("X-Audit-Webhook-Token"))
 	}
 	for what, got := range map[string]string{
 		"URL.Path":   seen.URL.Path,
 		"RequestURI": seen.RequestURI,
 	} {
-		if strings.Contains(got, "s3cret") {
+		if strings.Contains(got, "s3") && strings.Contains(got, "cret") {
 			t.Errorf("%s still carries the token: %q", what, got)
 		}
 	}

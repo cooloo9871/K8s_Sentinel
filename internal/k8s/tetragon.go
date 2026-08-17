@@ -69,11 +69,19 @@ func (e TetragonEvent) Blocked() bool {
 // come from the base sensor and belong to process discovery, and policy
 // denials are only synthesized when Hubble can name the denying policy.
 func (e TetragonEvent) IsSecurityEvent() bool {
+	return (e.HookKind() != "" || e.Type == "policy-deny") && e.PolicyName != ""
+}
+
+// HookKind names the hook that produced the event — kprobe, tracepoint, uprobe
+// or lsm — and is empty for everything else: an exec from the base sensor and a
+// policy denial synthesized from Hubble are not hooks. The one place the hook
+// kinds are enumerated.
+func (e TetragonEvent) HookKind() string {
 	switch e.Type {
-	case "kprobe", "tracepoint", "uprobe", "lsm", "policy-deny":
-		return e.PolicyName != ""
+	case "kprobe", "tracepoint", "uprobe", "lsm":
+		return e.Type
 	}
-	return false
+	return ""
 }
 
 // StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
@@ -152,7 +160,7 @@ func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- Te
 		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
 		// The container ID is still in evt.Arguments (from the calling runc process),
 		// and evt.ParentBin identifies the true runc caller.
-		if evt.Pod == "" && evt.Type == "kprobe" {
+		if evt.Pod == "" && evt.HookKind() != "" {
 			checkBin := evt.Binary
 			if strings.Contains(evt.ParentBin, "runc") {
 				checkBin = evt.ParentBin
@@ -242,27 +250,18 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	// detail panel work identically. Their arguments are not decoded — every
 	// hook's args mean something different, and a generic dump is noise.
 	if tp := anyMap(raw, "process_tracepoint", "processTracepoint"); tp != nil {
-		evt.Type = "tracepoint"
-		fillProcessWithParentFallback(&evt, tp)
+		hookEvent(&evt, "tracepoint", tp)
 		evt.Function = strings.Trim(anyStr(tp, "subsys")+"/"+anyStr(tp, "event"), "/")
-		evt.PolicyName = anyStr(tp, "policy_name", "policyName")
-		evt.Action = hookAction(anyStr(tp, "action"))
 		return evt, true
 	}
 	if up := anyMap(raw, "process_uprobe", "processUprobe"); up != nil {
-		evt.Type = "uprobe"
-		fillProcessWithParentFallback(&evt, up)
+		hookEvent(&evt, "uprobe", up)
 		evt.Function = strings.Trim(anyStr(up, "path")+":"+anyStr(up, "symbol"), ":")
-		evt.PolicyName = anyStr(up, "policy_name", "policyName")
-		evt.Action = hookAction(anyStr(up, "action"))
 		return evt, true
 	}
 	if lsm := anyMap(raw, "process_lsm", "processLsm"); lsm != nil {
-		evt.Type = "lsm"
-		fillProcessWithParentFallback(&evt, lsm)
+		hookEvent(&evt, "lsm", lsm)
 		evt.Function = anyStr(lsm, "function_name", "functionName")
-		evt.PolicyName = anyStr(lsm, "policy_name", "policyName")
-		evt.Action = hookAction(anyStr(lsm, "action"))
 		// The object of the call, for the hooks whose args carry one — LSM
 		// reuses the kprobe argument shapes, so the same decoders apply. Left
 		// undecoded, the detail panel's File and Destination stay blank and the
@@ -274,13 +273,7 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 					evt.FilePath, evt.FileOp = p, "open"
 				}
 			case "file_permission":
-				evt.FilePath = fileArgPath(args, 0)
-				// The same mask values the security_file_permission kprobe uses.
-				if v := intArg(args, 1); v == 4 {
-					evt.FileOp = "read"
-				} else if v == 2 {
-					evt.FileOp = "write"
-				}
+				evt.FilePath, evt.FileOp = filePermissionArgs(args)
 			case "socket_connect", "socket_bind":
 				evt.NetDest = sockaddrArgDest(args)
 			}
@@ -294,21 +287,14 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		return TetragonEvent{}, false
 	}
 
-	evt.Type = "kprobe"
-	fillProcessWithParentFallback(&evt, kp)
+	hookEvent(&evt, "kprobe", kp)
 	evt.Function = anyStr(kp, "function_name", "functionName")
-	evt.PolicyName = anyStr(kp, "policy_name", "policyName")
 
 	// Parse file path and operation for file-monitoring kprobes.
 	if args, ok := kp["args"].([]any); ok {
 		switch evt.Function {
 		case "security_file_permission":
-			evt.FilePath = fileArgPath(args, 0)
-			if v := intArg(args, 1); v == 4 {
-				evt.FileOp = "read"
-			} else if v == 2 {
-				evt.FileOp = "write"
-			}
+			evt.FilePath, evt.FileOp = filePermissionArgs(args)
 		case "security_mmap_file":
 			evt.FilePath = fileArgPath(args, 0)
 			if prot := uint32Arg(args, 1); prot&0x02 != 0 {
@@ -346,8 +332,6 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		}
 	}
 
-	evt.Action = hookAction(anyStr(kp, "action"))
-
 	// For execve kprobes the matching is on args[0] (the binary being executed),
 	// not on process.binary (which is the calling process, e.g. bash).
 	// Function name varies by arch: sys_execve, __x64_sys_execve, __arm64_sys_execve, etc.
@@ -365,20 +349,46 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	return evt, true
 }
 
-// hookAction turns Tetragon's action string into this store's verb. SIGKILL
-// killed the process; OVERRIDE forced the call to return an error, which blocks
-// the operation without killing anything — both prevented something, and both
-// must read as blocked rather than as a pure observation.
+// hookAction turns Tetragon's action string into this store's verb. Sigkill
+// killed the process outright; Signal sends one (enforcement uses 9) and
+// NotifyEnforcer hands the kill to the enforcer program; Override forced the
+// call to return an error, blocking the operation without killing anything.
+// Every one of them prevented something, and must read as blocked rather than
+// as a pure observation.
 func hookAction(action string) string {
 	a := strings.ToUpper(action)
 	switch {
-	case strings.Contains(a, "SIGKILL"):
+	case strings.Contains(a, "SIGKILL"), strings.Contains(a, "SIGNAL"),
+		strings.Contains(a, "NOTIFYENFORCER"):
 		return "kill"
 	case strings.Contains(a, "OVERRIDE"):
 		return "deny"
 	default:
 		return "monitor"
 	}
+}
+
+// hookEvent fills what every hook kind shares — the process context, the
+// policy that fired, and the action taken — so the four branches cannot drift
+// on any of them.
+func hookEvent(evt *TetragonEvent, kind string, hook map[string]any) {
+	evt.Type = kind
+	fillProcessWithParentFallback(evt, hook)
+	evt.PolicyName = anyStr(hook, "policy_name", "policyName")
+	evt.Action = hookAction(anyStr(hook, "action"))
+}
+
+// filePermissionArgs decodes the (file, mask) pair that both file_permission
+// hooks carry — the security_file_permission kprobe and the LSM hook use the
+// same shape and the same mask values: 4 is read, 2 is write.
+func filePermissionArgs(args []any) (path, op string) {
+	path = fileArgPath(args, 0)
+	if v := intArg(args, 1); v == 4 {
+		op = "read"
+	} else if v == 2 {
+		op = "write"
+	}
+	return path, op
 }
 
 // fillProcessWithParentFallback fills the process context, falling back to the
@@ -442,8 +452,8 @@ func sockArgEndpoints(args []any, idx int) (dest, src string) {
 	if !ok {
 		return "", ""
 	}
-	sock, ok := arg["sock_arg"].(map[string]any)
-	if !ok {
+	sock := anyMap(arg, "sock_arg", "sockArg")
+	if sock == nil {
 		return "", ""
 	}
 	formatAddr := func(addrKey, portKey string) string {
@@ -473,8 +483,10 @@ func sockaddrArgDest(args []any) string {
 			continue
 		}
 		addr := anyStr(sa, "addr", "sin_addr", "sinAddr")
+		// An AF_UNIX peer or an unrecognised field name — the address may sit
+		// in the next argument, so keep scanning rather than giving up.
 		if addr == "" {
-			return ""
+			continue
 		}
 		for _, k := range []string{"port", "sin_port", "sinPort"} {
 			if p, ok := sa[k].(float64); ok && p > 0 {
@@ -494,7 +506,7 @@ func fileArgPath(args []any, idx int) string {
 	if !ok {
 		return ""
 	}
-	if f, ok := arg["file_arg"].(map[string]any); ok {
+	if f := anyMap(arg, "file_arg", "fileArg"); f != nil {
 		return anyStr(f, "path")
 	}
 	return ""
@@ -508,7 +520,7 @@ func pathArgPath(args []any, idx int) string {
 	if !ok {
 		return ""
 	}
-	if p, ok := arg["path_arg"].(map[string]any); ok {
+	if p := anyMap(arg, "path_arg", "pathArg"); p != nil {
 		return anyStr(p, "path")
 	}
 	return ""
@@ -522,8 +534,10 @@ func intArg(args []any, idx int) int {
 	if !ok {
 		return 0
 	}
-	if v, ok := arg["int_arg"].(float64); ok {
-		return int(v)
+	for _, k := range []string{"int_arg", "intArg"} {
+		if v, ok := arg[k].(float64); ok {
+			return int(v)
+		}
 	}
 	return 0
 }
@@ -536,8 +550,10 @@ func uint32Arg(args []any, idx int) uint32 {
 	if !ok {
 		return 0
 	}
-	if v, ok := arg["uint32_arg"].(float64); ok {
-		return uint32(v)
+	for _, k := range []string{"uint32_arg", "uint32Arg"} {
+		if v, ok := arg[k].(float64); ok {
+			return uint32(v)
+		}
 	}
 	return 0
 }

@@ -243,15 +243,6 @@ func (s *Store) flush() {
 }
 
 // Add ingests a Tetragon event: dedup, insert newest-first, cap, persist.
-// hookOf names the hook kind for display. A synthesized policy denial is not a
-// hook, so it stays blank there.
-func hookOf(raw k8s.TetragonEvent) string {
-	if raw.Type == "policy-deny" {
-		return ""
-	}
-	return raw.Type
-}
-
 func (s *Store) Add(raw k8s.TetragonEvent) {
 	if !raw.IsSecurityEvent() {
 		return
@@ -290,6 +281,9 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 				if updated.DropReason == "" {
 					updated.DropReason = raw.DropReason
 				}
+				if updated.Hook == "" {
+					updated.Hook = raw.HookKind()
+				}
 				s.evts = append(s.evts[:i], s.evts[i+1:]...)
 				s.evts = append([]Event{updated}, s.evts...)
 				s.flush()
@@ -313,7 +307,7 @@ func (s *Store) Add(raw k8s.TetragonEvent) {
 		Arguments:  raw.Arguments,
 		ParentBin:  raw.ParentBin,
 		Function:   raw.Function,
-		Hook:       hookOf(raw),
+		Hook:       raw.HookKind(),
 		PolicyName: raw.PolicyName,
 		Action:     raw.Action,
 		ProcessUID: raw.ProcessUID,

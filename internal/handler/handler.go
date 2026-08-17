@@ -46,7 +46,7 @@ func New(cfg Config) http.Handler {
 	// session. With AuditWebhookToken set it requires that bearer token instead;
 	// left unprotected, anything in the cluster could forge admission events and
 	// flood the retention cap until the real ones are evicted.
-	r.Post("/api/admission-events/webhook", admissionWebhook(cfg.Admission, cfg.AuditWebhookToken))
+	r.Post(webhookPath, admissionWebhook(cfg.Admission, cfg.AuditWebhookToken))
 
 	// Public auth
 	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
@@ -146,8 +146,10 @@ const webhookPath = "/api/admission-events/webhook"
 // before routing so one route serves both spellings.
 func liftWebhookToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if seg, ok := strings.CutPrefix(r.URL.Path, webhookPath+"/"); ok &&
-			seg != "" && !strings.Contains(seg, "/") {
+		// Everything after the base path is the token, slashes included — a
+		// base64 token carries them, and refusing those turned each delivery
+		// into a 404 with the secret printed in the access log on every retry.
+		if seg, ok := strings.CutPrefix(r.URL.Path, webhookPath+"/"); ok && seg != "" {
 			r.Header.Set("X-Audit-Webhook-Token", seg)
 			r.URL.Path = webhookPath
 			r.URL.RawPath = ""
