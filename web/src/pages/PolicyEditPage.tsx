@@ -83,6 +83,14 @@ export function PolicyEditPage() {
         policyApi.get(name, namespace).then((r) => {
           setYamlContent(r.rawYaml)
           setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          // A manifest applied with kubectl opens as the YAML its author wrote,
+          // the same way Admission Policy and Network Policy treat anything not
+          // built here — even when the form could show it, a save from the form
+          // would rewrite an externally managed file into the builder's shape.
+          if (r.createdBy === 'k8s-apply') {
+            setMode('yaml')
+            return
+          }
           // Pre-populate form from existing policy YAML
           const parsed = yamlToForm(r.rawYaml)
           if (parsed) {
