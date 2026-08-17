@@ -274,9 +274,12 @@ The policy's shape carries one key decision:
 
 ```yaml
 ingress:
-  - fromEntities: [host, health]   # the kubelet's probes still get through
+  - fromEntities:       # the kubelet's probes still get through
+      - host
+      - health
 egressDeny:
-  - toEntities: [all]              # a deny beats any allow
+  - toEntities:         # a deny beats any allow
+      - all
 ```
 
 **Ingress from the node must stay open.** Block it and the kubelet's probes fail →

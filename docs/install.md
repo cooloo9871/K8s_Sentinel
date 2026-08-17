@@ -140,7 +140,7 @@ Default credentials are `admin` / `admin` — change the password immediately af
 
 K8s Sentinel stores the following under `/data/sentinel/` (override with the `DATA_DIR` environment variable).
 
-> **The bundled manifests mount an `emptyDir`, which means every restart resets all of it** — accounts back to the default `admin`, alert rules and syslog targets gone, custom templates gone, event history gone. Attach a PersistentVolume before configuring anything you expect to keep. A single-instance deployment should also use `strategy: { type: Recreate }`, so a rollout does not briefly run two pods that both stream events.
+> **The bundled manifests mount an `emptyDir`, which means every restart resets all of it** — accounts back to the default `admin`, alert rules and syslog targets gone, custom templates gone, event history gone. Attach a PersistentVolume before configuring anything you expect to keep. A single-instance deployment should also set the Deployment's update strategy to `Recreate`, so a rollout does not briefly run two pods that both stream events.
 
 | File | Contents |
 |---|---|

@@ -11,8 +11,13 @@ apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
   - level: Metadata
-    verbs: ["create", "update", "patch", "delete"]
-    omitStages: ["RequestReceived"]
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+    omitStages:
+      - RequestReceived
 ```
 
 ```yaml
@@ -27,7 +32,9 @@ users:
   - name: sentinel
 contexts:
   - name: default
-    context: { cluster: sentinel, user: sentinel }
+    context:
+      cluster: sentinel
+      user: sentinel
 current-context: default
 ```
 
@@ -58,7 +65,9 @@ Give Sentinel the token as an environment variable:
 # deploy/sentinel.yaml — container env
 - name: AUDIT_WEBHOOK_TOKEN
   valueFrom:
-    secretKeyRef: { name: sentinel-audit-webhook, key: token }
+    secretKeyRef:
+      name: sentinel-audit-webhook
+      key: token
 ```
 
 And put the same value in the audit-webhook kubeconfig's user entry — the
