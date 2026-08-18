@@ -122,35 +122,46 @@ func ciliumNamespaces() []string {
 	return []string{"kube-system", "cilium", "cilium-system"}
 }
 
-// DetectCilium returns true when a Cilium DaemonSet is present in the cluster.
-func (s *Store) DetectCilium(ctx context.Context) bool {
+// ciliumNamespace returns the namespace the Cilium DaemonSet is in, and whether
+// it was found. One scan, so callers that need both "is Cilium here" and "where
+// is Relay" do not probe the same namespaces twice.
+func (s *Store) ciliumNamespace(ctx context.Context) (string, bool) {
 	if s.typed == nil {
-		return false
+		return "", false
 	}
 	for _, ns := range ciliumNamespaces() {
 		if _, err := s.typed.AppsV1().DaemonSets(ns).Get(ctx, "cilium", metav1.GetOptions{}); err == nil {
-			return true
+			return ns, true
 		}
 	}
-	return false
+	return "", false
+}
+
+// DetectCilium returns true when a Cilium DaemonSet is present in the cluster.
+func (s *Store) DetectCilium(ctx context.Context) bool {
+	_, ok := s.ciliumNamespace(ctx)
+	return ok
+}
+
+// relayAddressIn is the relay endpoint for a given Cilium namespace.
+func relayAddressIn(ns string) string {
+	return "hubble-relay." + ns + ".svc.cluster.local:80"
 }
 
 // hubbleRelayAddress is where Hubble Relay serves the aggregated Observer API.
 // Relay collects from every node, so unlike the Tetragon agents there is one
 // endpoint rather than a per-pod fan-out. HUBBLE_RELAY_ADDRESS overrides it;
-// otherwise the relay Service in the namespace Cilium was found in.
+// otherwise the relay Service in the namespace Cilium was found in. The env is
+// read first so the namespace scan is skipped when the address is pinned.
 func (s *Store) hubbleRelayAddress(ctx context.Context) string {
 	if a := os.Getenv("HUBBLE_RELAY_ADDRESS"); a != "" {
 		return a
 	}
-	ns := "kube-system"
-	for _, n := range ciliumNamespaces() {
-		if _, err := s.typed.AppsV1().DaemonSets(n).Get(ctx, "cilium", metav1.GetOptions{}); err == nil {
-			ns = n
-			break
-		}
+	ns, ok := s.ciliumNamespace(ctx)
+	if !ok {
+		ns = "kube-system"
 	}
-	return "hubble-relay." + ns + ".svc.cluster.local:80"
+	return relayAddressIn(ns)
 }
 
 // StreamCiliumFlows streams every node's Hubble flows from Hubble Relay. It
@@ -419,10 +430,15 @@ type HubbleStatus struct {
 // Cilium is present at all; Ready reports that the flow source Network Topology
 // depends on is answering.
 func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
-	if !s.DetectCilium(ctx) {
+	ns, ok := s.ciliumNamespace(ctx)
+	if !ok {
 		return HubbleStatus{Available: false, Message: "Cilium not detected"}
 	}
-	conn, err := dialGRPC("HUBBLE_RELAY", s.hubbleRelayAddress(ctx))
+	addr := os.Getenv("HUBBLE_RELAY_ADDRESS")
+	if addr == "" {
+		addr = relayAddressIn(ns)
+	}
+	conn, err := dialGRPC("HUBBLE_RELAY", addr)
 	if err != nil {
 		return HubbleStatus{Available: true, Ready: false, Message: "dial hubble-relay: " + err.Error()}
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
+	"google.golang.org/grpc"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -114,10 +115,13 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, pod podEndpoint) (
 
 	dumpCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	// The whole process cache comes back in one unary response, and a busy
+	// node's cache (default size 65536) marshals well past grpc-go's 4 MB
+	// default receive cap, which would fail the dump with ResourceExhausted.
 	resp, err := tetragon.NewFineGuidanceSensorsClient(conn).GetDebug(dumpCtx, &tetragon.GetDebugRequest{
 		Flag: tetragon.ConfigFlag_CONFIG_FLAG_DUMP_PROCESS_CACHE,
 		Arg:  &tetragon.GetDebugRequest_Dump{Dump: &tetragon.DumpProcessCacheReqArgs{}},
-	})
+	}, grpc.MaxCallRecvMsgSize(128<<20))
 	if err != nil {
 		return 0, fmt.Errorf("GetDebug: %w", err)
 	}

@@ -57,6 +57,29 @@ func TestTetragonGRPCBridgesToTheParser(t *testing.T) {
 	}
 }
 
+// The process-cache seed has its own bridge: a ProcessInternal from GetDebug
+// marshaled to the shape parseAndSeedProcessCache reads. Untested, a proto
+// field rename would make every seed silently drop (count 0, nil error).
+func TestProcessCacheGRPCBridgesToTheSeeder(t *testing.T) {
+	s := NewStore(nil, nil, nil, "")
+	pi := &tetragon.ProcessInternal{Process: &tetragon.Process{
+		Binary: "/usr/sbin/nginx",
+		Pod:    &tetragon.Pod{Namespace: "demo", Name: "web-1"},
+	}}
+	line, err := marshalJSON(pi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.parseAndSeedProcessCache([]byte(line))
+	if err != nil || n != 1 {
+		t.Fatalf("seeded %d (err %v), want 1", n, err)
+	}
+	profiles := s.Discovery.All()
+	if len(profiles) != 1 || profiles[0].Namespace != "demo" || profiles[0].Pod != "web-1" {
+		t.Errorf("discovery profiles = %+v, want one for demo/web-1", profiles)
+	}
+}
+
 func TestHubbleGRPCBridgesToTheParser(t *testing.T) {
 	resp := &observer.GetFlowsResponse{
 		NodeName: "node-1",

@@ -54,6 +54,14 @@ func dialGRPC(prefix, addr string) (*grpc.ClientConn, error) {
 			}
 			cfg.RootCAs = pool
 		}
+		// A per-pod endpoint is dialed by IP, so certificate verification would
+		// check the cert against the IP and fail — agent certs carry DNS SANs,
+		// not pod IPs. <PREFIX>_SERVER_NAME names the identity to verify against
+		// instead. Required for TLS to the Tetragon agents; unset for Relay,
+		// which is dialed by its service DNS and verifies on its own.
+		if sn := os.Getenv(prefix + "_SERVER_NAME"); sn != "" {
+			cfg.ServerName = sn
+		}
 		creds = credentials.NewTLS(cfg)
 	}
 	// NewClient connects lazily; the first RPC establishes the connection, and a
