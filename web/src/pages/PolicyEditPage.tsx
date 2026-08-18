@@ -59,6 +59,9 @@ export function PolicyEditPage() {
   )
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(!isNew)
+  // Whether the YAML on screen could open in the form — decides if the header
+  // offers the switch.
+  const [formCapable, setFormCapable] = useState(false)
   const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
 
   // Clear the prefill from browser history after consuming it once.
@@ -89,6 +92,11 @@ export function PolicyEditPage() {
           // would rewrite an externally managed file into the builder's shape.
           if (r.createdBy === 'k8s-apply') {
             setMode('yaml')
+            // Representable is worth remembering: policies created in Sentinel
+            // before the created-by annotation existed also read as k8s-apply,
+            // and for those — or a kubectl manifest whose owner accepts the
+            // rewrite — the header offers to open the form anyway.
+            setFormCapable(yamlToForm(r.rawYaml) !== null)
             return
           }
           // Pre-populate form from existing policy YAML
@@ -213,6 +221,26 @@ export function PolicyEditPage() {
               </SelectContent>
             </Select>
           </div>
+          {mode === 'yaml' && formCapable && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Parse what is on screen now, not what was loaded — the YAML
+                // may have been edited. Saving from the form regenerates the
+                // manifest in the builder's shape, which is the trade the
+                // click accepts.
+                const parsed = yamlToForm(yamlContent)
+                if (!parsed) {
+                  toast.error('The current YAML holds rules the form cannot show — fix or save it as YAML.')
+                  return
+                }
+                setFormValues(parsed)
+                setMode('form')
+              }}
+            >
+              Open in form
+            </Button>
+          )}
           <Button variant="outline" onClick={() => navigate('/policies/tracing')}>
             Cancel
           </Button>

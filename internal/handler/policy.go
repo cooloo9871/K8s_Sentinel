@@ -109,6 +109,11 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 			}
 		}
 
+		// The editor's name rides along so a policy created before the
+		// created-by annotation existed gets adopted on its first save here —
+		// the store never overwrites an author that is already recorded.
+		editor := usernameFromCtx(r)
+
 		if req.Source == "yaml" {
 			if !checkManifestName(w, r, req.RawYAML) {
 				return
@@ -131,7 +136,7 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 					return
 				}
 			}
-			if err := store.ApplyRaw(r.Context(), req.RawYAML, ""); err != nil {
+			if err := store.ApplyRaw(r.Context(), req.RawYAML, editor); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
 			}
@@ -162,7 +167,7 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := store.Apply(r.Context(), tp, ""); err != nil {
+		if err := store.Apply(r.Context(), tp, editor); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to apply policy"})
 			return
 		}

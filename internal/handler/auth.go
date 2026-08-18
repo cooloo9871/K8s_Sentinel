@@ -20,6 +20,16 @@ func claimsFromCtx(r *http.Request) *auth.Claims {
 	return c
 }
 
+// usernameFromCtx is claimsFromCtx for callers that may run without the auth
+// middleware — a handler unit test, or any future public route. Empty means
+// nobody is recorded, which every store treats as "leave authorship alone".
+func usernameFromCtx(r *http.Request) string {
+	if c := claimsFromCtx(r); c != nil {
+		return c.Username
+	}
+	return ""
+}
+
 func authMiddleware(secret []byte, users *auth.UserStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
