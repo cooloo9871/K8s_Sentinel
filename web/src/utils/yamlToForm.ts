@@ -24,8 +24,17 @@ const SELECTOR_UNSUPPORTED = [
 const PROCESS_OPERATORS = ['Equal', 'NotEqual', 'Postfix', 'NotPostfix']
 const FILE_OPERATORS = ['Prefix', 'NotPrefix']
 
+// What Tetragon's CRD schema defaults onto every stored kprobe. A field equal
+// to its default is not information the form can lose — a save without it gets
+// it defaulted right back — so only a non-default value blocks the form. This
+// is what the cluster's copy of every form-built policy looks like; treating
+// the defaults as user data locked all of them out of the form. (The arg-level
+// defaults — maxData, resolve, returnCopy — need no handling: args are read by
+// index and type, and extra keys were never grounds for refusal.)
+const KPROBE_DEFAULTS: Record<string, unknown> = { return: false }
+
 function representable(kp: any, argOperators: string[]): boolean {
-  if (KPROBE_UNSUPPORTED.some(k => kp[k] !== undefined)) return false
+  if (KPROBE_UNSUPPORTED.some(k => kp[k] !== undefined && kp[k] !== KPROBE_DEFAULTS[k])) return false
   for (const sel of kp.selectors ?? []) {
     if (SELECTOR_UNSUPPORTED.some(k => sel[k] !== undefined)) return false
     // The form writes exactly one action, with nothing beside it — an argError,

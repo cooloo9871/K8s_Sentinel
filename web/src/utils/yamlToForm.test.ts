@@ -227,3 +227,69 @@ ${selector}`
     expect(yamlToForm(fileKprobe('', override))).toBeNull()
   })
 })
+
+// A policy as the cluster returns it: Tetragon's CRD schema defaults fields on
+// persist — return: false on the kprobe, maxData/resolve/returnCopy on every
+// arg — so nothing the builder writes ever comes back byte-identical. Treating
+// those defaults as user data meant every form-built policy in a real cluster
+// refused to reopen in the form. Same lesson the VAP builder learned with the
+// apiserver's own defaulting.
+describe('cluster-defaulted fields', () => {
+  const clusterReturned = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  annotations:
+    sentinel.io/created-by: admin
+  creationTimestamp: "2026-08-18T03:45:01Z"
+  generation: 2
+  name: test2
+  namespace: default
+  resourceVersion: "11470760"
+  uid: bf9fc65a-677d-4ace-bb1b-a9d279e3d83a
+spec:
+  kprobes:
+  - args:
+    - index: 0
+      maxData: false
+      resolve: ""
+      returnCopy: false
+      type: file
+    - index: 1
+      maxData: false
+      resolve: ""
+      returnCopy: false
+      type: int
+    call: security_file_permission
+    return: false
+    selectors:
+    - matchActions:
+      - action: Sigkill
+      matchArgs:
+      - index: 0
+        operator: Prefix
+        values:
+        - /etc
+      - index: 1
+        operator: Equal
+        values:
+        - "2"
+    syscall: false
+  podSelector:
+    matchLabels:
+      run: test2
+`
+
+  it('reopens a form-built policy the cluster has defaulted', () => {
+    const form = yamlToForm(clusterReturned)
+    expect(form).not.toBeNull()
+    expect(form?.file?.[0]?.paths).toEqual(['/etc'])
+    expect(form?.file?.[0]?.permission).toBe('write')
+    expect(form?.podSelector).toEqual({ run: 'test2' })
+  })
+
+  // Only the default value passes: a kprobe that really collects the return
+  // value is something the form cannot show, and must still fall back.
+  it('still refuses return: true', () => {
+    expect(yamlToForm(clusterReturned.replace('return: false', 'return: true'))).toBeNull()
+  })
+})
