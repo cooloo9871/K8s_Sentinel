@@ -77,7 +77,13 @@ rules:
   # Gateway API and Istio routes, for resolving which pods are reachable from
   # outside. Both are optional: absent CRDs answer NotFound, which is skipped.
   - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["gateways", "httproutes", "grpcroutes"]
+    resources: ["gateways", "httproutes", "grpcroutes", "tcproutes", "tlsroutes", "udproutes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["traefik.io", "traefik.containo.us"]
+    resources: ["ingressroutes", "ingressroutetcps", "ingressrouteudps"]
+    verbs: ["get", "list"]
+  - apiGroups: ["projectcontour.io"]
+    resources: ["httpproxies"]
     verbs: ["get", "list"]
   - apiGroups: ["networking.istio.io"]
     resources: ["virtualservices", "gateways"]

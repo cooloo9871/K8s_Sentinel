@@ -54,6 +54,16 @@ func routeClient(objs ...runtime.Object) *dynfake.FakeDynamicClient {
 			istioGatewayGVRs[1]:        "GatewayList",
 			cnpGVR:                     "CiliumNetworkPolicyList",
 			ccnpGVR:                    "CiliumClusterwideNetworkPolicyList",
+			tcpRouteGVR:                "TCPRouteList",
+			tlsRouteGVR:                "TLSRouteList",
+			udpRouteGVR:                "UDPRouteList",
+			contourProxyGVR:            "HTTPProxyList",
+			{Group: "traefik.io", Version: "v1alpha1", Resource: "ingressroutes"}:             "IngressRouteList",
+			{Group: "traefik.io", Version: "v1alpha1", Resource: "ingressroutetcps"}:          "IngressRouteTCPList",
+			{Group: "traefik.io", Version: "v1alpha1", Resource: "ingressrouteudps"}:          "IngressRouteUDPList",
+			{Group: "traefik.containo.us", Version: "v1alpha1", Resource: "ingressroutes"}:    "IngressRouteList",
+			{Group: "traefik.containo.us", Version: "v1alpha1", Resource: "ingressroutetcps"}: "IngressRouteTCPList",
+			{Group: "traefik.containo.us", Version: "v1alpha1", Resource: "ingressrouteudps"}: "IngressRouteUDPList",
 		},
 		objs...,
 	)
@@ -413,5 +423,138 @@ func TestEqualReachKeepsDetectionOrder(t *testing.T) {
 	sortByReach(exps)
 	if exps[0].Address != "a" || exps[1].Address != "b" {
 		t.Errorf("order changed: %+v", exps)
+	}
+}
+
+// The route kinds that share HTTPRoute's backendRefs shape but carried no
+// badge: a workload exposed through a TCPRoute read as unreachable from
+// outside.
+func TestTCPRouteExposesItsBackendPods(t *testing.T) {
+	route := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "gateway.networking.k8s.io/v1alpha2",
+		"kind":       "TCPRoute",
+		"metadata":   map[string]interface{}{"name": "db-route", "namespace": "shop"},
+		"spec": map[string]interface{}{
+			"parentRefs": []interface{}{map[string]interface{}{"name": "public-gw"}},
+			"rules": []interface{}{map[string]interface{}{
+				"backendRefs": []interface{}{map[string]interface{}{
+					"name": "web", "port": int64(5432),
+				}},
+			}},
+		},
+	}}
+	s := &Store{
+		typed:  k8sfake.NewSimpleClientset(servedPod("shop", "web", "web-1")...),
+		client: routeClient(route),
+	}
+	exps := s.listPodExposures(context.Background())["shop/web-1"]
+	if len(exps) != 1 || exps[0].Type != "gateway" {
+		t.Fatalf("got %v, want one gateway exposure", exposureTypes(exps))
+	}
+	if exps[0].Hops[1].Kind != "TCPRoute" {
+		t.Errorf("route hop = %+v, want a TCPRoute", exps[0].Hops[1])
+	}
+	// A TCPRoute has no hostnames; the address is every host the listener takes.
+	if exps[0].Address != "*" {
+		t.Errorf("address = %q, want *", exps[0].Address)
+	}
+}
+
+func traefikRoute(group, kind, resource, ns, name, match string, port interface{}) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": group + "/v1alpha1",
+		"kind":       kind,
+		"metadata":   map[string]interface{}{"name": name, "namespace": ns},
+		"spec": map[string]interface{}{
+			"entryPoints": []interface{}{"websecure"},
+			"routes": []interface{}{map[string]interface{}{
+				"match": match,
+				"services": []interface{}{map[string]interface{}{
+					"name": "web", "port": port,
+				}},
+			}},
+		},
+	}}
+}
+
+// Traefik's own CRDs are neither Ingress nor Gateway API and carried no badge.
+func TestTraefikIngressRouteExposesItsService(t *testing.T) {
+	s := &Store{
+		typed: k8sfake.NewSimpleClientset(servedPod("shop", "web", "web-1")...),
+		client: routeClient(traefikRoute(
+			"traefik.io", "IngressRoute", "ingressroutes",
+			"shop", "web-route", "Host(`shop.example.com`) && PathPrefix(`/api`)", int64(8080))),
+	}
+	exps := s.listPodExposures(context.Background())["shop/web-1"]
+	if len(exps) != 1 || exps[0].Type != "traefik" {
+		t.Fatalf("got %v, want one traefik exposure", exposureTypes(exps))
+	}
+	// The address is what the outside dials, pulled out of the rule match.
+	if exps[0].Address != "shop.example.com" {
+		t.Errorf("address = %q, want the Host() value", exps[0].Address)
+	}
+	if exps[0].Detail != "websecure" {
+		t.Errorf("detail = %q, want the entry point", exps[0].Detail)
+	}
+	if exps[0].Hops[1].Name != "shop/web:8080" {
+		t.Errorf("backend hop = %+v", exps[0].Hops[1])
+	}
+}
+
+// The legacy API group and the TCP variant, whose match is HostSNI.
+func TestTraefikLegacyGroupAndHostSNI(t *testing.T) {
+	s := &Store{
+		typed: k8sfake.NewSimpleClientset(servedPod("shop", "web", "web-1")...),
+		client: routeClient(traefikRoute(
+			"traefik.containo.us", "IngressRouteTCP", "ingressroutetcps",
+			"shop", "db-route", "HostSNI(`db.example.com`)", int64(5432))),
+	}
+	exps := s.listPodExposures(context.Background())["shop/web-1"]
+	if len(exps) != 1 || exps[0].Address != "db.example.com" {
+		t.Fatalf("got %v (address %s), want the HostSNI value", exposureTypes(exps),
+			func() string {
+				if len(exps) > 0 {
+					return exps[0].Address
+				}
+				return ""
+			}())
+	}
+}
+
+// Contour's HTTPProxy: the root names the FQDN; tcpproxy services count too.
+func TestContourHTTPProxyExposesItsServices(t *testing.T) {
+	proxy := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "projectcontour.io/v1",
+		"kind":       "HTTPProxy",
+		"metadata":   map[string]interface{}{"name": "web-proxy", "namespace": "shop"},
+		"spec": map[string]interface{}{
+			"virtualhost": map[string]interface{}{
+				"fqdn": "shop.example.com",
+				"tls":  map[string]interface{}{"secretName": "shop-cert"},
+			},
+			"routes": []interface{}{map[string]interface{}{
+				"services": []interface{}{map[string]interface{}{
+					"name": "web", "port": int64(80),
+				}},
+			}},
+			"tcpproxy": map[string]interface{}{
+				"services": []interface{}{map[string]interface{}{
+					"name": "web", "port": int64(443),
+				}},
+			},
+		},
+	}}
+	s := &Store{
+		typed:  k8sfake.NewSimpleClientset(servedPod("shop", "web", "web-1")...),
+		client: routeClient(proxy),
+	}
+	exps := s.listPodExposures(context.Background())["shop/web-1"]
+	if len(exps) != 2 {
+		t.Fatalf("got %v, want the route service and the tcpproxy service", exposureTypes(exps))
+	}
+	for _, e := range exps {
+		if e.Type != "contour" || e.Address != "shop.example.com" || e.Detail != "HTTPS" {
+			t.Errorf("exposure = %+v, want contour/shop.example.com/HTTPS", e)
+		}
 	}
 }

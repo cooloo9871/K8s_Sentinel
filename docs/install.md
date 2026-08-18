@@ -207,6 +207,8 @@ cilium-agent.
 | `discovery.k8s.io` | `endpointslices` | get, list |
 | `""` (core) | `configmaps` (`cilium-config`, `kube-proxy`) | get, list |
 | `networking.k8s.io` | `ingresses` | get, list |
-| `gateway.networking.k8s.io` | `gateways`, `httproutes`, `grpcroutes` | get, list |
+| `gateway.networking.k8s.io` | `gateways`, `httproutes`, `grpcroutes`, `tcproutes`, `tlsroutes`, `udproutes` | get, list |
+| `traefik.io`, `traefik.containo.us` | `ingressroutes`, `ingressroutetcps`, `ingressrouteudps` | get, list |
+| `projectcontour.io` | `httpproxies` | get, list |
 | `networking.istio.io` | `virtualservices`, `gateways` | get, list |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |

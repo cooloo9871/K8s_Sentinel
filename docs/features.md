@@ -134,7 +134,9 @@ Graphs live pod network connections from Cilium Hubble flows.
   | `nodeport` / `loadbalancer` | Service type |
   | `externalip` | `spec.externalIPs`, which is reachable whatever the type says and can sit alongside the others |
   | `ingress` | Ingress rules and default backend, any controller |
-  | `gateway` | Gateway API `HTTPRoute` / `GRPCRoute` `backendRefs`, including cross-namespace ones |
+  | `gateway` | Gateway API `HTTPRoute` / `GRPCRoute` / `TCPRoute` / `TLSRoute` / `UDPRoute` `backendRefs`, including cross-namespace ones |
+| `traefik` | Traefik `IngressRoute` / `IngressRouteTCP` / `IngressRouteUDP` (both API groups), hosts read from the rule matches |
+| `contour` | Contour `HTTPProxy`: the virtualhost FQDN, route services and tcpproxy services; delegated child proxies show as `*` |
   | `istio` | `VirtualService` destinations, met with the hosts and ports its **Gateway** publishes — only where a real Gateway is attached, since `mesh` alone is sidecar traffic and exposes nothing |
   | `hostnetwork` / `hostport` | pod and container spec |
 
@@ -161,7 +163,7 @@ Graphs live pod network connections from Cilium Hubble flows.
 
   Gateway API and Istio are optional: without the CRDs the lookup is skipped rather than failing.
 
-  Known gaps: Gateway API `TCPRoute` / `TLSRoute` / `UDPRoute`, and controller-specific CRDs that are neither Ingress nor Gateway API — Traefik `IngressRoute`, Contour `HTTPProxy`, Emissary `Mapping`, Gloo `VirtualService`, `CiliumEnvoyConfig`. A workload exposed only through one of those carries no badge. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
+  Known gaps: controller-specific CRDs beyond Traefik and Contour, such as Emissary `Mapping`, Gloo `VirtualService` and `CiliumEnvoyConfig`. A workload exposed only through one of those carries no badge. A pod receiving external traffic with **no declared exposure path** is flagged red, which catches config drift, a hostPort bypass or an active probe
 - **L7 detail** — HTTP method, path and status code on edges where Cilium's proxy is in the path
 - Traffic arriving from outside is identified by Cilium's `reserved:world` identity rather than by its address, so a connection SNATed to a node's `cilium_host` still reads as external — labelled **world via `<node>`**, with the detail panel explaining that the address is the node's and how to keep the client's
 - **Traffic between two node addresses is never drawn.** It is Cilium's own plumbing — inter-node health probing and tunnel chatter — and never a workload's traffic. Node-to-pod is always shown, because that is how the outside reaches a workload

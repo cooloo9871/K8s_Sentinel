@@ -3,7 +3,9 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +23,21 @@ var (
 	}
 	grpcRouteGVR = schema.GroupVersionResource{
 		Group: "gateway.networking.k8s.io", Version: "v1", Resource: "grpcroutes",
+	}
+	tcpRouteGVR = schema.GroupVersionResource{
+		Group: "gateway.networking.k8s.io", Version: "v1alpha2", Resource: "tcproutes",
+	}
+	tlsRouteGVR = schema.GroupVersionResource{
+		Group: "gateway.networking.k8s.io", Version: "v1alpha2", Resource: "tlsroutes",
+	}
+	udpRouteGVR = schema.GroupVersionResource{
+		Group: "gateway.networking.k8s.io", Version: "v1alpha2", Resource: "udproutes",
+	}
+	// Both API groups Traefik has shipped under; a cluster carries one of them.
+	traefikGroups = []string{"traefik.io", "traefik.containo.us"}
+
+	contourProxyGVR = schema.GroupVersionResource{
+		Group: "projectcontour.io", Version: "v1", Resource: "httpproxies",
 	}
 	gatewayGVR = schema.GroupVersionResource{
 		Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways",
@@ -253,6 +270,8 @@ func (s *Store) listPodExposures(ctx context.Context) map[string][]Exposure {
 	if s.client != nil {
 		s.addGatewayRouteExposures(ctx, addForService)
 		s.addIstioExposures(ctx, addForService)
+		s.addTraefikExposures(ctx, addForService)
+		s.addContourExposures(ctx, addForService)
 	}
 
 	return result
@@ -266,15 +285,23 @@ func (s *Store) addGatewayRouteExposures(ctx context.Context, add func(ns, svc s
 	// costs one call rather than one per route.
 	listeners := s.gatewayListeners(ctx)
 
-	for _, gvr := range []schema.GroupVersionResource{httpRouteGVR, grpcRouteGVR} {
-		list, err := s.client.Resource(gvr).Namespace("").List(ctx, fromCache)
+	// All five route kinds share the shape this reads: spec.rules[].backendRefs
+	// (TCPRoute and UDPRoute simply have no hostnames).
+	for _, rk := range []struct {
+		gvr  schema.GroupVersionResource
+		kind string
+	}{
+		{httpRouteGVR, "HTTPRoute"},
+		{grpcRouteGVR, "GRPCRoute"},
+		{tcpRouteGVR, "TCPRoute"},
+		{tlsRouteGVR, "TLSRoute"},
+		{udpRouteGVR, "UDPRoute"},
+	} {
+		list, err := s.client.Resource(rk.gvr).Namespace("").List(ctx, fromCache)
 		if err != nil {
 			continue // CRD not installed, or no permission — neither is an error here
 		}
-		routeKind := "HTTPRoute"
-		if gvr == grpcRouteGVR {
-			routeKind = "GRPCRoute"
-		}
+		routeKind := rk.kind
 
 		for _, route := range list.Items {
 			routeNs := route.GetNamespace()
@@ -683,9 +710,151 @@ func ingressScheme(ing networkingv1.Ingress, host string) string {
 // exposureReach ranks how far an entry point reaches, so a pod with several is
 // read widest-first. The order matters for an audit: an address on the internet
 // is a different problem from a port that first needs access to a node.
+// addTraefikExposures resolves Traefik's own route CRDs, which are neither
+// Ingress nor Gateway API and carried no badge at all. Hosts come out of the
+// rule matches (Host(`...`) / HostSNI(`...`)); a UDP route has no match to
+// read.
+func (s *Store) addTraefikExposures(ctx context.Context, add func(ns, svc string, e Exposure)) {
+	for _, group := range traefikGroups {
+		for _, rk := range []struct{ resource, kind string }{
+			{"ingressroutes", "IngressRoute"},
+			{"ingressroutetcps", "IngressRouteTCP"},
+			{"ingressrouteudps", "IngressRouteUDP"},
+		} {
+			gvr := schema.GroupVersionResource{Group: group, Version: "v1alpha1", Resource: rk.resource}
+			list, err := s.client.Resource(gvr).Namespace("").List(ctx, fromCache)
+			if err != nil {
+				continue // CRD not installed, or no permission
+			}
+			for _, route := range list.Items {
+				routeNs := route.GetNamespace()
+				routeHop := ExposureHop{Kind: rk.kind, Name: qualified(routeNs, route.GetName())}
+				entryPoints, _, _ := unstructured.NestedStringSlice(route.Object, "spec", "entryPoints")
+				detail := strings.Join(entryPoints, ", ")
+
+				rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "routes")
+				for _, r := range rules {
+					rule, ok := r.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					match, _, _ := unstructured.NestedString(rule, "match")
+					address := strings.Join(traefikHosts(match), ", ")
+					if address == "" {
+						address = "*"
+					}
+					services, _, _ := unstructured.NestedSlice(rule, "services")
+					for _, sv := range services {
+						svc, ok := sv.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						name, _, _ := unstructured.NestedString(svc, "name")
+						if name == "" {
+							continue
+						}
+						// Cross-namespace services exist behind a Traefik
+						// option; the field is honoured when present.
+						ns, _, _ := unstructured.NestedString(svc, "namespace")
+						if ns == "" {
+							ns = routeNs
+						}
+						port := intOrStringPort(svc, "port")
+						add(ns, name, Exposure{
+							Type:    "traefik",
+							Address: address,
+							Detail:  detail,
+							Hops:    []ExposureHop{routeHop, servicePort(ns, name, port)},
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+// traefikHosts pulls the hostnames out of a Traefik rule match: the Host and
+// HostSNI functions name what the outside dials.
+func traefikHosts(match string) []string {
+	var hosts []string
+	for _, m := range traefikHostRe.FindAllStringSubmatch(match, -1) {
+		hosts = append(hosts, m[1])
+	}
+	return hosts
+}
+
+var traefikHostRe = regexp.MustCompile("Host(?:SNI)?\\(`([^`]+)`")
+
+// addContourExposures resolves Contour's HTTPProxy: the root proxy names the
+// FQDN, routes and tcpproxy name the services. Delegated child proxies (the
+// includes tree) are listed on their own and carry no fqdn, so their address
+// shows as *; following the delegation chain is not attempted.
+func (s *Store) addContourExposures(ctx context.Context, add func(ns, svc string, e Exposure)) {
+	list, err := s.client.Resource(contourProxyGVR).Namespace("").List(ctx, fromCache)
+	if err != nil {
+		return // CRD not installed, or no permission
+	}
+	for _, proxy := range list.Items {
+		proxyNs := proxy.GetNamespace()
+		proxyHop := ExposureHop{Kind: "HTTPProxy", Name: qualified(proxyNs, proxy.GetName())}
+		address, _, _ := unstructured.NestedString(proxy.Object, "spec", "virtualhost", "fqdn")
+		if address == "" {
+			address = "*"
+		}
+		detail := ""
+		if tls, found, _ := unstructured.NestedMap(proxy.Object, "spec", "virtualhost", "tls"); found && len(tls) > 0 {
+			detail = "HTTPS"
+		}
+
+		emit := func(services []interface{}) {
+			for _, sv := range services {
+				svc, ok := sv.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				name, _, _ := unstructured.NestedString(svc, "name")
+				if name == "" {
+					continue
+				}
+				port := intOrStringPort(svc, "port")
+				// HTTPProxy services are same-namespace by design.
+				add(proxyNs, name, Exposure{
+					Type:    "contour",
+					Address: address,
+					Detail:  detail,
+					Hops:    []ExposureHop{proxyHop, servicePort(proxyNs, name, port)},
+				})
+			}
+		}
+		routes, _, _ := unstructured.NestedSlice(proxy.Object, "spec", "routes")
+		for _, r := range routes {
+			if rule, ok := r.(map[string]interface{}); ok {
+				services, _, _ := unstructured.NestedSlice(rule, "services")
+				emit(services)
+			}
+		}
+		tcpServices, _, _ := unstructured.NestedSlice(proxy.Object, "spec", "tcpproxy", "services")
+		emit(tcpServices)
+	}
+}
+
+// intOrStringPort reads a port field that manifests write as either a number
+// or a numeric string.
+func intOrStringPort(obj map[string]interface{}, field string) int32 {
+	if n, found, _ := unstructured.NestedInt64(obj, field); found {
+		return int32(n)
+	}
+	if sVal, found, _ := unstructured.NestedString(obj, field); found {
+		if n, err := strconv.Atoi(sVal); err == nil {
+			return int32(n)
+		}
+	}
+	return 0
+}
+
 func exposureReach(kind string) int {
 	switch kind {
-	case "loadbalancer", "gateway", "istio", "ingress":
+	case "loadbalancer", "gateway", "istio", "ingress", "traefik", "contour":
 		return 0 // routed from wherever the address resolves
 	case "externalip":
 		return 1 // an address the cluster claims on its own network
