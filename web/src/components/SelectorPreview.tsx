@@ -25,7 +25,17 @@ export function SelectorPreview({ namespace, matchLabels }: {
     return () => { stale = true; clearTimeout(t) }
   }, [namespace, labelsKey])
 
-  if (failed || result === null) return null
+  // A selector the apiserver refuses (a key that is not a valid label) must
+  // not make the preview silently vanish: an absent line reads as "no opinion",
+  // and the one time the line disappears is exactly when the input needs a look.
+  if (failed) {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        Preview unavailable for this selector.
+      </p>
+    )
+  }
+  if (result === null) return null
 
   const hasLabels = Object.keys(matchLabels).length > 0
   const where = namespace ? `in ${namespace}` : 'in the cluster'

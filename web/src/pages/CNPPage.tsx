@@ -649,7 +649,17 @@ export function CNPPage() {
                     )
                   }
                   const ns = form.scope === 'namespaced' ? form.namespace : (nsLabel ?? '')
-                  return <SelectorPreview namespace={ns} matchLabels={labels} />
+                  // Cilium selectors may carry source prefixes; k8s:app names
+                  // the plain pod label, while other sources (cilium:,
+                  // reserved:) are not pod labels at all and cannot be
+                  // previewed against the pod list.
+                  const podLabels: Record<string, string> = {}
+                  for (const [k, v] of Object.entries(labels)) {
+                    if (k.startsWith('k8s:')) podLabels[k.slice(4)] = v
+                    else if (!k.includes(':')) podLabels[k] = v
+                    else return null
+                  }
+                  return <SelectorPreview namespace={ns} matchLabels={podLabels} />
                 })()}
 
                 <RuleSection
