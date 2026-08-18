@@ -28,6 +28,7 @@ func TestEveryRouteIsRegistered(t *testing.T) {
 		{http.MethodDelete, "/api/policies/p"},
 		{http.MethodGet, "/api/mode"},
 		{http.MethodPut, "/api/mode"},
+		{http.MethodPost, "/api/selector-preview"},
 
 		{http.MethodGet, "/api/cnp"},
 		{http.MethodPost, "/api/cnp"},

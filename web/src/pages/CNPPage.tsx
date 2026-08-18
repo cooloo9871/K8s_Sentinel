@@ -23,8 +23,9 @@ import { YamlEditor } from '../components/YamlEditor'
 import { formatTWTime } from '../utils/time'
 import { cnpApi, namespaceApi, type CNPRecord } from '../api/client'
 import { NamespaceSelect } from '../components/NamespaceSelect'
+import { SelectorPreview } from '../components/SelectorPreview'
 import {
-  cnpFormToYaml, validateCNPForm, tryParseCNPForm, peerLabel,
+  cnpFormToYaml, validateCNPForm, tryParseCNPForm, peerLabel, subjectMatchLabels, NAMESPACE_KEY,
   emptyForm, emptyRule, emptyLabel, emptyPort, emptyHttp,
   HTTP_METHODS, PROTOCOLS, ENTITIES,
   type CNPFormInput, type CNPRule, type CNPSection, type CNPDirection, type CNPMode, type CNPScope,
@@ -188,6 +189,13 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
                     <SelectGroup>
                       <SelectItem value="labels">Labels</SelectItem>
                       <SelectItem value="entity">Entity</SelectItem>
+                      <SelectItem value="cidr">IP / CIDR</SelectItem>
+                      {/* Cilium learns a name's addresses from the DNS answers
+                          the pod receives, so FQDN exists on the egress allow
+                          side only. */}
+                      {direction === 'egress' && section.mode === 'whitelist' && (
+                        <SelectItem value="fqdn">FQDN</SelectItem>
+                      )}
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -204,6 +212,20 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
                       </SelectGroup>
                     </SelectContent>
                   </Select>
+                </Field>
+              ) : r.peerKind === 'cidr' ? (
+                <Field label={peerLabel(direction)} required
+                  hint="An IP or CIDR. A bare IP means that one host.">
+                  <Input value={r.peerCIDR} placeholder="10.0.0.0/8"
+                    onChange={e => updateRule(i, r => ({ ...r, peerCIDR: e.target.value }))}
+                    className="h-9 font-mono text-sm" />
+                </Field>
+              ) : r.peerKind === 'fqdn' ? (
+                <Field label={peerLabel(direction)} required
+                  hint="A domain name; * is a wildcard. A DNS rule to kube-dns is included automatically, because FQDN matching needs the DNS answers to be observed.">
+                  <Input value={r.peerFQDN} placeholder="github.com"
+                    onChange={e => updateRule(i, r => ({ ...r, peerFQDN: e.target.value }))}
+                    className="h-9 font-mono text-sm" />
                 </Field>
               ) : (
                 <>
@@ -605,6 +627,15 @@ export function CNPPage() {
                     />
                   </Field>
                 )}
+
+                {(() => {
+                  // io.kubernetes.pod.namespace is Cilium's derived label, not
+                  // one that exists on pods, so it becomes the namespace filter
+                  // and the rest are matched as real labels.
+                  const { [NAMESPACE_KEY]: nsLabel, ...labels } = subjectMatchLabels(form)
+                  const ns = form.scope === 'namespaced' ? form.namespace : (nsLabel ?? '')
+                  return <SelectorPreview namespace={ns} matchLabels={labels} />
+                })()}
 
                 <RuleSection
                   direction="ingress"

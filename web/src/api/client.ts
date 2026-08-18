@@ -64,6 +64,17 @@ export const podApi = {
     api.get(`/pods/${namespace}/${pod}/labels`).then((r) => r.data),
 }
 
+export interface SelectorPreviewResult {
+  total: number
+  pods: { namespace: string; name: string }[]
+}
+
+export const selectorApi = {
+  // Which pods a label selector would govern right now; namespace "" means all.
+  preview: (namespace: string, matchLabels: Record<string, string>): Promise<SelectorPreviewResult> =>
+    api.post('/selector-preview', { namespace, matchLabels }).then((r) => r.data),
+}
+
 export interface CustomTemplatePayload {
   id: string
   name: string

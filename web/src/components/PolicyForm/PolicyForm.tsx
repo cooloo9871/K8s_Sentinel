@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { policyApi } from '../../api/client'
 import { NamespaceSelect } from '../NamespaceSelect'
+import { SelectorPreview } from '../SelectorPreview'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -194,6 +195,14 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                   </Button>
                 </div>
               ))}
+              <SelectorPreview
+                namespace={value.namespace ?? ''}
+                matchLabels={Object.fromEntries(
+                  localLabels
+                    .filter(l => l.key.trim() && l.value.trim())
+                    .map(l => [l.key.trim(), l.value.trim()])
+                )}
+              />
               <div>
                 <Button variant="outline" size="sm" onClick={addLabel}>
                   + Add Label

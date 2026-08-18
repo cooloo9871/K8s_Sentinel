@@ -24,10 +24,11 @@ export type CNPDirection = 'ingress' | 'egress'
 // namespace, so governing pods elsewhere requires the cluster-wide kind.
 export type CNPScope = 'namespaced' | 'cluster'
 
-// A peer is either a set of labels or one of Cilium's reserved identities.
-// `world` in particular has no labels to select, and is how a rule names traffic
-// outside the cluster.
-export type PeerKind = 'labels' | 'entity'
+// A peer is a set of labels, one of Cilium's reserved identities, an address
+// range, or a domain name. The last two are for destinations that have neither
+// labels nor an identity worth naming: an external database subnet, a SaaS
+// endpoint.
+export type PeerKind = 'labels' | 'entity' | 'cidr' | 'fqdn'
 
 // Written on the policies this form generates, so editing one can reopen the
 // form instead of dropping to raw YAML. Matches how Admission Policy does it.
@@ -65,6 +66,12 @@ export interface CNPRule {
   // Empty means the policy's own namespace, which is Cilium's default.
   peerNamespace: string
   peerEntity: string
+  // An IP or CIDR; a bare IP is written as a /32 (or /128 for IPv6).
+  peerCIDR: string
+  // A domain name, with * as a wildcard. Egress whitelists only: Cilium learns
+  // a name's addresses from the DNS answers the pod receives, so there is
+  // nothing to match on ingress or in a deny rule.
+  peerFQDN: string
   ports: PortEntry[]
   http: HttpRule[]
 }
@@ -130,6 +137,8 @@ export function emptyRule(): CNPRule {
     peerLabels: [emptyLabel()],
     peerNamespace: '',
     peerEntity: 'world',
+    peerCIDR: '',
+    peerFQDN: '',
     ports: [],
     http: [],
   }
@@ -149,7 +158,7 @@ export function emptyForm(): CNPFormInput {
 
 // Cilium exposes a pod's namespace as a label, so selecting across namespaces
 // means writing that key. Nobody remembers it, hence the aliases.
-const NAMESPACE_KEY = 'io.kubernetes.pod.namespace'
+export const NAMESPACE_KEY = 'io.kubernetes.pod.namespace'
 const NAMESPACE_ALIASES = new Set(['namespace', 'ns'])
 
 /** Turns the form's label rows into a Cilium matchLabels map. */
@@ -207,6 +216,31 @@ function labelRowErrors(pairs: LabelPair[], what: string): string[] {
 }
 
 const DNS1123 = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+const CIDR_V4 = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/
+
+/** A bare address becomes a single-host CIDR, which is what Cilium expects. */
+function normalizeCIDR(v: string): string {
+  const s = v.trim()
+  if (s.includes('/')) return s
+  return s.includes(':') ? s + '/128' : s + '/32'
+}
+
+// What FQDN matching depends on: Cilium learns a name's addresses only from
+// DNS answers it observes, and a whitelist egress section would block DNS
+// itself. This rule allows DNS to kube-dns through the proxy, where the
+// answers are seen. It is plumbing rather than a decision, so the form folds
+// it away on read and re-emits it whenever a section carries FQDN rules; the
+// regeneration comparison sends every hand-written variant to the YAML editor.
+const DNS_VISIBILITY_RULE = {
+  toEndpoints: [{
+    matchLabels: { 'io.kubernetes.pod.namespace': 'kube-system', 'k8s-app': 'kube-dns' },
+  }],
+  toPorts: [{
+    ports: [{ port: '53', protocol: 'ANY' }],
+    rules: { dns: [{ matchPattern: '*' }] },
+  }],
+}
+const DNS_VISIBILITY_CANON = yaml.dump(DNS_VISIBILITY_RULE, { sortKeys: true })
 
 /** The HTTP entries that say something, dropping rows left blank. */
 function filledHttp(r: CNPRule): HttpRule[] {
@@ -279,6 +313,19 @@ function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
       if (!ENTITIES.includes(r.peerEntity)) {
         errors.push(`${at}${r.peerEntity || 'The entity'} is not a Cilium entity.`)
       }
+    } else if (r.peerKind === 'cidr') {
+      const v = r.peerCIDR.trim()
+      if (!v) {
+        errors.push(`${at}${side} needs an IP or CIDR.`)
+      } else if (!CIDR_V4.test(v) && !v.includes(':')) {
+        errors.push(`${at}${v} is not an IP or CIDR.`)
+      }
+    } else if (r.peerKind === 'fqdn') {
+      if (direction !== 'egress' || section.mode !== 'whitelist') {
+        errors.push(`${at}FQDN rules only allow egress: Cilium learns a name's addresses from the DNS answers the pod receives, so there is nothing to match on ingress or in a deny rule.`)
+      } else if (!r.peerFQDN.trim()) {
+        errors.push(`${at}${side} needs a domain name.`)
+      }
     } else {
       // A namespace alone is a complete peer, the same way it is a complete
       // subject: it names everything in that namespace. Only neither is
@@ -340,6 +387,9 @@ interface Rule {
   toEndpoints?: { matchLabels: Record<string, string> }[]
   fromEntities?: string[]
   toEntities?: string[]
+  fromCIDR?: string[]
+  toCIDR?: string[]
+  toFQDNs?: { matchName?: string; matchPattern?: string }[]
   toPorts?: PortRule[]
 }
 
@@ -350,6 +400,12 @@ function toCiliumRule(r: CNPRule, direction: CNPDirection): Rule {
   let out: Rule
   if (r.peerKind === 'entity') {
     out = isIngress ? { fromEntities: [r.peerEntity] } : { toEntities: [r.peerEntity] }
+  } else if (r.peerKind === 'cidr') {
+    const cidr = normalizeCIDR(r.peerCIDR)
+    out = isIngress ? { fromCIDR: [cidr] } : { toCIDR: [cidr] }
+  } else if (r.peerKind === 'fqdn') {
+    const name = r.peerFQDN.trim()
+    out = { toFQDNs: [name.includes('*') ? { matchPattern: name } : { matchName: name }] }
   } else {
     const endpoints = [{ matchLabels: peerMatchLabels(r) }]
     out = isIngress ? { fromEndpoints: endpoints } : { toEndpoints: endpoints }
@@ -389,6 +445,10 @@ export function cnpFormToYaml(input: CNPFormInput): string {
   for (const { direction, section } of sectionsOf(input)) {
     if (section.rules.length === 0) continue
     const rules = section.rules.map(r => toCiliumRule(r, direction))
+    if (direction === 'egress' && section.mode === 'whitelist' &&
+        section.rules.some(r => r.peerKind === 'fqdn')) {
+      rules.push(DNS_VISIBILITY_RULE as unknown as Rule)
+    }
     if (section.mode === 'blacklist') {
       // Without this, adding a deny rule would also switch the endpoint to
       // default-deny for the whole direction — denying far more than the rules
@@ -515,8 +575,14 @@ function parseRules(ciliumRules: Rule[], direction: CNPDirection): CNPRule[] | n
   const isIngress = direction === 'ingress'
   const rules: CNPRule[] = []
   for (const cr of ciliumRules) {
+    // The DNS visibility rule rides along with FQDN rules and is not shown; the
+    // regeneration comparison enforces that it and the FQDN rules pair up.
+    if (!isIngress && yaml.dump(cr, { sortKeys: true }) === DNS_VISIBILITY_CANON) {
+      continue
+    }
     const endpoints = isIngress ? cr.fromEndpoints : cr.toEndpoints
     const entities = isIngress ? cr.fromEntities : cr.toEntities
+    const cidrs = isIngress ? cr.fromCIDR : cr.toCIDR
 
     const rule = emptyRule()
     if (endpoints?.length === 1) {
@@ -535,6 +601,13 @@ function parseRules(ciliumRules: Rule[], direction: CNPDirection): CNPRule[] | n
     } else if (entities?.length === 1) {
       rule.peerKind = 'entity'
       rule.peerEntity = entities[0]
+    } else if (cidrs?.length === 1) {
+      rule.peerKind = 'cidr'
+      rule.peerCIDR = cidrs[0]
+    } else if (!isIngress && cr.toFQDNs?.length === 1) {
+      rule.peerKind = 'fqdn'
+      rule.peerFQDN = cr.toFQDNs[0].matchName ?? cr.toFQDNs[0].matchPattern ?? ''
+      if (!rule.peerFQDN) return null
     } else {
       return null
     }

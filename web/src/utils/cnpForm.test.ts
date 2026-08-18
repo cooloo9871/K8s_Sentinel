@@ -919,3 +919,87 @@ describe('peer namespace alone', () => {
     expect(validateCNPForm(peerOnlyNs('')).join(' ')).toContain('needs a label or a namespace')
   })
 })
+
+// A peer can be an address range or a domain name, for destinations that have
+// neither labels nor a reserved identity: an external database subnet, a SaaS
+// endpoint.
+describe('CIDR peers', () => {
+  const cidrRule = (over: Partial<CNPRule> = {}) =>
+    rule({ peerKind: 'cidr', peerCIDR: '10.0.0.0/8', ...over })
+
+  it('writes toCIDR for egress and fromCIDR for ingress', () => {
+    expect(cnpFormToYaml(only('egress', 'whitelist', [cidrRule()]))).toContain('toCIDR')
+    expect(cnpFormToYaml(only('ingress', 'whitelist', [cidrRule()]))).toContain('fromCIDR')
+  })
+
+  it('normalises a bare IP to a /32', () => {
+    expect(cnpFormToYaml(only('egress', 'blacklist', [cidrRule({ peerCIDR: '203.0.113.7' })])))
+      .toContain('203.0.113.7/32')
+  })
+
+  it('round-trips, in both modes', () => {
+    for (const form of [
+      only('egress', 'whitelist', [cidrRule({ ports: [{ port: '5432', protocol: 'TCP' }] })]),
+      only('egress', 'blacklist', [cidrRule()]),
+      only('ingress', 'whitelist', [cidrRule()]),
+    ]) {
+      const parsed = tryParseCNPForm(cnpFormToYaml(form))
+      expect(parsed, JSON.stringify(form)).toEqual(form)
+    }
+  })
+
+  it('refuses text that is not an address', () => {
+    expect(validateCNPForm(only('egress', 'whitelist', [cidrRule({ peerCIDR: 'not-an-ip' })])).join(' '))
+      .toContain('not an IP or CIDR')
+    expect(validateCNPForm(only('egress', 'whitelist', [cidrRule({ peerCIDR: '' })])).join(' '))
+      .toContain('needs an IP or CIDR')
+  })
+})
+
+describe('FQDN peers', () => {
+  const fqdnRule = (over: Partial<CNPRule> = {}) =>
+    rule({ peerKind: 'fqdn', peerFQDN: 'github.com', ...over })
+
+  it('writes toFQDNs with the DNS visibility rule the matching depends on', () => {
+    const out = cnpFormToYaml(only('egress', 'whitelist', [fqdnRule()]))
+    expect(out).toContain('matchName: github.com')
+    // Without DNS visibility, Cilium never learns the name's addresses and the
+    // whitelist blocks everything including DNS itself. The rule rides along.
+    expect(out).toContain('k8s-app: kube-dns')
+    expect(out).toContain('matchPattern: \'*\'')
+  })
+
+  it('writes a wildcard as matchPattern', () => {
+    expect(cnpFormToYaml(only('egress', 'whitelist', [fqdnRule({ peerFQDN: '*.github.com' })])))
+      .toContain('matchPattern: \'*.github.com\'')
+  })
+
+  it('round-trips with the DNS rule folded away', () => {
+    const form = only('egress', 'whitelist', [
+      fqdnRule({ ports: [{ port: '443', protocol: 'TCP' }] }),
+      rule({ peerLabels: [{ key: 'app', value: 'db' }] }),
+    ])
+    expect(tryParseCNPForm(cnpFormToYaml(form))).toEqual(form)
+  })
+
+  // Cilium resolves FQDNs from observed DNS answers, which only exist on the
+  // egress side; deny rules cannot carry toFQDNs at all.
+  it('refuses an FQDN peer outside a whitelist egress section', () => {
+    expect(validateCNPForm(only('ingress', 'whitelist', [fqdnRule()])).join(' '))
+      .toContain('only allow egress')
+    expect(validateCNPForm(only('egress', 'blacklist', [fqdnRule()])).join(' '))
+      .toContain('only allow egress')
+  })
+
+  // Hand-written near-misses fall back to the YAML editor rather than being
+  // silently rewritten: a DNS rule with no FQDN rule would be dropped on save,
+  // and an FQDN rule with no DNS rule would gain one.
+  it('falls back when the DNS rule and FQDN rules do not pair up', () => {
+    const withFqdn = cnpFormToYaml(only('egress', 'whitelist', [fqdnRule()]))
+    const dnsRuleStart = withFqdn.indexOf('    - toEndpoints:')
+    expect(dnsRuleStart).toBeGreaterThan(-1)
+    // Strip the trailing DNS visibility rule: fqdn without dns.
+    const withoutDns = withFqdn.slice(0, withFqdn.indexOf('- toEndpoints:', withFqdn.indexOf('toFQDNs')))
+    expect(tryParseCNPForm(withoutDns)).toBeNull()
+  })
+})

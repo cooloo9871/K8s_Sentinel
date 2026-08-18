@@ -66,6 +66,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
 		r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
 		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
+		r.Post("/api/selector-preview", selectorPreview(cfg.Store))
 		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
 		r.Get("/api/templates", listTemplates(cfg.Store))
 		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
