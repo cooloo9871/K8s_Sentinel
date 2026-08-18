@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
   IconShieldLock, IconServer, IconRefresh,
@@ -727,6 +728,19 @@ export function VAPPage() {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<'policies' | 'bindings'>('policies')
 
+  // Which screen is up lives in the URL, so Back returns to the list, F5 stays
+  // on the editor, and an edit has an address. The screens themselves are the
+  // state below; this block drives it from the route.
+  const navigate = useNavigate()
+  const { pathname, search: routeSearch } = useLocation()
+  const [searchParams] = useSearchParams()
+  const isPolicyNew = !!useMatch('/policies/admission/new')
+  const isBindingNew = !!useMatch('/policies/admission/bindings/new')
+  const policyEditParam = useMatch('/policies/admission/:name/edit')?.params.name
+  const bindingEditParam = useMatch('/policies/admission/bindings/:name/edit')?.params.name
+  const yamlMode = searchParams.get('mode') === 'yaml'
+  const [listsLoaded, setListsLoaded] = useState(false)
+
   // Policy builder state
   const [showBuilder, setShowBuilder] = useState(false)
   const [builderEditName, setBuilderEditName] = useState<string | undefined>()
@@ -788,6 +802,7 @@ export function VAPPage() {
       const [p, b] = await Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       setPolicies(p)
       setBindings(b)
+      setListsLoaded(true)
       hasLoaded.current = true
     } catch { /* ignore */ }
     finally { setLoading(false) }
@@ -840,6 +855,59 @@ export function VAPPage() {
     setEditor({ kind, name, yaml: rawYaml })
   }
 
+  // Route → screen. Editing needs the record, so it waits for the lists; a
+  // deep link naming something that no longer exists goes back with a toast.
+  useEffect(() => {
+    if (isPolicyNew) {
+      if (yamlMode) {
+        openNew('policy')
+      } else {
+        resetBuilderForm()
+        setBuilderEditName(undefined)
+        setShowBuilder(true)
+      }
+      return
+    }
+    if (isBindingNew) {
+      if (yamlMode) {
+        openNew('binding')
+      } else {
+        setBindingEditName(undefined)
+        setBindingName(''); setBindingPolicy(''); setBindingNamespace('')
+        setBindingActions(new Set(['Deny']))
+        setShowBindingBuilder(true)
+      }
+      setActiveTab('bindings')
+      return
+    }
+    if (policyEditParam || bindingEditParam) {
+      if (!listsLoaded) return
+      const kind = policyEditParam ? 'policy' as const : 'binding' as const
+      const name = policyEditParam ?? bindingEditParam!
+      const rec = policyEditParam
+        ? policies.find(x => x.name === name)
+        : bindings.find(x => x.name === name)
+      if (!rec) {
+        toast.error(`${kind === 'policy' ? 'Policy' : 'Binding'} ${name} no longer exists.`)
+        navigate('/policies/admission', { replace: true })
+        return
+      }
+      if (kind === 'binding') setActiveTab('bindings')
+      openEdit(kind, rec.name, rec.rawYaml)
+      return
+    }
+    // The list route closes every screen and clears what they held.
+    setShowBuilder(false)
+    setShowBindingBuilder(false)
+    setEditor(null)
+    setBuilderEditName(undefined)
+    setBindingEditName(undefined)
+    resetBuilderForm()
+  // Deliberately not keyed on the record lists: re-running openEdit on a
+  // background refresh would overwrite what the user is typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, routeSearch, listsLoaded])
+
   const handleSave = async () => {
     if (!editor || !editorValid) return
     setSaving(true)
@@ -853,8 +921,8 @@ export function VAPPage() {
       }
       toast.success(`${editor.kind === 'policy' ? 'Policy' : 'Binding'} applied.`)
       setActiveTab(editor.kind === 'policy' ? 'policies' : 'bindings')
-      setEditor(null)
       load()
+      navigate('/policies/admission')
     } catch (e: unknown) {
       toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
     } finally { setSaving(false) }
@@ -889,9 +957,8 @@ export function VAPPage() {
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
-      setShowBuilder(false)
-      resetBuilderForm()
       load()
+      navigate('/policies/admission')
     } catch (e: unknown) {
       toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
     } finally { setBuilderSaving(false) }
@@ -905,10 +972,8 @@ export function VAPPage() {
       if (bindingEditName) await vapApi.updateBinding(bindingEditName, y)
       else await vapApi.applyBinding(y)
       toast.success('Binding applied.')
-      setShowBindingBuilder(false)
-      setBindingEditName(undefined)
-      setBindingName(''); setBindingPolicy(''); setBindingNamespace(''); setBindingActions(new Set(['Deny']))
       load()
+      navigate('/policies/admission')
     } catch (e: unknown) {
       toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
     } finally { setBindingBuilderSaving(false) }
@@ -941,7 +1006,7 @@ export function VAPPage() {
             <h4 className="text-xl font-semibold">{builderEditName ? `Edit ${builderEditName}` : 'New Policy'}</h4>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowBuilder(false); resetBuilderForm() }}>Cancel</Button>
+            <Button variant="outline" onClick={() => navigate('/policies/admission')}>Cancel</Button>
             {isAdmin && (
               <Button onClick={handleBuilderApply} disabled={!canApply || builderSaving}>
                 {builderSaving ? 'Applying...' : 'Apply'}
@@ -1352,7 +1417,7 @@ export function VAPPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowBindingBuilder(false); setBindingEditName(undefined); setBindingName(''); setBindingPolicy(''); setBindingNamespace(''); setBindingActions(new Set(['Deny'])) }}>Cancel</Button>
+            <Button variant="outline" onClick={() => navigate('/policies/admission')}>Cancel</Button>
             {isAdmin && (
               <Button onClick={handleBindingBuilderApply} disabled={!canApply || bindingBuilderSaving}>
                 {bindingBuilderSaving ? 'Applying...' : 'Apply'}
@@ -1463,7 +1528,7 @@ export function VAPPage() {
             {editor.name && <p className="text-sm text-muted-foreground">{editor.name}</p>}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setEditor(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => navigate('/policies/admission')}>Cancel</Button>
             {isAdmin && (
               <Button onClick={handleSave} disabled={!editorValid || saving}>
                 {saving ? 'Applying...' : 'Apply'}
@@ -1512,8 +1577,8 @@ export function VAPPage() {
               </Button>
               {isAdmin && (
                 <>
-                  <Button size="sm" onClick={() => setShowBuilder(true)}>+ New Policy</Button>
-                  <Button size="sm" variant="outline" onClick={() => openNew('policy')}>+ New YAML</Button>
+                  <Button size="sm" onClick={() => navigate('/policies/admission/new')}>+ New Policy</Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate('/policies/admission/new?mode=yaml')}>+ New YAML</Button>
                 </>
               )}
             </div>
@@ -1548,7 +1613,7 @@ export function VAPPage() {
                         <TableCell className="text-muted-foreground">{formatTWTime(p.createdAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => openEdit('policy', p.name, p.rawYaml)}>{isAdmin ? 'Edit' : 'View YAML'}</Button>
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/policies/admission/${p.name}/edit`)}>{isAdmin ? 'Edit' : 'View YAML'}</Button>
                             {isAdmin && <Button variant="destructive" size="sm" onClick={() => setDeleteTarget({ kind: 'policy', name: p.name })}>Delete</Button>}
                           </div>
                         </TableCell>
@@ -1572,8 +1637,8 @@ export function VAPPage() {
               </Button>
               {isAdmin && (
                 <>
-                  <Button size="sm" onClick={() => setShowBindingBuilder(true)}>+ New Binding</Button>
-                  <Button size="sm" variant="outline" onClick={() => openNew('binding')}>+ New YAML</Button>
+                  <Button size="sm" onClick={() => navigate('/policies/admission/bindings/new')}>+ New Binding</Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate('/policies/admission/bindings/new?mode=yaml')}>+ New YAML</Button>
                 </>
               )}
             </div>
@@ -1612,7 +1677,7 @@ export function VAPPage() {
                         <TableCell className="text-muted-foreground">{formatTWTime(b.createdAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => openEdit('binding', b.name, b.rawYaml)}>{isAdmin ? 'Edit' : 'View YAML'}</Button>
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/policies/admission/bindings/${b.name}/edit`)}>{isAdmin ? 'Edit' : 'View YAML'}</Button>
                             {isAdmin && <Button variant="destructive" size="sm" onClick={() => setDeleteTarget({ kind: 'binding', name: b.name })}>Delete</Button>}
                           </div>
                         </TableCell>
