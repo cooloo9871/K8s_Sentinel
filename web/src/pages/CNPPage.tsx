@@ -192,10 +192,14 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
                       <SelectItem value="cidr">IP / CIDR</SelectItem>
                       {/* Cilium learns a name's addresses from the DNS answers
                           the pod receives, so FQDN exists on the egress allow
-                          side only. */}
-                      {direction === 'egress' && section.mode === 'whitelist' && (
-                        <SelectItem value="fqdn">FQDN</SelectItem>
-                      )}
+                          side only. Rendered even when not selectable: a rule
+                          that IS an FQDN peer keeps its name in the trigger
+                          when the mode flips, instead of going blank while the
+                          validation error explains. */}
+                      <SelectItem value="fqdn"
+                        disabled={direction !== 'egress' || section.mode !== 'whitelist'}>
+                        FQDN
+                      </SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -633,6 +637,17 @@ export function CNPPage() {
                   // one that exists on pods, so it becomes the namespace filter
                   // and the rest are matched as real labels.
                   const { [NAMESPACE_KEY]: nsLabel, ...labels } = subjectMatchLabels(form)
+                  // A namespaced policy naming a different namespace selects
+                  // nothing at all in Cilium; say that rather than previewing a
+                  // set the policy will not govern.
+                  if (form.scope === 'namespaced' && nsLabel && nsLabel !== form.namespace) {
+                    return (
+                      <p className="text-[11px] text-destructive">
+                        Selects no pods: a namespaced policy only ever matches its own
+                        namespace, and this selector names {nsLabel}.
+                      </p>
+                    )
+                  }
                   const ns = form.scope === 'namespaced' ? form.namespace : (nsLabel ?? '')
                   return <SelectorPreview namespace={ns} matchLabels={labels} />
                 })()}

@@ -1003,3 +1003,21 @@ describe('FQDN peers', () => {
     expect(tryParseCNPForm(withoutDns)).toBeNull()
   })
 })
+
+// The apiserver would reject these anyway, but its error arrives after Apply
+// and names a line in generated YAML; the form can say it at the field.
+describe('CIDR validation', () => {
+  const cidr = (v: string) => only('egress', 'whitelist', [
+    rule({ peerKind: 'cidr', peerCIDR: v }),
+  ])
+
+  it('refuses an impossible octet and an impossible prefix', () => {
+    expect(validateCNPForm(cidr('300.1.2.3')).join(' ')).toContain('not an IP or CIDR')
+    expect(validateCNPForm(cidr('10.0.0.0/33')).join(' ')).toContain('not an IP or CIDR')
+  })
+
+  it('accepts the edges', () => {
+    expect(validateCNPForm(cidr('255.255.255.255/32'))).toEqual([])
+    expect(validateCNPForm(cidr('0.0.0.0/0'))).toEqual([])
+  })
+})

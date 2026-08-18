@@ -216,7 +216,15 @@ function labelRowErrors(pairs: LabelPair[], what: string): string[] {
 }
 
 const DNS1123 = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
-const CIDR_V4 = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/
+/** A well-formed IPv4 address or CIDR: four octets in range, prefix 0 to 32. */
+function isV4CIDR(v: string): boolean {
+  const [addr, prefix, extra] = v.split('/')
+  if (extra !== undefined) return false
+  if (prefix !== undefined && (!/^\d{1,2}$/.test(prefix) || Number(prefix) > 32)) return false
+  const octets = addr.split('.')
+  if (octets.length !== 4) return false
+  return octets.every(o => /^\d{1,3}$/.test(o) && Number(o) <= 255)
+}
 
 /** A bare address becomes a single-host CIDR, which is what Cilium expects. */
 function normalizeCIDR(v: string): string {
@@ -317,7 +325,7 @@ function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
       const v = r.peerCIDR.trim()
       if (!v) {
         errors.push(`${at}${side} needs an IP or CIDR.`)
-      } else if (!CIDR_V4.test(v) && !v.includes(':')) {
+      } else if (!isV4CIDR(v) && !v.includes(':')) {
         errors.push(`${at}${v} is not an IP or CIDR.`)
       }
     } else if (r.peerKind === 'fqdn') {
