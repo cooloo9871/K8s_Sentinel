@@ -53,7 +53,10 @@ else
 
   "${HELM}" repo add cilium https://helm.cilium.io --force-update
   "${HELM}" repo update cilium
-  "${HELM}" template tetragon cilium/tetragon -n kube-system | kubectl apply -f -
+  # Expose the Tetragon gRPC server on the pod network (default is localhost),
+  # so Sentinel can collect events over it instead of kubectl exec.
+  "${HELM}" template tetragon cilium/tetragon -n kube-system \
+    --set tetragon.grpc.address=0.0.0.0:54321 | kubectl apply -f -
 
   echo "[tetragon] waiting for DaemonSet to be ready..."
   kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s

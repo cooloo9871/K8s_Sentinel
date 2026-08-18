@@ -1,20 +1,32 @@
 package k8s
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"strings"
 	"sync"
 
+	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/remotecommand"
 )
+
+// podEndpoint is a running pod reachable over gRPC: its name for logging, its
+// IP to dial. Each Tetragon agent only observes its own node, so every one is
+// connected to.
+type podEndpoint struct {
+	Name string
+	IP   string
+}
+
+// tetragonGRPCPort is where the Tetragon agent's gRPC server listens. The
+// install sets tetragon.grpc.address=0.0.0.0:54321 so it is reachable on the
+// pod network; the default localhost bind is not.
+func tetragonGRPCPort() string {
+	return envOr("TETRAGON_GRPC_PORT", "54321")
+}
 
 // TetragonEvent is the shape carried on the shared runtime-security event bus.
 // Most events originate from Tetragon kprobes, but Cilium network policy
@@ -84,11 +96,11 @@ func (e TetragonEvent) HookKind() string {
 	return ""
 }
 
-// StreamTetragonEvents streams events from ALL Tetragon pods concurrently.
-// In a multi-node cluster each pod only sees its own node's events, so we
-// must aggregate all pods to get complete cluster coverage.
+// StreamTetragonEvents streams events from ALL Tetragon pods concurrently over
+// their gRPC APIs. In a multi-node cluster each pod only sees its own node's
+// events, so every one is connected to for complete cluster coverage.
 func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEvent) error {
-	if s.typed == nil || s.restConfig == nil {
+	if s.typed == nil {
 		return fmt.Errorf("kubernetes clients not initialised")
 	}
 
@@ -98,61 +110,49 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 	}
 
 	var wg sync.WaitGroup
-	for _, podName := range pods {
+	for _, pod := range pods {
 		wg.Add(1)
-		go func(name string) {
+		go func(p podEndpoint) {
 			defer wg.Done()
 			// One pod failing must not stop the others, but it does have to be
-			// visible: the error was discarded here while the comment claimed it
-			// was logged, so a broken Tetragon stream looked like a quiet cluster.
-			if err := s.streamFromPod(ctx, name, out); err != nil && ctx.Err() == nil {
-				log.Printf("tetragon-stream: pod %s: %v", name, err)
+			// visible: a broken Tetragon stream otherwise looks like a quiet
+			// cluster.
+			if err := s.streamFromPod(ctx, p, out); err != nil && ctx.Err() == nil {
+				log.Printf("tetragon-stream: pod %s: %v", p.Name, err)
 			}
-		}(podName)
+		}(pod)
 	}
 	wg.Wait()
 	return nil
 }
 
-func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- TetragonEvent) error {
-	req := s.typed.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(podName).
-		Namespace(tetragonNamespace()).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: "tetragon",
-			Command:   []string{"tetra", "getevents", "-o", "json"},
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    false,
-			TTY:       false,
-		}, scheme.ParameterCodec)
-
-	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- TetragonEvent) error {
+	conn, err := dialGRPC("TETRAGON_GRPC", pod.IP+":"+tetragonGRPCPort())
 	if err != nil {
-		return fmt.Errorf("exec %s: %w", podName, err)
+		return fmt.Errorf("dial %s: %w", pod.Name, err)
+	}
+	defer conn.Close()
+
+	stream, err := tetragon.NewFineGuidanceSensorsClient(conn).GetEvents(ctx, &tetragon.GetEventsRequest{})
+	if err != nil {
+		return fmt.Errorf("GetEvents %s: %w", pod.Name, err)
 	}
 
-	pr, pw := io.Pipe()
-	defer pr.Close()
-
-	execDone := make(chan error, 1)
-	go func() {
-		defer pw.Close()
-		execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: pw})
-	}()
-
-	scanner := bufio.NewScanner(pr)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
-
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("recv from %s: %w", pod.Name, err)
 		}
-		evt, ok := parseTetragonLog(scanner.Text())
+		// The gRPC message is bridged through the same parser the CLI JSON used,
+		// by marshaling it exactly as `tetra getevents -o json` does.
+		line, err := marshalJSON(resp)
+		if err != nil {
+			continue
+		}
+		evt, ok := parseTetragonLog(line)
 		if !ok {
 			continue
 		}
@@ -180,14 +180,9 @@ func (s *Store) streamFromPod(ctx context.Context, podName string, out chan<- Te
 			return nil
 		}
 	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	return <-execDone
 }
 
-func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
+func (s *Store) findAllTetragonPods(ctx context.Context) ([]podEndpoint, error) {
 	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
 		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{
 			LabelSelector:   sel,
@@ -196,16 +191,17 @@ func (s *Store) findAllTetragonPods(ctx context.Context) ([]string, error) {
 		if err != nil {
 			continue
 		}
-		// Only running pods can be exec'd into. Taking every pod meant a pending or
-		// evicted one produced an exec failure on every reconnect.
-		var names []string
+		// Only running pods with an assigned IP can be dialled; a pending or
+		// terminating one has none and would fail the connection on every
+		// reconnect.
+		var pods []podEndpoint
 		for _, p := range list.Items {
-			if p.Status.Phase == corev1.PodRunning {
-				names = append(names, p.Name)
+			if p.Status.Phase == corev1.PodRunning && p.Status.PodIP != "" {
+				pods = append(pods, podEndpoint{Name: p.Name, IP: p.Status.PodIP})
 			}
 		}
-		if len(names) > 0 {
-			return names, nil
+		if len(pods) > 0 {
+			return pods, nil
 		}
 	}
 	return nil, fmt.Errorf("no Tetragon pods found in namespace %q (set TETRAGON_NAMESPACE if installed elsewhere)", tetragonNamespace())

@@ -7,12 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/remotecommand"
 )
-
 
 // StartDiscoveryLoop seeds Discovery with already-running processes, then
 // continuously streams new process_exec events from Tetragon.
@@ -70,12 +67,12 @@ func (s *Store) runDiscoveryOnce(ctx context.Context) {
 	}
 }
 
-// scanRunningProcesses execs "tetra dump process-cache" in each Tetragon pod.
-// tetra connects to the local Unix socket and dumps ALL processes Tetragon
-// has tracked (including those running before K8s Sentinel started).
-// Falls back to pod-spec seeding if the command is unavailable.
+// scanRunningProcesses reads each Tetragon agent's process cache over gRPC,
+// which holds ALL processes Tetragon has tracked, including those running
+// before K8s Sentinel started. Falls back to pod-spec seeding when the dump is
+// unavailable (an older Tetragon, or an unreachable agent).
 func (s *Store) scanRunningProcesses(ctx context.Context) {
-	if s.typed == nil || s.restConfig == nil {
+	if s.typed == nil {
 		return
 	}
 	pods, err := s.findAllTetragonPods(ctx)
@@ -86,10 +83,10 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 
 	total := 0
 	anyOK := false
-	for _, podName := range pods {
-		n, err := s.dumpProcessCacheViaTetra(ctx, podName)
+	for _, pod := range pods {
+		n, err := s.dumpProcessCacheViaTetra(ctx, pod)
 		if err != nil {
-			fmt.Printf("[sentinel-discovery] dump %s: %v\n", podName, err)
+			fmt.Printf("[sentinel-discovery] dump %s: %v\n", pod.Name, err)
 		} else {
 			total += n
 			anyOK = true
@@ -104,40 +101,45 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 	s.populateWorkloadInfo(ctx)
 }
 
-// dumpProcessCacheViaTetra runs "tetra dump process-cache" inside the Tetragon
-// pod container. tetra talks to the local Unix socket at
-// /var/run/cilium/tetragon/tetragon.sock and outputs the full process cache
-// as JSON. This command was added in Tetragon v1.3.
-func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (int, error) {
-	req := s.typed.CoreV1().RESTClient().Post().
-		Resource("pods").Name(podName).Namespace(tetragonNamespace()).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: "tetragon",
-			Command:   []string{"tetra", "dump", "processcache"},
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    false,
-			TTY:       false,
-		}, scheme.ParameterCodec)
-
-	executor, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+// dumpProcessCacheViaTetra reads the Tetragon agent's whole process cache over
+// gRPC (GetDebug with DUMP_PROCESS_CACHE), which includes processes that were
+// already running before Sentinel started — the reason this seeds rather than
+// relying on the live event stream alone.
+func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, pod podEndpoint) (int, error) {
+	conn, err := dialGRPC("TETRAGON_GRPC", pod.IP+":"+tetragonGRPCPort())
 	if err != nil {
-		return 0, fmt.Errorf("exec setup: %w", err)
+		return 0, fmt.Errorf("dial: %w", err)
 	}
+	defer conn.Close()
 
-	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	dumpCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-
-	var buf bytes.Buffer
-	if err := executor.StreamWithContext(execCtx, remotecommand.StreamOptions{Stdout: &buf}); err != nil {
-		return 0, fmt.Errorf("exec: %w", err)
+	resp, err := tetragon.NewFineGuidanceSensorsClient(conn).GetDebug(dumpCtx, &tetragon.GetDebugRequest{
+		Flag: tetragon.ConfigFlag_CONFIG_FLAG_DUMP_PROCESS_CACHE,
+		Arg:  &tetragon.GetDebugRequest_Dump{Dump: &tetragon.DumpProcessCacheReqArgs{}},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("GetDebug: %w", err)
 	}
-	if buf.Len() == 0 {
-		return 0, fmt.Errorf("empty output (tetra dump process-cache may not be available)")
+	pc := resp.GetProcesses()
+	if pc == nil {
+		return 0, fmt.Errorf("no process cache in response")
 	}
 
-	return s.parseAndSeedProcessCache(buf.Bytes())
+	// Each ProcessInternal marshals to the shape the seeder already reads, so
+	// the JSON path is reused rather than a second decoder written.
+	seeded := 0
+	for _, p := range pc.Processes {
+		line, err := marshalJSON(p)
+		if err != nil {
+			continue
+		}
+		n, err := s.parseAndSeedProcessCache([]byte(line))
+		if err == nil {
+			seeded += n
+		}
+	}
+	return seeded, nil
 }
 
 // parseAndSeedProcessCache decodes JSON from "tetra dump process-cache" and
@@ -146,6 +148,7 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, podName string) (i
 // Expected format:
 //
 //	{"processes":[{"process":{"binary":"...","pod":{"namespace":"...","name":"..."}}},...]}
+//
 // parseAndSeedProcessCache decodes NDJSON from "tetra dump processcache".
 // Each line is one ProcessInternal object; lines without a pod field are
 // host/kernel processes and are skipped.
@@ -211,8 +214,7 @@ func (s *Store) populateWorkloadInfo(ctx context.Context) {
 	}
 
 	// 2. List all running pods and resolve each pod's owner.
-	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
-		})
+	pods, err := s.typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return
 	}

@@ -27,11 +27,11 @@ One Pod, two things: a Go backend, and a React SPA compiled into the same binary
                     │   │  · assorted TTL caches       │   │
                     │   └───┬──────────────────────────┘   │
                     └───────┼──────────────────────────────┘
-                            │ kubectl exec / API
+                            │ gRPC / API
               ┌─────────────┴─────────────┐
               ▼                           ▼
       tetragon DaemonSet          cilium-agent DaemonSet
-      (tetra getevents)           (hubble observe --follow)
+      (GetEvents gRPC)             (Relay GetFlows gRPC)
 ```
 
 **There is no database.** All state is either in memory or in JSON files under `DATA_DIR`.
@@ -62,12 +62,19 @@ results into JSON.
 
 ### 3.1 Tetragon — runtime events
 
-`StartTetragonBroadcast` runs `tetra getevents -o json` via `kubectl exec` against
-**every** Tetragon Pod, parses the NDJSON line by line into `TetragonEvent`, and fans
-out to all subscribers.
+`StartTetragonBroadcast` opens the Tetragon `GetEvents` gRPC stream against **every**
+Tetragon Pod (dialing each pod IP on port 54321), bridges each protobuf message back
+to `TetragonEvent`, and fans out to all subscribers.
 
 Why one stream per Pod: **each agent only sees its own node's events** — one missing
-connection means every event from that node silently disappears.
+connection means every event from that node silently disappears. Tetragon has no
+relay, so the per-pod model is unavoidable here.
+
+**The bridge**: rather than parse protobuf directly, each message is marshaled with
+the proto field names — exactly what `tetra getevents -o json` emits — and fed to the
+same `parseTetragonLog` the CLI output used. The careful parsing, dedup and
+attribution logic is reused unchanged; a bridge test pins that the protobuf still
+reproduces the CLI shape.
 
 The only subscriber is `security.Store`.
 
@@ -85,19 +92,22 @@ from one pod.
 
 > **Known duplication**: `StartDiscoveryLoop` does not subscribe to this broadcast; it
 > opens its own `StreamTetragonEvents`. So every node actually carries **two**
-> `tetra getevents` streams. Switching Discovery to the broadcast would make it drop
+> `GetEvents` streams. Switching Discovery to the broadcast would make it drop
 > events when the buffer fills (the broadcast is a non-blocking fan-out), while its
 > own stream has backpressure — that trade-off has not been decided.
 
 ### 3.2 Hubble — network flows
 
-`StartCiliumBroadcast` first runs `DetectCilium`, then execs
-`hubble observe --follow -o json --all-namespaces` in every cilium-agent.
+`StartCiliumBroadcast` first runs `DetectCilium`, then opens the `GetFlows` gRPC
+stream against **Hubble Relay** — one aggregated endpoint for the whole cluster,
+unlike the per-pod Tetragon streams, because Relay already collects from every node.
+Each `GetFlowsResponse` is bridged the same way (proto-names marshal → the existing
+`parseCiliumFlow` that `hubble observe -o json` was written against).
 
-**Cilium's namespace must be detected once and reused from then on.** Detection probes
-`kube-system`, `cilium` and `cilium-system`; if the exec falls back to a default
-instead, a cluster with Cilium installed elsewhere ends up in a loop of "detected, but
-no agent can ever be found" (fixed in v0.21.0).
+**Cilium's namespace must be detected to address Relay.** Detection probes
+`kube-system`, `cilium` and `cilium-system`; the relay endpoint defaults to
+`hubble-relay.<ns>.svc.cluster.local:80` in whichever it finds, overridable with
+`HUBBLE_RELAY_ADDRESS`.
 
 Every flow goes three ways:
 1. Merged into the topology buffer
@@ -380,23 +390,20 @@ without the arg shows `dev`.
 
 ## 10. Open architectural problems
 
-Ordered by severity. The first two need a decision, not just implementation.
+Ordered by severity.
 
 1. **`emptyDir` persistence** (see §7) — the worst one. A security product that drops
    its own audit trail on every restart
-2. **`create` on `pods/exec`, cluster-wide** — equivalent to cluster-admin. The
-   direct consequence of the transport choice of running `hubble observe` /
-   `tetra getevents` via exec. Switching to Hubble Relay's gRPC API would remove the
-   grant entirely
-3. **The audit webhook is unauthenticated** — `/api/admission-events/webhook` is
-   public, so events can be forged; combined with the retention caps, real events can
-   be squeezed out. Adding auth requires a matching change to the kube-apiserver's
-   audit webhook config
-4. **No informers** — every cache does its own periodic full LIST of all pods
+2. **No informers** — every cache does its own periodic full LIST of all pods
    (attribution 30s, ClusterIPs 30s, exposures 30s, workloads 60s, runc resolution
    30s). Five paths, no sharing. v0.34.0 moved these LISTs onto the apiserver's watch
    cache (`ResourceVersion: "0"`) instead of etcd quorum reads and put a cache in
    front of `ListNodeIPMap` — but **the same pod list is still fetched five times**;
    the real fix is one shared informer
-5. **Two Tetragon event streams** (see §3.1)
-6. **Authentication weaknesses** (see §8)
+3. **Two Tetragon event streams** (see §3.1)
+4. **Authentication weaknesses** (see §8)
+
+**Resolved since first draft:** the audit webhook can now require a bearer token
+(v0.39.1), and `pods/exec` is gone — events are collected over the Tetragon and
+Hubble gRPC APIs (v0.43.0), so the ClusterRole no longer grants the exec that was
+equivalent to cluster-admin.

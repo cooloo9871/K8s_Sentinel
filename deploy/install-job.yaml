@@ -52,7 +52,10 @@ spec:
                 echo "  installing via Helm..."
                 helm repo add cilium https://helm.cilium.io --force-update
                 helm repo update cilium
-                helm install tetragon cilium/tetragon -n kube-system
+                # gRPC on the pod network, so Sentinel collects events over
+                # it rather than kubectl exec.
+                helm install tetragon cilium/tetragon -n kube-system \
+                  --set tetragon.grpc.address=0.0.0.0:54321
                 echo "  waiting for DaemonSet..."
                 kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s
                 echo "  ready"

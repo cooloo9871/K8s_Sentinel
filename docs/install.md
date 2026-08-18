@@ -18,6 +18,7 @@ cilium install --version <version> \
   --set k8sServiceHost=<api-server-ip> \
   --set k8sServicePort=6443 \
   --set hubble.enabled=true \
+  --set hubble.relay.enabled=true \
   --set rollOutCiliumPods=true \
   --set operator.rollOutPods=true
 ```
@@ -26,7 +27,8 @@ Which of these K8s Sentinel actually reads, and which are there for other reason
 
 | Flag | Needed by Sentinel | Why |
 |---|---|---|
-| `hubble.enabled=true` | **Yes — required** | Opens the agent's observation socket. Sentinel execs `hubble observe` inside `cilium-agent` and reads it directly, which is the only source for Network Topology and Cilium policy denials |
+| `hubble.enabled=true` | **Yes — required** | Turns on flow observation, the only source for Network Topology and Cilium policy denials |
+| `hubble.relay.enabled=true` | **Yes — required** | Deploys Hubble Relay, which aggregates every node's flows behind one gRPC endpoint. Sentinel connects to `hubble-relay` over gRPC rather than reaching into each agent; without Relay there is no aggregated flow source to read |
 | `kubeProxyReplacement=true` | **Yes** | Cilium's socket-level load balancer rewrites a Service address to the backend pod *before* the flow is observed, so the topology sees the real endpoint. Left to kube-proxy, iptables does the translation after the packet leaves the pod, the flow carries the ClusterIP, and Sentinel drops that edge — a VIP is not an endpoint. It is also what lets Hubble see inbound NodePort traffic before SNAT |
 | `k8sServiceHost` / `k8sServicePort` | Indirectly | Not read by Sentinel. Required *by Cilium* once kube-proxy is gone: the agents can no longer reach the API server through a Service VIP |
 | `rollOutCiliumPods` / `operator.rollOutPods` | **No** | Nothing to do with Sentinel. They restart the agent and operator on a config change, so a `cilium upgrade` takes effect without a manual rollout — worth having, for its own sake |
@@ -43,8 +45,7 @@ Note what it cannot do: correlation only names a policy for an **explicit** `ing
 
 **Not needed at all:**
 
-- **`hubble.tls.enabled`.** Deliberately absent above. It defaults to `true`, Sentinel is unaffected either way — the setting secures Hubble's *network* listener for Relay and remote clients, while Sentinel reads the local socket inside the agent over its own exec channel — and Cilium's own chart calls disabling it "highly discouraged" because the Hubble API exposes potentially sensitive information. Leave it at the default
-- **Hubble Relay and Hubble UI.** Sentinel reads the agent socket directly and is the only UI
+- **Hubble UI.** Sentinel is the only UI; Relay is required (above) but the UI is not.
 - **`hubble.metrics`** beyond the correlation flag. Sentinel does not scrape Hubble metrics
 - **Tetragon's `podInfo`** — see below
 
@@ -75,13 +76,19 @@ Install Tetragon separately:
 
 ```bash
 helm repo add cilium https://helm.cilium.io/
-helm install tetragon cilium/tetragon -n kube-system
+helm install tetragon cilium/tetragon -n kube-system \
+  --set tetragon.grpc.address=0.0.0.0:54321
 ```
 
-No extra settings are needed. What attributes events to pods is the agent's
-Kubernetes metadata enrichment — `tetragon.enableK8sAPIAccess`, on by default —
-which is what fills the `process.pod` field that Security Events read for
-namespace, pod and container.
+The one required setting is **`tetragon.grpc.address=0.0.0.0:54321`**. Sentinel
+collects runtime events over the Tetragon gRPC API, and the agent's default
+bind is `localhost:54321` — reachable only from inside the pod. Binding it to
+the pod network lets Sentinel connect. (The `deploy/install-job.yaml` and
+`deploy/install.sh` installers set this for you.)
+
+What attributes events to pods is the agent's Kubernetes metadata enrichment —
+`tetragon.enableK8sAPIAccess`, on by default — which fills the `process.pod`
+field that Security Events read for namespace, pod and container.
 
 > `tetragon.podInfo.enabled` is **not** required, despite what earlier versions of
 > this file said. That flag enables the `PodInfo` CRD, which maps pod IPs for
@@ -171,6 +178,9 @@ volumes:
 | `DATA_DIR` | `/data/sentinel` | Data directory; a warning is logged at startup if it is not writable |
 | `TETRAGON_NAMESPACE` | `kube-system` | Namespace where Tetragon is installed |
 | `CILIUM_NAMESPACE` | `kube-system` | Namespace where Cilium is installed |
+| `TETRAGON_GRPC_PORT` | `54321` | Port of the Tetragon agent's gRPC server |
+| `HUBBLE_RELAY_ADDRESS` | `hubble-relay.<ns>.svc.cluster.local:80` | Hubble Relay endpoint; the default resolves the namespace Cilium was found in |
+| `HUBBLE_RELAY_TLS` / `TETRAGON_GRPC_TLS` | *(unset)* | Set to `true` when the endpoint serves TLS; `*_CA` names a CA file when the server certificate is not signed by a system root |
 | `AUDIT_WEBHOOK_TOKEN` | *(unset)* | Token the [audit webhook](audit-webhook.md) requires when set, carried at the end of the webhook URL; unset leaves the endpoint open |
 
 ---
@@ -188,11 +198,10 @@ volumes:
 
 ## RBAC
 
-`create` on `pods/exec` is what reaches the Tetragon and Cilium agents, and
-`patch` on `pods` is what applies the quarantine label. Both are broad: `create`
-on `pods/exec` means Sentinel can run a command in any container in the cluster,
-which is the direct cost of collecting flows by running `hubble observe` inside
-cilium-agent.
+Sentinel collects events over the Tetragon and Hubble gRPC APIs, so it holds
+**no `pods/exec`** — the permission that would let it run any command in any
+container. The only write it keeps is `patch` on `pods`, for the quarantine
+label; everything else is read-only.
 
 | API Group | Resources | Verbs |
 |---|---|---|
@@ -201,7 +210,7 @@ cilium-agent.
 | `cilium.io` | `ciliumnodes` | get, list |
 | `admissionregistration.k8s.io` | `validatingadmissionpolicies`, `validatingadmissionpolicybindings` | CRUD |
 | `""` (core) | `namespaces` | get, list |
-| `""` (core) | `pods`, `pods/log`, `pods/exec` | get, list, watch, create, **patch** |
+| `""` (core) | `pods`, `pods/log` | get, list, watch, **patch** |
 | `""` (core) | `events` | get, list, watch |
 | `""` (core) | `nodes`, `services` | get, list |
 | `discovery.k8s.io` | `endpointslices` | get, list |

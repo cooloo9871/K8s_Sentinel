@@ -42,7 +42,6 @@ type Store struct {
 	// An interface, not *kubernetes.Clientset, so tests can inject a fake. Only
 	// CoreV1/AppsV1/NetworkingV1 are used, all of which it covers.
 	typed      kubernetes.Interface
-	restConfig *rest.Config
 	modeMu     sync.RWMutex
 	globalMode string // explicitly set by user; never auto-derived from policies
 	Discovery  *DiscoveryProfileStore
@@ -95,11 +94,14 @@ type Store struct {
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the
 // persistence path for custom policy templates (derived from DATA_DIR).
-func NewStore(client dynamic.Interface, typed kubernetes.Interface, cfg *rest.Config, templatesFile string) *Store {
+// The rest.Config parameter is retained for signature stability but no longer
+// used: event collection moved from kubectl exec to the Tetragon and Hubble
+// gRPC APIs, so the Store dials pod IPs directly rather than opening exec
+// streams.
+func NewStore(client dynamic.Interface, typed kubernetes.Interface, _ *rest.Config, templatesFile string) *Store {
 	return &Store{
 		client:       client,
 		typed:        typed,
-		restConfig:   cfg,
 		globalMode:   "Monitoring",
 		Discovery:    NewDiscoveryProfileStore(),
 		Templates:    NewTemplateStore(templatesFile),

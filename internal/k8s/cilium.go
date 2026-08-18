@@ -1,22 +1,15 @@
 package k8s
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	observer "github.com/cilium/cilium/api/v1/observer"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/remotecommand"
 )
 
 // CiliumFlow is a normalized Hubble/Cilium network flow.
@@ -142,67 +135,54 @@ func (s *Store) DetectCilium(ctx context.Context) bool {
 	return false
 }
 
-// StreamCiliumFlows streams Hubble flows from all Cilium agent pods concurrently.
-// It returns when all pod streams exit (error or context done).
-func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) error {
-	ns, pods, err := s.findAllCiliumPods(ctx)
-	if err != nil {
-		return fmt.Errorf("no Cilium agent pods found: %w", err)
+// hubbleRelayAddress is where Hubble Relay serves the aggregated Observer API.
+// Relay collects from every node, so unlike the Tetragon agents there is one
+// endpoint rather than a per-pod fan-out. HUBBLE_RELAY_ADDRESS overrides it;
+// otherwise the relay Service in the namespace Cilium was found in.
+func (s *Store) hubbleRelayAddress(ctx context.Context) string {
+	if a := os.Getenv("HUBBLE_RELAY_ADDRESS"); a != "" {
+		return a
 	}
-	var wg sync.WaitGroup
-	for _, pod := range pods {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			if err := s.streamCiliumFromPod(ctx, ns, name, out); err != nil && ctx.Err() == nil {
-				log.Printf("cilium-stream: pod %s: %v", name, err)
-			}
-		}(pod)
+	ns := "kube-system"
+	for _, n := range ciliumNamespaces() {
+		if _, err := s.typed.AppsV1().DaemonSets(n).Get(ctx, "cilium", metav1.GetOptions{}); err == nil {
+			ns = n
+			break
+		}
 	}
-	wg.Wait()
-	return nil
+	return "hubble-relay." + ns + ".svc.cluster.local:80"
 }
 
-func (s *Store) streamCiliumFromPod(ctx context.Context, namespace, podName string, out chan<- CiliumFlow) error {
-	req := s.typed.CoreV1().RESTClient().
-		Post().
-		Resource("pods").
-		Name(podName).
-		Namespace(namespace).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: "cilium-agent",
-			Command:   []string{"hubble", "observe", "--follow", "-o", "json", "--all-namespaces"},
-			Stdout:    true,
-			Stderr:    false,
-		}, scheme.ParameterCodec)
-
-	exec, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+// StreamCiliumFlows streams every node's Hubble flows from Hubble Relay. It
+// returns when the stream exits (error or context done).
+func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) error {
+	conn, err := dialGRPC("HUBBLE_RELAY", s.hubbleRelayAddress(ctx))
 	if err != nil {
-		return fmt.Errorf("exec %s: %w", podName, err)
+		return fmt.Errorf("dial hubble-relay: %w", err)
+	}
+	defer conn.Close()
+
+	// follow keeps the stream open; number 0 means unbounded here.
+	stream, err := observer.NewObserverClient(conn).GetFlows(ctx, &observer.GetFlowsRequest{Follow: true})
+	if err != nil {
+		return fmt.Errorf("GetFlows: %w", err)
 	}
 
-	pr, pw := io.Pipe()
-	// Closing the reader makes any further write fail with ErrClosedPipe, which
-	// unblocks the exec goroutine. Without it, leaving this loop early — a
-	// scanner error, most plausibly a line over the buffer size — left exec
-	// blocked writing into a pipe nobody reads, so `<-execDone` never returned.
-	// That wedged this pod's stream, hence StreamCiliumFlows' WaitGroup, hence
-	// the reconnect loop: flow collection stopped cluster-wide until a restart.
-	defer pr.Close()
-	execDone := make(chan error, 1)
-	go func() {
-		execDone <- exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-			Stdout: pw,
-		})
-		pw.Close()
-	}()
-
-	scanner := bufio.NewScanner(pr)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("recv flow: %w", err)
+		}
+		if resp.GetFlow() == nil {
+			continue // node-status and lost-events messages carry no flow
+		}
+		// Bridged through the same parser the CLI JSON used, by marshaling the
+		// response exactly as `hubble observe -o json` does.
+		line, err := marshalJSON(resp)
+		if err != nil {
 			continue
 		}
 		flow, ok := parseCiliumFlow(line)
@@ -215,10 +195,6 @@ func (s *Store) streamCiliumFromPod(ctx context.Context, namespace, podName stri
 			return nil
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read flows from %s: %w", podName, err)
-	}
-	return <-execDone
 }
 
 // ciliumPolicyRef is one entry of Hubble's *_denied_by / *_allowed_by policy
@@ -432,70 +408,30 @@ func verdictLabel(v string) string {
 	}
 }
 
-// findAllCiliumPods returns the namespace Cilium was found in and its running
-// agent pods. The namespace is returned rather than assumed, so every exec that
-// follows goes where the pods actually are.
-func (s *Store) findAllCiliumPods(ctx context.Context) (string, []string, error) {
-	for _, ns := range ciliumNamespaces() {
-		for _, sel := range []string{"k8s-app=cilium", "app.kubernetes.io/name=cilium", "app=cilium"} {
-			list, err := s.typed.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
-				LabelSelector:   sel,
-				ResourceVersion: fromCache.ResourceVersion,
-			})
-			if err != nil || len(list.Items) == 0 {
-				continue
-			}
-			var names []string
-			for _, p := range list.Items {
-				if p.Status.Phase == "Running" {
-					names = append(names, p.Name)
-				}
-			}
-			if len(names) > 0 {
-				return ns, names, nil
-			}
-		}
-	}
-	return "", nil, fmt.Errorf("no running Cilium pods found in %v", ciliumNamespaces())
-}
-
-// HubbleStatus reports whether the Hubble agent socket is reachable inside cilium-agent.
+// HubbleStatus reports whether Hubble Relay's Observer API is reachable.
 type HubbleStatus struct {
 	Available bool   `json:"available"`
 	Ready     bool   `json:"ready"`
 	Message   string `json:"message,omitempty"`
 }
 
-// CheckHubbleReady probes one cilium-agent pod to see if hubble observe works.
+// CheckHubbleReady asks Hubble Relay for its status. Available reports that
+// Cilium is present at all; Ready reports that the flow source Network Topology
+// depends on is answering.
 func (s *Store) CheckHubbleReady(ctx context.Context) HubbleStatus {
-	ns, pods, err := s.findAllCiliumPods(ctx)
-	if err != nil || len(pods) == 0 {
-		return HubbleStatus{Available: false, Message: "Cilium agent pods not found"}
+	if !s.DetectCilium(ctx) {
+		return HubbleStatus{Available: false, Message: "Cilium not detected"}
 	}
-	// Run a one-shot hubble observe --last 1 to test connectivity
-	req := s.typed.CoreV1().RESTClient().
-		Post().
-		Resource("pods").
-		Name(pods[0]).
-		Namespace(ns).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: "cilium-agent",
-			Command:   []string{"hubble", "observe", "--last", "1", "-o", "json", "--all-namespaces"},
-			Stdout:    true,
-			Stderr:    true,
-		}, scheme.ParameterCodec)
-
-	exec, err := remotecommand.NewSPDYExecutor(s.restConfig, "POST", req.URL())
+	conn, err := dialGRPC("HUBBLE_RELAY", s.hubbleRelayAddress(ctx))
 	if err != nil {
-		return HubbleStatus{Available: true, Ready: false, Message: "exec error: " + err.Error()}
+		return HubbleStatus{Available: true, Ready: false, Message: "dial hubble-relay: " + err.Error()}
 	}
-	var out, errBuf bytes.Buffer
-	execCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer conn.Close()
+
+	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	_ = exec.StreamWithContext(execCtx, remotecommand.StreamOptions{Stdout: &out, Stderr: &errBuf})
-	if errBuf.Len() > 0 && out.Len() == 0 {
-		return HubbleStatus{Available: true, Ready: false, Message: errBuf.String()}
+	if _, err := observer.NewObserverClient(conn).ServerStatus(statusCtx, &observer.ServerStatusRequest{}); err != nil {
+		return HubbleStatus{Available: true, Ready: false, Message: "hubble-relay not answering: " + err.Error()}
 	}
 	return HubbleStatus{Available: true, Ready: true}
 }
