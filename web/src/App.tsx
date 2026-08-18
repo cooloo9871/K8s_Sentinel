@@ -57,12 +57,23 @@ function AppRoutes() {
           <Route path="/security/events" element={<SecurityEventsPage />} />
           <Route path="/security/discovery" element={<DiscoveryPage />} />
           <Route path="/settings/users" element={<UsersPage />} />
+          <Route path="/settings/users/new" element={<UsersPage />} />
           <Route path="/security/alerts" element={<AlertsPage />} />
+          <Route path="/security/alerts/new" element={<AlertsPage />} />
+          <Route path="/security/alerts/:id/edit" element={<AlertsPage />} />
           <Route path="/security/rsyslog" element={<RsyslogPage />} />
+          <Route path="/security/rsyslog/new" element={<RsyslogPage />} />
+          <Route path="/security/rsyslog/:id/edit" element={<RsyslogPage />} />
           <Route path="/settings/retention" element={<SecurityRetentionPage />} />
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
           <Route path="/policies/admission" element={<VAPPage />} />
+          <Route path="/policies/admission/new" element={<VAPPage />} />
+          <Route path="/policies/admission/:name/edit" element={<VAPPage />} />
+          <Route path="/policies/admission/bindings/new" element={<VAPPage />} />
+          <Route path="/policies/admission/bindings/:name/edit" element={<VAPPage />} />
           <Route path="/policies/network" element={<CNPPage />} />
+          <Route path="/policies/network/new" element={<CNPPage />} />
+          <Route path="/policies/network/:name/edit" element={<CNPPage />} />
           <Route path="/policies/quarantine" element={<QuarantinePage />} />
           <Route path="/network/topology" element={<NetworkTopologyPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

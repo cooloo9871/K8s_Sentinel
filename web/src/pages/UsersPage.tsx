@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useMatch, useNavigate } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,8 +16,11 @@ import { useToast } from '../layout/AppToaster'
 export function UsersPage() {
   const { user: me } = useAuth()
   const toast = useToast()
+  const navigate = useNavigate()
+  // The create screen is a route, so Back returns to the list, F5 stays on the
+  // form, and the sidebar link works while it is open.
+  const showForm = !!useMatch('/settings/users/new')
   const [users, setUsers] = useState<UserRecord[]>([])
-  const [showForm, setShowForm] = useState(false)
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
@@ -53,11 +57,19 @@ export function UsersPage() {
     } catch { toast.error('Failed to update session timeout') }
   }
 
-  // The one place the form closes, so the typed password never outlives it —
+  // The one place the form closes, so the typed password never outlives it;
   // cancelling must not leave credentials sitting in component state.
   const closeForm = () => {
-    setShowForm(false); setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+    setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+    navigate('/settings/users')
   }
+
+  // Only admins create users; a deep link from someone else goes back.
+  useEffect(() => {
+    if (showForm && me && me.role !== 'admin') {
+      navigate('/settings/users', { replace: true })
+    }
+  }, [showForm, me, navigate])
 
   const handleCreate = async () => {
     if (!newUsername.trim() || !newPassword.trim() || creating) return
@@ -138,7 +150,7 @@ export function UsersPage() {
           <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
         </div>
         {me?.role === 'admin' && (
-          <Button onClick={() => setShowForm(true)}>+ New User</Button>
+          <Button onClick={() => navigate('/settings/users/new')}>+ New User</Button>
         )}
       </div>
 
