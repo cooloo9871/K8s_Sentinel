@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useMatch, useNavigate, useParams } from 'react-router-dom'
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -128,37 +129,55 @@ export function RsyslogPage() {
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
 
+  const navigate = useNavigate()
+  // Which screen is up lives in the URL: the list, /new, or /:id/edit. Back
+  // returns to the list, F5 stays on the form, and an edit has an address.
+  const isNew = !!useMatch('/security/rsyslog/new')
+  const { id: editId } = useParams<{ id: string }>()
   const [configs, setConfigs] = useState<RsyslogConfig[]>([])
-  // Which screen is up: the list (null), the create form ('new'), or the edit
-  // form for one config. One value, so the two forms cannot both be "open".
-  const [formTarget, setFormTarget] = useState<RsyslogConfig | 'new' | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<RsyslogConfig | null>(null)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    try { setConfigs(await rsyslogApi.list()) } catch { }
+    try {
+      setConfigs(await rsyslogApi.list())
+      setLoaded(true)
+    } catch { }
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // A deep link may name a config that no longer exists; once the list has
+  // loaded, an unresolvable id goes back.
+  const editTarget = editId ? configs.find(c => c.id === editId) ?? null : null
+  useEffect(() => {
+    if (editId && loaded && !editTarget) {
+      toast.error('That syslog config no longer exists.')
+      navigate('/security/rsyslog', { replace: true })
+    }
+  }, [editId, loaded, editTarget, navigate, toast])
 
   const handleCreate = async (form: Omit<RsyslogConfig, 'id'>) => {
     setSaving(true)
     try {
       await rsyslogApi.create(form)
       toast.success('rsyslog config created.')
-      setFormTarget(null); load()
+      load()
+      navigate('/security/rsyslog')
     } catch { toast.error('Failed to create rsyslog config') }
     finally { setSaving(false) }
   }
 
   const handleUpdate = async (form: Omit<RsyslogConfig, 'id'>) => {
-    if (!formTarget || formTarget === 'new') return
+    if (!editTarget) return
     setSaving(true)
     try {
-      await rsyslogApi.update(formTarget.id, { ...form, id: formTarget.id })
+      await rsyslogApi.update(editTarget.id, { ...form, id: editTarget.id })
       toast.success('rsyslog config updated.')
-      setFormTarget(null); load()
+      load()
+      navigate('/security/rsyslog')
     } catch { toast.error('Failed to update rsyslog config') }
     finally { setSaving(false) }
   }
@@ -192,23 +211,24 @@ export function RsyslogPage() {
     } finally { setTesting(null) }
   }
 
-  // Creating and editing happen on a screen of their own — the list comes back
-  // on save or cancel, the same way the Network Policy editor does it.
-  if (isAdmin && formTarget) {
-    const editing = formTarget === 'new' ? null : formTarget
+  // Creating and editing are routes of their own; the list comes back on save
+  // or cancel.
+  if (isAdmin && (isNew || editId)) {
+    if (editId && !editTarget) return null
     return (
       <>
         <div className="mb-6">
           <h4 className="text-xl font-semibold">
-            {editing ? `Edit ${editing.name}` : 'New rsyslog Config'}
+            {editTarget ? `Edit ${editTarget.name}` : 'New rsyslog Config'}
           </h4>
         </div>
         <Card className="max-w-2xl">
           <CardContent className="pt-4">
             <ConfigForm
-              initial={editing ?? EMPTY}
-              onSave={editing ? handleUpdate : handleCreate}
-              onCancel={() => setFormTarget(null)}
+              key={editTarget?.id ?? 'new'}
+              initial={editTarget ?? EMPTY}
+              onSave={editTarget ? handleUpdate : handleCreate}
+              onCancel={() => navigate('/security/rsyslog')}
               saving={saving}
             />
           </CardContent>
@@ -225,7 +245,7 @@ export function RsyslogPage() {
           <p className="text-sm text-muted-foreground">Forward Security Events and Admission Events to syslog servers.</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setFormTarget('new')}>+ New Config</Button>
+          <Button onClick={() => navigate('/security/rsyslog/new')}>+ New Config</Button>
         )}
       </div>
 
@@ -254,7 +274,7 @@ export function RsyslogPage() {
                     {testing === cfg.id ? 'Sending...' : 'Test'}
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
-                    onClick={() => setFormTarget(cfg)}>Edit</Button>
+                    onClick={() => navigate(`/security/rsyslog/${cfg.id}/edit`)}>Edit</Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
                     onClick={() => handleToggle(cfg)}>
                     {cfg.enabled ? 'Disable' : 'Enable'}
