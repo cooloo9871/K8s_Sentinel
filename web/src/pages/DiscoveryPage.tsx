@@ -170,7 +170,7 @@ export function DiscoveryPage() {
     }
     navigate('/policies/tracing/new', { state: { prefill } })
     toast.success(skipped > 0
-      ? `Policy pre-filled. ${skipped} entr${skipped !== 1 ? 'ies' : 'y'} left out — no absolute path was observed for them.`
+      ? `Policy pre-filled. ${skipped} entr${skipped !== 1 ? 'ies' : 'y'} left out: no absolute path was observed for them.`
       : 'Policy pre-filled.')
   }
 

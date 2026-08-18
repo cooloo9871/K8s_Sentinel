@@ -21,7 +21,7 @@ export function ProcessSection({ binaries, onChange }: Props) {
           matched as a suffix, and a whitelist of suffixes is walked past by a
           binary at a path ending in an allowed one. */}
       <p className="text-xs text-muted-foreground">
-        Absolute paths, matched exactly — a program name on its own is not accepted.
+        Absolute paths, matched exactly. A program name on its own is not accepted.
       </p>
       {binaries.map((b, i) => (
         <div key={i} className="flex items-center gap-2">

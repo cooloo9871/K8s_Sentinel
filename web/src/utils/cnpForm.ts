@@ -295,7 +295,7 @@ function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
       // An empty row is dropped rather than silently narrowing nothing, but say
       // so — a row that looks like a restriction and is not would mislead.
       if (!port) {
-        errors.push(`${at}Port${label} is empty — fill it in or remove it.`)
+        errors.push(`${at}Port${label} is empty. Fill it in or remove it.`)
       } else if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
         errors.push(`${at}Port${label} must be a number between 1 and 65535.`)
       }
@@ -310,7 +310,7 @@ function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
     r.http.forEach((h, hi) => {
       const label = r.http.length > 1 ? ` ${hi + 1}` : ''
       if (h.method === '' && h.path.trim() === '') {
-        errors.push(`${at}HTTP rule${label} is empty — set a method or a path, or remove it.`)
+        errors.push(`${at}HTTP rule${label} is empty. Set a method or a path, or remove it.`)
       }
     })
 
@@ -319,7 +319,7 @@ function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
       // ingressDeny is rejected by the API server, so refuse it here with a
       // reason instead of letting the apply fail.
       if (section.mode === 'blacklist') {
-        errors.push(`${at}HTTP rules cannot be combined with a blacklist — Cilium deny rules match on L3/L4 only.`)
+        errors.push(`${at}HTTP rules cannot be combined with a blacklist: Cilium deny rules match on L3/L4 only.`)
       }
       // An L7 rule lives under toPorts, so there has to be a port to attach it to.
       if (filledPorts(r).length === 0) {

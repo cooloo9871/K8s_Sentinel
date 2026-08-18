@@ -94,7 +94,7 @@ export function ScopeFilter({
               className="h-7 w-full text-xs"
               onClick={() => onChange([])}
             >
-              Clear — show all namespaces
+              Clear (show all namespaces)
             </Button>
           </div>
         )}

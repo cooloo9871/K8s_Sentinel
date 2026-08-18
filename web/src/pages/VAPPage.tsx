@@ -938,8 +938,7 @@ export function VAPPage() {
       <>
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h4 className="text-xl font-semibold">{builderEditName ? 'Edit Policy' : 'New Policy'}</h4>
-            <p className="text-sm text-muted-foreground">Configure the policy rules below, then click Apply.</p>
+            <h4 className="text-xl font-semibold">{builderEditName ? `Edit ${builderEditName}` : 'New Policy'}</h4>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => { setShowBuilder(false); resetBuilderForm() }}>Cancel</Button>
@@ -1098,7 +1097,7 @@ export function VAPPage() {
 
                   {labelRules.length > 1 && (
                     <p className="text-xs text-muted-foreground">
-                      Each rule is evaluated independently — a request is denied if any rule fails.
+                      Each rule is evaluated independently. A request is denied if any rule fails.
                     </p>
                   )}
                 </div>
@@ -1130,8 +1129,8 @@ export function VAPPage() {
                           <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectItem value="no-latest">No Latest Tag — deny images using :latest or no tag</SelectItem>
-                              <SelectItem value="required-registry">Allowed Registry — deny images not from the specified registry</SelectItem>
+                              <SelectItem value="no-latest">No Latest Tag: deny images using :latest or no tag</SelectItem>
+                              <SelectItem value="required-registry">Allowed Registry: deny images not from the specified registry</SelectItem>
                             </SelectGroup>
                           </SelectContent>
                         </Select>
@@ -1167,7 +1166,7 @@ export function VAPPage() {
 
                   {imageRules.length > 1 && (
                     <p className="text-xs text-muted-foreground">
-                      Each rule is evaluated independently — a request is denied if any rule fails.
+                      Each rule is evaluated independently. A request is denied if any rule fails.
                     </p>
                   )}
                 </div>
@@ -1230,9 +1229,9 @@ export function VAPPage() {
                           <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectItem value="both">CPU and Memory — both limits must be set</SelectItem>
-                              <SelectItem value="cpu">CPU only — CPU limit must be set</SelectItem>
-                              <SelectItem value="memory">Memory only — memory limit must be set</SelectItem>
+                              <SelectItem value="both">CPU and Memory: both limits must be set</SelectItem>
+                              <SelectItem value="cpu">CPU only: CPU limit must be set</SelectItem>
+                              <SelectItem value="memory">Memory only: memory limit must be set</SelectItem>
                             </SelectGroup>
                           </SelectContent>
                         </Select>
@@ -1295,7 +1294,7 @@ export function VAPPage() {
                         <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value="all">All — deny hostNetwork, hostPID, and hostIPC</SelectItem>
+                            <SelectItem value="all">All: deny hostNetwork, hostPID, and hostIPC</SelectItem>
                             <SelectItem value="no-host-network">No Host Network</SelectItem>
                             <SelectItem value="no-host-pid">No Host PID</SelectItem>
                             <SelectItem value="no-host-ipc">No Host IPC</SelectItem>
@@ -1347,8 +1346,10 @@ export function VAPPage() {
       <>
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h4 className="text-xl font-semibold">{bindingEditName ? 'Edit Binding' : 'New Binding'}</h4>
-            <p className="text-sm text-muted-foreground">Bind a policy to a scope and choose validation actions.</p>
+            <h4 className="text-xl font-semibold">{bindingEditName ? `Edit ${bindingEditName}` : 'New Binding'}</h4>
+            {!bindingEditName && (
+              <p className="text-sm text-muted-foreground">Bind a policy to a scope and choose validation actions.</p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => { setShowBindingBuilder(false); setBindingEditName(undefined); setBindingName(''); setBindingPolicy(''); setBindingNamespace(''); setBindingActions(new Set(['Deny'])) }}>Cancel</Button>
@@ -1402,7 +1403,7 @@ export function VAPPage() {
                 <p className="text-xs text-muted-foreground">
                   {bindingNamespace.trim()
                     ? `Applies to namespace: ${bindingNamespace.trim()}`
-                    : 'No namespace filter — applies cluster-wide.'}
+                    : 'No namespace filter. Applies cluster-wide.'}
                 </p>
               </div>
 
@@ -1419,9 +1420,9 @@ export function VAPPage() {
                       <label htmlFor={`action-${a}`} className="cursor-pointer text-sm">
                         <span className="font-medium">{a}</span>
                         <span className="ml-2 text-xs text-muted-foreground">
-                          {a === 'Deny'  && '— block the request'}
-                          {a === 'Audit' && '— allow but record in audit log'}
-                          {a === 'Warn'  && '— allow but return a warning'}
+                          {a === 'Deny'  && 'block the request'}
+                          {a === 'Audit' && 'allow but record in audit log'}
+                          {a === 'Warn'  && 'allow but return a warning'}
                         </span>
                       </label>
                     </div>

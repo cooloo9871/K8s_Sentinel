@@ -121,7 +121,7 @@ func (s *Store) ApplyCNPRaw(ctx context.Context, rawYAML, createdBy string) erro
 	case "CiliumClusterwideNetworkPolicy":
 		gvr = ccnpGVR
 	default:
-		return fmt.Errorf("unsupported kind %q — expected CiliumNetworkPolicy or CiliumClusterwideNetworkPolicy", kind)
+		return fmt.Errorf("unsupported kind %q, expected CiliumNetworkPolicy or CiliumClusterwideNetworkPolicy", kind)
 	}
 	clusterScoped := gvr == ccnpGVR
 

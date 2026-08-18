@@ -139,7 +139,7 @@ func (d *Dispatcher) TestSend(cfg Config) error {
 	case r := <-ch:
 		return r.err
 	case <-time.After(5 * time.Second):
-		return fmt.Errorf("connection timed out after 5s — check host and port")
+		return fmt.Errorf("connection timed out after 5s; check host and port")
 	}
 }
 

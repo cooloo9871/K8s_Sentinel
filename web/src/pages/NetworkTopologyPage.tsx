@@ -720,7 +720,7 @@ export function NetworkTopologyPage() {
           <CardContent className="flex items-center gap-3 p-3">
             <IconAlertTriangle size={16} className="shrink-0 text-yellow-600" />
             <p className="text-xs text-yellow-700">
-              IP name resolution is degraded — some cluster IPs could not be resolved to pod/service names and appear as External nodes. Check K8s Sentinel RBAC permissions (requires <code className="font-mono">services list</code>).
+              IP name resolution is degraded: some cluster IPs could not be resolved to pod/service names and appear as External nodes. Check K8s Sentinel RBAC permissions (requires <code className="font-mono">services list</code>).
             </p>
           </CardContent>
         </Card>
@@ -759,12 +759,12 @@ export function NetworkTopologyPage() {
               </pre>
               <p className="mt-0.5 text-xs text-amber-600">
                 <span className="font-medium">hubble.enabled</span> opens the agent socket this page
-                reads — no Hubble UI or Relay is needed.{' '}
+                reads. No Hubble UI or Relay is needed.{' '}
                 <span className="font-medium">kubeProxyReplacement</span> is what rewrites a Service
                 address to the backend pod before the flow is observed; left to kube-proxy the flow
                 carries the ClusterIP, which is not an endpoint, and service traffic never reaches
                 the graph. The two <span className="font-medium">rollOut</span> flags are unrelated
-                to K8s Sentinel — they restart the agent and operator on a config change.
+                to K8s Sentinel; they restart the agent and operator on a config change.
               </p>
             </div>
           </CardContent>
@@ -926,7 +926,7 @@ export function NetworkTopologyPage() {
                       <div className="rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
                         Arrived through node <span className="font-mono">{selectedNode.viaNode}</span>,
                         which replaced the client address. Cilium reports the source as outside the
-                        cluster, but the original IP is lost to SNAT — set the Service to
+                        cluster, but the original IP is lost to SNAT. Set the Service to
                         <span className="font-mono"> externalTrafficPolicy: Local</span>, or run Cilium
                         in DSR mode, to keep it.
                       </div>
@@ -951,7 +951,7 @@ export function NetworkTopologyPage() {
                           <div className="rounded bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-700">
                             The cloud instance metadata service. Reaching it is a known
                             credential-theft path, so it is worth knowing which workload asks and
-                            why — on bare metal nothing answers, and an Istio sidecar probes it at
+                            why. On bare metal nothing answers, and an Istio sidecar probes it at
                             startup to detect the platform.
                           </div>
                         )}

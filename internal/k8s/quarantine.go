@@ -149,10 +149,10 @@ func (s *Store) patchPod(ctx context.Context, namespace, pod, patch string) erro
 		// The commonest refusal by far: events outlive the pods that raised them,
 		// so the button is still there on an event whose workload was replaced
 		// hours ago. "not found" alone reads like a bug in Sentinel.
-		return fmt.Errorf("pod %s/%s no longer exists — it was probably replaced since this event",
+		return fmt.Errorf("pod %s/%s no longer exists; it was probably replaced since this event",
 			namespace, pod)
 	case k8serrors.IsForbidden(err):
-		return fmt.Errorf("not allowed to label pod %s/%s — the ClusterRole needs pods/patch: %w",
+		return fmt.Errorf("not allowed to label pod %s/%s; the ClusterRole needs pods/patch: %w",
 			namespace, pod, err)
 	default:
 		return fmt.Errorf("label pod %s/%s: %w", namespace, pod, err)

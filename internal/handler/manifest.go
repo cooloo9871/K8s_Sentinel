@@ -30,7 +30,7 @@ func checkManifestName(w http.ResponseWriter, r *http.Request, rawYAML string) b
 	}
 	if got := manifest.Metadata.Name; got != "" && got != want {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf(
-			"manifest is named %q but this edits %q — renaming would leave the original in place; create a new policy instead", got, want))
+			"manifest is named %q but this edits %q; renaming would leave the original in place. Create a new policy instead", got, want))
 		return false
 	}
 	return true

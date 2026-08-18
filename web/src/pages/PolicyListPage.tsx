@@ -130,10 +130,10 @@ export function PolicyListPage() {
               </Badge>
               <span className="text-sm text-muted-foreground">
                 {globalMode === 'Protect'
-                  ? 'Protect mode is on — actively blocking violations on all policies'
+                  ? 'Protect mode is on: actively blocking violations on all policies'
                   : globalMode === 'Mixed'
                   ? 'Policies have mixed modes'
-                  : 'Protect mode is off — monitoring only, no blocking'}
+                  : 'Protect mode is off: monitoring only, no blocking'}
               </span>
             </div>
           </div>

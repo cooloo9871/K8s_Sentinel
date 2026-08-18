@@ -80,7 +80,7 @@ function QuarantineAction({ e, quarantined, onChanged }: {
     setBusy(true)
     try {
       await quarantineApi.add(e.namespace, e.pod)
-      toast.success(`${e.pod} quarantined — network cut off, container left running`)
+      toast.success(`${e.pod} quarantined. Network cut off, container left running.`)
       onChanged()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Could not quarantine ${e.pod}`)
@@ -165,7 +165,7 @@ function DetailRow({ e, quarantined, onChanged }: {
     if ((e.container ?? '').includes(', ') && (e.function ?? '').includes('deny')) {
       items.push({
         label: 'Container',
-        value: 'cannot be narrowed — all containers in a pod share one network namespace',
+        value: 'cannot be narrowed: all containers in a pod share one network namespace',
       })
     }
   }

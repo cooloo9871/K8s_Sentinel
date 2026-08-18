@@ -73,7 +73,7 @@ export function FilterPopover({ sections, label = 'Filter' }: {
               className="h-7 w-full text-xs"
               onClick={() => sections.forEach(s => s.onChange([]))}
             >
-              Clear — show everything
+              Clear (show everything)
             </Button>
           </div>
         )}

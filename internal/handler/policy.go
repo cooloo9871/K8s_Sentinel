@@ -127,12 +127,12 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 			if nsPinned && yaml.Unmarshal([]byte(req.RawYAML), &manifest) == nil {
 				if manifest.Kind != "" && (manifest.Kind == "TracingPolicyNamespaced") != (wantNs != "") {
 					writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
-						"manifest kind %s does not match the policy being edited — changing it would leave the original in place; create a new policy instead", manifest.Kind)})
+						"manifest kind %s does not match the policy being edited; changing it would leave the original in place. Create a new policy instead", manifest.Kind)})
 					return
 				}
 				if manifest.Kind == "TracingPolicyNamespaced" && manifest.Metadata.Namespace != wantNs {
 					writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
-						"manifest is in namespace %q but this edits %q — moving would leave the original in place; create a new policy instead", manifest.Metadata.Namespace, wantNs)})
+						"manifest is in namespace %q but this edits %q; moving would leave the original in place. Create a new policy instead", manifest.Metadata.Namespace, wantNs)})
 					return
 				}
 			}
@@ -150,12 +150,12 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 		}
 		if got := strings.TrimSpace(req.Form.Name); got != "" && got != urlName {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
-				"form names the policy %q but this edits %q — renaming would leave the original in place; create a new policy instead", got, urlName)})
+				"form names the policy %q but this edits %q; renaming would leave the original in place. Create a new policy instead", got, urlName)})
 			return
 		}
 		if nsPinned && strings.TrimSpace(req.Form.Namespace) != wantNs {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf(
-				"form puts the policy in namespace %q but this edits %q — moving would leave the original in place; create a new policy instead", req.Form.Namespace, wantNs)})
+				"form puts the policy in namespace %q but this edits %q; moving would leave the original in place. Create a new policy instead", req.Form.Namespace, wantNs)})
 			return
 		}
 		action := req.Action

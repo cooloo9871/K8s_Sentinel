@@ -104,7 +104,7 @@ export function PolicyTemplatesPage() {
         setSelected({ ...t, yaml: substituted })
       } catch {
         setSelected(t)
-        toast.error('Could not detect cluster CIDRs — edit the YAML manually before creating.')
+        toast.error('Could not detect cluster CIDRs. Edit the YAML manually before creating.')
       } finally {
         setDialogLoading(false)
       }
@@ -341,7 +341,7 @@ export function PolicyTemplatesPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Create from Template</AlertDialogTitle>
-            <AlertDialogDescription>{selected?.name} — set a name for the new policy.</AlertDialogDescription>
+            <AlertDialogDescription>{selected?.name}: set a name for the new policy.</AlertDialogDescription>
           </AlertDialogHeader>
           {selected?.yaml.includes('${') && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">

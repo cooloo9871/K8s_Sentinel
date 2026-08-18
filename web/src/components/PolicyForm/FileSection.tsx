@@ -83,7 +83,7 @@ export function FileSection({ rules, onChange }: Props) {
             <span className="text-xs text-muted-foreground">
               Exceptions{' '}
               <span className="text-muted-foreground/60">
-                (optional — these processes bypass this rule)
+                (optional: these processes bypass this rule)
               </span>
             </span>
             {(r.exceptBinaries ?? []).map((bin, ei) => (

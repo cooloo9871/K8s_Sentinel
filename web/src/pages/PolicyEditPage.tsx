@@ -196,11 +196,8 @@ export function PolicyEditPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">
-            {isNew ? 'New Policy' : 'Edit Policy'}
+            {isNew ? 'New Policy' : `Edit ${name}`}
           </h4>
-          {!isNew && (
-            <p className="text-sm text-muted-foreground">{name}</p>
-          )}
         </div>
         <div className="flex items-center gap-3">
           {/* Per-policy mode selector */}
@@ -231,7 +228,7 @@ export function PolicyEditPage() {
                 // click accepts.
                 const parsed = yamlToForm(yamlContent)
                 if (!parsed) {
-                  toast.error('The current YAML holds rules the form cannot show — fix or save it as YAML.')
+                  toast.error('The current YAML holds rules the form cannot show. Fix it or save as YAML.')
                   return
                 }
                 setFormValues(parsed)

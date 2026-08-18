@@ -80,7 +80,7 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 			if want := r.URL.Query().Get("namespace"); want != "" {
 				if got := manifest.Metadata.Namespace; got != "" && got != want {
 					writeError(w, http.StatusBadRequest, fmt.Sprintf(
-						"manifest is in namespace %q but this edits %q — moving would leave the original in place; create a new policy instead", got, want))
+						"manifest is in namespace %q but this edits %q; moving would leave the original in place. Create a new policy instead", got, want))
 					return
 				}
 			}
@@ -88,7 +88,7 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 				gotCluster := manifest.Kind == "CiliumClusterwideNetworkPolicy"
 				if gotCluster != (want == "cluster") {
 					writeError(w, http.StatusBadRequest, fmt.Sprintf(
-						"manifest kind %s does not match the policy being edited — changing it would leave the original in place; create a new policy instead", manifest.Kind))
+						"manifest kind %s does not match the policy being edited; changing it would leave the original in place. Create a new policy instead", manifest.Kind))
 					return
 				}
 			}

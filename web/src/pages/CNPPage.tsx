@@ -152,7 +152,7 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
       {section.rules.length === 0 ? (
         <div className="flex items-center justify-between">
           <p className="text-[11px] text-muted-foreground">
-            No rules — this direction is left out of the policy.
+            No rules. This direction is left out of the policy.
           </p>
           <Button variant="outline" size="sm" onClick={addRule}>+ Add rule</Button>
         </div>
@@ -176,7 +176,7 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
               </div>
 
               <Field
-                label={`${peerLabel(direction)} — kind`}
+                label={`${peerLabel(direction)} kind`}
                 hint={r.peerKind === 'entity'
                   ? 'A reserved Cilium identity, which has no labels to select.'
                   : undefined}
@@ -273,7 +273,7 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
               <div className="flex flex-col gap-2 border-t pt-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">
-                    L7 — HTTP rules
+                    L7 HTTP rules
                     {/* Kept only on a blacklist, where it says why the
                         controls below are disabled. */}
                     {section.mode === 'blacklist' && (
@@ -328,7 +328,7 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
                 ))}
                 {r.http.length > 1 && (
                   <p className="text-[11px] text-muted-foreground">
-                    Alternatives — a request matching any of them matches the rule.
+                    Alternatives: a request matching any of them matches the rule.
                   </p>
                 )}
               </div>
@@ -509,11 +509,9 @@ export function CNPPage() {
             <h4 className="text-xl font-semibold">
               {editing ? `Edit ${editing.name}` : 'New Network Policy'}
             </h4>
-            {(editing || !usingForm) && (
+            {!editing && !usingForm && (
               <p className="text-sm text-muted-foreground">
-                {editing
-                  ? `${editing.scope === 'cluster' ? 'Cluster-wide' : editing.namespace} · applied on save`
-                  : 'Scope is determined by the manifest kind — CiliumNetworkPolicy is namespaced, CiliumClusterwideNetworkPolicy is not.'}
+                Scope is determined by the manifest kind: CiliumNetworkPolicy is namespaced, CiliumClusterwideNetworkPolicy is not.
               </p>
             )}
           </div>
