@@ -394,6 +394,11 @@ export function CNPPage() {
   const [form, setForm] = useState<CNPFormInput>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<CNPRecord | null>(null)
+  // A latch that flips once, unlike `loading` which toggles on every load. The
+  // route effect below keys on it to resolve a deep-linked edit after the list
+  // arrives; keying on `loading` would re-run openEdit — and overwrite what the
+  // user is typing — the moment anything refreshes the list.
+  const [policiesLoaded, setPoliciesLoaded] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -402,6 +407,7 @@ export function CNPPage() {
       setAvailable(res.available)
       setUnavailableMsg(res.message ?? '')
       setPolicies(res.policies ?? [])
+      setPoliciesLoaded(true)
     } catch {
       setAvailable(false)
       setUnavailableMsg('Failed to reach the Sentinel API.')
@@ -428,7 +434,7 @@ export function CNPPage() {
       return
     }
     if (editParam) {
-      if (loading) return
+      if (!policiesLoaded) return
       const scope = searchParams.get('scope') ?? 'namespace'
       const ns = searchParams.get('namespace') ?? ''
       const rec = policies.find(x =>
@@ -443,10 +449,11 @@ export function CNPPage() {
     }
     setEditorOpen(false)
     setEditing(null)
-  // Deliberately not keyed on the policy list: re-running openEdit on a
-  // background refresh would overwrite what the user is typing.
+  // Deliberately keyed on the load latch, not the policy list or `loading`:
+  // re-running openEdit on a background refresh would overwrite what the user
+  // is typing, and `policiesLoaded` flips once rather than toggling.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, routeSearch, loading])
+  }, [pathname, routeSearch, policiesLoaded])
   useEffect(() => { namespaceApi.list().then(setClusterNamespaces).catch(() => {}) }, [])
 
   const formErrors = useMemo(() => validateCNPForm(form), [form])
