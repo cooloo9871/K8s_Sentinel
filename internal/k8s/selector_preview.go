@@ -2,12 +2,17 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
+
+// ErrInvalidSelector marks input the caller typed wrong, as opposed to the
+// cluster failing: the handler answers 400 rather than 500.
+var ErrInvalidSelector = errors.New("invalid selector")
 
 // SelectedPod names one pod a selector matched.
 type SelectedPod struct {
@@ -29,8 +34,15 @@ func (s *Store) SelectPods(ctx context.Context, namespace string, matchLabels ma
 	if s.typed == nil {
 		return 0, nil, fmt.Errorf("kubernetes client not initialised")
 	}
+	// Validated, not just joined: a value containing a comma would otherwise
+	// splice extra conditions into the selector string, and an invalid
+	// character would surface as an apiserver error blamed on the cluster.
+	sel, err := labels.ValidatedSelectorFromSet(matchLabels)
+	if err != nil {
+		return 0, nil, fmt.Errorf("%w: %v", ErrInvalidSelector, err)
+	}
 	list, err := s.typed.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector:   labels.Set(matchLabels).String(),
+		LabelSelector:   sel.String(),
 		ResourceVersion: fromCache.ResourceVersion,
 	})
 	if err != nil {

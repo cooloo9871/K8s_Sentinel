@@ -216,14 +216,29 @@ function labelRowErrors(pairs: LabelPair[], what: string): string[] {
 }
 
 const DNS1123 = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
-/** A well-formed IPv4 address or CIDR: four octets in range, prefix 0 to 32. */
+// Cilium's FQDNSelector shape, with * as the wildcard: no scheme, no spaces.
+const FQDN_RE = /^[*a-zA-Z0-9_][-*.a-zA-Z0-9_]*$/
+/** A well-formed IPv4 address or CIDR: four octets in range with no leading
+ * zeros, prefix 0 to 32. */
 function isV4CIDR(v: string): boolean {
   const [addr, prefix, extra] = v.split('/')
   if (extra !== undefined) return false
-  if (prefix !== undefined && (!/^\d{1,2}$/.test(prefix) || Number(prefix) > 32)) return false
+  if (prefix !== undefined && (!/^(0|[1-9]\d?)$/.test(prefix) || Number(prefix) > 32)) return false
   const octets = addr.split('.')
   if (octets.length !== 4) return false
-  return octets.every(o => /^\d{1,3}$/.test(o) && Number(o) <= 255)
+  return octets.every(o => /^(0|[1-9]\d{0,2})$/.test(o) && Number(o) <= 255)
+}
+
+/** A plausible IPv6 address or CIDR: hex groups and colons, one :: at most,
+ * prefix 0 to 128. Deliberately looser than a full parser; the apiserver has
+ * the final word, but 10.0.0.1:443 must not slip through as "IPv6". */
+function isV6CIDR(v: string): boolean {
+  const [addr, prefix, extra] = v.split('/')
+  if (extra !== undefined) return false
+  if (prefix !== undefined && (!/^(0|[1-9]\d{0,2})$/.test(prefix) || Number(prefix) > 128)) return false
+  if (!/^[0-9a-fA-F:]+$/.test(addr) || !addr.includes(':')) return false
+  if (addr.includes(':::') || (addr.match(/::/g) ?? []).length > 1) return false
+  return addr.split(':').every(g => g.length <= 4)
 }
 
 /** A bare address becomes a single-host CIDR, which is what Cilium expects. */
@@ -239,9 +254,14 @@ function normalizeCIDR(v: string): string {
 // answers are seen. It is plumbing rather than a decision, so the form folds
 // it away on read and re-emits it whenever a section carries FQDN rules; the
 // regeneration comparison sends every hand-written variant to the YAML editor.
+// CHANGING THIS SHAPE ORPHANS EXISTING POLICIES: the rider is recognised by
+// exact equality below, so a policy saved with today's shape stops matching a
+// changed constant, fails the regeneration comparison, and silently loses form
+// editing. Any change here needs the old shape kept recognisable (a list of
+// historical canons) or a migration story.
 const DNS_VISIBILITY_RULE = {
   toEndpoints: [{
-    matchLabels: { 'io.kubernetes.pod.namespace': 'kube-system', 'k8s-app': 'kube-dns' },
+    matchLabels: { [NAMESPACE_KEY]: 'kube-system', 'k8s-app': 'kube-dns' },
   }],
   toPorts: [{
     ports: [{ port: '53', protocol: 'ANY' }],
@@ -325,7 +345,7 @@ function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
       const v = r.peerCIDR.trim()
       if (!v) {
         errors.push(`${at}${side} needs an IP or CIDR.`)
-      } else if (!isV4CIDR(v) && !v.includes(':')) {
+      } else if (!isV4CIDR(v) && !isV6CIDR(v)) {
         errors.push(`${at}${v} is not an IP or CIDR.`)
       }
     } else if (r.peerKind === 'fqdn') {
@@ -333,6 +353,8 @@ function sectionErrors(direction: CNPDirection, section: CNPSection): string[] {
         errors.push(`${at}FQDN rules only allow egress: Cilium learns a name's addresses from the DNS answers the pod receives, so there is nothing to match on ingress or in a deny rule.`)
       } else if (!r.peerFQDN.trim()) {
         errors.push(`${at}${side} needs a domain name.`)
+      } else if (!FQDN_RE.test(r.peerFQDN.trim())) {
+        errors.push(`${at}${r.peerFQDN.trim()} is not a domain name. Letters, digits, dots, dashes and * only; no scheme, no spaces.`)
       }
     } else {
       // A namespace alone is a complete peer, the same way it is a complete

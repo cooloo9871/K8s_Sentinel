@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { policyApi } from '../../api/client'
 import { NamespaceSelect } from '../NamespaceSelect'
 import { SelectorPreview } from '../SelectorPreview'
+import { completePairs } from '../../utils/labelPairs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -100,10 +101,9 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
 
   const syncLabelsToParent = (entries: LabelEntry[]) => {
     setLocalLabels(entries)
-    const selector = entries.reduce<Record<string, string>>((acc, { key, value: v }) => {
-      if (key.trim()) acc[key.trim()] = v.trim()
-      return acc
-    }, {})
+    // completePairs is also what the preview renders, so the two cannot
+    // disagree about a half-filled row again.
+    const selector = completePairs(entries)
     onChange({
       ...value,
       podSelector: Object.keys(selector).length > 0 ? selector : undefined,
@@ -197,11 +197,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               ))}
               <SelectorPreview
                 namespace={value.namespace ?? ''}
-                matchLabels={Object.fromEntries(
-                  localLabels
-                    .filter(l => l.key.trim() && l.value.trim())
-                    .map(l => [l.key.trim(), l.value.trim()])
-                )}
+                matchLabels={completePairs(localLabels)}
               />
               <div>
                 <Button variant="outline" size="sm" onClick={addLabel}>

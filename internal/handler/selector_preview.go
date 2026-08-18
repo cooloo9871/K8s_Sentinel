@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
@@ -21,6 +22,10 @@ func selectorPreview(store *k8s.Store) http.HandlerFunc {
 			return
 		}
 		total, pods, err := store.SelectPods(r.Context(), req.Namespace, req.MatchLabels)
+		if errors.Is(err, k8s.ErrInvalidSelector) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

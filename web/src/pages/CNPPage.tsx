@@ -226,7 +226,7 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
                 </Field>
               ) : r.peerKind === 'fqdn' ? (
                 <Field label={peerLabel(direction)} required
-                  hint="A domain name; * is a wildcard. A DNS rule to kube-dns is included automatically, because FQDN matching needs the DNS answers to be observed.">
+                  hint="A domain name; * is a wildcard. A DNS rule to kube-dns is included automatically, because FQDN matching needs the DNS answers to be observed; it shows as an extra egress rule with L7 on the policy list.">
                   <Input value={r.peerFQDN} placeholder="github.com"
                     onChange={e => updateRule(i, r => ({ ...r, peerFQDN: e.target.value }))}
                     className="h-9 font-mono text-sm" />
@@ -640,6 +640,16 @@ export function CNPPage() {
                   // A namespaced policy naming a different namespace selects
                   // nothing at all in Cilium; say that rather than previewing a
                   // set the policy will not govern.
+                  // Without a namespace chosen there is nothing truthful to
+                  // preview: the policy can only ever govern one namespace,
+                  // and querying with "" would endorse a cluster-wide set.
+                  if (form.scope === 'namespaced' && !form.namespace) {
+                    return (
+                      <p className="text-[11px] text-muted-foreground">
+                        Choose a namespace above to preview what this selects.
+                      </p>
+                    )
+                  }
                   if (form.scope === 'namespaced' && nsLabel && nsLabel !== form.namespace) {
                     return (
                       <p className="text-[11px] text-destructive">

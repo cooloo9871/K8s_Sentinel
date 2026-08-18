@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -58,5 +59,20 @@ func TestSelectPods(t *testing.T) {
 	}
 	if total != 0 {
 		t.Errorf("no match: total=%d, want 0", total)
+	}
+}
+
+// Typed-wrong input is the caller's error, not the cluster's, and a value
+// containing a comma must not splice extra conditions into the selector.
+func TestSelectPodsRefusesAnInvalidSelector(t *testing.T) {
+	s := NewStore(nil, k8sfake.NewSimpleClientset(), nil, "")
+	for _, labels := range []map[string]string{
+		{"app": "web,run=db"},
+		{"bad key!": "x"},
+	} {
+		_, _, err := s.SelectPods(context.Background(), "", labels)
+		if !errors.Is(err, ErrInvalidSelector) {
+			t.Errorf("labels %v: err = %v, want ErrInvalidSelector", labels, err)
+		}
 	}
 }

@@ -1021,3 +1021,29 @@ describe('CIDR validation', () => {
     expect(validateCNPForm(cidr('0.0.0.0/0'))).toEqual([])
   })
 })
+
+// The colon used to be an escape hatch: anything containing one skipped
+// validation entirely as "IPv6", so an IP:port paste sailed through to the
+// apiserver. And an FQDN got no syntax check at all while CIDR did.
+describe('CIDR and FQDN strictness', () => {
+  const cidr = (v: string) => only('egress', 'whitelist', [rule({ peerKind: 'cidr', peerCIDR: v })])
+  const fqdn = (v: string) => only('egress', 'whitelist', [rule({ peerKind: 'fqdn', peerFQDN: v })])
+
+  it('refuses an IP:port paste and malformed IPv6', () => {
+    for (const v of ['10.0.0.1:443', 'fe80:::1', '10.0.0.0/08', '010.1.2.3']) {
+      expect(validateCNPForm(cidr(v)).join(' '), v).toContain('not an IP or CIDR')
+    }
+  })
+
+  it('accepts real IPv6', () => {
+    expect(validateCNPForm(cidr('fd00::/8'))).toEqual([])
+    expect(validateCNPForm(cidr('2001:db8::1'))).toEqual([])
+  })
+
+  it('refuses text that is not a domain name', () => {
+    for (const v of ['https://github.com', 'github .com', 'github,com']) {
+      expect(validateCNPForm(fqdn(v)).join(' '), v).toContain('not a domain name')
+    }
+    expect(validateCNPForm(fqdn('*.github.com'))).toEqual([])
+  })
+})

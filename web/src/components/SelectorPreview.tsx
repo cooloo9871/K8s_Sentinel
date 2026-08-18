@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { selectorApi, type SelectorPreviewResult } from '../api/client'
 
 // The most damaging policy mistake is a selector that matches something other
@@ -11,50 +11,73 @@ export function SelectorPreview({ namespace, matchLabels }: {
   namespace: string
   matchLabels: Record<string, string>
 }) {
-  const [result, setResult] = useState<SelectorPreviewResult | null>(null)
-  const [failed, setFailed] = useState(false)
+  // The result is keyed by the request that produced it, so an answer for an
+  // earlier selector is never rendered under the current one. Warnings here
+  // point in opposite directions (red for nothing, amber for everything), and
+  // a stale total showed the wrong one for the debounce-plus-roundtrip window.
+  const [result, setResult] = useState<{ key: string; data: SelectorPreviewResult } | null>(null)
+  const [failedKey, setFailedKey] = useState<string | null>(null)
+  // The debounce is for typing, not for arriving: applied to the first render
+  // it would leave the line blank for half a second every time the form opens.
+  const rendered = useRef(false)
 
-  const labelsKey = JSON.stringify(matchLabels)
+  const key = namespace + '\u0000' + JSON.stringify(matchLabels)
+  const hasLabels = Object.keys(matchLabels).length > 0
+  // Everything in the cluster needs no query to describe, and asking would
+  // list every pod there is on each keystroke.
+  const wholeCluster = !hasLabels && namespace === ''
+
   useEffect(() => {
+    if (wholeCluster) return
     let stale = false
+    const delay = rendered.current ? 400 : 0
+    rendered.current = true
     const t = setTimeout(() => {
-      selectorApi.preview(namespace, JSON.parse(labelsKey))
-        .then(r => { if (!stale) { setResult(r); setFailed(false) } })
-        .catch(() => { if (!stale) setFailed(true) })
-    }, 400)
+      selectorApi.preview(namespace, matchLabels)
+        .then(r => { if (!stale) setResult({ key, data: r }) })
+        .catch(() => { if (!stale) setFailedKey(key) })
+    }, delay)
     return () => { stale = true; clearTimeout(t) }
-  }, [namespace, labelsKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
 
-  // A selector the apiserver refuses (a key that is not a valid label) must
-  // not make the preview silently vanish: an absent line reads as "no opinion",
-  // and the one time the line disappears is exactly when the input needs a look.
-  if (failed) {
+  const where = namespace ? `in ${namespace}` : 'in the cluster'
+
+  if (wholeCluster) {
+    return (
+      <p className="text-[11px] text-amber-600">
+        No labels: selects every pod in the cluster.
+      </p>
+    )
+  }
+  // A selector the apiserver refuses must not make the preview silently
+  // vanish: the one time the line disappears is exactly when the input needs
+  // a look.
+  if (failedKey === key) {
     return (
       <p className="text-[11px] text-muted-foreground">
         Preview unavailable for this selector.
       </p>
     )
   }
-  if (result === null) return null
+  if (result?.key !== key) return null
+  const { total, pods } = result.data
 
-  const hasLabels = Object.keys(matchLabels).length > 0
-  const where = namespace ? `in ${namespace}` : 'in the cluster'
-
-  if (result.total === 0) {
+  if (total === 0) {
     return (
       <p className="text-[11px] text-destructive">
         Selects no pods {where} right now. A typo in a label selects nothing, silently.
       </p>
     )
   }
-  const names = result.pods.map(p => (namespace ? p.name : `${p.namespace}/${p.name}`))
+  const names = pods.map(p => (namespace ? p.name : `${p.namespace}/${p.name}`))
   const shown = names.slice(0, 5).join(', ')
-  const more = result.total - Math.min(5, names.length)
+  const more = total - Math.min(5, names.length)
   return (
     <p className={`text-[11px] ${hasLabels ? 'text-muted-foreground' : 'text-amber-600'}`}>
       {hasLabels
-        ? `Selects ${result.total} pod${result.total === 1 ? '' : 's'} ${where}: `
-        : `No labels: selects every pod ${where}, currently ${result.total}. `}
+        ? `Selects ${total} pod${total === 1 ? '' : 's'} ${where}: `
+        : `No labels: selects every pod ${where}, currently ${total}. `}
       {shown}{more > 0 ? ` and ${more} more` : ''}
     </p>
   )
