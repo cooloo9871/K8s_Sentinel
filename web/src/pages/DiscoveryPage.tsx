@@ -25,7 +25,8 @@ function RelativeTime({ iso }: { iso: string }) {
   const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
   const label = diff < 60 ? 'just now'
     : diff < 3600 ? `${Math.floor(diff / 60)}m ago`
-    : `${Math.floor(diff / 3600)}h ago`
+    : diff < 86400 ? `${Math.floor(diff / 3600)}h ago`
+    : `${Math.floor(diff / 86400)}d ago`
   return <span className="text-xs text-muted-foreground" title={formatTWTime(iso)}>{label}</span>
 }
 
