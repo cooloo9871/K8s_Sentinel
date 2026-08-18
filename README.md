@@ -27,7 +27,7 @@ Each layer does what only it can do:
 
 ## Quick start
 
-Requires **Kubernetes 1.32+**, **Cilium** (kube-proxy replacement + Hubble) and **Tetragon** — setup details in [docs/install.md](docs/install.md).
+Requires **Kubernetes 1.32+**, **Cilium** (kube-proxy replacement + Hubble Relay), and **Tetragon** with its gRPC server on the pod network — setup details in [docs/install.md](docs/install.md).
 
 ```bash
 git clone https://github.com/cooloo9871/K8s_Sentinel.git && cd K8s_Sentinel

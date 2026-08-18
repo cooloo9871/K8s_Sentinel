@@ -745,8 +745,8 @@ export function NetworkTopologyPage() {
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-amber-700">No network connections recorded yet</p>
               <p className="text-xs text-amber-600">
-                Network Topology is built from Cilium Hubble flows. Confirm the cluster runs Cilium
-                as its CNI with the Hubble agent enabled:
+                Network Topology is built from Cilium Hubble flows, read from Hubble Relay. Confirm
+                the cluster runs Cilium as its CNI with Hubble and Relay enabled:
               </p>
               <pre className="mt-1 overflow-x-auto rounded bg-amber-500/10 px-2 py-1.5 font-mono text-[11px] text-amber-700">
 {`cilium install --version <version> \\
@@ -754,12 +754,15 @@ export function NetworkTopologyPage() {
   --set k8sServiceHost=<api-server-ip> \\
   --set k8sServicePort=6443 \\
   --set hubble.enabled=true \\
+  --set hubble.relay.enabled=true \\
   --set rollOutCiliumPods=true \\
   --set operator.rollOutPods=true`}
               </pre>
               <p className="mt-0.5 text-xs text-amber-600">
-                <span className="font-medium">hubble.enabled</span> opens the agent socket this page
-                reads. No Hubble UI or Relay is needed.{' '}
+                <span className="font-medium">hubble.enabled</span> turns on flow observation and{' '}
+                <span className="font-medium">hubble.relay.enabled</span> deploys the{' '}
+                <span className="font-mono">hubble-relay</span> service this page reads over gRPC;
+                both are required.{' '}
                 <span className="font-medium">kubeProxyReplacement</span> is what rewrites a Service
                 address to the backend pod before the flow is observed; left to kube-proxy the flow
                 carries the ClusterIP, which is not an endpoint, and service traffic never reaches
