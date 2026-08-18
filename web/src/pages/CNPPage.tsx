@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconAlertTriangle, IconRefresh,
 } from '@tabler/icons-react'
@@ -410,6 +411,42 @@ export function CNPPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Which screen is up lives in the URL: the list, /new (?mode=yaml for the
+  // raw editor), or /:name/edit with scope and namespace pinned in the query,
+  // since a name alone is ambiguous across namespaces. Back returns to the
+  // list, F5 stays on the editor, and an edit has an address.
+  const navigate = useNavigate()
+  const { pathname, search: routeSearch } = useLocation()
+  const [searchParams] = useSearchParams()
+  const isNew = !!useMatch('/policies/network/new')
+  const editParam = useMatch('/policies/network/:name/edit')?.params.name
+
+  useEffect(() => {
+    if (isNew) {
+      openCreate(searchParams.get('mode') === 'yaml' ? 'yaml' : 'form')
+      return
+    }
+    if (editParam) {
+      if (loading) return
+      const scope = searchParams.get('scope') ?? 'namespace'
+      const ns = searchParams.get('namespace') ?? ''
+      const rec = policies.find(x =>
+        x.name === editParam && x.scope === scope && (scope === 'cluster' || x.namespace === ns))
+      if (!rec) {
+        toast.error(`Policy ${editParam} no longer exists.`)
+        navigate('/policies/network', { replace: true })
+        return
+      }
+      openEdit(rec)
+      return
+    }
+    setEditorOpen(false)
+    setEditing(null)
+  // Deliberately not keyed on the policy list: re-running openEdit on a
+  // background refresh would overwrite what the user is typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, routeSearch, loading])
   useEffect(() => { namespaceApi.list().then(setClusterNamespaces).catch(() => {}) }, [])
 
   const formErrors = useMemo(() => validateCNPForm(form), [form])
@@ -457,8 +494,8 @@ export function CNPPage() {
       if (editing) await cnpApi.update(editing.name, editing.namespace, editing.scope, outgoingYaml)
       else await cnpApi.apply(outgoingYaml)
       toast.success(editing ? 'Network policy updated.' : 'Network policy created.')
-      setEditorOpen(false)
       load()
+      navigate('/policies/network')
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
       toast.error(msg || 'Failed to apply network policy.')
@@ -542,7 +579,7 @@ export function CNPPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setEditorOpen(false)}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/policies/network')}>Cancel</Button>
             <Button size="sm" onClick={save} disabled={saving || !canApply}>
               {saving ? 'Applying...' : 'Apply'}
             </Button>
@@ -752,8 +789,8 @@ export function CNPPage() {
           </Button>
           {isAdmin && (
             <>
-              <Button size="sm" onClick={() => openCreate('form')}>+ New Policy</Button>
-              <Button size="sm" variant="outline" onClick={() => openCreate('yaml')}>+ New YAML</Button>
+              <Button size="sm" onClick={() => navigate('/policies/network/new')}>+ New Policy</Button>
+              <Button size="sm" variant="outline" onClick={() => navigate('/policies/network/new?mode=yaml')}>+ New YAML</Button>
             </>
           )}
         </div>
@@ -814,7 +851,10 @@ export function CNPPage() {
                     {isAdmin && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEdit(p)}>Edit</Button>
+                          <Button variant="outline" size="sm"
+                            onClick={() => navigate(`/policies/network/${p.name}/edit?scope=${p.scope}&namespace=${encodeURIComponent(p.namespace)}`)}>
+                            Edit
+                          </Button>
                           <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(p)}>Delete</Button>
                         </div>
                       </TableCell>
