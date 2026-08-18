@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useMatch, useNavigate, useParams } from 'react-router-dom'
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -119,41 +120,57 @@ export function AlertsPage() {
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
 
+  const navigate = useNavigate()
+  // Which screen is up lives in the URL: the list, /new, or /:id/edit. Back
+  // returns to the list, F5 stays on the form, and an edit has an address.
+  const isNew = !!useMatch('/security/alerts/new')
+  const { id: editId } = useParams<{ id: string }>()
   const [rules, setRules] = useState<AlertRule[]>([])
-  // Which screen is up: the list (null), the create form ('new'), or the edit
-  // form for one rule. One value, so the two forms cannot both be "open".
-  const [formTarget, setFormTarget] = useState<AlertRule | 'new' | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<AlertRule | null>(null)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    try { setRules(await alertsApi.list()) } catch { /* ignore */ }
+    try {
+      setRules(await alertsApi.list())
+      setLoaded(true)
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
     load()
   }, [load])
 
+  // The rule an /:id/edit deep link names may not exist (deleted, or a typo in
+  // a pasted URL); once the list has loaded, an unresolvable id goes back.
+  const editTarget = editId ? rules.find(r => r.id === editId) ?? null : null
+  useEffect(() => {
+    if (editId && loaded && !editTarget) {
+      toast.error('That alert rule no longer exists.')
+      navigate('/security/alerts', { replace: true })
+    }
+  }, [editId, loaded, editTarget, navigate, toast])
+
   const handleCreate = async (form: Omit<AlertRule, 'id'>) => {
     setSaving(true)
     try {
       await alertsApi.create(form)
       toast.success('Alert rule created.')
-      setFormTarget(null)
       load()
+      navigate('/security/alerts')
     } catch { toast.error('Failed to create alert rule') }
     finally { setSaving(false) }
   }
 
   const handleUpdate = async (form: Omit<AlertRule, 'id'>) => {
-    if (!formTarget || formTarget === 'new') return
+    if (!editTarget) return
     setSaving(true)
     try {
-      await alertsApi.update(formTarget.id, { ...form, id: formTarget.id })
+      await alertsApi.update(editTarget.id, { ...form, id: editTarget.id })
       toast.success('Alert rule updated.')
-      setFormTarget(null)
       load()
+      navigate('/security/alerts')
     } catch { toast.error('Failed to update alert rule') }
     finally { setSaving(false) }
   }
@@ -186,23 +203,25 @@ export function AlertsPage() {
     } finally { setTesting(null) }
   }
 
-  // Creating and editing happen on a screen of their own — the list comes back
-  // on save or cancel, the same way the Network Policy editor does it.
-  if (isAdmin && formTarget) {
-    const editing = formTarget === 'new' ? null : formTarget
+  // Creating and editing are routes of their own; the list comes back on save
+  // or cancel.
+  if (isAdmin && (isNew || editId)) {
+    // A deep-linked edit needs the list before it can show the rule.
+    if (editId && !editTarget) return null
     return (
       <>
         <div className="mb-6">
           <h4 className="text-xl font-semibold">
-            {editing ? `Edit ${editing.name}` : 'New Alert Rule'}
+            {editTarget ? `Edit ${editTarget.name}` : 'New Alert Rule'}
           </h4>
         </div>
         <Card className="max-w-2xl">
           <CardContent className="pt-4">
             <RuleForm
-              initial={editing ?? EMPTY_RULE}
-              onSave={editing ? handleUpdate : handleCreate}
-              onCancel={() => setFormTarget(null)}
+              key={editTarget?.id ?? 'new'}
+              initial={editTarget ?? EMPTY_RULE}
+              onSave={editTarget ? handleUpdate : handleCreate}
+              onCancel={() => navigate('/security/alerts')}
               saving={saving}
             />
           </CardContent>
@@ -219,7 +238,7 @@ export function AlertsPage() {
           <p className="text-sm text-muted-foreground">Send webhook notifications for Security Events and Admission Events.</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setFormTarget('new')}>+ New Rule</Button>
+          <Button onClick={() => navigate('/security/alerts/new')}>+ New Rule</Button>
         )}
       </div>
 
@@ -247,7 +266,7 @@ export function AlertsPage() {
                     {testing === rule.id ? 'Sending...' : 'Test'}
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
-                    onClick={() => setFormTarget(rule)}>Edit</Button>
+                    onClick={() => navigate(`/security/alerts/${rule.id}/edit`)}>Edit</Button>
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
                     onClick={() => handleToggle(rule)}>
                     {rule.enabled ? 'Disable' : 'Enable'}
