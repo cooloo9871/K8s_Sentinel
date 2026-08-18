@@ -86,6 +86,16 @@ bind is `localhost:54321` — reachable only from inside the pod. Binding it to
 the pod network lets Sentinel connect. (The `deploy/install-job.yaml` and
 `deploy/install.sh` installers set this for you.)
 
+> **Upgrading an existing Tetragon?** The installer skips Tetragon when its
+> DaemonSet is already present, so it will not reconfigure one installed before
+> gRPC collection. Set the address on the running config and restart:
+>
+> ```bash
+> kubectl -n kube-system patch cm tetragon-config --type merge \
+>   -p '{"data":{"server-address":"0.0.0.0:54321"}}'
+> kubectl -n kube-system rollout restart ds/tetragon
+> ```
+
 What attributes events to pods is the agent's Kubernetes metadata enrichment —
 `tetragon.enableK8sAPIAccess`, on by default — which fills the `process.pod`
 field that Security Events read for namespace, pod and container.

@@ -94,7 +94,10 @@ data:
   enable-k8s-api: "true"
   metrics-server: :2112
   metrics-label-filter: namespace,workload,pod,binary
-  server-address: unix:///var/run/tetragon/tetragon.sock
+  # TCP on the pod network (Tetragon is hostNetwork, so this is the node IP),
+  # so Sentinel collects events over gRPC instead of kubectl exec. Default is a
+  # unix socket, reachable only from inside the pod.
+  server-address: 0.0.0.0:54321
   health-server-address: :6789
   health-server-interval: "10"
   gops-address: localhost:8118
