@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { IconRefresh } from '@tabler/icons-react'
+import { IconDownload, IconRefresh } from '@tabler/icons-react'
 import { auditApi, type AuditEntry } from '../api/client'
 import { formatTWTime } from '../utils/time'
+import { downloadCSV } from '../utils/csv'
 
 // A failed action is worth spotting: an attempt that was rejected still says
 // what someone tried to do. Shown as words rather than the HTTP code, with the
@@ -56,6 +57,19 @@ export function AuditLogPage() {
         (e.target ?? '').toLowerCase().includes(q))
     : entries
 
+  // Exports what is on screen — the filter narrows the file too, which is the
+  // usual intent when someone filters then exports.
+  const exportCsv = () => {
+    downloadCSV(
+      'audit-log.csv',
+      ['Time', 'User', 'Action', 'Target', 'Status', 'Method', 'Path'],
+      filtered.map(e => [
+        formatTWTime(e.time), e.user, e.action, e.target ?? '',
+        statusText(e.status), e.method, e.path,
+      ]),
+    )
+  }
+
   return (
     <>
       <div className="mb-4 flex items-start justify-between">
@@ -65,9 +79,14 @@ export function AuditLogPage() {
             A record of every operation performed in Sentinel.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load}>
-          <IconRefresh size={14} className="mr-1" /> Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
+            <IconDownload size={14} className="mr-1" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={load}>
+            <IconRefresh size={14} className="mr-1" /> Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="mb-3">
