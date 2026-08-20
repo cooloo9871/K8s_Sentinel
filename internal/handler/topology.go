@@ -72,9 +72,11 @@ const denialStillLive = 2 * time.Minute
 
 // normalizePort collapses ephemeral ports (Linux default range starts at
 // 32768) into one "dynamic" bucket so a single logical connection pair does
-// not explode into N parallel edges keyed by client-side ports.
+// not explode into N parallel edges keyed by client-side ports. The ports
+// Sentinel dials to collect events are exempt: they are real server ports that
+// happen to sit in that range.
 func normalizePort(port string) string {
-	if p, err := strconv.Atoi(port); err == nil && p >= 32768 {
+	if p, err := strconv.Atoi(port); err == nil && p >= 32768 && !k8s.IsMonitoringPort(port) {
 		return "dynamic"
 	}
 	return port

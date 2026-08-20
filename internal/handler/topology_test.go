@@ -293,3 +293,19 @@ func TestAKubeletProbeIsFlaggedRatherThanDropped(t *testing.T) {
 		t.Error("an edge was called a probe without any pod spec to say so")
 	}
 }
+
+// Sentinel dials Tetragon on 54321, a real server port that sits in the
+// ephemeral range; the topology must show it, not fold it into "dynamic".
+func TestMonitoringPortIsNotCollapsed(t *testing.T) {
+	if got := normalizePort("54321"); got != "54321" {
+		t.Errorf("normalizePort(54321) = %q, want 54321 (a monitoring port)", got)
+	}
+	// A genuine ephemeral client port still collapses.
+	if got := normalizePort("41000"); got != "dynamic" {
+		t.Errorf("normalizePort(41000) = %q, want dynamic", got)
+	}
+	// And an ordinary low server port is untouched.
+	if got := normalizePort("443"); got != "443" {
+		t.Errorf("normalizePort(443) = %q, want 443", got)
+	}
+}

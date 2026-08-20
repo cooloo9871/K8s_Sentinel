@@ -28,6 +28,14 @@ func tetragonGRPCPort() string {
 	return envOr("TETRAGON_GRPC_PORT", "54321")
 }
 
+// IsMonitoringPort reports whether a port is one Sentinel itself dials to
+// collect events — the Tetragon gRPC API. It is a real destination port but
+// sits in the ephemeral range (54321), so the topology must not collapse it to
+// "dynamic" the way it does genuine client-side ports.
+func IsMonitoringPort(port string) bool {
+	return port == tetragonGRPCPort()
+}
+
 // TetragonEvent is the shape carried on the shared runtime-security event bus.
 // Most events originate from Tetragon kprobes, but Cilium network policy
 // denials are synthesized into the same shape so that retention, alerting and

@@ -243,11 +243,12 @@ func (s *Store) updateCiliumTopo(f CiliumFlow) {
 	port := ""
 	if f.DstPort > 0 {
 		// Collapse ephemeral client-side ports (Linux default range starts at
-		// 32768) into one bucket so the buffer doesn't grow per connection.
-		if f.DstPort >= 32768 {
+		// 32768) into one bucket so the buffer doesn't grow per connection — but
+		// not the ports Sentinel itself dials to collect events, which are real
+		// server ports that happen to sit in that range.
+		port = fmt.Sprintf("%d", f.DstPort)
+		if f.DstPort >= 32768 && !IsMonitoringPort(port) {
 			port = "dynamic"
-		} else {
-			port = fmt.Sprintf("%d", f.DstPort)
 		}
 	}
 	// The verdict is part of the identity. Leaving it out let a later allowed
