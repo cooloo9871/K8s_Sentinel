@@ -19,11 +19,21 @@ const (
 )
 
 type User struct {
-	Username  string `json:"username"`
-	PassHash  string `json:"passHash"`
-	Role      Role   `json:"role"`
-	CreatedAt string `json:"createdAt"`
+	Username string `json:"username"`
+	PassHash string `json:"passHash"`
+	Role     Role   `json:"role"`
+	// Set on the bootstrapped admin so admin/admin cannot be used for anything
+	// but changing itself; cleared on the first successful password change.
+	MustChangePassword bool   `json:"mustChangePassword,omitempty"`
+	CreatedAt          string `json:"createdAt"`
 }
+
+// MinPasswordLength is the shortest password accepted. Short enough not to
+// annoy, long enough that a length floor is meaningful.
+const MinPasswordLength = 8
+
+// ErrPasswordTooShort is returned when a new password is below the minimum.
+var ErrPasswordTooShort = fmt.Errorf("password must be at least %d characters", MinPasswordLength)
 
 const DefaultSessionTTL = 3600 // seconds
 
@@ -137,10 +147,11 @@ func (s *UserStore) flush() {
 func (s *UserStore) bootstrap() {
 	hash, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
 	u := User{
-		Username:  "admin",
-		PassHash:  string(hash),
-		Role:      RoleAdmin,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Username:           "admin",
+		PassHash:           string(hash),
+		Role:               RoleAdmin,
+		MustChangePassword: true,
+		CreatedAt:          time.Now().UTC().Format(time.RFC3339),
 	}
 	s.users["admin"] = u
 	s.flush()
@@ -177,6 +188,9 @@ func (s *UserStore) List() []User {
 }
 
 func (s *UserStore) Create(username, password string, role Role) error {
+	if len(password) < MinPasswordLength {
+		return ErrPasswordTooShort
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.users[username]; exists {
@@ -208,6 +222,9 @@ func (s *UserStore) Delete(username string) bool {
 }
 
 func (s *UserStore) ChangePassword(username, newPassword string) error {
+	if len(newPassword) < MinPasswordLength {
+		return ErrPasswordTooShort
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -219,7 +236,17 @@ func (s *UserStore) ChangePassword(username, newPassword string) error {
 		return fmt.Errorf("user not found")
 	}
 	u.PassHash = string(hash)
+	// Changing the password is what clears the forced-change gate.
+	u.MustChangePassword = false
 	s.users[username] = u
 	s.flush()
 	return nil
+}
+
+// RequiresPasswordChange reports whether the user must change their password
+// before doing anything else. Used to gate the authenticated API.
+func (s *UserStore) RequiresPasswordChange(username string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.users[username].MustChangePassword
 }

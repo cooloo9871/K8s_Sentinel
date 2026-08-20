@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"time"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -39,6 +40,9 @@ type Config struct {
 // New builds the HTTP handler tree.
 func New(cfg Config) http.Handler {
 	r := chi.NewRouter()
+	// Five failed logins per source IP a minute, then a brief block; slows brute
+	// force without letting an attacker lock a real user out.
+	loginLimiter := auth.NewLoginLimiter(5, time.Minute)
 	// Before the access logger, so the token never reaches the log.
 	r.Use(liftWebhookToken)
 	r.Use(middleware.Logger)
@@ -51,15 +55,18 @@ func New(cfg Config) http.Handler {
 	r.Post(webhookPath, admissionWebhook(cfg.Admission, cfg.AuditWebhookToken))
 
 	// Public auth
-	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret))
+	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret, loginLimiter))
 	r.Post("/api/auth/logout", logoutHandler(cfg.Users, cfg.Secret))
 
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware(cfg.Secret, cfg.Users))
+		// A user who must change their password can reach only /me and their own
+		// password change until they do.
+		r.Use(mustChangeGate(cfg.Users))
 
 		// Viewer + Admin (read-only)
-		r.Get("/api/auth/me", meHandler())
+		r.Get("/api/auth/me", meHandler(cfg.Users))
 		r.Get("/api/policies", listPolicies(cfg.Store))
 		r.Post("/api/policies/preview", previewPolicy)
 		r.Get("/api/policies/{name}", getPolicy(cfg.Store))

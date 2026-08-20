@@ -6,6 +6,7 @@ import { AdmissionEventsProvider } from './layout/AdmissionEventsProvider'
 import { DiscoveryProvider } from './layout/DiscoveryProvider'
 import { AuthProvider, useAuth } from './layout/AuthContext'
 import { LoginPage } from './pages/LoginPage'
+import { ForcePasswordChangePage } from './pages/ForcePasswordChangePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { PolicyListPage } from './pages/PolicyListPage'
 import { PolicyEditPage } from './pages/PolicyEditPage'
@@ -28,7 +29,7 @@ import { AuditLogPage } from './pages/AuditLogPage'
 import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
 
 function AppRoutes() {
-  const { user, loading, logout } = useAuth()
+  const { user, loading, logout, refresh } = useAuth()
 
   if (loading) return null
 
@@ -36,6 +37,12 @@ function AppRoutes() {
     return (
       <LoginPage onLogin={() => window.location.replace('/dashboard')} />
     )
+  }
+
+  // The default admin must set a real password before reaching the app; the
+  // backend enforces the same gate, this makes it the only thing on screen.
+  if (user.mustChangePassword) {
+    return <ForcePasswordChangePage username={user.username} onDone={refresh} />
   }
 
   return (

@@ -151,7 +151,7 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 # open http://localhost:8080
 ```
 
-Default credentials are `admin` / `admin` — change the password immediately after the first login.
+Default credentials are `admin` / `admin`. The first login is forced to a password change before the console opens, and the new password must be at least 8 characters. Login attempts are rate limited per source IP to slow brute forcing.
 
 ## Persistent storage
 

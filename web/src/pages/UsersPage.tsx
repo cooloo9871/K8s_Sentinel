@@ -13,6 +13,8 @@ import { userApi, settingsApi, type UserRecord } from '../api/client'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 
+const MIN_PASSWORD_LENGTH = 8
+
 export function UsersPage() {
   const { user: me } = useAuth()
   const toast = useToast()
@@ -30,6 +32,7 @@ export function UsersPage() {
   // Change password dialog
   const [pwTarget, setPwTarget] = useState<string | null>(null)
   const [newPw, setNewPw] = useState('')
+  const [currentPw, setCurrentPw] = useState('')
 
   // Session TTL
   const [, setSessionTTL] = useState<number>(3600)
@@ -73,6 +76,9 @@ export function UsersPage() {
 
   const handleCreate = async () => {
     if (!newUsername.trim() || !newPassword.trim() || creating) return
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      toast.error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`); return
+    }
     setCreating(true)
     try {
       await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
@@ -92,13 +98,26 @@ export function UsersPage() {
     } catch { toast.error('Failed to delete user') }
   }
 
+  // Changing your own password requires the current one; an admin resetting
+  // someone else's does not. The backend enforces both — this mirrors it.
+  const changingOwn = pwTarget === me?.username
+
   const handleChangePassword = async () => {
     if (!pwTarget || !newPw.trim()) return
+    if (newPw.length < MIN_PASSWORD_LENGTH) {
+      toast.error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`); return
+    }
+    if (changingOwn && !currentPw) {
+      toast.error('Enter your current password.'); return
+    }
     try {
-      await userApi.changePassword(pwTarget, newPw.trim())
+      await userApi.changePassword(pwTarget, newPw.trim(), changingOwn ? currentPw : undefined)
       toast.success('Password updated.')
-      setPwTarget(null); setNewPw('')
-    } catch { toast.error('Failed to update password') }
+      setPwTarget(null); setNewPw(''); setCurrentPw('')
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } }).response?.status
+      toast.error(status === 403 ? 'Current password is incorrect.' : 'Failed to update password')
+    }
   }
 
   // Creating happens on a screen of its own — the list comes back on save or
@@ -119,6 +138,7 @@ export function UsersPage() {
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Password <span className="text-destructive">*</span></Label>
                 <Input className="h-8 text-sm" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                <p className="text-[11px] text-muted-foreground">At least {MIN_PASSWORD_LENGTH} characters.</p>
               </div>
             </div>
             <div className="flex flex-col gap-1">
@@ -227,20 +247,30 @@ export function UsersPage() {
       </AlertDialog>
 
       {/* Change password dialog */}
-      <AlertDialog open={!!pwTarget} onOpenChange={(open) => !open && setPwTarget(null)}>
+      <AlertDialog open={!!pwTarget} onOpenChange={(open) => { if (!open) { setPwTarget(null); setNewPw(''); setCurrentPw('') } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Change Password</AlertDialogTitle>
             <AlertDialogDescription>Set a new password for "{pwTarget}".</AlertDialogDescription>
           </AlertDialogHeader>
+          {changingOwn && (
+            <div className="flex flex-col gap-1.5 py-2">
+              <Label>Current Password</Label>
+              <Input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+            </div>
+          )}
           <div className="flex flex-col gap-1.5 py-2">
             <Label>New Password</Label>
             <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleChangePassword()} />
+            <p className="text-xs text-muted-foreground">At least {MIN_PASSWORD_LENGTH} characters.</p>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleChangePassword} disabled={!newPw.trim()}>Update</AlertDialogAction>
+            <AlertDialogAction
+              onClick={handleChangePassword}
+              disabled={newPw.length < MIN_PASSWORD_LENGTH || (changingOwn && !currentPw)}
+            >Update</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

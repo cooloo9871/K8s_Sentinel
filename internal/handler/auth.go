@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -63,8 +64,13 @@ func adminOnly(next http.Handler) http.Handler {
 	})
 }
 
-func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
+func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		if limiter.Blocked(ip) {
+			http.Error(w, "too many attempts, try again shortly", http.StatusTooManyRequests)
+			return
+		}
 		var body struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
@@ -75,9 +81,11 @@ func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 		}
 		u, ok := users.Authenticate(body.Username, body.Password)
 		if !ok {
+			limiter.Fail(ip)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
+		limiter.Reset(ip)
 		ttl := time.Duration(users.GetSessionTTL()) * time.Second
 		token, err := auth.SignToken(secret, u, ttl)
 		if err != nil {
@@ -94,10 +102,28 @@ func loginHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 			MaxAge:   users.GetSessionTTL(),
 		})
 		writeJSON(w, http.StatusOK, map[string]any{
-			"username": u.Username,
-			"role":     u.Role,
+			"username":           u.Username,
+			"role":               u.Role,
+			"mustChangePassword": u.MustChangePassword,
 		})
 	}
+}
+
+// clientIP is the source the login limiter keys on. The first X-Forwarded-For
+// hop when a proxy set it, else the connection's remote address without its
+// port.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	host := r.RemoteAddr
+	if i := strings.LastIndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return host
 }
 
 func getSessionTTLHandler(users *auth.UserStore) http.HandlerFunc {
@@ -147,12 +173,41 @@ func logoutHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 	}
 }
 
-func meHandler() http.HandlerFunc {
+func meHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := claimsFromCtx(r)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"username": claims.Username,
-			"role":     claims.Role,
+			"username":           claims.Username,
+			"role":               claims.Role,
+			"mustChangePassword": users.RequiresPasswordChange(claims.Username),
+		})
+	}
+}
+
+// mustChangeGate blocks a user who must change their password from doing
+// anything but reading /me and changing their own password. It closes the
+// window in which admin/admin could be used for real work before it is changed.
+func mustChangeGate(users *auth.UserStore) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := claimsFromCtx(r)
+			if claims == nil || !users.RequiresPasswordChange(claims.Username) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Allowed while the change is pending: read who you are, and change
+			// your own password. Path-matched rather than route-pattern-matched
+			// so it does not depend on middleware ordering.
+			if r.Method == http.MethodGet && r.URL.Path == "/api/auth/me" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if r.Method == http.MethodPut &&
+				r.URL.Path == "/api/users/"+claims.Username+"/password" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			http.Error(w, "password change required before continuing", http.StatusForbidden)
 		})
 	}
 }
@@ -223,14 +278,29 @@ func changePasswordHandler(users *auth.UserStore) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Password string `json:"password"`
+			CurrentPassword string `json:"currentPassword"`
+			Password        string `json:"password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Password == "" {
 			http.Error(w, "password required", http.StatusBadRequest)
 			return
 		}
+		// Changing your own password requires proving you know the current one,
+		// so a hijacked session cannot silently lock the owner out. An admin
+		// resetting someone else's password is a separate, audit-logged action
+		// that does not need the old one.
+		if claims.Username == username {
+			if _, ok := users.Authenticate(username, body.CurrentPassword); !ok {
+				http.Error(w, "current password is incorrect", http.StatusForbidden)
+				return
+			}
+		}
 		if err := users.ChangePassword(username, body.Password); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			status := http.StatusBadRequest
+			if err.Error() == "user not found" {
+				status = http.StatusNotFound
+			}
+			http.Error(w, err.Error(), status)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

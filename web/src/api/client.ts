@@ -86,6 +86,7 @@ export interface CustomTemplatePayload {
 export interface AuthUser {
   username: string
   role: 'admin' | 'viewer'
+  mustChangePassword?: boolean
 }
 
 export const authApi = {
@@ -110,8 +111,10 @@ export const userApi = {
     api.post('/users', { username, password, role }),
   delete: (username: string): Promise<void> =>
     api.delete(`/users/${username}`),
-  changePassword: (username: string, password: string): Promise<void> =>
-    api.put(`/users/${username}/password`, { password }),
+  // currentPassword is required when changing your own password; an admin
+  // resetting another user's may leave it blank.
+  changePassword: (username: string, password: string, currentPassword?: string): Promise<void> =>
+    api.put(`/users/${username}/password`, { password, currentPassword }),
 }
 
 export interface AlertRule {

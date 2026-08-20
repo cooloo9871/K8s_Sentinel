@@ -350,8 +350,18 @@ middleware never ran, the claims are always nil, and revocation silently does no
 
 There are two roles: `admin` writes, `viewer` reads.
 
-> **Known weaknesses**: no login rate limit; no minimum password length; changing
-> your own password does not require the old one; the revocation list is memory-only
+Login hardening (v0.47.0): the default `admin` account must change its password
+on first login before the rest of the console is reachable — enforced on the
+server by a gate that, while the flag is set, allows only `GET /api/auth/me` and
+the account's own password change. Passwords are at least 8 characters. Failed
+logins are rate limited per source IP (5 per minute, then a brief block), keyed
+on the source rather than the username so an attacker cannot lock a real user
+out. Changing your own password requires the current one; an admin resetting
+another account's does not.
+
+> **Known weaknesses**: the login rate-limit state is memory-only, so it resets
+> on restart (acceptable — bcrypt already makes each attempt cost ~50-100ms, and
+> an attacker cannot force restarts); the revocation list is likewise memory-only
 > (see the previous section); no CSP or other security headers.
 
 ---
