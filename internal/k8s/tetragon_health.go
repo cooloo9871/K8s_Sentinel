@@ -8,14 +8,23 @@ import (
 )
 
 // TetragonAgentStatus holds health information for one Tetragon DaemonSet pod.
+// The Ingest* fields carry the real ingestion state — whether Sentinel's gRPC
+// stream to this agent is actually connected and delivering — which pod
+// readiness alone cannot tell us.
 type TetragonAgentStatus struct {
 	PodName      string `json:"podName"`
 	NodeName     string `json:"nodeName"`
-	Phase        string `json:"phase"`    // Running / Pending / Failed / Unknown
+	Phase        string `json:"phase"` // Running / Pending / Failed / Unknown
 	Ready        bool   `json:"ready"`
 	RestartCount int32  `json:"restartCount"`
 	StartedAt    string `json:"startedAt,omitempty"`
 	Message      string `json:"message,omitempty"` // reason if not ready
+
+	IngestObserved    bool   `json:"ingestObserved"` // false = no stream attempt recorded yet
+	IngestConnected   bool   `json:"ingestConnected"`
+	IngestFailures    int    `json:"ingestFailures"`
+	IngestLastEventAt string `json:"ingestLastEventAt,omitempty"`
+	IngestLastError   string `json:"ingestLastError,omitempty"`
 }
 
 // GetTetragonAgents returns the health status of all Tetragon DaemonSet pods.
@@ -57,6 +66,13 @@ func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, e
 						agent.Message = cs.State.Terminated.Reason
 					}
 				}
+			}
+			if st, ok := s.ingestion.TetragonStatus(agent.NodeName); ok {
+				agent.IngestObserved = true
+				agent.IngestConnected = st.Connected
+				agent.IngestFailures = st.ConsecutiveFailures
+				agent.IngestLastEventAt = st.LastEventAt
+				agent.IngestLastError = st.LastError
 			}
 			agents = append(agents, agent)
 		}

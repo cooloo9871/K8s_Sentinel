@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"time"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -77,6 +77,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
 		r.Post("/api/selector-preview", selectorPreview(cfg.Store))
 		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
+		r.Get("/api/ingestion/health", getIngestionHealth(cfg.Store))
 		r.Get("/api/templates", listTemplates(cfg.Store))
 		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
 		// Audited on its own because it lives outside the admin group — a viewer

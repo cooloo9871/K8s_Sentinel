@@ -169,6 +169,7 @@ func (s *Store) hubbleRelayAddress(ctx context.Context) string {
 func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) error {
 	conn, err := dialGRPC("HUBBLE_RELAY", s.hubbleRelayAddress(ctx))
 	if err != nil {
+		s.ingestion.MarkHubbleError(err)
 		return fmt.Errorf("dial hubble-relay: %w", err)
 	}
 	defer conn.Close()
@@ -176,8 +177,10 @@ func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) er
 	// follow keeps the stream open; number 0 means unbounded here.
 	stream, err := observer.NewObserverClient(conn).GetFlows(ctx, &observer.GetFlowsRequest{Follow: true})
 	if err != nil {
+		s.ingestion.MarkHubbleError(err)
 		return fmt.Errorf("GetFlows: %w", err)
 	}
+	s.ingestion.MarkHubbleConnected()
 
 	for {
 		resp, err := stream.Recv()
@@ -185,8 +188,10 @@ func (s *Store) StreamCiliumFlows(ctx context.Context, out chan<- CiliumFlow) er
 			if ctx.Err() != nil {
 				return nil
 			}
+			s.ingestion.MarkHubbleError(err)
 			return fmt.Errorf("recv flow: %w", err)
 		}
+		s.ingestion.MarkHubbleEvent()
 		if resp.GetFlow() == nil {
 			continue // node-status and lost-events messages carry no flow
 		}

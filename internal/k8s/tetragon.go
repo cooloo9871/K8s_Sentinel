@@ -19,6 +19,7 @@ import (
 type podEndpoint struct {
 	Name string
 	IP   string
+	Node string // the node this agent runs on; the ingestion-health key
 }
 
 // tetragonGRPCPort is where the Tetragon agent's gRPC server listens. The
@@ -137,14 +138,19 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- TetragonEvent) error {
 	conn, err := dialGRPC("TETRAGON_GRPC", pod.IP+":"+tetragonGRPCPort())
 	if err != nil {
+		s.ingestion.MarkTetragonError(pod.Node, err)
 		return fmt.Errorf("dial %s: %w", pod.Name, err)
 	}
 	defer conn.Close()
 
 	stream, err := tetragon.NewFineGuidanceSensorsClient(conn).GetEvents(ctx, &tetragon.GetEventsRequest{})
 	if err != nil {
+		s.ingestion.MarkTetragonError(pod.Node, err)
 		return fmt.Errorf("GetEvents %s: %w", pod.Name, err)
 	}
+	// The stream is open; from here the agent is genuinely reachable, which
+	// pod readiness alone never told us.
+	s.ingestion.MarkTetragonConnected(pod.Node)
 
 	for {
 		resp, err := stream.Recv()
@@ -152,8 +158,12 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 			if ctx.Err() != nil {
 				return nil
 			}
+			s.ingestion.MarkTetragonError(pod.Node, err)
 			return fmt.Errorf("recv from %s: %w", pod.Name, err)
 		}
+		// A received message means the stream is live and delivering, the
+		// heartbeat that distinguishes a quiet cluster from a broken one.
+		s.ingestion.MarkTetragonEvent(pod.Node)
 		// The gRPC message is bridged through the same parser the CLI JSON used,
 		// by marshaling it exactly as `tetra getevents -o json` does.
 		line, err := marshalJSON(resp)
@@ -205,7 +215,11 @@ func (s *Store) findAllTetragonPods(ctx context.Context) ([]podEndpoint, error) 
 		var pods []podEndpoint
 		for _, p := range list.Items {
 			if p.Status.Phase == corev1.PodRunning && p.Status.PodIP != "" {
-				pods = append(pods, podEndpoint{Name: p.Name, IP: p.Status.PodIP})
+				node := p.Spec.NodeName
+				if node == "" {
+					node = p.Name // fall back so the key is never empty
+				}
+				pods = append(pods, podEndpoint{Name: p.Name, IP: p.Status.PodIP, Node: node})
 			}
 		}
 		if len(pods) > 0 {

@@ -56,6 +56,17 @@ function StatCard({ icon, label, value, sub, accent = '#2d7dd2' }: StatProps) {
   )
 }
 
+// One ingestion source's health, from /api/ingestion/health. A source counts
+// as a problem only once an attempt has actually failed, so a stream still
+// coming up at startup does not raise a false alarm.
+interface IngestSource {
+  kind: string
+  name: string
+  connected: boolean
+  consecutiveFailures: number
+  lastError?: string
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const toast = useToast()
@@ -74,6 +85,8 @@ export function DashboardPage() {
   const [mode, setMode] = useState<Mode>('Monitoring')
   const [agentTotal, setAgentTotal] = useState<number | null>(null)
   const [agentReady, setAgentReady] = useState<number | null>(null)
+  const [agentStreamDown, setAgentStreamDown] = useState(0)
+  const [ingestProblems, setIngestProblems] = useState<IngestSource[]>([])
   const hasLoaded = useRef(false)
   const [loading, setLoading] = useState(!hasLoaded.current)
 
@@ -97,10 +110,18 @@ export function DashboardPage() {
       .catch(() => {})
     fetch('/api/tetragon/agents')
       .then(r => r.json())
-      .then((d: { agents: { ready: boolean }[] }) => {
+      .then((d: { agents: { ready: boolean; ingestObserved: boolean; ingestConnected: boolean }[] }) => {
         const list = d.agents ?? []
         setAgentTotal(list.length)
         setAgentReady(list.filter(a => a.ready).length)
+        setAgentStreamDown(list.filter(a => a.ready && a.ingestObserved && !a.ingestConnected).length)
+      })
+      .catch(() => {})
+    fetch('/api/ingestion/health')
+      .then(r => r.json())
+      .then((d: { sources: IngestSource[] }) => {
+        setIngestProblems((d.sources ?? []).filter(
+          s => !s.connected && (s.consecutiveFailures > 0 || !!s.lastError)))
       })
       .catch(() => {})
   }
@@ -148,14 +169,40 @@ export function DashboardPage() {
         </Button>
       </div>
 
+      {/* Ingestion problems: surfaced only when a stream has actually failed,
+          because a security console going silently blind is the worst failure. */}
+      {ingestProblems.length > 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive">
+          <p className="text-sm font-semibold">Ingestion problem detected. Sentinel may be missing events.</p>
+          <ul className="mt-1.5 space-y-0.5 text-xs">
+            {ingestProblems.map(s => (
+              <li key={`${s.kind}:${s.name}`}>
+                {s.kind === 'hubble' ? 'Hubble' : `Tetragon ${s.name}`}: {s.lastError || 'stream down'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           icon={<IconServer size={26} />}
           label="Tetragon Agents"
           value={agentTotal === null ? '—' : `${agentReady} / ${agentTotal}`}
-          sub={agentTotal === null ? 'Loading…' : agentReady === agentTotal && agentTotal > 0 ? 'All nodes online' : agentTotal === 0 ? 'No agents found' : `${agentTotal - (agentReady ?? 0)} not ready`}
-          accent={agentTotal === null ? '#6b7280' : agentReady === agentTotal && agentTotal > 0 ? '#28a745' : '#dc3545'}
+          sub={
+            agentTotal === null ? 'Loading…'
+              : agentStreamDown > 0 ? `${agentStreamDown} stream${agentStreamDown > 1 ? 's' : ''} down`
+              : agentReady === agentTotal && agentTotal > 0 ? 'All nodes ingesting'
+              : agentTotal === 0 ? 'No agents found'
+              : `${agentTotal - (agentReady ?? 0)} not ready`
+          }
+          accent={
+            agentTotal === null ? '#6b7280'
+              : agentStreamDown > 0 ? '#dc3545'
+              : agentReady === agentTotal && agentTotal > 0 ? '#28a745'
+              : '#dc3545'
+          }
         />
         <StatCard
           icon={<IconActivity size={26} />}

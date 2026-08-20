@@ -52,6 +52,11 @@ type Store struct {
 	tetragonMu   sync.RWMutex
 	tetragonSubs map[chan TetragonEvent]struct{}
 
+	// Ingestion health — whether each stream is actually connected and
+	// delivering events, so a source can be shown as blind rather than falsely
+	// healthy when its pod is merely Ready.
+	ingestion *IngestionHealth
+
 	// Cilium/Hubble fan-out broadcast
 	ciliumMu   sync.RWMutex
 	ciliumSubs map[chan CiliumFlow]struct{}
@@ -110,8 +115,13 @@ func NewStore(client dynamic.Interface, typed kubernetes.Interface, _ *rest.Conf
 		ciliumSubs:   make(map[chan CiliumFlow]struct{}),
 		ciliumTopo:   make(map[string]CiliumTopoEntry),
 		ipCacheTTL:   30 * time.Second,
+		ingestion:    NewIngestionHealth(),
 	}
 }
+
+// Ingestion exposes the live ingestion-health tracker, which records whether
+// each stream is actually connected and delivering.
+func (s *Store) Ingestion() *IngestionHealth { return s.ingestion }
 
 // ── Tetragon fan-out ────────────────────────────────────────────────────────
 
@@ -393,6 +403,9 @@ func (s *Store) StartCiliumBroadcast(ctx context.Context) {
 	go func() {
 		if !s.DetectCilium(ctx) {
 			log.Printf("cilium-broadcast: Cilium not detected, skipping")
+			// Record it so the UI shows Hubble ingestion as off rather than
+			// silently omitting it — "not detected" is itself a finding.
+			s.ingestion.MarkHubbleError(fmt.Errorf("Cilium not detected"))
 			return
 		}
 		log.Printf("cilium-broadcast: Cilium detected, starting flow stream")

@@ -13,16 +13,34 @@ interface TetragonAgent {
   restartCount: number
   startedAt?: string
   message?: string
+  ingestObserved: boolean
+  ingestConnected: boolean
+  ingestFailures: number
+  ingestLastEventAt?: string
+  ingestLastError?: string
+}
+
+// The pod is Ready but Sentinel's gRPC stream to it is not connected — the
+// silent-blindness case this page exists to expose.
+function streamDown(a: TetragonAgent): boolean {
+  return a.phase === 'Running' && a.ready && a.ingestObserved && !a.ingestConnected
+}
+
+function isHealthy(a: TetragonAgent): boolean {
+  return a.ready && a.phase === 'Running' && !streamDown(a)
 }
 
 function StatusBadge({ agent }: { agent: TetragonAgent }) {
-  if (agent.ready && agent.phase === 'Running') {
-    return <Badge className="bg-green-500/15 text-green-700 font-medium">Healthy</Badge>
+  if (agent.phase !== 'Running') {
+    return <Badge variant="destructive" className="font-medium">{agent.phase || 'Unknown'}</Badge>
   }
-  if (agent.phase === 'Running') {
+  if (!agent.ready) {
     return <Badge className="bg-amber-500/15 text-amber-700 font-medium">Not Ready</Badge>
   }
-  return <Badge variant="destructive" className="font-medium">{agent.phase || 'Unknown'}</Badge>
+  if (streamDown(agent)) {
+    return <Badge variant="destructive" className="font-medium">Stream Down</Badge>
+  }
+  return <Badge className="bg-green-500/15 text-green-700 font-medium">Healthy</Badge>
 }
 
 export function TetragonStatusPage() {
@@ -52,7 +70,7 @@ export function TetragonStatusPage() {
     return () => clearInterval(timer)
   }, [load])
 
-  const healthy = agents.filter(a => a.ready && a.phase === 'Running').length
+  const healthy = agents.filter(isHealthy).length
   const total = agents.length
 
   return (
@@ -125,7 +143,7 @@ export function TetragonStatusPage() {
           {agents
             .sort((a, b) => a.nodeName.localeCompare(b.nodeName))
             .map(agent => (
-              <Card key={agent.podName} className={!agent.ready ? 'border-destructive/40 bg-destructive/5' : ''}>
+              <Card key={agent.podName} className={!agent.ready || streamDown(agent) ? 'border-destructive/40 bg-destructive/5' : ''}>
                 <CardHeader className="border-b pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold truncate" title={agent.nodeName}>
@@ -147,6 +165,30 @@ export function TetragonStatusPage() {
                       {agent.restartCount}
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Ingestion</span>
+                    <span className={
+                      !agent.ingestObserved ? 'text-muted-foreground'
+                        : agent.ingestConnected ? 'text-green-700 font-medium'
+                        : 'text-destructive font-medium'
+                    }>
+                      {!agent.ingestObserved ? 'Not measured'
+                        : agent.ingestConnected ? 'Connected'
+                        : 'Stream down'}
+                    </span>
+                  </div>
+                  {agent.ingestObserved && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Last event</span>
+                      <span>{agent.ingestLastEventAt ? formatTWTime(agent.ingestLastEventAt) : 'None yet'}</span>
+                    </div>
+                  )}
+                  {agent.ingestFailures > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Consecutive failures</span>
+                      <span className="text-destructive font-medium">{agent.ingestFailures}</span>
+                    </div>
+                  )}
                   {agent.startedAt && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Started</span>
@@ -156,6 +198,11 @@ export function TetragonStatusPage() {
                   {agent.message && (
                     <div className="mt-2 rounded bg-destructive/10 px-2 py-1 text-destructive">
                       {agent.message}
+                    </div>
+                  )}
+                  {streamDown(agent) && agent.ingestLastError && (
+                    <div className="mt-2 rounded bg-destructive/10 px-2 py-1 text-destructive break-words">
+                      {agent.ingestLastError}
                     </div>
                   )}
                 </CardContent>

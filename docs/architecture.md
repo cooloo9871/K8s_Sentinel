@@ -115,6 +115,31 @@ Every flow goes three ways:
 3. If it is an attributable policy denial → synthesized into a `TetragonEvent` and fed
    into the security event stream
 
+### 3.3 Ingestion health — knowing when we are blind
+
+The worst failure mode for a security console is looking like it is monitoring
+while it is blind. A Tetragon Pod's readiness probe reports whether the agent
+itself is up, **not** whether Sentinel's gRPC stream to it is connected — so a
+blocked NetworkPolicy, a wrong `TETRAGON_GRPC`, a TLS mismatch or a stream that
+drops on connect would leave the agent showing "Ready" while not a single event
+arrives.
+
+`IngestionHealth` (`internal/k8s/ingestion_health.go`) records, per source, the
+truth the readiness probe cannot: whether the stream is **connected**, the
+**consecutive-failure** count, the **last error**, and the **last time an event
+actually arrived**. The stream paths mark it directly — `streamFromPod` on
+connect / receive / error (keyed by node, since Tetragon is per-node),
+`StreamCiliumFlows` likewise for Hubble, and the `DetectCilium` miss records
+"Cilium not detected" rather than returning silently.
+
+Health is **connection liveness**, not event volume: a stream that is connected
+but quiet is healthy (a calm cluster is not a broken one), so the last-event
+time is shown as information, never used on its own to declare a source dead.
+`GET /api/ingestion/health` returns every source's status; `GetTetragonAgents`
+folds each node's ingestion state into its row so the agent view shows
+**Stream Down** when a Ready pod is not actually being ingested, and the
+dashboard raises a banner the moment any stream has failed.
+
 ---
 
 ## 4. The topology graph
