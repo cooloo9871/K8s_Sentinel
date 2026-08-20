@@ -165,8 +165,10 @@ func TestChangePasswordIsAuditedOnSuccessAndFailure(t *testing.T) {
 	}
 }
 
-// Every sign-in attempt is audited: the account it targeted, the source IP, and
-// the outcome — success, wrong credentials, and being rate-limited alike.
+// Sign-in attempts are audited: the account, the source IP, and the outcome
+// (success, wrong credentials). A blocked (429) attempt is deliberately NOT
+// audited — the earlier failures already recorded the attack, and auditing every
+// blocked request would let a flood evict real admin-action evidence.
 func TestLoginIsAudited(t *testing.T) {
 	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json")) // admin/admin
 	store := audit.NewStore(filepath.Join(t.TempDir(), "audit.json"))
@@ -189,12 +191,11 @@ func TestLoginIsAudited(t *testing.T) {
 		t.Fatalf("fourth attempt: status = %d, want 429 (blocked)", code)
 	}
 
-	got := store.List() // newest first
+	got := store.List() // newest first; the 429 is not recorded
 	want := []struct {
 		user   string
 		status int
 	}{
-		{"admin", http.StatusTooManyRequests},
 		{"ghost", http.StatusUnauthorized},
 		{"admin", http.StatusUnauthorized},
 		{"admin", http.StatusOK},
@@ -210,5 +211,28 @@ func TestLoginIsAudited(t *testing.T) {
 			t.Errorf("entry %d = action %q target %q, want %q/%q", i,
 				got[i].Action, got[i].Target, "Sign in", "203.0.113.9")
 		}
+	}
+}
+
+// By default the source IP is the connection's RemoteAddr, never the client-set
+// X-Forwarded-For — otherwise an attacker sends a fresh fake IP per request and
+// never trips the rate limit.
+func TestClientIPIgnoresXFFByDefault(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	req.RemoteAddr = "10.0.0.5:1234"
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	if ip := clientIP(req); ip != "10.0.0.5" {
+		t.Errorf("clientIP = %q, want 10.0.0.5 (XFF must be ignored by default)", ip)
+	}
+}
+
+// Behind a trusted proxy, XFF is honoured so real client IPs are used.
+func TestClientIPUsesXFFWhenTrusted(t *testing.T) {
+	t.Setenv("TRUST_PROXY_HEADERS", "true")
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	req.RemoteAddr = "10.0.0.5:1234"
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.5")
+	if ip := clientIP(req); ip != "1.2.3.4" {
+		t.Errorf("clientIP = %q, want 1.2.3.4 (first XFF hop when trusted)", ip)
 	}
 }

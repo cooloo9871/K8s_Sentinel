@@ -56,12 +56,27 @@ func (l *LoginLimiter) Blocked(key string) bool {
 func (l *LoginLimiter) Fail(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.gcLocked()
 	w := l.attempts[key]
 	if w == nil || time.Since(w.start) >= l.window {
 		l.attempts[key] = &attemptWindow{count: 1, start: time.Now()}
 		return
 	}
 	w.count++
+}
+
+// gcLocked drops elapsed windows once the map grows large, so a flood of
+// distinct keys (e.g. spoofed sources) cannot grow it without bound. Cheap in
+// the common case: it only scans past a generous threshold.
+func (l *LoginLimiter) gcLocked() {
+	if len(l.attempts) < 10000 {
+		return
+	}
+	for k, w := range l.attempts {
+		if time.Since(w.start) >= l.window {
+			delete(l.attempts, k)
+		}
+	}
 }
 
 // Reset clears a key, called on a successful login so a legitimate user is not

@@ -136,3 +136,29 @@ func TestIngestionHealthNilSafe(t *testing.T) {
 		t.Error("nil receiver Snapshot should be nil")
 	}
 }
+
+// A recovered source clears its failure streak on the next event, so it never
+// shows connected-yet-failing.
+func TestIngestionHealthEventClearsFailures(t *testing.T) {
+	h := NewIngestionHealth()
+	h.MarkTetragonError("node-a", fmt.Errorf("boom"))
+	h.MarkTetragonEvent("node-a")
+	st, _ := h.TetragonStatus("node-a")
+	if !st.Connected || st.ConsecutiveFailures != 0 {
+		t.Errorf("after event: connected=%v failures=%d, want true/0", st.Connected, st.ConsecutiveFailures)
+	}
+}
+
+// PruneTetragon drops nodes no longer present and keeps the ones still alive.
+func TestIngestionHealthPrune(t *testing.T) {
+	h := NewIngestionHealth()
+	h.MarkTetragonConnected("node-a")
+	h.MarkTetragonConnected("node-b")
+	h.PruneTetragon(map[string]bool{"node-a": true})
+	if _, ok := h.TetragonStatus("node-a"); !ok {
+		t.Error("node-a should be kept")
+	}
+	if _, ok := h.TetragonStatus("node-b"); ok {
+		t.Error("node-b should have been pruned")
+	}
+}

@@ -118,15 +118,20 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		return err
 	}
 
+	// When ANY pod's stream ends — a broken or restarted agent — cancel the rest
+	// and return, so the caller's reconnect loop re-lists pods and redials every
+	// node. Without this, waiting for all goroutines meant a single dead node was
+	// never redialed while healthy nodes kept their streams open, leaving that
+	// node's ingestion health stuck showing blind even after it recovered.
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	var wg sync.WaitGroup
 	for _, pod := range pods {
 		wg.Add(1)
 		go func(p podEndpoint) {
 			defer wg.Done()
-			// One pod failing must not stop the others, but it does have to be
-			// visible: a broken Tetragon stream otherwise looks like a quiet
-			// cluster.
-			if err := s.streamFromPod(ctx, p, out); err != nil && ctx.Err() == nil {
+			defer cancel()
+			if err := s.streamFromPod(streamCtx, p, out); err != nil && streamCtx.Err() == nil {
 				log.Printf("tetragon-stream: pod %s: %v", p.Name, err)
 			}
 		}(pod)
@@ -138,14 +143,18 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- TetragonEvent) error {
 	conn, err := dialGRPC("TETRAGON_GRPC", pod.IP+":"+tetragonGRPCPort())
 	if err != nil {
-		s.ingestion.MarkTetragonError(pod.Node, err)
+		if ctx.Err() == nil { // not a mark for our own cancellation
+			s.ingestion.MarkTetragonError(pod.Node, err)
+		}
 		return fmt.Errorf("dial %s: %w", pod.Name, err)
 	}
 	defer conn.Close()
 
 	stream, err := tetragon.NewFineGuidanceSensorsClient(conn).GetEvents(ctx, &tetragon.GetEventsRequest{})
 	if err != nil {
-		s.ingestion.MarkTetragonError(pod.Node, err)
+		if ctx.Err() == nil {
+			s.ingestion.MarkTetragonError(pod.Node, err)
+		}
 		return fmt.Errorf("GetEvents %s: %w", pod.Name, err)
 	}
 	// The stream is open; from here the agent is genuinely reachable, which

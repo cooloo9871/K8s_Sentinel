@@ -24,6 +24,7 @@ import { useAuth } from '../layout/AuthContext'
 import { useSecurityEvents } from '../layout/SecurityEventsProvider'
 import { useAdmissionEvents } from '../layout/AdmissionEventsProvider'
 import { RelativeTime } from '../components/RelativeTime'
+import { isIngestProblem } from '../utils/ingestion'
 import type { PolicyRecord, Mode } from '../api/types'
 
 interface StatProps {
@@ -110,18 +111,17 @@ export function DashboardPage() {
       .catch(() => {})
     fetch('/api/tetragon/agents')
       .then(r => r.json())
-      .then((d: { agents: { ready: boolean; ingestObserved: boolean; ingestConnected: boolean }[] }) => {
+      .then((d: { agents: { ready: boolean; phase: string; ingestObserved: boolean; ingestConnected: boolean }[] }) => {
         const list = d.agents ?? []
         setAgentTotal(list.length)
         setAgentReady(list.filter(a => a.ready).length)
-        setAgentStreamDown(list.filter(a => a.ready && a.ingestObserved && !a.ingestConnected).length)
+        setAgentStreamDown(list.filter(a => a.ready && a.phase === 'Running' && a.ingestObserved && !a.ingestConnected).length)
       })
       .catch(() => {})
     fetch('/api/ingestion/health')
       .then(r => r.json())
       .then((d: { sources: IngestSource[] }) => {
-        setIngestProblems((d.sources ?? []).filter(
-          s => !s.connected && (s.consecutiveFailures > 0 || !!s.lastError)))
+        setIngestProblems((d.sources ?? []).filter(isIngestProblem))
       })
       .catch(() => {})
   }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -68,19 +69,23 @@ func adminOnly(next http.Handler) http.Handler {
 func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimiter, auditStore *audit.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := clientIP(r)
+		// The rate-limit check comes first, and a blocked attempt is NOT audited:
+		// the earlier failures from this IP already recorded the attack, so writing
+		// an audit entry per blocked request would only let an attacker flood the
+		// (shared, capped) audit log and evict real admin-action evidence.
+		if limiter.Blocked(ip) {
+			http.Error(w, "too many attempts, try again shortly", http.StatusTooManyRequests)
+			return
+		}
+		// A login body is tiny; cap it so a blocked-or-not client cannot make us
+		// read a huge payload into memory.
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 		var body struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
 		}
-		// Decoded before the rate-limit check so a blocked attempt is still
-		// recorded against the account it was aimed at.
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
-		if limiter.Blocked(ip) {
-			recordLogin(auditStore, body.Username, ip, http.StatusTooManyRequests)
-			http.Error(w, "too many attempts, try again shortly", http.StatusTooManyRequests)
 			return
 		}
 		u, ok := users.Authenticate(body.Username, body.Password)
@@ -133,21 +138,31 @@ func recordLogin(store *audit.Store, username, ip string, status int) {
 	})
 }
 
-// clientIP is the source the login limiter keys on. The first X-Forwarded-For
-// hop when a proxy set it, else the connection's remote address without its
-// port.
+// clientIP is the source the login limiter keys on. By default it is the
+// connection's remote address, which a client cannot forge. X-Forwarded-For is
+// honoured only when TRUST_PROXY_HEADERS is set, because a client talking
+// directly to Sentinel controls that header completely — trusting it
+// unconditionally would let an attacker send a fresh fake IP per request and
+// never hit the rate limit at all. Enable it only behind a proxy that
+// overwrites the header.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
+	if trustProxyHeaders() {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if i := strings.IndexByte(xff, ','); i >= 0 {
+				return strings.TrimSpace(xff[:i])
+			}
+			return strings.TrimSpace(xff)
 		}
-		return strings.TrimSpace(xff)
 	}
 	host := r.RemoteAddr
 	if i := strings.LastIndexByte(host, ':'); i >= 0 {
 		host = host[:i]
 	}
 	return host
+}
+
+func trustProxyHeaders() bool {
+	return os.Getenv("TRUST_PROXY_HEADERS") == "true"
 }
 
 func getSessionTTLHandler(users *auth.UserStore) http.HandlerFunc {

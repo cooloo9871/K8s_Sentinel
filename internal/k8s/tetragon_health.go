@@ -27,6 +27,16 @@ type TetragonAgentStatus struct {
 	IngestLastError   string `json:"ingestLastError,omitempty"`
 }
 
+// ingestKey is the ingestion-health map key for an agent: its node, falling
+// back to the pod name when the node is unset — matching how findAllTetragonPods
+// keys the write side, so reads and writes never disagree.
+func ingestKey(a TetragonAgentStatus) string {
+	if a.NodeName != "" {
+		return a.NodeName
+	}
+	return a.PodName
+}
+
 // GetTetragonAgents returns the health status of all Tetragon DaemonSet pods.
 func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, error) {
 	if s.typed == nil {
@@ -67,7 +77,7 @@ func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, e
 					}
 				}
 			}
-			if st, ok := s.ingestion.TetragonStatus(agent.NodeName); ok {
+			if st, ok := s.ingestion.TetragonStatus(ingestKey(agent)); ok {
 				agent.IngestObserved = true
 				agent.IngestConnected = st.Connected
 				agent.IngestFailures = st.ConsecutiveFailures
@@ -76,6 +86,13 @@ func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, e
 			}
 			agents = append(agents, agent)
 		}
+		// Drop ingestion health for nodes that no longer have an agent pod, so a
+		// scaled-down node does not linger as a permanently-blind source.
+		alive := make(map[string]bool, len(agents))
+		for _, a := range agents {
+			alive[ingestKey(a)] = true
+		}
+		s.ingestion.PruneTetragon(alive)
 		return agents, nil
 	}
 

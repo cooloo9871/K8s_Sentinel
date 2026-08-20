@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatTWTime } from '../utils/time'
+import { isNotDetected } from '../utils/ingestion'
 
 interface TetragonAgent {
   podName: string
@@ -60,7 +61,7 @@ interface IngestSource {
 function hubbleState(h: IngestSource | null): { label: string; down: boolean; muted: boolean } {
   if (!h) return { label: 'Not measured', down: false, muted: true }
   if (h.connected) return { label: 'Connected', down: false, muted: false }
-  if ((h.lastError ?? '').toLowerCase().includes('not detected')) {
+  if (isNotDetected(h)) {
     return { label: 'Not detected', down: false, muted: true }
   }
   if (h.consecutiveFailures > 0 || h.lastError) return { label: 'Stream down', down: true, muted: false }

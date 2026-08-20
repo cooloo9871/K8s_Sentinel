@@ -87,8 +87,10 @@ func markEvent(s *sourceHealth, at time.Time) {
 	s.eventCount++
 	s.lastEventAt = at
 	// A stream delivering events is connected even if MarkConnected was missed
-	// (e.g. Hubble, whose connect point is the first flow).
+	// (e.g. Hubble, whose connect point is the first flow), and clears any stale
+	// failure streak so a recovered source never shows connected-yet-failing.
 	s.connected = true
+	s.consecutiveFailures = 0
 }
 
 func (h *IngestionHealth) MarkTetragonConnected(node string) {
@@ -158,6 +160,23 @@ func (h *IngestionHealth) TetragonStatus(node string) (SourceStatus, bool) {
 		return SourceStatus{}, false
 	}
 	return s.snapshot("tetragon", node), true
+}
+
+// PruneTetragon drops recorded nodes that are no longer present, so a cluster
+// that scales down does not leave dead nodes showing as permanently blind and
+// the map does not grow without bound. `alive` is the set of node keys that
+// currently exist.
+func (h *IngestionHealth) PruneTetragon(alive map[string]bool) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for node := range h.tetragon {
+		if !alive[node] {
+			delete(h.tetragon, node)
+		}
+	}
 }
 
 // Snapshot returns every source's status, Tetragon nodes sorted by name then
