@@ -357,7 +357,11 @@ the account's own password change. Passwords are at least 8 characters. Failed
 logins are rate limited per source IP (5 per minute, then a brief block), keyed
 on the source rather than the username so an attacker cannot lock a real user
 out. Changing your own password requires the current one; an admin resetting
-another account's does not.
+another account's does not. Every sign-in attempt is written to the audit log —
+success, wrong credentials, and rate-limited alike — recording the account it
+targeted, the source IP, and the outcome (the password is never recorded).
+Password changes are audited too, on their own route since they sit outside the
+admin group (fixed in v0.47.1).
 
 > **Known weaknesses**: the login rate-limit state is memory-only, so it resets
 > on restart (acceptable — bcrypt already makes each attempt cost ~50-100ms, and

@@ -55,7 +55,7 @@ func New(cfg Config) http.Handler {
 	r.Post(webhookPath, admissionWebhook(cfg.Admission, cfg.AuditWebhookToken))
 
 	// Public auth
-	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret, loginLimiter))
+	r.Post("/api/auth/login", loginHandler(cfg.Users, cfg.Secret, loginLimiter, cfg.Audit))
 	r.Post("/api/auth/logout", logoutHandler(cfg.Users, cfg.Secret))
 
 	// Authenticated routes

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 )
 
@@ -64,24 +65,28 @@ func adminOnly(next http.Handler) http.Handler {
 	})
 }
 
-func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimiter) http.HandlerFunc {
+func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimiter, auditStore *audit.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := clientIP(r)
-		if limiter.Blocked(ip) {
-			http.Error(w, "too many attempts, try again shortly", http.StatusTooManyRequests)
-			return
-		}
 		var body struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
 		}
+		// Decoded before the rate-limit check so a blocked attempt is still
+		// recorded against the account it was aimed at.
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if limiter.Blocked(ip) {
+			recordLogin(auditStore, body.Username, ip, http.StatusTooManyRequests)
+			http.Error(w, "too many attempts, try again shortly", http.StatusTooManyRequests)
 			return
 		}
 		u, ok := users.Authenticate(body.Username, body.Password)
 		if !ok {
 			limiter.Fail(ip)
+			recordLogin(auditStore, body.Username, ip, http.StatusUnauthorized)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
@@ -101,12 +106,31 @@ func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimit
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   users.GetSessionTTL(),
 		})
+		recordLogin(auditStore, u.Username, ip, http.StatusOK)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"username":           u.Username,
 			"role":               u.Role,
 			"mustChangePassword": u.MustChangePassword,
 		})
 	}
+}
+
+// recordLogin logs a sign-in attempt: the account it was for, the source IP as
+// the target, and the outcome as the status (200 ok, 401 wrong credentials, 429
+// rate-limited). Failed attempts are the point — the log answers "who tried to
+// sign in as whom, from where". The password is never recorded.
+func recordLogin(store *audit.Store, username, ip string, status int) {
+	if store == nil {
+		return
+	}
+	store.Record(audit.Entry{
+		User:   username,
+		Action: "Sign in",
+		Target: ip,
+		Method: http.MethodPost,
+		Path:   "/api/auth/login",
+		Status: status,
+	})
 }
 
 // clientIP is the source the login limiter keys on. The first X-Forwarded-For

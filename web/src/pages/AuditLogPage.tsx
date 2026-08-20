@@ -22,6 +22,7 @@ function statusText(status: number): string {
     case 403: return 'Denied'
     case 404: return 'Not found'
     case 409: return 'Conflict'
+    case 429: return 'Rate limited'
   }
   if (status >= 500) return 'Error'
   return 'Failed'

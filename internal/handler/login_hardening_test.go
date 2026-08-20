@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -160,6 +161,54 @@ func TestChangePasswordIsAuditedOnSuccessAndFailure(t *testing.T) {
 	for _, e := range got {
 		if e.Action != "Change user password" || e.Target != "admin" {
 			t.Errorf("entry = %q/%q, want %q/%q", e.Action, e.Target, "Change user password", "admin")
+		}
+	}
+}
+
+// Every sign-in attempt is audited: the account it targeted, the source IP, and
+// the outcome — success, wrong credentials, and being rate-limited alike.
+func TestLoginIsAudited(t *testing.T) {
+	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json")) // admin/admin
+	store := audit.NewStore(filepath.Join(t.TempDir(), "audit.json"))
+	limiter := auth.NewLoginLimiter(2, time.Minute)
+	h := loginHandler(users, []byte("0123456789abcdef0123456789abcdef"), limiter, store)
+
+	post := func(user, pass string) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/login",
+			strings.NewReader(`{"username":"`+user+`","password":"`+pass+`"}`))
+		req.RemoteAddr = "203.0.113.9:5555"
+		w := httptest.NewRecorder()
+		h(w, req)
+		return w.Code
+	}
+
+	post("admin", "admin")    // 200, resets the limiter
+	post("admin", "nope")     // 401, fail 1
+	post("ghost", "whatever") // 401, fail 2 -> limiter now maxed
+	if code := post("admin", "admin"); code != http.StatusTooManyRequests {
+		t.Fatalf("fourth attempt: status = %d, want 429 (blocked)", code)
+	}
+
+	got := store.List() // newest first
+	want := []struct {
+		user   string
+		status int
+	}{
+		{"admin", http.StatusTooManyRequests},
+		{"ghost", http.StatusUnauthorized},
+		{"admin", http.StatusUnauthorized},
+		{"admin", http.StatusOK},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("recorded %d sign-in entries, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i].User != w.user || got[i].Status != w.status {
+			t.Errorf("entry %d = %q/%d, want %q/%d", i, got[i].User, got[i].Status, w.user, w.status)
+		}
+		if got[i].Action != "Sign in" || got[i].Target != "203.0.113.9" {
+			t.Errorf("entry %d = action %q target %q, want %q/%q", i,
+				got[i].Action, got[i].Target, "Sign in", "203.0.113.9")
 		}
 	}
 }
