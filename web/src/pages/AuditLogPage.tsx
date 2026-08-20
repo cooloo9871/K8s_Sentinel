@@ -11,12 +11,26 @@ import { auditApi, type AuditEntry } from '../api/client'
 import { formatTWTime } from '../utils/time'
 
 // A failed action is worth spotting: an attempt that was rejected still says
-// what someone tried to do.
+// what someone tried to do. Shown as words rather than the HTTP code, with the
+// code kept on hover for anyone who wants it.
+function statusText(status: number): string {
+  if (status >= 200 && status < 300) return 'Success'
+  switch (status) {
+    case 400: return 'Rejected'
+    case 401: return 'Unauthorized'
+    case 403: return 'Denied'
+    case 404: return 'Not found'
+    case 409: return 'Conflict'
+  }
+  if (status >= 500) return 'Error'
+  return 'Failed'
+}
+
 function StatusBadge({ status }: { status: number }) {
   const ok = status >= 200 && status < 300
   return (
-    <Badge variant={ok ? 'secondary' : 'destructive'} className="text-[10px] font-mono">
-      {status}
+    <Badge variant={ok ? 'secondary' : 'destructive'} className="text-[10px]" title={String(status)}>
+      {statusText(status)}
     </Badge>
   )
 }
@@ -48,7 +62,7 @@ export function AuditLogPage() {
         <div>
           <h4 className="text-xl font-semibold">Audit Log</h4>
           <p className="text-sm text-muted-foreground">
-            Every change made through Sentinel: who did it, what, and when.
+            A record of every operation performed in Sentinel.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load}>
