@@ -42,7 +42,7 @@ const GROUPS: NavGroup[] = [
   },
   {
     label: 'Cluster',
-    items: [{ to: '/cluster/tetragon', label: 'Tetragon Agents' }],
+    items: [{ to: '/cluster/tetragon', label: 'Event Sources' }],
   },
   {
     label: 'Settings',

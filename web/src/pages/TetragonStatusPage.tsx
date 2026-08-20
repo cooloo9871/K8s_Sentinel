@@ -43,8 +43,33 @@ function StatusBadge({ agent }: { agent: TetragonAgent }) {
   return <Badge className="bg-green-500/15 text-green-700 font-medium">Healthy</Badge>
 }
 
+// One ingestion source from /api/ingestion/health. Used here for the Hubble
+// entry, which has no per-node pods the way Tetragon does.
+interface IngestSource {
+  kind: string
+  name: string
+  connected: boolean
+  consecutiveFailures: number
+  lastEventAt?: string
+  lastError?: string
+}
+
+// hubbleState maps the raw source into a display state. A "Cilium not detected"
+// error is a configuration fact, not a broken stream, so it reads as muted
+// rather than an alarm.
+function hubbleState(h: IngestSource | null): { label: string; down: boolean; muted: boolean } {
+  if (!h) return { label: 'Not measured', down: false, muted: true }
+  if (h.connected) return { label: 'Connected', down: false, muted: false }
+  if ((h.lastError ?? '').toLowerCase().includes('not detected')) {
+    return { label: 'Not detected', down: false, muted: true }
+  }
+  if (h.consecutiveFailures > 0 || h.lastError) return { label: 'Stream down', down: true, muted: false }
+  return { label: 'Not measured', down: false, muted: true }
+}
+
 export function TetragonStatusPage() {
   const [agents, setAgents] = useState<TetragonAgent[]>([])
+  const [hubble, setHubble] = useState<IngestSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [error, setError] = useState('')
@@ -55,6 +80,12 @@ export function TetragonStatusPage() {
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
       setAgents(data.agents ?? [])
+      // Best-effort: the Hubble entry is separate from Tetragon agents and its
+      // absence must not blank the whole page.
+      try {
+        const ing = await fetch('/api/ingestion/health').then(r => r.json())
+        setHubble((ing.sources ?? []).find((s: IngestSource) => s.kind === 'hubble') ?? null)
+      } catch { /* leave hubble as-is */ }
       setLastUpdated(new Date())
       setError('')
     } catch (e: any) {
@@ -72,14 +103,15 @@ export function TetragonStatusPage() {
 
   const healthy = agents.filter(isHealthy).length
   const total = agents.length
+  const hb = hubbleState(hubble)
 
   return (
     <>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h4 className="text-xl font-semibold">Tetragon Agents</h4>
+          <h4 className="text-xl font-semibold">Event Sources</h4>
           <p className="text-sm text-muted-foreground">
-            Health status of Tetragon DaemonSet pods across all nodes
+            Whether Sentinel is actually ingesting from each source: Tetragon agents per node, and Hubble
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -119,6 +151,50 @@ export function TetragonStatusPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Hubble — the aggregated relay stream, not a per-node agent, so it
+          stands on its own rather than in the Tetragon grid. */}
+      {!loading && (
+        <Card className={`mb-6 ${hb.down ? 'border-destructive/40 bg-destructive/5' : ''}`}>
+          <CardHeader className="border-b pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold">Hubble</CardTitle>
+              {hb.down ? (
+                <Badge variant="destructive" className="font-medium">Stream Down</Badge>
+              ) : hb.muted ? (
+                <Badge className="bg-muted text-muted-foreground font-medium">{hb.label}</Badge>
+              ) : (
+                <Badge className="bg-green-500/15 text-green-700 font-medium">Connected</Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-3 text-xs space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Source</span>
+              <span>Hubble Relay (cluster-wide flow stream)</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Last flow</span>
+              <span>{hubble?.lastEventAt ? formatTWTime(hubble.lastEventAt) : 'None yet'}</span>
+            </div>
+            {(hubble?.consecutiveFailures ?? 0) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Consecutive failures</span>
+                <span className="text-destructive font-medium">{hubble!.consecutiveFailures}</span>
+              </div>
+            )}
+            {hb.down && hubble?.lastError && (
+              <div className="mt-2 rounded bg-destructive/10 px-2 py-1 text-destructive break-words">
+                {hubble.lastError}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && agents.length > 0 && (
+        <h5 className="mb-3 text-sm font-semibold text-muted-foreground">Tetragon agents</h5>
       )}
 
       {error && (
