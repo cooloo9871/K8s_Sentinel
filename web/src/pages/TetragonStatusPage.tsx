@@ -127,7 +127,17 @@ export function TetragonStatusPage() {
         </div>
       </div>
 
-      {/* Summary */}
+      {error && (
+        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && agents.length > 0 && (
+        <h5 className="mb-3 text-sm font-semibold text-muted-foreground">Tetragon agents</h5>
+      )}
+
+      {/* Summary — Tetragon agent health counts */}
       {!loading && agents.length > 0 && (
         <div className="mb-6 flex gap-4">
           <Card className="flex-1">
@@ -150,56 +160,6 @@ export function TetragonStatusPage() {
               <p className="text-xs text-muted-foreground mt-0.5">Total Agents</p>
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      {/* Hubble — the aggregated relay stream, not a per-node agent, so it
-          stands on its own rather than in the Tetragon grid. */}
-      {!loading && (
-        <Card className={`mb-6 ${hb.down ? 'border-destructive/40 bg-destructive/5' : ''}`}>
-          <CardHeader className="border-b pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">Hubble</CardTitle>
-              {hb.down ? (
-                <Badge variant="destructive" className="font-medium">Stream Down</Badge>
-              ) : hb.muted ? (
-                <Badge className="bg-muted text-muted-foreground font-medium">{hb.label}</Badge>
-              ) : (
-                <Badge className="bg-green-500/15 text-green-700 font-medium">Connected</Badge>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="pt-3 text-xs space-y-1.5">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Source</span>
-              <span>Hubble Relay (cluster-wide flow stream)</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Last flow</span>
-              <span>{hubble?.lastEventAt ? formatTWTime(hubble.lastEventAt) : 'None yet'}</span>
-            </div>
-            {(hubble?.consecutiveFailures ?? 0) > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Consecutive failures</span>
-                <span className="text-destructive font-medium">{hubble!.consecutiveFailures}</span>
-              </div>
-            )}
-            {hb.down && hubble?.lastError && (
-              <div className="mt-2 rounded bg-destructive/10 px-2 py-1 text-destructive break-words">
-                {hubble.lastError}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {!loading && agents.length > 0 && (
-        <h5 className="mb-3 text-sm font-semibold text-muted-foreground">Tetragon agents</h5>
-      )}
-
-      {error && (
-        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
         </div>
       )}
 
@@ -285,6 +245,49 @@ export function TetragonStatusPage() {
               </Card>
             ))}
         </div>
+      )}
+
+      {/* Hubble — the aggregated relay stream, its own section below the
+          per-node Tetragon agents rather than wedged between them. */}
+      {!loading && (
+        <>
+          <h5 className="mb-3 mt-8 text-sm font-semibold text-muted-foreground">Hubble</h5>
+          <Card className={hb.down ? 'border-destructive/40 bg-destructive/5' : ''}>
+            <CardHeader className="border-b pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Hubble Relay</CardTitle>
+                {hb.down ? (
+                  <Badge variant="destructive" className="font-medium">Stream Down</Badge>
+                ) : hb.muted ? (
+                  <Badge className="bg-muted text-muted-foreground font-medium">{hb.label}</Badge>
+                ) : (
+                  <Badge className="bg-green-500/15 text-green-700 font-medium">Connected</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Source</span>
+                <span>Cluster-wide flow stream</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Last flow</span>
+                <span>{hubble?.lastEventAt ? formatTWTime(hubble.lastEventAt) : 'None yet'}</span>
+              </div>
+              {(hubble?.consecutiveFailures ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Consecutive failures</span>
+                  <span className="text-destructive font-medium">{hubble!.consecutiveFailures}</span>
+                </div>
+              )}
+              {hb.down && hubble?.lastError && (
+                <div className="mt-2 rounded bg-destructive/10 px-2 py-1 text-destructive break-words">
+                  {hubble.lastError}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
     </>
   )
