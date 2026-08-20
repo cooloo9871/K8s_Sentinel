@@ -243,6 +243,21 @@ export const clusterApi = {
     api.get('/cluster/cidr').then((r) => r.data),
 }
 
+export interface AuditEntry {
+  id: string
+  time: string
+  user: string
+  action: string
+  target?: string
+  method: string
+  path: string
+  status: number
+}
+
+export const auditApi = {
+  list: (): Promise<AuditEntry[]> => api.get('/audit').then((r) => r.data ?? []),
+}
+
 export const settingsApi = {
   getSessionTTL: (): Promise<{ sessionTTL: number }> =>
     api.get('/settings/session-ttl').then((r) => r.data),

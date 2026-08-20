@@ -11,6 +11,7 @@ import (
 
 	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
 	"github.com/cooloo9871/K8s_Sentinel/internal/alert"
+	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
@@ -28,6 +29,7 @@ type Config struct {
 	RsyslogDispatch *rsyslog.Dispatcher
 	Admission       *admission.Store
 	Security        *security.Store
+	Audit           *audit.Store
 	// Shared secret for the kube-apiserver audit webhook. When set, the webhook
 	// requires it as a bearer token; when empty, the endpoint stays open — the
 	// route predates the token and existing apiserver configs carry none.
@@ -94,6 +96,11 @@ func New(cfg Config) http.Handler {
 		// Admin-only (writes)
 		r.Group(func(r chi.Router) {
 			r.Use(adminOnly)
+			// Records every state-changing admin request (skips GET), so the
+			// audit log covers new write routes without a per-handler call.
+			r.Use(auditMiddleware(cfg.Audit))
+
+			r.Get("/api/audit", listAudit(cfg.Audit))
 
 			r.Post("/api/policies", createPolicy(cfg.Store))
 			r.Put("/api/policies/{name}", updatePolicy(cfg.Store))

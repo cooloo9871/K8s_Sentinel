@@ -29,6 +29,7 @@ func TestEveryRouteIsRegistered(t *testing.T) {
 		{http.MethodGet, "/api/mode"},
 		{http.MethodPut, "/api/mode"},
 		{http.MethodPost, "/api/selector-preview"},
+		{http.MethodGet, "/api/audit"},
 
 		{http.MethodGet, "/api/cnp"},
 		{http.MethodPost, "/api/cnp"},

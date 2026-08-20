@@ -12,6 +12,7 @@ import (
 
 	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
 	"github.com/cooloo9871/K8s_Sentinel/internal/alert"
+	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/handler"
 	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
@@ -68,6 +69,7 @@ func main() {
 	go securityStore.Run(ctx, store)
 
 	alerts := alert.NewStore(data("alerts.json"))
+	auditStore := audit.NewStore(data("audit.json"))
 	dispatcher := alert.NewDispatcher(alerts, securityStore, admissionStore)
 	go dispatcher.Run(ctx)
 
@@ -85,6 +87,7 @@ func main() {
 		RsyslogDispatch: rsyslogDispatch,
 		Admission:       admissionStore,
 		Security:        securityStore,
+		Audit:           auditStore,
 		// Optional shared secret for the audit webhook. Unset keeps the endpoint
 		// open, matching apiserver configs written before the token existed.
 		AuditWebhookToken: os.Getenv("AUDIT_WEBHOOK_TOKEN"),

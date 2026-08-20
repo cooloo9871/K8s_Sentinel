@@ -52,6 +52,7 @@ const GROUPS: NavGroup[] = [
       { to: '/security/alerts', label: 'Alerts' },
       { to: '/security/rsyslog', label: 'Syslog' },
       { to: '/settings/retention', label: 'Event Retention' },
+      { to: '/settings/audit', label: 'Audit Log' },
     ],
   },
 ]

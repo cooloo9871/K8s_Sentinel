@@ -24,6 +24,7 @@ import { QuarantinePage } from './pages/QuarantinePage'
 import { CNPPage } from './pages/CNPPage'
 import { RsyslogPage } from './pages/RsyslogPage'
 import { SecurityRetentionPage } from './pages/SecurityRetentionPage'
+import { AuditLogPage } from './pages/AuditLogPage'
 import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
 
 function AppRoutes() {
@@ -65,6 +66,7 @@ function AppRoutes() {
           <Route path="/security/rsyslog/new" element={<RsyslogPage />} />
           <Route path="/security/rsyslog/:id/edit" element={<RsyslogPage />} />
           <Route path="/settings/retention" element={<SecurityRetentionPage />} />
+          <Route path="/settings/audit" element={<AuditLogPage />} />
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
           <Route path="/policies/admission" element={<VAPPage />} />
           <Route path="/policies/admission/new" element={<VAPPage />} />

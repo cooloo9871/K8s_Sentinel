@@ -219,6 +219,7 @@ Graphs live pod network connections from Cilium Hubble flows.
 - **Event Retention** — Security Events (warning and critical caps, TTL 1–90 days) and Admission Events (cap, TTL 1–365 days)
 - **Alerts** — push Security and Admission events to Slack, Teams, Discord or any webhook, with filters and cooldown
 - **Syslog** — forward events to a rsyslog/syslog server over UDP or TCP
+- **Audit Log** — every change made through Sentinel (quarantine, protect mode, policy and user changes, and the rest), with who did it, the target, and whether it succeeded. Recorded by middleware on every admin write, so no action route is missed; append-only, persisted, capped at 5000 entries
 
 ## Things worth knowing before you enforce
 
