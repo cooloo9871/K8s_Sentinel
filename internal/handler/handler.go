@@ -79,7 +79,11 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
 		r.Get("/api/templates", listTemplates(cfg.Store))
 		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
-		r.Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
+		// Audited on its own because it lives outside the admin group — a viewer
+		// may change their own password, so it cannot sit under adminOnly, but a
+		// password change (success or failure) is exactly what the log is for.
+		r.With(auditMiddleware(cfg.Audit)).
+			Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
 		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
 		r.Get("/api/alerts", listAlerts(cfg.Alerts))
 		r.Get("/api/admission-events", listAdmissionEvents(cfg.Admission))

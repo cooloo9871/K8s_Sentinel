@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 )
 
@@ -121,5 +122,44 @@ func TestChangePasswordRejectsTooShort(t *testing.T) {
 		`{"currentPassword":"admin","password":"short"}`)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("too-short password: status = %d, want 400", w.Code)
+	}
+}
+
+// A password change is audited whether it succeeds or fails — it lives outside
+// the admin group, so it carries its own audit middleware, and a rejected
+// attempt (wrong current password) is exactly what the log should keep.
+func TestChangePasswordIsAuditedOnSuccessAndFailure(t *testing.T) {
+	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json")) // admin/admin
+	store := audit.NewStore(filepath.Join(t.TempDir(), "audit.json"))
+
+	r := chi.NewRouter()
+	// Inject the caller the way authMiddleware would, then audit, then handle —
+	// the same order as the real route.
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			next.ServeHTTP(w, withClaims(req, "admin", auth.RoleAdmin))
+		})
+	})
+	r.With(auditMiddleware(store)).
+		Put("/api/users/{username}/password", changePasswordHandler(users))
+
+	serve := func(body string) {
+		req := httptest.NewRequest(http.MethodPut, "/api/users/admin/password", strings.NewReader(body))
+		r.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	serve(`{"currentPassword":"wrong","password":"a-new-password"}`) // 403
+	serve(`{"currentPassword":"admin","password":"a-new-password"}`) // 204
+
+	got := store.List() // newest first
+	if len(got) != 2 {
+		t.Fatalf("recorded %d entries, want 2", len(got))
+	}
+	if got[0].Status != http.StatusNoContent || got[1].Status != http.StatusForbidden {
+		t.Errorf("statuses = %d then %d, want 204 then 403", got[0].Status, got[1].Status)
+	}
+	for _, e := range got {
+		if e.Action != "Change user password" || e.Target != "admin" {
+			t.Errorf("entry = %q/%q, want %q/%q", e.Action, e.Target, "Change user password", "admin")
+		}
 	}
 }
