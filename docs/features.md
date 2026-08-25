@@ -207,7 +207,7 @@ Graphs live pod network connections from Cilium Hubble flows.
 
 ## Dashboard
 
-- **Tetragon Agents** — per-node agent readiness (ready / total), red when any agent is not ready
+- **Tetragon Agents** — per-node health (ready / total), red when an agent is not ready or its gRPC stream is not actually delivering events; a banner appears when any source (Tetragon or Hubble) has failed. Full per-source ingestion detail is on the **Event Sources** page
 - Security and Admission event counts by severity, updating live, plus Global Protect Mode status
 - Recent Tracing Policy, Admission Policy and Network Policy lists
 - **Quarantine** — what is currently contained, with who asked and when. The count turns red when it is not zero, because a contained pod is an incident in progress
@@ -215,11 +215,11 @@ Graphs live pod network connections from Cilium Hubble flows.
 ## Settings
 
 - The running version is shown at the bottom of the sidebar, so a `kubectl rollout restart` can be confirmed from the UI
-- **Users** — local accounts with JWT sessions and revocation on logout, Admin / Viewer roles, session timeout
+- **Users** — local accounts with JWT sessions and revocation on logout, Admin / Viewer roles, session timeout. The default admin must change its password on first login; passwords are at least 8 characters, changing your own requires the current one, and failed logins are rate limited per source IP
 - **Event Retention** — Security Events (warning and critical caps, TTL 1–90 days) and Admission Events (cap, TTL 1–365 days)
 - **Alerts** — push Security and Admission events to Slack, Teams, Discord or any webhook, with filters and cooldown
 - **Syslog** — forward events to a rsyslog/syslog server over UDP or TCP
-- **Audit Log** — every change made through Sentinel (quarantine, protect mode, policy and user changes, and the rest), with who did it, the target, and whether it succeeded. Recorded by middleware on every admin write, so no action route is missed; append-only, persisted, capped at 5000 entries
+- **Audit Log** — every change made through Sentinel (quarantine, protect mode, policy and user changes, and the rest), with who did it, the target, and whether it succeeded. Recorded by middleware on every admin write, so no action route is missed; append-only, persisted, capped at 5000 entries, with CSV export. Sign-in attempts (success and wrong credentials) are recorded too
 
 ## Things worth knowing before you enforce
 
@@ -235,5 +235,5 @@ Each of these is a real way to cause an outage or to think you are protected whe
 
 - **Deny rules are L3/L4 only.** Cilium rejects an HTTP rule inside `ingressDeny`/`egressDeny`, which is why the form disables the L7 fields under Blacklist. "Deny POST /admin" has to be expressed as a whitelist of what *is* allowed
 - **A drop is not always attributable.** Default-deny drops are caused by the *absence* of an allow rule, so Hubble has no rule to report. Sentinel resolves those by asking which of your policies govern the pod in that direction, and stays silent when none do — the Policy column never shows something that is not in the cluster
-- **Global Protect Mode is a switch on live enforcement.** Flipping every Tracing Policy to Monitoring stops them killing anything. There is currently no audit record of who changed it
+- **Global Protect Mode is a switch on live enforcement.** Flipping every Tracing Policy to Monitoring stops them killing anything. The change is recorded in the Audit Log, like every other admin action
 - **Tetragon cannot see pre-SNAT inbound addresses.** Its `tcp_connect` kprobe fires after the kernel has rewritten the source, which is why network observation is Cilium's job here and the network templates were removed from Tracing Policy

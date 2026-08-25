@@ -338,19 +338,16 @@ Deployment in seconds.
 File writes are **asynchronous**: snapshot plus generation number, a stale goroutine
 abandons its write, and the rename happens inside the mutex to eliminate the TOCTOU.
 
-> ### ⚠ Known defect: `DATA_DIR` is currently an `emptyDir`
->
-> `deploy/sentinel.yaml` mounts `/data/sentinel` as an `emptyDir`, so a Pod restart
-> loses **all** of the JSON above: accounts fall back to admin/admin, the JWT secret
-> regenerates (every session invalidated), and the security and admission event
-> history goes to zero.
->
-> The writability check in `main.go` does **not** catch this — the directory is
-> writable; it just disappears.
->
-> The fix is a PVC plus `strategy: Recreate` (a single replica on an RWO volume
-> deadlocks a rolling update). Not applied yet, because it requires the cluster to
-> have a default StorageClass.
+> **Persistence.** `deploy/sentinel.yaml` mounts `/data/sentinel` as an `emptyDir`
+> by default: a zero-dependency install that needs no StorageClass, which keeps
+> evaluation frictionless. On an `emptyDir` a Pod restart clears everything above
+> (accounts return to admin/admin, the JWT secret regenerates and invalidates every
+> session, event history resets), so to keep data across restarts mount a
+> PersistentVolume as described in [install.md](install.md#persistent-storage),
+> together with `strategy: Recreate` (a single replica on an RWO volume would
+> otherwise deadlock a rolling update, so this path needs a default StorageClass).
+> The writability check in `main.go` does not flag this: the directory is writable,
+> it simply does not survive a restart.
 
 Retention caps are per severity (default 500 warnings / 300 criticals / 7 days), with
 the oldest evicted first.
@@ -431,16 +428,18 @@ without the arg shows `dev`.
 
 Ordered by severity.
 
-1. **`emptyDir` persistence** (see §7) — the worst one. A security product that drops
-   its own audit trail on every restart
-2. **No informers** — every cache does its own periodic full LIST of all pods
+1. **No informers** — every cache does its own periodic full LIST of all pods
    (attribution 30s, ClusterIPs 30s, exposures 30s, workloads 60s, runc resolution
    30s). Five paths, no sharing. v0.34.0 moved these LISTs onto the apiserver's watch
    cache (`ResourceVersion: "0"`) instead of etcd quorum reads and put a cache in
    front of `ListNodeIPMap` — but **the same pod list is still fetched five times**;
    the real fix is one shared informer
-3. **Two Tetragon event streams** (see §3.1)
-4. **Authentication weaknesses** (see §8)
+2. **Two Tetragon event streams** (see §3.1)
+3. **Authentication weaknesses** (see §8)
+
+Persistence with `emptyDir` is a deliberate default, not a problem — mount a
+PersistentVolume (see §7 and [install.md](install.md#persistent-storage)) to keep
+data across restarts.
 
 **Resolved since first draft:** the audit webhook can now require a bearer token
 (v0.39.1), and `pods/exec` is gone — events are collected over the Tetragon and

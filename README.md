@@ -23,7 +23,9 @@ Each layer does what only it can do:
 - **Behavior Discovery** — learns what each workload actually executes, and turns it into a policy prefill
 - **Network Topology** — live connection graph from Hubble flows: policy denials in red with the denying policy named, exposure paths traced hop by hop, quarantined pods marked
 - **Security & Admission Events** — persisted, deduplicated, filterable, exportable; webhook alerts (Slack / Teams / Discord) and syslog forwarding fire once per event
-- **Dashboard & Settings** — agent health, event counts, quarantine status; local accounts with Admin / Viewer roles, retention tuning
+- **Audit Log** — every administrative action recorded (who did what, when), filterable, with CSV export
+- **Event Sources** — live ingestion health per source, so a Tetragon agent that is Ready but whose gRPC stream is not actually delivering shows as down rather than falsely healthy
+- **Dashboard & Settings** — agent and ingestion health, event counts, quarantine status; local accounts with Admin / Viewer roles (forced first-login password change, per-IP login rate limiting), retention tuning
 
 ## Quick start
 
