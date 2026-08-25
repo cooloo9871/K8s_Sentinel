@@ -16,7 +16,7 @@ import {
   SidebarMenuButton,
 } from '@/components/ui/sidebar'
 
-type NavItem = { to: string; label: string }
+type NavItem = { to: string; label: string; adminOnly?: boolean }
 type NavGroup = { label: string; items: NavItem[]; adminOnly?: boolean }
 
 // The collapsible groups, as data: the open/closed state is keyed by label, so
@@ -38,6 +38,9 @@ const GROUPS: NavGroup[] = [
     items: [
       { to: '/security/events', label: 'Security Events' },
       { to: '/security/admission', label: 'Admission Events' },
+      // Read-only records like the events above, not a setting — and admin-only,
+      // matching the /api/audit endpoint, so a viewer never sees a dead link.
+      { to: '/settings/audit', label: 'Audit Log', adminOnly: true },
     ],
   },
   {
@@ -52,7 +55,6 @@ const GROUPS: NavGroup[] = [
       { to: '/security/alerts', label: 'Alerts' },
       { to: '/security/rsyslog', label: 'Syslog' },
       { to: '/settings/retention', label: 'Event Retention' },
-      { to: '/settings/audit', label: 'Audit Log' },
     ],
   },
 ]
@@ -139,7 +141,9 @@ export function AppSidebar() {
               {expanded && (
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {group.items.map(item => (
+                    {group.items
+                      .filter(item => !item.adminOnly || user?.role === 'admin')
+                      .map(item => (
                       <SidebarMenuItem key={item.to}>
                         <SidebarMenuButton asChild isActive={isActive(item.to)} className={GROUP_ITEM_CLASS}>
                           <NavLink to={item.to}>{item.label}</NavLink>
