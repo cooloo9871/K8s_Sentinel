@@ -124,3 +124,101 @@ func TestEnqueueDropsWhenFull(t *testing.T) {
 		t.Errorf("queue length = %d, want 1 (second enqueue dropped)", len(d.queue))
 	}
 }
+
+// 5xx is transient like 429, so it is retried and eventually succeeds.
+func TestDeliverRetriesOn5xxThenSucceeds(t *testing.T) {
+	old := baseBackoff
+	baseBackoff = time.Millisecond
+	defer func() { baseBackoff = old }()
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable) // 503
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	d := newTestDispatcher()
+	d.deliver(context.Background(), queuedSend{url: srv.URL, body: []byte("{}"), kind: "security"})
+	if got := atomic.LoadInt32(&hits); got != 2 {
+		t.Errorf("server hit %d times, want 2 (one 503 then success)", got)
+	}
+}
+
+// A plain 4xx (e.g. a deleted webhook) is not retried.
+func TestDeliverDoesNotRetry4xx(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusNotFound) // 404
+	}))
+	defer srv.Close()
+
+	d := newTestDispatcher()
+	d.deliver(context.Background(), queuedSend{url: srv.URL, body: []byte("{}"), kind: "security"})
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("server hit %d times, want 1 (404 not retried)", got)
+	}
+}
+
+// A Retry-After longer than the cap makes deliver give up immediately rather
+// than spinning through retries bound to fail.
+func TestDeliverGivesUpWhenRetryAfterExceedsCap(t *testing.T) {
+	oldMax := maxRetryWait
+	maxRetryWait = 5 * time.Second
+	defer func() { maxRetryWait = oldMax }()
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Retry-After", "3600")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	d := newTestDispatcher()
+	d.deliver(context.Background(), queuedSend{url: srv.URL, body: []byte("{}"), kind: "security"})
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("server hit %d times, want 1 (give up when Retry-After over cap)", got)
+	}
+}
+
+// parseRetryAfter reports over-cap (and absurd/overflow) values as beyond the
+// cap, so deliver gives up rather than overflowing.
+func TestParseRetryAfterOverCap(t *testing.T) {
+	oldMax := maxRetryWait
+	maxRetryWait = 30 * time.Second
+	defer func() { maxRetryWait = oldMax }()
+
+	if d := parseRetryAfter("3600"); d <= maxRetryWait {
+		t.Errorf("parseRetryAfter(3600) = %v, want > cap %v", d, maxRetryWait)
+	}
+	if d := parseRetryAfter("99999999999"); d <= maxRetryWait || d < 0 {
+		t.Errorf("parseRetryAfter(huge) = %v, want a sane value over cap", d)
+	}
+}
+
+// enqueue returning false must roll back the cooldown so the same event can be
+// retried on its next occurrence rather than being suppressed after never being
+// sent.
+func TestEnqueueFailureRollsBackCooldown(t *testing.T) {
+	d := &Dispatcher{
+		last:  map[string]time.Time{},
+		queue: make(chan queuedSend, 1),
+	}
+	d.queue <- queuedSend{url: "x"} // fill the queue so the next enqueue fails
+
+	// Simulate what dispatch does: record cooldown, try to send, roll back on drop.
+	key := "rule|fingerprint"
+	d.last[key] = time.Now()
+	if d.enqueue("x", []byte("{}"), "security") {
+		t.Fatal("enqueue should have failed on a full queue")
+	}
+	d.rollbackCooldown(key)
+	if _, exists := d.last[key]; exists {
+		t.Error("cooldown was not rolled back after a dropped enqueue")
+	}
+}

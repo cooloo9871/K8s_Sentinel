@@ -130,7 +130,7 @@ const (
 	// once full, further alerts are dropped with a log rather than blocking the
 	// event path.
 	sendQueueSize = 256
-	// On HTTP 429, retry this many times, honouring Retry-After, before giving up.
+	// On a 429 or 5xx, retry this many times, honouring Retry-After, before giving up.
 	maxSendRetries = 3
 )
 
@@ -139,10 +139,13 @@ var (
 	// Slack allows roughly one message per second per app, so pace each webhook
 	// to that: a burst of events must not turn into a burst of POSTs.
 	minSendInterval = time.Second
-	// Base wait for the exponential backoff when a 429 carries no Retry-After.
+	// Base wait for the linear backoff when a 429/5xx carries no Retry-After
+	// (attempt 1 waits 1×, attempt 2 waits 2×, and so on).
 	baseBackoff = time.Second
-	// Cap on a single backoff wait, so one hostile Retry-After cannot stall the
-	// whole queue for long.
+	// Longest we will wait before a retry. Because a single sender drains the
+	// queue, this wait blocks every destination, not just this one — so a
+	// destination that asks for longer is given up on rather than stalling the
+	// whole queue for that long.
 	maxRetryWait = 30 * time.Second
 )
 
@@ -202,13 +205,17 @@ func (d *Dispatcher) Run(ctx context.Context) {
 	go d.runTetragon(ctx)
 }
 
-// enqueue hands a delivery to the sender, dropping it (with a log) when the
-// queue is full rather than blocking the event path or growing memory.
-func (d *Dispatcher) enqueue(url string, body []byte, kind string) {
+// enqueue hands a delivery to the sender, returning false (with a log) when the
+// queue is full rather than blocking the event path or growing memory. The
+// caller uses the result to avoid recording a cooldown for an alert that was
+// never actually queued.
+func (d *Dispatcher) enqueue(url string, body []byte, kind string) bool {
 	select {
 	case d.queue <- queuedSend{url: url, body: body, kind: kind}:
+		return true
 	default:
 		log.Printf("alert-dispatcher: send queue full, dropping %s alert to %q", kind, url)
+		return false
 	}
 }
 
@@ -243,13 +250,22 @@ func (d *Dispatcher) deliver(ctx context.Context, q queuedSend) {
 		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 		resp.Body.Close()
 
-		if status == http.StatusTooManyRequests && attempt < maxSendRetries {
+		// 429 and 5xx are transient — retry them. Other 4xx (e.g. a deleted
+		// webhook) will not improve, so they are not retried.
+		retryable := status == http.StatusTooManyRequests || status >= 500
+		if retryable && attempt < maxSendRetries {
+			// A Retry-After longer than the cap means the destination wants us to
+			// wait longer than we are willing to block the (single) queue for.
+			// Retrying sooner would just be refused again, so give up now rather
+			// than spin through retries that are bound to fail.
+			if retryAfter > maxRetryWait {
+				log.Printf("alert-dispatcher: %s POST %q asked to wait %v (over %v cap), giving up", q.kind, q.url, retryAfter, maxRetryWait)
+				d.nextSend[q.url] = time.Now().Add(minSendInterval)
+				return
+			}
 			wait := retryAfter
 			if wait <= 0 {
 				wait = time.Duration(attempt+1) * baseBackoff
-			}
-			if wait > maxRetryWait {
-				wait = maxRetryWait
 			}
 			if !sleepCtx(ctx, wait) {
 				return
@@ -257,7 +273,11 @@ func (d *Dispatcher) deliver(ctx context.Context, q queuedSend) {
 			continue
 		}
 		if status >= 400 {
-			log.Printf("alert-dispatcher: %s POST %q returned %d", q.kind, q.url, status)
+			if attempt > 0 {
+				log.Printf("alert-dispatcher: %s POST %q still %d after %d retries, giving up", q.kind, q.url, status, attempt)
+			} else {
+				log.Printf("alert-dispatcher: %s POST %q returned %d", q.kind, q.url, status)
+			}
 		}
 		d.nextSend[q.url] = time.Now().Add(minSendInterval)
 		return
@@ -283,7 +303,12 @@ func parseRetryAfter(h string) time.Duration {
 	if h == "" {
 		return 0
 	}
-	if secs, err := strconv.Atoi(h); err == nil && secs >= 0 {
+	if secs, err := strconv.ParseInt(h, 10, 64); err == nil && secs >= 0 {
+		// Anything past the cap (including absurd values that would overflow the
+		// multiplication) is reported as "over cap" so deliver gives up.
+		if secs > int64(maxRetryWait/time.Second) {
+			return maxRetryWait + time.Second
+		}
 		return time.Duration(secs) * time.Second
 	}
 	if t, err := http.ParseTime(h); err == nil {
@@ -359,11 +384,13 @@ func (d *Dispatcher) dispatchAdmission(evt admission.Event) {
 		if skip {
 			continue
 		}
-		d.postAdmission(rule, evt, severity)
+		if !d.postAdmission(rule, evt, severity) {
+			d.rollbackCooldown(key)
+		}
 	}
 }
 
-func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity string) {
+func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity string) bool {
 	lines := []string{
 		fmt.Sprintf("*[%s]* %s", strings.ToUpper(severity), rule.Name),
 		"*Rule:* Admission Event",
@@ -422,9 +449,18 @@ func (d *Dispatcher) postAdmission(rule AlertRule, evt admission.Event, severity
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return false
 	}
-	d.enqueue(rule.WebhookURL, body, "admission")
+	return d.enqueue(rule.WebhookURL, body, "admission")
+}
+
+// rollbackCooldown forgets a cooldown entry recorded for an alert that was not
+// actually queued, so the next occurrence can try again rather than being
+// suppressed for the whole cooldown after never having been sent.
+func (d *Dispatcher) rollbackCooldown(key string) {
+	d.mu.Lock()
+	delete(d.last, key)
+	d.mu.Unlock()
 }
 
 func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
@@ -450,11 +486,13 @@ func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
 		if skip {
 			continue
 		}
-		d.post(rule, evt, severity)
+		if !d.post(rule, evt, severity) {
+			d.rollbackCooldown(key)
+		}
 	}
 }
 
-func (d *Dispatcher) post(rule AlertRule, evt k8s.TetragonEvent, severity string) {
+func (d *Dispatcher) post(rule AlertRule, evt k8s.TetragonEvent, severity string) bool {
 	payload := WebhookPayload{
 		RuleName:   rule.Name,
 		Severity:   severity,
@@ -477,9 +515,9 @@ func (d *Dispatcher) post(rule AlertRule, evt k8s.TetragonEvent, severity string
 	body, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("alert-dispatcher: marshal error: %v", err)
-		return
+		return false
 	}
-	d.enqueue(rule.WebhookURL, body, "security")
+	return d.enqueue(rule.WebhookURL, body, "security")
 }
 
 // SendTest posts a sample payload to the given URL for validation.
