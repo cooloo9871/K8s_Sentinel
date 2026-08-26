@@ -205,6 +205,11 @@ Graphs live pod network connections from Cilium Hubble flows.
 - Sourced from Kubernetes Warning Events (no setup) or the **kube-apiserver audit webhook** (full coverage, [setup required](audit-webhook.md))
 - 30-second deduplication, persisted; default 500 events with a 30-day TTL
 
+### Audit Log
+
+- Every change made through Sentinel (quarantine, protect mode, policy and user changes, and the rest), with who did it, the target, and whether it succeeded. Recorded by middleware on every admin write, so no action route is missed
+- Append-only, persisted, capped at 5000 entries, with CSV export. Sign-in attempts (success and wrong credentials) are recorded too
+
 ## Dashboard
 
 - **Tetragon Agents** — per-node health (ready / total), red when an agent is not ready or its gRPC stream is not actually delivering events; a banner appears when any source (Tetragon or Hubble) has failed. Full per-source ingestion detail is on the **Event Sources** page
@@ -219,7 +224,6 @@ Graphs live pod network connections from Cilium Hubble flows.
 - **Event Retention** — Security Events (warning and critical caps, TTL 1–90 days) and Admission Events (cap, TTL 1–365 days)
 - **Alerts** — push Security and Admission events to Slack, Teams, Discord or any webhook, with filters and cooldown
 - **Syslog** — forward events to a rsyslog/syslog server over UDP or TCP
-- **Audit Log** — every change made through Sentinel (quarantine, protect mode, policy and user changes, and the rest), with who did it, the target, and whether it succeeded. Recorded by middleware on every admin write, so no action route is missed; append-only, persisted, capped at 5000 entries, with CSV export. Sign-in attempts (success and wrong credentials) are recorded too
 
 ## Things worth knowing before you enforce
 
