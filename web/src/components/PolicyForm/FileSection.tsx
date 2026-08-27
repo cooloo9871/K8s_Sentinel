@@ -78,7 +78,21 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
   // Whitelist is ONE exclusion set (Tetragon OR-s separate selectors, which
   // breaks NotPrefix), so the form collapses everything into a single group:
   // one list of excluded paths, one permission, one list of exception processes.
+  // Like the blacklist view, nothing is shown until + Add opens the group.
   if (fileMode === 'whitelist') {
+    if (rules.length === 0) {
+      return (
+        <div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onChange([{ paths: [''], exceptBinaries: [], permission: 'all' }])}
+          >
+            + Add
+          </Button>
+        </div>
+      )
+    }
     const paths = rules.flatMap(r => r.paths ?? [])
     const except = rules.flatMap(r => r.exceptBinaries ?? [])
     const permission = rules.map(r => r.permission).find(p => p && p !== 'all') ?? 'all'
@@ -86,12 +100,24 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
       onChange([{ paths, exceptBinaries: except, permission, ...patch }])
     return (
       <div className="flex flex-col gap-3 rounded-md border p-3">
-        <PathList
-          label="Excluded paths"
-          hint="(everything else is monitored)"
-          values={paths}
-          onChange={(v) => write({ paths: v })}
-        />
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
+            <PathList
+              label="Excluded paths"
+              hint="(everything else is monitored)"
+              values={paths}
+              onChange={(v) => write({ paths: v })}
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange([])}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
+            ✕
+          </Button>
+        </div>
         <PermissionSelect value={permission} onChange={(v) => write({ permission: v })} />
         <PathList
           label="Exception processes"
