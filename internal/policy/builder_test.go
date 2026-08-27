@@ -281,3 +281,27 @@ func TestBuildRejectsAPolicyWithNoRules(t *testing.T) {
 		t.Errorf("error = %q, want it to say a rule is required", err)
 	}
 }
+
+// File rules default to blacklist (Prefix: block the listed paths) and switch to
+// NotPrefix under whitelist mode (act on paths NOT listed).
+func TestBuildFileWhitelistOperator(t *testing.T) {
+	blk, err := policy.Build(policy.PolicyFormInput{
+		Name: "f", File: []policy.FileRule{{Paths: []string{"/etc/shadow"}}},
+	}, policy.ActionPost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if op := blk.Spec.KProbes[0].Selectors[0].MatchArgs[0].Operator; op != "Prefix" {
+		t.Errorf("default (blacklist) operator = %q, want Prefix", op)
+	}
+
+	wl, err := policy.Build(policy.PolicyFormInput{
+		Name: "f", FileMode: "whitelist", File: []policy.FileRule{{Paths: []string{"/etc/shadow"}}},
+	}, policy.ActionPost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if op := wl.Spec.KProbes[0].Selectors[0].MatchArgs[0].Operator; op != "NotPrefix" {
+		t.Errorf("whitelist operator = %q, want NotPrefix", op)
+	}
+}
