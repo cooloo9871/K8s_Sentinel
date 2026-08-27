@@ -272,7 +272,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                   : 'Blacklist: only the paths you list are blocked. Everything else is allowed.'}
               </p>
             </div>
-            <FileSection rules={fileRules} onChange={setFileRules} />
+            <FileSection rules={fileRules} onChange={setFileRules} fileMode={value.fileMode ?? 'blacklist'} />
           </CardContent>
         </Card>
 

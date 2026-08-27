@@ -293,3 +293,42 @@ spec:
     expect(yamlToForm(clusterReturned.replace('return: false', 'return: true'))).toBeNull()
   })
 })
+
+describe('yamlToForm — file whitelist', () => {
+  // The builder emits a whitelist as one selector with all excluded paths in a
+  // single NotPrefix. Reopening must fold it back into ONE rule with all paths,
+  // not one rule per path, so a re-save round-trips to the same single selector.
+  it('folds a NotPrefix multi-value selector into one whitelist rule', () => {
+    const yaml = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: p
+spec:
+  kprobes:
+    - call: security_file_permission
+      args:
+        - index: 0
+          type: file
+        - index: 1
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: NotPrefix
+              values:
+                - /etc/passwd
+                - /etc/shadow
+          matchBinaries:
+            - operator: NotIn
+              values:
+                - /usr/bin/allowed
+          matchActions:
+            - action: Post
+`
+    const form = yamlToForm(yaml)
+    expect(form?.fileMode).toBe('whitelist')
+    expect(form?.file).toHaveLength(1)
+    expect(form?.file?.[0].paths).toEqual(['/etc/passwd', '/etc/shadow'])
+    expect(form?.file?.[0].exceptBinaries).toEqual(['/usr/bin/allowed'])
+  })
+})

@@ -305,3 +305,35 @@ func TestBuildFileWhitelistOperator(t *testing.T) {
 		t.Errorf("whitelist operator = %q, want NotPrefix", op)
 	}
 }
+
+// Whitelist with multiple excluded paths must produce ONE selector with all
+// paths in a single NotPrefix, plus one merged NotIn for exception binaries.
+// Separate selectors would be OR-ed and the exclusion would silently fail.
+func TestBuildFileWhitelistMergesIntoOneSelector(t *testing.T) {
+	got, err := policy.Build(policy.PolicyFormInput{
+		Name:     "watch",
+		FileMode: "whitelist",
+		File: []policy.FileRule{
+			{Paths: []string{"/etc/passwd"}, ExceptBinaries: []string{"/usr/bin/allowed"}},
+			{Paths: []string{"/etc/shadow"}},
+		},
+	}, policy.ActionPost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sels := got.Spec.KProbes[0].Selectors
+	if len(sels) != 1 {
+		t.Fatalf("selectors = %d, want 1 (whitelist must be a single selector)", len(sels))
+	}
+	arg := sels[0].MatchArgs[0]
+	if arg.Operator != "NotPrefix" {
+		t.Errorf("operator = %q, want NotPrefix", arg.Operator)
+	}
+	if len(arg.Values) != 2 || arg.Values[0] != "/etc/passwd" || arg.Values[1] != "/etc/shadow" {
+		t.Errorf("values = %v, want [/etc/passwd /etc/shadow]", arg.Values)
+	}
+	if len(sels[0].MatchBinaries) != 1 || sels[0].MatchBinaries[0].Operator != "NotIn" ||
+		len(sels[0].MatchBinaries[0].Values) != 1 || sels[0].MatchBinaries[0].Values[0] != "/usr/bin/allowed" {
+		t.Errorf("matchBinaries = %+v, want one NotIn [/usr/bin/allowed]", sels[0].MatchBinaries)
+	}
+}

@@ -71,53 +71,87 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		})
 	}
 
-	// File rules: ONE security_file_permission kprobe.
-	// Each rule gets its own selector so per-rule ExceptBinaries can be applied.
-	// Rules with the same ExceptBinaries set could be merged, but keeping them
-	// separate is simpler and avoids ambiguity.
-	fileOp := "Prefix" // blacklist (default)
-	if input.FileMode == "whitelist" {
-		fileOp = "NotPrefix"
-	}
+	// File rules → ONE security_file_permission kprobe.
 	var fileSelectors []KProbeSelector
-	for _, r := range input.File {
-		paths := make([]string, 0, len(r.Paths))
-		for _, p := range r.Paths {
-			if p != "" {
-				paths = append(paths, p)
-			}
-		}
-		if len(paths) == 0 {
-			continue
-		}
-		matchArgs := []ArgSelector{{Index: 0, Operator: fileOp, Values: paths}}
-		// MAY_READ=4, MAY_WRITE=2 — use Bitmask to check specific permission bits.
-		switch r.Permission {
+	// permArgs turns a permission into the optional index-1 selector
+	// (MAY_READ=4, MAY_WRITE=2); "all" adds nothing.
+	permArgs := func(perm string) []ArgSelector {
+		switch perm {
 		case "read":
-			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Equal", Values: []string{"4"}})
+			return []ArgSelector{{Index: 1, Operator: "Equal", Values: []string{"4"}}}
 		case "write":
-			matchArgs = append(matchArgs, ArgSelector{Index: 1, Operator: "Equal", Values: []string{"2"}})
+			return []ArgSelector{{Index: 1, Operator: "Equal", Values: []string{"2"}}}
 		}
-		sel := KProbeSelector{
-			MatchArgs:    matchArgs,
-			MatchActions: []ActionSelector{{Action: action}},
-		}
-		bins := make([]string, 0, len(r.ExceptBinaries))
-		for _, b := range r.ExceptBinaries {
-			if b != "" {
-				bins = append(bins, b)
+		return nil
+	}
+	if input.FileMode == "whitelist" {
+		// Whitelist MUST be a single selector: one NotPrefix over ALL paths and one
+		// NotIn over ALL exception binaries. Tetragon OR-s separate selectors, so
+		// "NotPrefix[a]" OR "NotPrefix[b]" is true for almost every path and the
+		// exclusion silently fails; a single selector gives the intended "not a AND
+		// not b". Permission and exceptions therefore apply to the whole exclusion
+		// set (the first rule's permission wins).
+		var allPaths, allBins []string
+		permission := ""
+		for _, r := range input.File {
+			for _, p := range r.Paths {
+				if p != "" {
+					allPaths = append(allPaths, p)
+				}
+			}
+			for _, b := range r.ExceptBinaries {
+				if b != "" {
+					allBins = append(allBins, b)
+				}
+			}
+			if permission == "" {
+				permission = r.Permission
 			}
 		}
-		if len(bins) > 0 {
-			sel.MatchBinaries = []BinarySelector{{Operator: "NotIn", Values: bins}}
+		if len(allPaths) > 0 {
+			sel := KProbeSelector{
+				MatchArgs:    append([]ArgSelector{{Index: 0, Operator: "NotPrefix", Values: allPaths}}, permArgs(permission)...),
+				MatchActions: []ActionSelector{{Action: action}},
+			}
+			if len(allBins) > 0 {
+				sel.MatchBinaries = []BinarySelector{{Operator: "NotIn", Values: allBins}}
+			}
+			fileSelectors = append(fileSelectors, sel)
 		}
-		fileSelectors = append(fileSelectors, sel)
+	} else {
+		// Blacklist: each rule gets its own selector (OR = block any listed path),
+		// so per-rule permission and exception binaries are preserved.
+		for _, r := range input.File {
+			paths := make([]string, 0, len(r.Paths))
+			for _, p := range r.Paths {
+				if p != "" {
+					paths = append(paths, p)
+				}
+			}
+			if len(paths) == 0 {
+				continue
+			}
+			sel := KProbeSelector{
+				MatchArgs:    append([]ArgSelector{{Index: 0, Operator: "Prefix", Values: paths}}, permArgs(r.Permission)...),
+				MatchActions: []ActionSelector{{Action: action}},
+			}
+			bins := make([]string, 0, len(r.ExceptBinaries))
+			for _, b := range r.ExceptBinaries {
+				if b != "" {
+					bins = append(bins, b)
+				}
+			}
+			if len(bins) > 0 {
+				sel.MatchBinaries = []BinarySelector{{Operator: "NotIn", Values: bins}}
+			}
+			fileSelectors = append(fileSelectors, sel)
+		}
 	}
 	if len(fileSelectors) > 0 {
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
-			Call:    "security_file_permission",
-			Syscall: false,
-			Args:    []KProbeArg{{Index: 0, Type: "file"}, {Index: 1, Type: "int"}},
+			Call:      "security_file_permission",
+			Syscall:   false,
+			Args:      []KProbeArg{{Index: 0, Type: "file"}, {Index: 1, Type: "int"}},
 			Selectors: fileSelectors,
 		})
 	}

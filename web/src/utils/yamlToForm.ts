@@ -151,14 +151,22 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
           else if ((permArg.values ?? []).includes('2')) permission = 'write'
         }
         for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
-          if (ma.operator === 'NotPrefix') result.fileMode = 'whitelist'
-          else if (ma.operator === 'Prefix') result.fileMode = 'blacklist'
-          for (const path of ma.values ?? []) {
-            if (path) result.file!.push({
-              paths: [path],
-              ...(exceptBins.length > 0 ? { exceptBinaries: exceptBins } : {}),
-              ...(permission !== 'all' ? { permission } : {}),
-            })
+          const mode = ma.operator === 'NotPrefix' ? 'whitelist'
+            : ma.operator === 'Prefix' ? 'blacklist' : null
+          if (!mode) continue
+          result.fileMode = mode
+          const paths = (ma.values ?? []).filter(Boolean)
+          if (paths.length === 0) continue
+          const extra = {
+            ...(exceptBins.length > 0 ? { exceptBinaries: exceptBins } : {}),
+            ...(permission !== 'all' ? { permission } : {}),
+          }
+          if (mode === 'whitelist') {
+            // The builder emits whitelist as ONE selector holding all excluded
+            // paths, so restore it as a single rule to round-trip exactly.
+            result.file!.push({ paths, ...extra })
+          } else {
+            for (const path of paths) result.file!.push({ paths: [path], ...extra })
           }
         }
       }
