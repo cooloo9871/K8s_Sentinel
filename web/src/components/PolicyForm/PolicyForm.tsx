@@ -98,6 +98,32 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   const setFileRules = (rules: typeof fileRules) =>
     onChange({ ...value, file: rules })
 
+  // Switching the file mode normalises the rules for the target shape at once,
+  // so what the section shows is exactly what the state holds. Without this, a
+  // whitelist's multi-path rule viewed under blacklist showed only its first
+  // path while the generated policy still carried them all, and editing that
+  // row silently discarded the hidden paths.
+  const setFileMode = (mode: 'whitelist' | 'blacklist') => {
+    const rules = value.file ?? []
+    let file: typeof rules
+    if (mode === 'whitelist') {
+      // Whitelist is one exclusion set: merge every rule into a single one, the
+      // same way the section and the builder read a mixed list.
+      const paths = rules.flatMap(r => r.paths ?? []).filter(Boolean)
+      const exceptBinaries = rules.flatMap(r => r.exceptBinaries ?? []).filter(Boolean)
+      const permission = rules.map(r => r.permission).find(p => p && p !== 'all') ?? 'all'
+      file = paths.length > 0 || exceptBinaries.length > 0
+        ? [{ paths, exceptBinaries, permission }]
+        : []
+    } else {
+      // Blacklist is one rule per path; each split keeps the rule's own
+      // permission and exceptions.
+      file = rules.flatMap(r =>
+        (r.paths ?? []).filter(Boolean).map(p => ({ ...r, paths: [p] })))
+    }
+    onChange({ ...value, fileMode: mode, file })
+  }
+
 
   const syncLabelsToParent = (entries: LabelEntry[]) => {
     setLocalLabels(entries)
@@ -254,7 +280,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               <Label className="text-xs">Mode</Label>
               <Select
                 value={value.fileMode ?? 'blacklist'}
-                onValueChange={(v) => onChange({ ...value, fileMode: v as 'whitelist' | 'blacklist' })}
+                onValueChange={(v) => setFileMode(v as 'whitelist' | 'blacklist')}
               >
                 <SelectTrigger className="h-8 w-64 text-sm">
                   <SelectValue />

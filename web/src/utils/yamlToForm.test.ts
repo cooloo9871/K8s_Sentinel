@@ -332,3 +332,93 @@ spec:
     expect(form?.file?.[0].exceptBinaries).toEqual(['/usr/bin/allowed'])
   })
 })
+
+describe('yamlToForm — strictness against silent rewrites', () => {
+  const fileKprobe = (selectors: string) => `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: p
+spec:
+  kprobes:
+    - call: security_file_permission
+      args:
+        - index: 0
+          type: file
+        - index: 1
+          type: int
+      selectors:
+${selectors}
+`
+
+  it('rejects mixed Prefix and NotPrefix selectors (one mode would invert the other on save)', () => {
+    const yaml = fileKprobe(`        - matchArgs:
+            - {index: 0, operator: Prefix, values: [/etc/shadow]}
+          matchActions:
+            - action: Post
+        - matchArgs:
+            - {index: 0, operator: NotPrefix, values: [/tmp]}
+          matchActions:
+            - action: Post`)
+    expect(yamlToForm(yaml)).toBeNull()
+  })
+
+  it('rejects an index-1 arg the form does not model (Mask would be dropped on save)', () => {
+    const yaml = fileKprobe(`        - matchArgs:
+            - {index: 0, operator: Prefix, values: [/etc/shadow]}
+            - {index: 1, operator: Mask, values: ["2"]}
+          matchActions:
+            - action: Post`)
+    expect(yamlToForm(yaml)).toBeNull()
+  })
+
+  it('rejects a multi-value permission (["4","2"] would narrow to read on save)', () => {
+    const yaml = fileKprobe(`        - matchArgs:
+            - {index: 0, operator: Prefix, values: [/etc/shadow]}
+            - {index: 1, operator: Equal, values: ["4", "2"]}
+          matchActions:
+            - action: Post`)
+    expect(yamlToForm(yaml)).toBeNull()
+  })
+
+  it('reads a whitelist permission, quoted or not', () => {
+    const quoted = fileKprobe(`        - matchArgs:
+            - {index: 0, operator: NotPrefix, values: [/etc/passwd]}
+            - {index: 1, operator: Equal, values: ["4"]}
+          matchActions:
+            - action: Post`)
+    expect(yamlToForm(quoted)?.file?.[0].permission).toBe('read')
+
+    // An unquoted YAML number must parse the same as the quoted form.
+    const unquoted = fileKprobe(`        - matchArgs:
+            - {index: 0, operator: NotPrefix, values: [/etc/passwd]}
+            - {index: 1, operator: Equal, values: [2]}
+          matchActions:
+            - action: Post`)
+    expect(yamlToForm(unquoted)?.file?.[0].permission).toBe('write')
+  })
+
+  it('rejects mixed Equal and NotEqual process selectors', () => {
+    const yaml = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: p
+spec:
+  kprobes:
+    - call: sys_execve
+      syscall: true
+      args:
+        - index: 0
+          type: string
+      selectors:
+        - matchArgs:
+            - {index: 0, operator: Equal, values: [/bin/sh]}
+          matchActions:
+            - action: Post
+        - matchArgs:
+            - {index: 0, operator: NotEqual, values: [/usr/sbin/nginx]}
+          matchActions:
+            - action: Post
+`
+    expect(yamlToForm(yaml)).toBeNull()
+  })
+})

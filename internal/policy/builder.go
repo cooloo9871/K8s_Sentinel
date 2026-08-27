@@ -72,6 +72,27 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 	}
 
 	// File rules → ONE security_file_permission kprobe.
+	//
+	// cleanPaths trims and validates one list of file paths or exception
+	// binaries. Relative entries are refused, like process binaries are: the
+	// operators compare against the absolute path Tetragon resolves, so a
+	// relative blacklist entry never matches (a silently dead rule) and a
+	// relative whitelist entry makes NotPrefix true for every path — under
+	// Sigkill that kills every process touching any file.
+	cleanPaths := func(raw []string, what string) ([]string, error) {
+		out := make([]string, 0, len(raw))
+		for _, p := range raw {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if !strings.HasPrefix(p, "/") {
+				return nil, fmt.Errorf("%s %q must be an absolute path", what, p)
+			}
+			out = append(out, p)
+		}
+		return out, nil
+	}
 	var fileSelectors []KProbeSelector
 	// permArgs turns a permission into the optional index-1 selector
 	// (MAY_READ=4, MAY_WRITE=2); "all" adds nothing.
@@ -90,23 +111,30 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		// "NotPrefix[a]" OR "NotPrefix[b]" is true for almost every path and the
 		// exclusion silently fails; a single selector gives the intended "not a AND
 		// not b". Permission and exceptions therefore apply to the whole exclusion
-		// set (the first rule's permission wins).
+		// set: the first rule carrying a specific (read/write) permission wins —
+		// the same rule the form uses to display it, so what is shown is what is
+		// generated.
 		var allPaths, allBins []string
 		permission := ""
 		for _, r := range input.File {
-			for _, p := range r.Paths {
-				if p != "" {
-					allPaths = append(allPaths, p)
-				}
+			paths, err := cleanPaths(r.Paths, "file rule path")
+			if err != nil {
+				return TracingPolicy{}, err
 			}
-			for _, b := range r.ExceptBinaries {
-				if b != "" {
-					allBins = append(allBins, b)
-				}
+			allPaths = append(allPaths, paths...)
+			bins, err := cleanPaths(r.ExceptBinaries, "file rule exception")
+			if err != nil {
+				return TracingPolicy{}, err
 			}
-			if permission == "" {
+			allBins = append(allBins, bins...)
+			if permission == "" && r.Permission != "" && r.Permission != "all" {
 				permission = r.Permission
 			}
+		}
+		// Exceptions without a single excluded path would be dropped with the
+		// whole file section; refuse rather than silently discard them.
+		if len(allPaths) == 0 && len(allBins) > 0 {
+			return TracingPolicy{}, fmt.Errorf("a file whitelist needs at least one excluded path; exception processes alone have no effect")
 		}
 		if len(allPaths) > 0 {
 			sel := KProbeSelector{
@@ -122,11 +150,9 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		// Blacklist: each rule gets its own selector (OR = block any listed path),
 		// so per-rule permission and exception binaries are preserved.
 		for _, r := range input.File {
-			paths := make([]string, 0, len(r.Paths))
-			for _, p := range r.Paths {
-				if p != "" {
-					paths = append(paths, p)
-				}
+			paths, err := cleanPaths(r.Paths, "file rule path")
+			if err != nil {
+				return TracingPolicy{}, err
 			}
 			if len(paths) == 0 {
 				continue
@@ -135,11 +161,9 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 				MatchArgs:    append([]ArgSelector{{Index: 0, Operator: "Prefix", Values: paths}}, permArgs(r.Permission)...),
 				MatchActions: []ActionSelector{{Action: action}},
 			}
-			bins := make([]string, 0, len(r.ExceptBinaries))
-			for _, b := range r.ExceptBinaries {
-				if b != "" {
-					bins = append(bins, b)
-				}
+			bins, err := cleanPaths(r.ExceptBinaries, "file rule exception")
+			if err != nil {
+				return TracingPolicy{}, err
 			}
 			if len(bins) > 0 {
 				sel.MatchBinaries = []BinarySelector{{Operator: "NotIn", Values: bins}}
@@ -156,71 +180,22 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		})
 	}
 
-	// Network rules: ONE tcp_connect kprobe.
-	// NetworkMode "blacklist" → DAddr    (block connections IN list)
-	// NetworkMode "whitelist" → NotDAddr (block connections NOT in list) — default
-	var netAddresses []string
+	// Network rules are refused rather than generated. The form dropped them
+	// long ago (identity-based network control belongs to CiliumNetworkPolicy:
+	// it cannot be bypassed by dialing a pod IP and drops packets instead of
+	// killing processes), but the generator lingered here, and its whitelist
+	// OR-ed separate NotDAddr/NotDPort selectors — the same broken semantics
+	// the file whitelist had. A direct API caller sending network fields would
+	// have received a policy that does not do what it says, so refuse instead.
 	for _, r := range input.Network {
-		if addr := strings.TrimSpace(r.Address); addr != "" {
-			netAddresses = append(netAddresses, addr)
+		if strings.TrimSpace(r.Address) != "" {
+			return TracingPolicy{}, fmt.Errorf("network rules are not supported in Tracing Policy; use a Cilium Network Policy instead")
 		}
 	}
-	var ports []string
 	for _, p := range input.NetworkPorts {
-		if t := strings.TrimSpace(p); t != "" {
-			ports = append(ports, t)
+		if strings.TrimSpace(p) != "" {
+			return TracingPolicy{}, fmt.Errorf("network rules are not supported in Tracing Policy; use a Cilium Network Policy instead")
 		}
-	}
-
-	var netSelectors []KProbeSelector
-
-	// Append selectors using blacklist/whitelist mode.
-	// An unrecognised NetworkMode with addresses/ports is treated as whitelist
-	// only when NetworkMode is the empty string (unset); any other unexpected
-	// value skips the address/port selectors entirely to avoid silently applying
-	// wrong semantics.
-	if input.NetworkMode != "" && input.NetworkMode != "blacklist" && input.NetworkMode != "whitelist" {
-		// Unknown mode — skip address/port selectors, keep binary-specific ones.
-		goto buildKProbe
-	}
-	if input.NetworkMode == "blacklist" {
-		var matchArgs []ArgSelector
-		if len(netAddresses) > 0 {
-			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DAddr", Values: netAddresses})
-		}
-		if len(ports) > 0 {
-			matchArgs = append(matchArgs, ArgSelector{Index: 0, Operator: "DPort", Values: ports})
-		}
-		if len(matchArgs) > 0 {
-			netSelectors = append(netSelectors, KProbeSelector{
-				MatchArgs:    matchArgs,
-				MatchActions: []ActionSelector{{Action: action}},
-			})
-		}
-	} else {
-		// Whitelist: SEPARATE selectors → NotDAddr OR NotDPort (OR semantics).
-		if len(netAddresses) > 0 {
-			netSelectors = append(netSelectors, KProbeSelector{
-				MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDAddr", Values: netAddresses}},
-				MatchActions: []ActionSelector{{Action: action}},
-			})
-		}
-		if len(ports) > 0 {
-			netSelectors = append(netSelectors, KProbeSelector{
-				MatchArgs:    []ArgSelector{{Index: 0, Operator: "NotDPort", Values: ports}},
-				MatchActions: []ActionSelector{{Action: action}},
-			})
-		}
-	}
-
-buildKProbe:
-	if len(netSelectors) > 0 {
-		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
-			Call:      "tcp_connect",
-			Syscall:   false,
-			Args:      []KProbeArg{{Index: 0, Type: "sock"}},
-			Selectors: netSelectors,
-		})
 	}
 
 	// A policy with no rules is not a policy: applied over an existing one it

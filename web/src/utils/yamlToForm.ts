@@ -84,6 +84,8 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
   // form built around a list of binaries has no way to express, so it opened
   // empty and would have saved as spec: {}.
   let rulesBefore = 0
+  // First process/file mode seen, to detect selectors that contradict it.
+  let processModeSeen: 'whitelist' | 'blacklist' | null = null
 
   for (const kp of kprobes) {
     rulesBefore = result.process!.length + result.file!.length
@@ -94,6 +96,14 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     if (call === 'sys_execve' || call.includes('sys_execve')) {
       if (!representable(kp, PROCESS_OPERATORS)) return null
       for (const sel of selectors) {
+        // The builder writes exactly one index-0 arg per selector. A second one
+        // is an AND the form cannot express — a save would merge the lists into
+        // one arg (an OR) and change the semantics — and any other index would
+        // simply be dropped. Both must stay in the YAML editor.
+        const args = sel.matchArgs ?? []
+        if (args.some((a: any) => a.index !== 0)) return null
+        if (args.length > 1) return null
+
         // Track whether matchArgs index:0 was already parsed to avoid
         // double-counting when both matchArgs and matchBinaries are present.
         let parsedFromMatchArgs = false
@@ -103,10 +113,17 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
         // then are still in clusters — reading only the current pair would leave
         // processMode unset on those, so a blacklist would reopen as a whitelist
         // and invert on save.
-        const matchArgsIdx0 = (sel.matchArgs ?? []).filter((a: any) => a.index === 0)
-        for (const ma of matchArgsIdx0) {
-          if (ma.operator === 'NotEqual' || ma.operator === 'NotPostfix') result.processMode = 'whitelist'
-          else if (ma.operator === 'Equal' || ma.operator === 'Postfix') result.processMode = 'blacklist'
+        for (const ma of args) {
+          const mode = (ma.operator === 'NotEqual' || ma.operator === 'NotPostfix') ? 'whitelist'
+            : (ma.operator === 'Equal' || ma.operator === 'Postfix') ? 'blacklist' : null
+          if (mode) {
+            // Mixed whitelist and blacklist selectors cannot share the form's
+            // single mode: keeping the last one would invert the other half of
+            // the policy on save.
+            if (processModeSeen && processModeSeen !== mode) return null
+            processModeSeen = mode
+            result.processMode = mode
+          }
           for (const bin of ma.values ?? []) {
             // Older policies hold the path with its leading slash stripped.
             if (bin) result.process!.push({ binaries: [bin.startsWith('/') ? bin : '/' + bin] })
@@ -143,17 +160,32 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
           .filter((mb: any) => mb.operator === 'NotIn')
           .flatMap((mb: any) => mb.values ?? [])
           .filter(Boolean)
-        // Detect permission from index-1 Equal args (MAY_READ=4, MAY_WRITE=2)
-        const permArg = (sel.matchArgs ?? []).find((a: any) => a.index === 1 && a.operator === 'Equal')
+        // The form models exactly one path arg (index 0) and at most one
+        // permission arg: index 1, Equal, a single value of MAY_READ (4) or
+        // MAY_WRITE (2) — precisely what the builder writes. Anything else
+        // (Mask, NotEqual, other indexes, multi-value like ["4","2"], a second
+        // path arg) would be silently dropped or rewritten on save, widening or
+        // narrowing the rule, so the policy stays in the YAML editor.
         let permission: 'all' | 'read' | 'write' = 'all'
-        if (permArg) {
-          if ((permArg.values ?? []).includes('4')) permission = 'read'
-          else if ((permArg.values ?? []).includes('2')) permission = 'write'
+        let idx0Count = 0
+        for (const ma of sel.matchArgs ?? []) {
+          if (ma.index === 0) { idx0Count++; continue }
+          if (ma.index !== 1 || ma.operator !== 'Equal') return null
+          // String() so an unquoted YAML number (values: [4]) reads the same
+          // as the quoted form the builder writes.
+          const vals = (ma.values ?? []).map((v: any) => String(v))
+          if (vals.length !== 1 || (vals[0] !== '4' && vals[0] !== '2')) return null
+          if (permission !== 'all') return null // a second permission arg
+          permission = vals[0] === '4' ? 'read' : 'write'
         }
+        if (idx0Count > 1) return null
         for (const ma of (sel.matchArgs ?? []).filter((a: any) => a.index === 0)) {
           const mode = ma.operator === 'NotPrefix' ? 'whitelist'
             : ma.operator === 'Prefix' ? 'blacklist' : null
           if (!mode) continue
+          // Mixed Prefix and NotPrefix selectors cannot share the form's single
+          // fileMode: keeping the last one would invert the other half on save.
+          if (result.fileMode && result.fileMode !== mode) return null
           result.fileMode = mode
           const paths = (ma.values ?? []).filter(Boolean)
           if (paths.length === 0) continue

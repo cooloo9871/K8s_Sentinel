@@ -19,18 +19,18 @@ function PathList({ label, hint, values, onChange }: {
   values: string[]
   onChange: (v: string[]) => void
 }) {
-  const shown = values.length > 0 ? values : ['']
-  const write = (next: string[]) => onChange(next)
+  // No placeholder row: rendering a phantom empty input when the list is empty
+  // made the first "+ Add" a visual no-op and the last row's ✕ appear dead.
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-xs text-muted-foreground">
         {label}{hint && <span className="text-muted-foreground/60"> {hint}</span>}
       </span>
-      {shown.map((v, i) => (
+      {values.map((v, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
             value={v}
-            onChange={e => { const n = [...shown]; n[i] = e.target.value; write(n) }}
+            onChange={e => { const n = [...values]; n[i] = e.target.value; onChange(n) }}
             className="h-8 text-sm"
           />
           {v && !v.startsWith('/') && (
@@ -39,7 +39,7 @@ function PathList({ label, hint, values, onChange }: {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => write(shown.filter((_, j) => j !== i))}
+            onClick={() => onChange(values.filter((_, j) => j !== i))}
             className="shrink-0 text-muted-foreground hover:text-destructive"
           >
             ✕
@@ -47,19 +47,20 @@ function PathList({ label, hint, values, onChange }: {
         </div>
       ))}
       <div>
-        <Button variant="outline" size="sm" onClick={() => write([...values, ''])}>+ Add</Button>
+        <Button variant="outline" size="sm" onClick={() => onChange([...values, ''])}>+ Add</Button>
       </div>
     </div>
   )
 }
 
-function PermissionSelect({ value, onChange }: {
+function PermissionSelect({ label = 'Permission', value, onChange }: {
+  label?: string
   value: FileRule['permission']
   onChange: (v: FileRule['permission']) => void
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs text-muted-foreground">Permission</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
       <Select value={value ?? 'all'} onValueChange={(v) => onChange(v as FileRule['permission'])}>
         <SelectTrigger className="h-8 w-52 text-sm"><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -118,7 +119,11 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
             ✕
           </Button>
         </div>
-        <PermissionSelect value={permission} onChange={(v) => write({ permission: v })} />
+        {/* "Monitored access", not "Permission": under a whitelist this chooses
+            which access kind is monitored at all. "Read only" means writes
+            anywhere are NOT monitored, not that the listed paths become
+            read-only. */}
+        <PermissionSelect label="Monitored access" value={permission} onChange={(v) => write({ permission: v })} />
         <PathList
           label="Exception processes"
           hint="(optional: their access is not monitored)"

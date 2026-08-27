@@ -337,3 +337,98 @@ func TestBuildFileWhitelistMergesIntoOneSelector(t *testing.T) {
 		t.Errorf("matchBinaries = %+v, want one NotIn [/usr/bin/allowed]", sels[0].MatchBinaries)
 	}
 }
+
+// File paths and exception binaries must be absolute, like process binaries: a
+// relative blacklist entry never matches (a dead rule), and a relative
+// whitelist entry makes NotPrefix true for everything.
+func TestBuildRejectsRelativeFilePaths(t *testing.T) {
+	if _, err := policy.Build(policy.PolicyFormInput{
+		Name: "f", File: []policy.FileRule{{Paths: []string{"etc/shadow"}}},
+	}, policy.ActionPost); err == nil {
+		t.Error("relative blacklist path was accepted")
+	}
+	if _, err := policy.Build(policy.PolicyFormInput{
+		Name: "f", FileMode: "whitelist", File: []policy.FileRule{{Paths: []string{"etc"}}},
+	}, policy.ActionPost); err == nil {
+		t.Error("relative whitelist path was accepted")
+	}
+	if _, err := policy.Build(policy.PolicyFormInput{
+		Name: "f", File: []policy.FileRule{{Paths: []string{"/etc/shadow"}, ExceptBinaries: []string{"bash"}}},
+	}, policy.ActionPost); err == nil {
+		t.Error("relative exception binary was accepted")
+	}
+}
+
+// The merged whitelist permission is the first specific (read/write) one — an
+// explicit "all" from an earlier rule must not shadow it, matching how the form
+// displays the merged value.
+func TestBuildFileWhitelistPermissionSkipsAll(t *testing.T) {
+	got, err := policy.Build(policy.PolicyFormInput{
+		Name:     "f",
+		FileMode: "whitelist",
+		File: []policy.FileRule{
+			{Paths: []string{"/etc/passwd"}, Permission: "all"},
+			{Paths: []string{"/etc/shadow"}, Permission: "read"},
+		},
+	}, policy.ActionPost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := got.Spec.KProbes[0].Selectors[0].MatchArgs
+	if len(args) != 2 || args[1].Index != 1 || args[1].Values[0] != "4" {
+		t.Errorf("matchArgs = %+v, want a second index-1 Equal [4] (read)", args)
+	}
+}
+
+// A whitelist holding only exception processes has nothing to attach them to;
+// silently dropping them would look like they took effect.
+func TestBuildFileWhitelistRejectsExceptionsWithoutPaths(t *testing.T) {
+	_, err := policy.Build(policy.PolicyFormInput{
+		Name:     "f",
+		FileMode: "whitelist",
+		File:     []policy.FileRule{{Paths: []string{""}, ExceptBinaries: []string{"/bin/bash"}}},
+	}, policy.ActionPost)
+	if err == nil {
+		t.Error("whitelist with exceptions but no paths was accepted")
+	}
+}
+
+// Blacklist keeps each rule's own permission on its own selector.
+func TestBuildFileBlacklistPerRulePermission(t *testing.T) {
+	got, err := policy.Build(policy.PolicyFormInput{
+		Name: "f",
+		File: []policy.FileRule{
+			{Paths: []string{"/etc/shadow"}, Permission: "write"},
+			{Paths: []string{"/root"}},
+		},
+	}, policy.ActionPost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sels := got.Spec.KProbes[0].Selectors
+	if len(sels[0].MatchArgs) != 2 || sels[0].MatchArgs[1].Values[0] != "2" {
+		t.Errorf("rule 1 args = %+v, want index-1 Equal [2] (write)", sels[0].MatchArgs)
+	}
+	if len(sels[1].MatchArgs) != 1 {
+		t.Errorf("rule 2 args = %+v, want no permission arg", sels[1].MatchArgs)
+	}
+}
+
+// Network rules are refused: they belong to CiliumNetworkPolicy, and the old
+// generator's whitelist OR-ed selectors that never expressed the intended AND.
+func TestBuildRejectsNetworkRules(t *testing.T) {
+	if _, err := policy.Build(policy.PolicyFormInput{
+		Name:    "n",
+		Process: []policy.ProcessRule{{Binaries: []string{"/bin/sh"}}},
+		Network: []policy.NetworkRule{{Address: "10.0.0.1"}},
+	}, policy.ActionPost); err == nil {
+		t.Error("network address was accepted")
+	}
+	if _, err := policy.Build(policy.PolicyFormInput{
+		Name:         "n",
+		Process:      []policy.ProcessRule{{Binaries: []string{"/bin/sh"}}},
+		NetworkPorts: []string{"443"},
+	}, policy.ActionPost); err == nil {
+		t.Error("network port was accepted")
+	}
+}
