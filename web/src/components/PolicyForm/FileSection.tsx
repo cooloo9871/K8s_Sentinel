@@ -13,10 +13,9 @@ interface Props {
 
 // A reusable editor for a list of absolute paths (used for excluded paths and
 // exception processes), with the same "absolute paths required" hint.
-function PathList({ label, hint, placeholder, values, onChange }: {
+function PathList({ label, hint, values, onChange }: {
   label: string
   hint?: string
-  placeholder: string
   values: string[]
   onChange: (v: string[]) => void
 }) {
@@ -30,7 +29,6 @@ function PathList({ label, hint, placeholder, values, onChange }: {
       {shown.map((v, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
-            placeholder={placeholder}
             value={v}
             onChange={e => { const n = [...shown]; n[i] = e.target.value; write(n) }}
             className="h-8 text-sm"
@@ -91,7 +89,6 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
         <PathList
           label="Excluded paths"
           hint="(everything else is monitored)"
-          placeholder="/etc/passwd"
           values={paths}
           onChange={(v) => write({ paths: v })}
         />
@@ -99,7 +96,6 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
         <PathList
           label="Exception processes"
           hint="(optional: their access is not monitored)"
-          placeholder="/bin/bash"
           values={except}
           onChange={(v) => write({ exceptBinaries: v })}
         />
@@ -125,7 +121,6 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
             <div className="flex flex-1 flex-col gap-1">
               <span className="text-xs text-muted-foreground">Path</span>
               <Input
-                placeholder="/etc/passwd"
                 value={r.paths[0] ?? ''}
                 onChange={e => updateRule(i, { paths: [e.target.value] })}
                 className="h-8 text-sm"
@@ -144,7 +139,6 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
           <PathList
             label="Exceptions"
             hint="(optional: these processes bypass this rule)"
-            placeholder="/bin/bash"
             values={r.exceptBinaries ?? []}
             onChange={(v) => updateRule(i, { exceptBinaries: v })}
           />
