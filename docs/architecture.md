@@ -342,7 +342,9 @@ abandons its write, and the rename happens inside the mutex to eliminate the TOC
 > by default: a zero-dependency install that needs no StorageClass, which keeps
 > evaluation frictionless. On an `emptyDir` a Pod restart clears everything above
 > (accounts return to admin/admin, the JWT secret regenerates and invalidates every
-> session, event history resets), so to keep data across restarts mount a
+> session — unless `JWT_SECRET` is injected from a Kubernetes Secret, which keeps
+> sessions valid across restarts with no volume at all — and event history
+> resets), so to keep data across restarts mount a
 > PersistentVolume as described in [install.md](install.md#persistent-storage),
 > together with `strategy: Recreate` (a single replica on an RWO volume would
 > otherwise deadlock a rolling update, so this path needs a default StorageClass).
@@ -388,7 +390,12 @@ admin group (fixed in v0.47.1).
 > **Known weaknesses**: the login rate-limit state is memory-only, so it resets
 > on restart (acceptable — bcrypt already makes each attempt cost ~50-100ms, and
 > an attacker cannot force restarts); the revocation list is likewise memory-only
-> (see the previous section); no CSP or other security headers.
+> (see the previous section).
+
+Every response carries security headers (v0.53.0): `nosniff`, `X-Frame-Options:
+DENY`, `Referrer-Policy: no-referrer`, and a Content-Security-Policy locked to
+same-origin — the SPA loads nothing external, so only React's inline style
+attributes need an allowance (`style-src 'unsafe-inline'`).
 
 ---
 

@@ -45,6 +45,7 @@ func New(cfg Config) http.Handler {
 	loginLimiter := auth.NewLoginLimiter(5, time.Minute)
 	// Before the access logger, so the token never reaches the log.
 	r.Use(liftWebhookToken)
+	r.Use(securityHeaders)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
@@ -152,6 +153,35 @@ func New(cfg Config) http.Handler {
 	})
 
 	return r
+}
+
+// securityHeaders sets the browser-side protections on every response. The CSP
+// is written for what the SPA actually is: hashed same-origin bundles
+// (script-src 'self'), self-hosted woff2 fonts, React inline style attributes
+// (the one 'unsafe-inline'), data: URIs for embedded images, and same-origin
+// fetch/SSE. Nothing external is ever loaded, so everything else is locked to
+// 'self' or off.
+func securityHeaders(next http.Handler) http.Handler {
+	csp := strings.Join([]string{
+		"default-src 'self'",
+		"script-src 'self'",
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data:",
+		"font-src 'self'",
+		"connect-src 'self'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+	}, "; ")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", csp)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // webhookPath is the audit webhook route; a token may ride as one extra path

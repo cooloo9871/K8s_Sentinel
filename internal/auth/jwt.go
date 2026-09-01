@@ -17,6 +17,16 @@ type Claims struct {
 }
 
 func LoadOrCreateSecret(path string) ([]byte, error) {
+	// JWT_SECRET overrides the file entirely: injected from a Kubernetes Secret
+	// it survives Pod restarts without needing a PersistentVolume, so an upgrade
+	// no longer regenerates the key and logs every user out. Trimmed because a
+	// Secret's value often arrives with a trailing newline.
+	if env := strings.TrimSpace(os.Getenv("JWT_SECRET")); env != "" {
+		if len(env) < 32 {
+			return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters, got %d", len(env))
+		}
+		return []byte(env), nil
+	}
 	data, err := os.ReadFile(path)
 	if err == nil {
 		// Take the file as it is when the length already matches. The secret is 32

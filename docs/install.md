@@ -162,7 +162,7 @@ The bundled manifests mount `/data/sentinel` as an `emptyDir`, which needs no St
 | File | Contents |
 |---|---|
 | `users.json` | Accounts and session settings |
-| `.jwt-secret` | JWT signing secret |
+| `.jwt-secret` | JWT signing secret (skipped entirely when `JWT_SECRET` is set, which keeps sessions valid across restarts even on an `emptyDir`) |
 | `templates.json` | Custom policy templates |
 | `alerts.json` | Webhook alert rules |
 | `rsyslog.json` | Syslog forwarding settings |
@@ -192,6 +192,8 @@ volumes:
 | `HUBBLE_RELAY_ADDRESS` | `hubble-relay.<ns>.svc.cluster.local:80` | Hubble Relay endpoint; the default resolves the namespace Cilium was found in |
 | `HUBBLE_RELAY_TLS` / `TETRAGON_GRPC_TLS` | *(unset)* | Set to `true` when the endpoint serves TLS; `*_CA` names a CA file when the certificate is not signed by a system root, and `*_SERVER_NAME` names the identity to verify against (required for the Tetragon agents, which are dialed by pod IP) |
 | `AUDIT_WEBHOOK_TOKEN` | *(unset)* | Token the [audit webhook](audit-webhook.md) requires when set, carried at the end of the webhook URL; unset leaves the endpoint open |
+| `JWT_SECRET` | *(unset)* | Session-token signing key, at least 32 characters. Inject it from a Kubernetes Secret and sessions survive Pod restarts without a PersistentVolume; unset, the key lives in `DATA_DIR/.jwt-secret` and on an `emptyDir` regenerates on every restart, logging everyone out |
+| `TRUST_PROXY_HEADERS` | *(unset)* | Set to `true` only behind a proxy or ingress that overwrites `X-Forwarded-For`; the login rate limiter and sign-in audit entries then use the forwarded client IP instead of the connection address. Never enable it when clients reach Sentinel directly, since the header is client-controlled |
 
 ---
 
