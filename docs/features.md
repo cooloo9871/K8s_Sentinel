@@ -11,7 +11,7 @@ getting it running, see [install.md](install.md).
 - Create, edit and delete **TracingPolicy** resources, cluster-wide or namespace-scoped
 - Filter the list by namespace and scope
 - **Process Rules** — control which binaries may execute (whitelist / blacklist). **Absolute paths, matched exactly.** A bare program name is refused: it would have to be matched as a suffix, and a whitelist of suffixes is walked straight past by a binary at a path ending in an allowed one — `/tmp/usr/sbin/nginx` satisfies a rule meant for `/usr/sbin/nginx`. Behavior Discovery lists the paths each workload actually runs, so the exact value does not have to be guessed
-- **File Rules** — control which paths may be accessed, optionally restricted to reads or writes, with per-rule process exceptions
+- **File Rules** — control which paths may be accessed (whitelist / blacklist). A blacklist blocks the listed paths, each rule with its own read/write scope and process exceptions; a whitelist monitors everything **except** one excluded set of paths, with one access scope and one list of exception processes for the whole set (Tetragon OR-s separate selectors, so a whitelist is necessarily a single exclusion set). Paths are absolute, prefix-matched
 - Switch each policy between **Monitoring** (observe) and **Protect** (block) mode, or flip every policy at once with **Global Protect Mode**
 - **Created By** records who created each policy; resources applied with `kubectl` show as `k8s-apply`
 - **+ New Policy** opens the form builder; **+ New YAML** starts from a manifest. Editing reopens the form when the policy can be represented in it, and the YAML editor otherwise — a policy carrying network kprobes opens as YAML so a save cannot drop those rules

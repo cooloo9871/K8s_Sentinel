@@ -16,16 +16,17 @@ Each layer does what only it can do:
 
 ## Features
 
-- **Tracing Policy** — process whitelists/blacklists and file access rules through a form builder, with Monitoring / Protect modes and a global switch
+- **Tracing Policy** — process and file whitelist/blacklist rules through a form builder (file rules with read/write scoping and per-process exceptions), with Monitoring / Protect modes and a global switch
 - **Network Policy** — CiliumNetworkPolicy builder with ingress and egress in one policy, whitelist/blacklist per direction, cross-namespace peers and L7 HTTP rules
 - **Admission Policy** — a CEL builder covering seven rule types (labels, annotations, images, replicas, resource limits, security context, host access), plus bindings
 - **Quarantine** — cut a suspect pod off from the network without killing it, so the evidence survives; one click from a Security Event, one to release
 - **Behavior Discovery** — learns what each workload actually executes, and turns it into a policy prefill
 - **Network Topology** — live connection graph from Hubble flows: policy denials in red with the denying policy named, exposure paths traced hop by hop, quarantined pods marked
-- **Security & Admission Events** — persisted, deduplicated, filterable, exportable; webhook alerts (Slack / Teams / Discord) and syslog forwarding fire once per event
+- **Security & Admission Events** — persisted, deduplicated, filterable, exportable; webhook alerts (Slack / Teams / Discord) and syslog forwarding fire once per event, paced and retried so a burst does not trip provider rate limits
 - **Audit Log** — every administrative action recorded (who did what, when), filterable, with CSV export
 - **Event Sources** — live ingestion health per source, so a Tetragon agent that is Ready but whose gRPC stream is not actually delivering shows as down rather than falsely healthy
 - **Dashboard & Settings** — agent and ingestion health, event counts, quarantine status; local accounts with Admin / Viewer roles (forced first-login password change, per-IP login rate limiting), retention tuning
+- **Hardened by default** — same-origin Content-Security-Policy and security headers on every response; sessions can survive restarts without persistent storage by injecting `JWT_SECRET` from a Kubernetes Secret
 
 ## Quick start
 
