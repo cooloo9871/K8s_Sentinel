@@ -46,6 +46,10 @@ Image: `ghcr.io/cooloo9871/sentinel` — pin a [release tag](https://github.com/
 
 ## Documentation
 
+**Technical documentation site: [sentineldoc.github.io](https://sentineldoc.github.io/)**
+
+In-repo references:
+
 | Doc | Covers |
 |---|---|
 | [docs/install.md](docs/install.md) | Cilium and Tetragon setup with the flags explained, install options, persistent storage, environment variables, resources, RBAC |
