@@ -98,6 +98,34 @@ describe('tryParseBuilderPolicy', () => {
   labels:
     team: platform`))).toBeNull()
   })
+
+  it('round-trips a ConfigMap size policy', () => {
+    const raw = generatePolicyYaml(
+      'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
+      [], undefined, undefined, { maxSizeKB: '10', message: '' },
+    )
+    // Scoped to configmaps, limit in bytes, and both fields checked — a
+    // data-only limit is bypassed by putting the payload in binaryData.
+    expect(raw).toContain('resources: ["configmaps"]')
+    expect(raw).toContain('object.data[k].size() <= 10240')
+    expect(raw).toContain('object.binaryData[k].size() <= 10240')
+
+    const parsed = tryParseBuilderPolicy(raw)
+    expect(parsed?.ruleType).toBe('configmap-size')
+    expect(parsed?.configMapSizeRule.maxSizeKB).toBe('10')
+    // And as the apiserver returns it.
+    expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+  })
+
+  // A hand-written data-only size check is not what the form generates: opening
+  // it would add the binaryData half on save, so it stays in the YAML editor.
+  it('refuses a data-only ConfigMap size expression', () => {
+    const raw = generatePolicyYaml(
+      'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
+      [], undefined, undefined, { maxSizeKB: '10', message: '' },
+    ).replace(/ &&\n        \(!has\(object\.binaryData\).*\)\)/, '')
+    expect(tryParseBuilderPolicy(raw)).toBeNull()
+  })
 })
 
 describe('tryParseBuilderBinding', () => {

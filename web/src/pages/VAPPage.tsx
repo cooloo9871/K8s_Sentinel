@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
-  IconShieldLock, IconServer, IconRefresh,
+  IconShieldLock, IconServer, IconRefresh, IconFileDescription,
 } from '@tabler/icons-react'
 import React from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -34,7 +34,7 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
@@ -92,6 +92,21 @@ interface HostAccessRule {
 
 const emptyHostAccessRule = (): HostAccessRule => ({ checkType: 'all', message: '' })
 
+// maxSizeKB is a string so the field can start blank instead of carrying a
+// preset number; the builder refuses to apply until it parses to a positive int.
+interface ConfigMapSizeRule {
+  maxSizeKB: string
+  message: string
+}
+
+const emptyConfigMapSizeRule = (): ConfigMapSizeRule => ({ maxSizeKB: '', message: '' })
+
+// The generated expression works in whole bytes.
+function configMapSizeBytes(rule: ConfigMapSizeRule): number {
+  const kb = Number(rule.maxSizeKB)
+  return Number.isFinite(kb) && kb > 0 ? Math.floor(kb * 1024) : 0
+}
+
 // Module-level constant — single source of truth for both the card grid and
 // the readonly display. Avoids the two lists drifting when a new rule type is added.
 const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; label: string; desc: string; readonlyLabel: string }[] = [
@@ -102,6 +117,7 @@ const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; label:
   { value: 'resource-limits', icon: <IconCpu size={14} />,         label: 'Resources',  desc: 'Require containers to set CPU and/or memory limits',          readonlyLabel: 'Resource Limits' },
   { value: 'security-context',icon: <IconShieldLock size={14} />,  label: 'Security',   desc: 'Deny privileged containers or require runAsNonRoot',          readonlyLabel: 'Security Context' },
   { value: 'host-access',     icon: <IconServer size={14} />,      label: 'Host',       desc: 'Deny hostNetwork, hostPID, and/or hostIPC access',            readonlyLabel: 'Host Access' },
+  { value: 'configmap-size',  icon: <IconFileDescription size={14} />, label: 'ConfigMap Size', desc: 'Limit the size of each ConfigMap key (data and binaryData)', readonlyLabel: 'ConfigMap Size Limit' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -376,12 +392,36 @@ function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
   ]
 }
 
+function autoConfigMapSizeMessage(rule: ConfigMapSizeRule): string {
+  const bytes = configMapSizeBytes(rule)
+  return bytes > 0
+    ? `ConfigMap has a key larger than ${bytes} bytes (${rule.maxSizeKB}KB)`
+    : 'ConfigMap key size limit exceeded'
+}
+
+function configMapSizeRuleToYamlLines(rule: ConfigMapSizeRule): string[] {
+  const bytes = configMapSizeBytes(rule)
+  const m = escapeYaml(rule.message.trim() || autoConfigMapSizeMessage(rule))
+  // Both data and binaryData carry content, so both are limited — a data-only
+  // check is bypassed by putting the payload in binaryData. binaryData arrives
+  // base64-encoded, so its measured size is about 4/3 of the raw content, which
+  // is fine for a ceiling.
+  return [
+    '    - expression: >-',
+    `        (!has(object.data) || object.data.all(k, object.data[k].size() <= ${bytes})) &&`,
+    `        (!has(object.binaryData) || object.binaryData.all(k, object.binaryData[k].size() <= ${bytes}))`,
+    `      message: "${m}"`,
+    '      reason: Forbidden',
+  ]
+}
+
 export function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
   replicaRules: ReplicaRule[], applyTo: LabelApplyTo = 'all',
   resourceLimitRules: ResourceLimitRule[] = [],
   securityContextRule: SecurityContextRule = emptySecurityContextRule(),
   hostAccessRule: HostAccessRule = emptyHostAccessRule(),
+  configMapSizeRule: ConfigMapSizeRule = emptyConfigMapSizeRule(),
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
@@ -400,6 +440,8 @@ export function generatePolicyYaml(
     validationLines = securityContextRuleToYamlLines(securityContextRule)
   } else if (ruleType === 'host-access') {
     validationLines = hostAccessRuleToYamlLines(hostAccessRule)
+  } else if (ruleType === 'configmap-size') {
+    validationLines = configMapSizeRuleToYamlLines(configMapSizeRule)
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -416,6 +458,14 @@ export function generatePolicyYaml(
         '      apiVersions: ["v1"]',
         '      operations: [UPDATE]',
         '      resources: ["deployments/scale", "statefulsets/scale"]',
+      ]
+    : ruleType === 'configmap-size'
+    ? [
+        '    resourceRules:',
+        '      - apiGroups: [""]',
+        '        apiVersions: ["v1"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["configmaps"]',
       ]
     : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context' || ruleType === 'host-access')
     ? [
@@ -584,6 +634,18 @@ function parseExpressionToHostAccessPart(expr: string): HostAccessCheckType | nu
   return null
 }
 
+function parseExpressionToConfigMapSizeRule(expr: string, msg: string): ConfigMapSizeRule | null {
+  const e = expr.replace(/\s+/g, ' ').trim()
+  // Both halves must be present with the same limit — a hand-written data-only
+  // check is not what the form generates, and opening it would add the
+  // binaryData half on save.
+  const m = e.match(/^\(!has\(object\.data\) \|\| object\.data\.all\(k, object\.data\[k\]\.size\(\) <= (\d+)\)\) && \(!has\(object\.binaryData\) \|\| object\.binaryData\.all\(k, object\.binaryData\[k\]\.size\(\) <= (\d+)\)\)$/)
+  if (!m || m[1] !== m[2]) return null
+  const bytes = Number(m[1])
+  if (!Number.isFinite(bytes) || bytes <= 0 || bytes % 1024 !== 0) return null
+  return { maxSizeKB: String(bytes / 1024), message: msg }
+}
+
 // specForCompare renders a spec for comparison against a regenerated one,
 // dropping the values the kube-apiserver defaults on persist — matchPolicy:
 // Equivalent, empty selectors, per-rule scope "*". The builder never writes
@@ -615,7 +677,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType; applyTo: LabelApplyTo
   labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
   resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
-  hostAccessRule: HostAccessRule
+  hostAccessRule: HostAccessRule; configMapSizeRule: ConfigMapSizeRule
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -632,6 +694,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     const resourceLimitRules: ResourceLimitRule[] = []
     const scParts: { part: SecurityContextPart; message: string }[] = []
     let hostAccessParsed: HostAccessRule | null = null
+    let configMapSizeParsed: ConfigMapSizeRule | null = null
     for (const v of spec.validations) {
       const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
       if (lr) { labelRules.push(lr); continue }
@@ -647,6 +710,8 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       if (scp) { scParts.push({ part: scp, message: v.message ?? '' }); continue }
       const hap = parseExpressionToHostAccessPart(v.expression ?? '')
       if (hap) { hostAccessParsed = { checkType: hap, message: v.message ?? '' }; continue }
+      const cms = parseExpressionToConfigMapSizeRule(v.expression ?? '', v.message ?? '')
+      if (cms) { configMapSizeParsed = cms; continue }
       return null  // unknown expression type — fall through to YAML editor
     }
     // Build security context rule from parts
@@ -659,8 +724,9 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       message: scParts[0]?.message ?? '',
     }
     const hostAccessRule: HostAccessRule = hostAccessParsed ?? emptyHostAccessRule()
+    const configMapSizeRule: ConfigMapSizeRule = configMapSizeParsed ?? emptyConfigMapSizeRule()
     // All rules must be the same type
-    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0, hostAccessParsed !== null].filter(Boolean).length
+    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0, hostAccessParsed !== null, configMapSizeParsed !== null].filter(Boolean).length
     if (typesUsed > 1) return null
     const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica'
       : imageRules.length > 0 ? 'image'
@@ -668,9 +734,10 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       : resourceLimitRules.length > 0 ? 'resource-limits'
       : scParts.length > 0 ? 'security-context'
       : hostAccessParsed !== null ? 'host-access'
+      : configMapSizeParsed !== null ? 'configmap-size'
       : 'label'
     const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
-    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule }
+    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule }
 
     // The builder may only open a policy it can reproduce: saving regenerates
     // the whole manifest, so whatever these fields cannot show — a hand-tuned
@@ -680,7 +747,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
     const regen = yaml.load(generatePolicyYaml(
       result.name, ruleType, result.labelRules, imageRules, replicaRules,
-      applyTo, resourceLimitRules, securityContextRule, hostAccessRule,
+      applyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule,
     )) as Record<string, unknown> | undefined
     if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
       return null
@@ -804,6 +871,7 @@ export function VAPPage() {
   const [resourceLimitRules, setResourceLimitRules] = useState<ResourceLimitRule[]>([emptyResourceLimitRule()])
   const [securityContextRule, setSecurityContextRule] = useState<SecurityContextRule>(emptySecurityContextRule())
   const [hostAccessRule, setHostAccessRule] = useState<HostAccessRule>(emptyHostAccessRule())
+  const [configMapSizeRule, setConfigMapSizeRule] = useState<ConfigMapSizeRule>(emptyConfigMapSizeRule())
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -835,6 +903,7 @@ export function VAPPage() {
     setResourceLimitRules([emptyResourceLimitRule()])
     setSecurityContextRule(emptySecurityContextRule())
     setHostAccessRule(emptyHostAccessRule())
+    setConfigMapSizeRule(emptyConfigMapSizeRule())
   }
 
   // Binding builder state
@@ -885,6 +954,7 @@ export function VAPPage() {
         setResourceLimitRules(parsed.resourceLimitRules.length ? parsed.resourceLimitRules : [emptyResourceLimitRule()])
         setSecurityContextRule(parsed.securityContextRule)
         setHostAccessRule(parsed.hostAccessRule)
+        setConfigMapSizeRule(parsed.configMapSizeRule)
         setShowBuilder(true)
         return
       }
@@ -1007,7 +1077,7 @@ export function VAPPage() {
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -1043,7 +1113,7 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule)
     const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
@@ -1052,6 +1122,8 @@ export function VAPPage() {
       ? true
       : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
       ? true
+      : builderRuleType === 'configmap-size'
+      ? configMapSizeBytes(configMapSizeRule) > 0
       : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
     return (
@@ -1106,6 +1178,7 @@ export function VAPPage() {
                               setResourceLimitRules([emptyResourceLimitRule()])
                               setSecurityContextRule(emptySecurityContextRule())
                               setHostAccessRule(emptyHostAccessRule())
+                              setConfigMapSizeRule(emptyConfigMapSizeRule())
                             }}
                             className={[
                               'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
@@ -1434,6 +1507,36 @@ export function VAPPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
+                  </p>
+                </div>
+              )}
+
+              {/* ── ConfigMap size rule ── */}
+              {builderRuleType === 'configmap-size' && (
+                <div className="flex flex-col gap-3">
+                  <Label>ConfigMap Size Rule</Label>
+                  <div className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Max size per key (KB)</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={configMapSizeRule.maxSizeKB}
+                        onChange={e => setConfigMapSizeRule(r => ({ ...r, maxSizeKB: e.target.value }))}
+                        className="h-8 w-40 text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                      <Input
+                        value={configMapSizeRule.message}
+                        onChange={e => setConfigMapSizeRule(r => ({ ...r, message: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Applies to ConfigMaps. Limits each key in data and binaryData; binaryData is measured base64-encoded.
                   </p>
                 </div>
               )}

@@ -93,7 +93,7 @@ the quarantine: the new pod is not the one that was contained.
 ### Admission Policy (ValidatingAdmissionPolicy)
 
 - Manage native Kubernetes VAP resources and bindings, via YAML editor or a UI builder that generates CEL
-- The builder covers seven rule types and reverse-parses existing policies so they can be reopened in the form:
+- The builder covers eight rule types and reverse-parses existing policies so they can be reopened in the form:
 
   | Rule Type | Description |
   |---|---|
@@ -104,6 +104,7 @@ the quarantine: the new pod is not the one that was contained.
   | **Resource Limits** | Require CPU and memory limits; covers every workload type and initContainers |
   | **Security Context** | Forbid privileged containers; require runAsNonRoot, honouring pod and container level inheritance |
   | **Host Access** | Forbid hostNetwork, hostPID and hostIPC across Pods and template-based workloads |
+  | **ConfigMap Size Limit** | Cap the size of each ConfigMap key; covers both `data` and `binaryData`, so the limit cannot be dodged by base64-encoding the payload |
 
 - **Binding Builder** — pick the policy, the namespace scope and validation actions (Deny / Audit / Warn). The scope is all namespaces, **only** a chosen set, or **all except** a chosen set (e.g. everywhere but `kube-system`), with several namespaces selectable at once
 - Resources created through the UI are tagged `sentinel.io/builder: "true"` so Edit reopens the builder
