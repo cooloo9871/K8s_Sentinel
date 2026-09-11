@@ -105,7 +105,7 @@ the quarantine: the new pod is not the one that was contained.
   | **Security Context** | Forbid privileged containers; require runAsNonRoot, honouring pod and container level inheritance |
   | **Host Access** | Forbid hostNetwork, hostPID and hostIPC across Pods and template-based workloads |
 
-- **Binding Builder** — pick the policy, namespaces and validation actions (Deny / Audit / Warn)
+- **Binding Builder** — pick the policy, the namespace scope and validation actions (Deny / Audit / Warn). The scope is all namespaces, **only** a chosen set, or **all except** a chosen set (e.g. everywhere but `kube-system`), with several namespaces selectable at once
 - Resources created through the UI are tagged `sentinel.io/builder: "true"` so Edit reopens the builder
 
 ## Behavior Discovery

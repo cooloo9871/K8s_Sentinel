@@ -102,25 +102,56 @@ describe('tryParseBuilderPolicy', () => {
 
 describe('tryParseBuilderBinding', () => {
   it('round-trips what the builder generates, with and without a namespace', () => {
-    const scoped = tryParseBuilderBinding(generateBindingYaml('b', 'require-team', 'demo', ['Deny']))
-    expect(scoped?.namespace).toBe('demo')
-    const everywhere = tryParseBuilderBinding(generateBindingYaml('b', 'require-team', '', ['Deny', 'Audit']))
-    expect(everywhere?.namespace).toBe('')
+    const scoped = tryParseBuilderBinding(generateBindingYaml('b', 'require-team', 'include', ['demo'], ['Deny']))
+    expect(scoped?.nsMode).toBe('include')
+    expect(scoped?.namespaces).toEqual(['demo'])
+    const everywhere = tryParseBuilderBinding(generateBindingYaml('b', 'require-team', 'all', [], ['Deny', 'Audit']))
+    expect(everywhere?.nsMode).toBe('all')
+    expect(everywhere?.namespaces).toEqual([])
     expect(everywhere?.actions).toEqual(['Deny', 'Audit'])
+  })
+
+  // A single included namespace keeps the matchLabels shape older bindings were
+  // saved with, so they reopen and resave unchanged; several use matchExpressions.
+  it('round-trips multi-namespace In and NotIn scopes', () => {
+    const single = generateBindingYaml('b', 'p', 'include', ['demo'], ['Deny'])
+    expect(single).toContain('matchLabels')
+    expect(single).not.toContain('matchExpressions')
+
+    const multi = generateBindingYaml('b', 'p', 'include', ['team-a', 'team-b', 'team-c'], ['Deny'])
+    expect(multi).toContain('operator: In')
+    const parsedMulti = tryParseBuilderBinding(multi)
+    expect(parsedMulti?.nsMode).toBe('include')
+    expect(parsedMulti?.namespaces).toEqual(['team-a', 'team-b', 'team-c'])
+
+    const except = generateBindingYaml('b', 'p', 'exclude', ['kube-system', 'kube-public'], ['Deny'])
+    expect(except).toContain('operator: NotIn')
+    const parsedExcept = tryParseBuilderBinding(except)
+    expect(parsedExcept?.nsMode).toBe('exclude')
+    expect(parsedExcept?.namespaces).toEqual(['kube-system', 'kube-public'])
+
+    // A single excluded namespace still needs matchExpressions — matchLabels
+    // cannot say "not".
+    const exceptOne = generateBindingYaml('b', 'p', 'exclude', ['kube-system'], ['Deny'])
+    expect(exceptOne).toContain('operator: NotIn')
+    expect(tryParseBuilderBinding(exceptOne)?.nsMode).toBe('exclude')
   })
 
   it('accepts its own binding as the apiserver returns it', () => {
     expect(tryParseBuilderBinding(withServerDefaults(
-      generateBindingYaml('b', 'require-team', 'demo', ['Deny']),
+      generateBindingYaml('b', 'require-team', 'include', ['demo'], ['Deny']),
+    ))).not.toBeNull()
+    expect(tryParseBuilderBinding(withServerDefaults(
+      generateBindingYaml('b', 'require-team', 'exclude', ['kube-system', 'kube-public'], ['Deny']),
     ))).not.toBeNull()
     // A cluster-wide binding has no matchResources for the server to default.
     expect(tryParseBuilderBinding(withServerDefaults(
-      generateBindingYaml('b', 'require-team', '', ['Deny', 'Audit']),
+      generateBindingYaml('b', 'require-team', 'all', [], ['Deny', 'Audit']),
     ))).not.toBeNull()
   })
 
   it('refuses a hand-added selector or paramRef', () => {
-    const base = generateBindingYaml('b', 'require-team', 'demo', ['Deny'])
+    const base = generateBindingYaml('b', 'require-team', 'include', ['demo'], ['Deny'])
     expect(tryParseBuilderBinding(base + `
       objectSelector:
         matchLabels:
@@ -134,8 +165,17 @@ describe('tryParseBuilderBinding', () => {
   // field to open in — reading it as "no namespace" would widen the binding to
   // the whole cluster on save.
   it('refuses a namespace selector it cannot show', () => {
-    const yaml = generateBindingYaml('b', 'require-team', 'demo', ['Deny'])
+    const yaml = generateBindingYaml('b', 'require-team', 'include', ['demo'], ['Deny'])
       .replace('kubernetes.io/metadata.name: demo', 'env: prod')
     expect(tryParseBuilderBinding(yaml)).toBeNull()
+
+    // An expression on another key, another operator, or a second expression is
+    // out of the form's reach too.
+    const otherKey = generateBindingYaml('b', 'p', 'exclude', ['kube-system'], ['Deny'])
+      .replace('key: kubernetes.io/metadata.name', 'key: env')
+    expect(tryParseBuilderBinding(otherKey)).toBeNull()
+    const otherOp = generateBindingYaml('b', 'p', 'exclude', ['kube-system'], ['Deny'])
+      .replace('operator: NotIn', 'operator: Exists')
+    expect(tryParseBuilderBinding(otherOp)).toBeNull()
   })
 })

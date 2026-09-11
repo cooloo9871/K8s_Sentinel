@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select'
 import yaml from 'js-yaml'
 import { vapApi, namespaceApi, type VAPRecord, type VAPBindingRecord } from '../api/client'
-import { NamespaceSelect } from '../components/NamespaceSelect'
+import { ScopeFilter } from '../components/ScopeFilter'
 import { YamlEditor } from '../components/YamlEditor'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
@@ -458,12 +458,17 @@ export function generatePolicyYaml(
 
 // Binding builder --------------------------------------------------------------
 
+// How a binding is scoped to namespaces: everywhere, only the listed ones (In),
+// or everywhere except the listed ones (NotIn).
+export type BindingNsMode = 'all' | 'include' | 'exclude'
+
 export function generateBindingYaml(
-  name: string, policyName: string, namespace: string, actions: ValidationAction[],
+  name: string, policyName: string, nsMode: BindingNsMode, namespaces: string[],
+  actions: ValidationAction[],
 ): string {
   const safeName   = name.trim()       || 'my-binding'
   const safePolicy = policyName.trim() || 'my-policy'
-  const safeNs     = namespace.trim()
+  const nsList     = namespaces.map(n => n.trim()).filter(Boolean)
   const actStr     = actions.length ? actions.join(', ') : 'Deny'
 
   const lines = [
@@ -477,13 +482,27 @@ export function generateBindingYaml(
     `  policyName: "${safePolicy}"`,
     `  validationActions: [${actStr}]`,
   ]
-  if (safeNs) {
-    lines.push(
-      '  matchResources:',
-      '    namespaceSelector:',
-      '      matchLabels:',
-      `        kubernetes.io/metadata.name: ${safeNs}`,
-    )
+  if (nsMode !== 'all' && nsList.length > 0) {
+    if (nsMode === 'include' && nsList.length === 1) {
+      // A single included namespace keeps the matchLabels shape older bindings
+      // were saved with, so reopening and resaving them changes nothing.
+      lines.push(
+        '  matchResources:',
+        '    namespaceSelector:',
+        '      matchLabels:',
+        `        kubernetes.io/metadata.name: ${nsList[0]}`,
+      )
+    } else {
+      lines.push(
+        '  matchResources:',
+        '    namespaceSelector:',
+        '      matchExpressions:',
+        '        - key: kubernetes.io/metadata.name',
+        `          operator: ${nsMode === 'include' ? 'In' : 'NotIn'}`,
+        '          values:',
+        ...nsList.map(n => `            - ${n}`),
+      )
+    }
   }
   return lines.join('\n')
 }
@@ -672,7 +691,8 @@ export function tryParseBuilderPolicy(rawYaml: string): {
 
 // Exported for its tests.
 export function tryParseBuilderBinding(rawYaml: string): {
-  name: string; policyName: string; namespace: string; actions: ValidationAction[]
+  name: string; policyName: string; nsMode: BindingNsMode; namespaces: string[]
+  actions: ValidationAction[]
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -684,21 +704,52 @@ export function tryParseBuilderBinding(rawYaml: string): {
     const spec = doc.spec as {
       policyName?: string
       validationActions?: string[]
-      matchResources?: { namespaceSelector?: { matchLabels?: Record<string, string> } }
+      matchResources?: {
+        namespaceSelector?: {
+          matchLabels?: Record<string, string>
+          matchExpressions?: { key?: string; operator?: string; values?: string[] }[]
+        }
+      }
     }
-    const ns = spec?.matchResources?.namespaceSelector?.matchLabels?.['kubernetes.io/metadata.name'] ?? ''
+
+    // The namespace scope the form can hold: nothing, a matchLabels single
+    // namespace (the legacy shape), or ONE metadata.name expression with In or
+    // NotIn. Anything else — several expressions, another key or operator —
+    // would be rewritten on save, so it stays in the YAML editor.
+    let nsMode: BindingNsMode = 'all'
+    let namespaces: string[] = []
+    const sel = spec?.matchResources?.namespaceSelector
+    const labelNs = sel?.matchLabels?.['kubernetes.io/metadata.name']
+    const exprs = sel?.matchExpressions ?? []
+    if (labelNs) {
+      if (exprs.length > 0) return null // both shapes at once is not the form's
+      nsMode = 'include'
+      namespaces = [labelNs]
+    } else if (exprs.length === 1) {
+      const e = exprs[0]
+      if (e.key !== 'kubernetes.io/metadata.name') return null
+      if (e.operator !== 'In' && e.operator !== 'NotIn') return null
+      const values = (e.values ?? []).filter(Boolean)
+      if (values.length === 0) return null
+      nsMode = e.operator === 'In' ? 'include' : 'exclude'
+      namespaces = values
+    } else if (exprs.length > 1) {
+      return null
+    }
+
     const result = {
       name: meta?.name ?? '',
       policyName: spec?.policyName ?? '',
       actions: (spec?.validationActions ?? ['Deny']) as ValidationAction[],
-      namespace: ns,
+      nsMode,
+      namespaces,
     }
     // Same bar as the policy: the form may only open a binding it can
     // reproduce, or a paramRef or objectSelector added by hand would be
     // silently deleted on the next save.
     if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
     const regen = yaml.load(generateBindingYaml(
-      result.name, result.policyName, result.namespace, result.actions,
+      result.name, result.policyName, result.nsMode, result.namespaces, result.actions,
     )) as Record<string, unknown> | undefined
     if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
       return null
@@ -791,7 +842,8 @@ export function VAPPage() {
   const [bindingEditName, setBindingEditName] = useState<string | undefined>()
   const [bindingName, setBindingName] = useState('')
   const [bindingPolicy, setBindingPolicy] = useState('')
-  const [bindingNamespace, setBindingNamespace] = useState('')
+  const [bindingNsMode, setBindingNsMode] = useState<BindingNsMode>('all')
+  const [bindingNamespaces, setBindingNamespaces] = useState<string[]>([])
   const [clusterNamespaces, setClusterNamespaces] = useState<string[]>([])
   const [bindingActions, setBindingActions] = useState<Set<ValidationAction>>(new Set(['Deny']))
   const [bindingBuilderSaving, setBindingBuilderSaving] = useState(false)
@@ -843,7 +895,8 @@ export function VAPPage() {
         setBindingEditName(name)
         setBindingName(parsed.name)
         setBindingPolicy(parsed.policyName)
-        setBindingNamespace(parsed.namespace)
+        setBindingNsMode(parsed.nsMode)
+        setBindingNamespaces(parsed.namespaces)
         setBindingActions(new Set(parsed.actions))
         setShowBindingBuilder(true)
         return
@@ -873,7 +926,8 @@ export function VAPPage() {
         openNew('binding')
       } else {
         setBindingEditName(undefined)
-        setBindingName(''); setBindingPolicy(''); setBindingNamespace('')
+        setBindingName(''); setBindingPolicy('')
+        setBindingNsMode('all'); setBindingNamespaces([])
         setBindingActions(new Set(['Deny']))
         setShowBindingBuilder(true)
       }
@@ -966,9 +1020,10 @@ export function VAPPage() {
 
   const handleBindingBuilderApply = async () => {
     if (!bindingName.trim() || !bindingPolicy.trim() || bindingActions.size === 0) return
+    if (bindingNsMode !== 'all' && bindingNamespaces.length === 0) return
     setBindingBuilderSaving(true)
     try {
-      const y = generateBindingYaml(bindingName, bindingPolicy, bindingNamespace, [...bindingActions])
+      const y = generateBindingYaml(bindingName, bindingPolicy, bindingNsMode, bindingNamespaces, [...bindingActions])
       if (bindingEditName) await vapApi.updateBinding(bindingEditName, y)
       else await vapApi.applyBinding(y)
       toast.success('Binding applied.')
@@ -1405,8 +1460,9 @@ export function VAPPage() {
 
   // ── Binding builder view ───────────────────────────────────────────────────
   if (showBindingBuilder) {
-    const previewYaml = generateBindingYaml(bindingName, bindingPolicy, bindingNamespace, [...bindingActions])
+    const previewYaml = generateBindingYaml(bindingName, bindingPolicy, bindingNsMode, bindingNamespaces, [...bindingActions])
     const canApply = bindingName.trim() !== '' && bindingPolicy.trim() !== '' && bindingActions.size > 0
+      && (bindingNsMode === 'all' || bindingNamespaces.length > 0)
     return (
       <>
         <div className="mb-6 flex items-center justify-between">
@@ -1458,17 +1514,36 @@ export function VAPPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="binding-ns">Namespace</Label>
-                <NamespaceSelect
-                  value={bindingNamespace}
-                  onChange={setBindingNamespace}
-                  namespaces={clusterNamespaces}
-                  noneLabel="All namespaces"
-                />
+                <Label>Namespaces</Label>
+                <Select value={bindingNsMode} onValueChange={v => setBindingNsMode(v as BindingNsMode)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="all">All namespaces</SelectItem>
+                      <SelectItem value="include">Only these namespaces</SelectItem>
+                      <SelectItem value="exclude">All except these namespaces</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {bindingNsMode !== 'all' && (
+                  <ScopeFilter
+                    value={bindingNamespaces}
+                    onChange={setBindingNamespaces}
+                    namespaces={clusterNamespaces}
+                    includeCluster={false}
+                    className="h-9 w-full justify-between text-sm font-normal"
+                  />
+                )}
                 <p className="text-xs text-muted-foreground">
-                  {bindingNamespace.trim()
-                    ? `Applies to namespace: ${bindingNamespace.trim()}`
-                    : 'No namespace filter. Applies cluster-wide.'}
+                  {bindingNsMode === 'all'
+                    ? 'No namespace filter. Applies cluster-wide.'
+                    : bindingNamespaces.length === 0
+                      ? 'Pick at least one namespace.'
+                      : bindingNsMode === 'include'
+                        ? `Applies only in: ${bindingNamespaces.join(', ')}`
+                        : `Applies everywhere except: ${bindingNamespaces.join(', ')}`}
                 </p>
               </div>
 
