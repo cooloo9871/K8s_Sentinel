@@ -1531,6 +1531,7 @@ export function VAPPage() {
                       <Input
                         value={configMapSizeRule.message}
                         onChange={e => setConfigMapSizeRule(r => ({ ...r, message: e.target.value }))}
+                        placeholder={autoConfigMapSizeMessage(configMapSizeRule)}
                         className="h-8 text-sm"
                       />
                     </div>
