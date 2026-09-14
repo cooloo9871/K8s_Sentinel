@@ -392,25 +392,94 @@ function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
   ]
 }
 
+// The ConfigMap size CEL, shared verbatim between the generator and the parser
+// so the two cannot drift. Semantics: a key within the limit always passes; an
+// oversized key passes only if it already existed and is not growing — so
+// existing oversized ConfigMaps keep working, but cannot get any bigger, and
+// new oversized keys are refused outright. The threshold lives in the `limit`
+// variable, which keeps these expressions constant text.
+const CM_SIZE_DATA_EXPR = [
+  'variables.newData.all(k,',
+  '  bytes(variables.newData[k]).size() <= variables.limit ||',
+  '  (k in variables.oldData &&',
+  '   bytes(variables.newData[k]).size() <= bytes(variables.oldData[k]).size())',
+  ')',
+]
+// binaryData is base64 in the admission payload, so its decoded size is
+// size()*3/4; growth is compared in the same representation on both sides.
+const CM_SIZE_BIN_EXPR = [
+  'variables.newBin.all(k,',
+  '  (variables.newBin[k].size() * 3) / 4 <= variables.limit ||',
+  '  (k in variables.oldBin &&',
+  '   variables.newBin[k].size() <= variables.oldBin[k].size())',
+  ')',
+]
+const CM_SIZE_DATA_MSG = [
+  '"ConfigMap data key exceeds " + string(variables.limit) +',
+  '" bytes and is growing; oversized keys: " +',
+  'variables.newData.filter(k,',
+  '  bytes(variables.newData[k]).size() > variables.limit',
+  ').join(", ")',
+]
+const CM_SIZE_BIN_MSG = [
+  '"ConfigMap binaryData key exceeds " + string(variables.limit) +',
+  '" bytes (decoded) and is growing; oversized keys: " +',
+  'variables.newBin.filter(k,',
+  '  (variables.newBin[k].size() * 3) / 4 > variables.limit',
+  ').join(", ")',
+]
+
 function autoConfigMapSizeMessage(rule: ConfigMapSizeRule): string {
   const bytes = configMapSizeBytes(rule)
   return bytes > 0
-    ? `ConfigMap has a key larger than ${bytes} bytes (${rule.maxSizeKB}KB)`
+    ? `ConfigMap data key exceeds ${bytes} bytes and is growing; oversized keys: <key names>`
     : 'ConfigMap key size limit exceeded'
 }
 
-function configMapSizeRuleToYamlLines(rule: ConfigMapSizeRule): string[] {
+// matchConditions + variables for the ConfigMap size policy, emitted at spec
+// level. kube-system service accounts are exempt so kubelet and controller
+// writes are never blocked; oldObject is null on CREATE, which is what makes
+// the grandfather clause apply to updates only.
+function configMapSizeSpecLines(rule: ConfigMapSizeRule): string[] {
   const bytes = configMapSizeBytes(rule)
-  const m = escapeYaml(rule.message.trim() || autoConfigMapSizeMessage(rule))
-  // Both data and binaryData carry content, so both are limited — a data-only
-  // check is bypassed by putting the payload in binaryData. binaryData arrives
-  // base64-encoded, so its measured size is about 4/3 of the raw content, which
-  // is fine for a ceiling.
+  return [
+    '  matchConditions:',
+    '    - name: exclude-system-serviceaccounts',
+    '      expression: >-',
+    '        !request.userInfo.username.startsWith("system:serviceaccount:kube-system:")',
+    '  variables:',
+    '    - name: limit',
+    `      expression: "${bytes}"`,
+    '    - name: isUpdate',
+    `      expression: 'request.operation == "UPDATE" && oldObject != null'`,
+    '    - name: newData',
+    '      expression: "has(object.data) ? object.data : {}"',
+    '    - name: oldData',
+    '      expression: >-',
+    '        (variables.isUpdate && has(oldObject.data)) ? oldObject.data : {}',
+    '    - name: newBin',
+    '      expression: "has(object.binaryData) ? object.binaryData : {}"',
+    '    - name: oldBin',
+    '      expression: >-',
+    '        (variables.isUpdate && has(oldObject.binaryData)) ? oldObject.binaryData : {}',
+  ]
+}
+
+function configMapSizeRuleToYamlLines(rule: ConfigMapSizeRule): string[] {
+  const custom = rule.message.trim()
+  // A custom message replaces the dynamic messageExpression on both
+  // validations; left blank, the deny names the oversized keys.
+  const msgFor = (exprLines: string[]) => custom
+    ? [`      message: "${escapeYaml(custom)}"`]
+    : ['      messageExpression: >-', ...exprLines.map(l => `        ${l}`)]
   return [
     '    - expression: >-',
-    `        (!has(object.data) || object.data.all(k, object.data[k].size() <= ${bytes})) &&`,
-    `        (!has(object.binaryData) || object.binaryData.all(k, object.binaryData[k].size() <= ${bytes}))`,
-    `      message: "${m}"`,
+    ...CM_SIZE_DATA_EXPR.map(l => `        ${l}`),
+    ...msgFor(CM_SIZE_DATA_MSG),
+    '      reason: Forbidden',
+    '    - expression: >-',
+    ...CM_SIZE_BIN_EXPR.map(l => `        ${l}`),
+    ...msgFor(CM_SIZE_BIN_MSG),
     '      reason: Forbidden',
   ]
 }
@@ -501,6 +570,7 @@ export function generatePolicyYaml(
     '  failurePolicy: Fail',
     '  matchConstraints:',
     ...resourceRuleLines,
+    ...(ruleType === 'configmap-size' ? configMapSizeSpecLines(configMapSizeRule) : []),
     '  validations:',
     ...validationLines,
   ].join('\n')
@@ -634,16 +704,36 @@ function parseExpressionToHostAccessPart(expr: string): HostAccessCheckType | nu
   return null
 }
 
-function parseExpressionToConfigMapSizeRule(expr: string, msg: string): ConfigMapSizeRule | null {
-  const e = expr.replace(/\s+/g, ' ').trim()
-  // Both halves must be present with the same limit — a hand-written data-only
-  // check is not what the form generates, and opening it would add the
-  // binaryData half on save.
-  const m = e.match(/^\(!has\(object\.data\) \|\| object\.data\.all\(k, object\.data\[k\]\.size\(\) <= (\d+)\)\) && \(!has\(object\.binaryData\) \|\| object\.binaryData\.all\(k, object\.binaryData\[k\]\.size\(\) <= (\d+)\)\)$/)
-  if (!m || m[1] !== m[2]) return null
-  const bytes = Number(m[1])
+// parseConfigMapSizeSpec recognises the whole two-validation shape the builder
+// writes: both expressions verbatim (whitespace aside), the limit read from the
+// `limit` variable, and either the generated messageExpressions (blank message)
+// or one identical plain message on both. Everything else about the spec —
+// variables, matchConditions, matchConstraints — is checked by the regenerate-
+// and-compare guard in tryParseBuilderPolicy.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseConfigMapSizeSpec(spec: any): ConfigMapSizeRule | null {
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
+  const vals = spec?.validations ?? []
+  if (vals.length !== 2) return null
+  if (norm(vals[0].expression ?? '') !== norm(CM_SIZE_DATA_EXPR.join(' '))) return null
+  if (norm(vals[1].expression ?? '') !== norm(CM_SIZE_BIN_EXPR.join(' '))) return null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const limitVar = (spec.variables ?? []).find((v: any) => v?.name === 'limit')
+  const bytes = Number(limitVar?.expression)
   if (!Number.isFinite(bytes) || bytes <= 0 || bytes % 1024 !== 0) return null
-  return { maxSizeKB: String(bytes / 1024), message: msg }
+  const maxSizeKB = String(bytes / 1024)
+
+  const [d, b] = vals
+  if (d.messageExpression && b.messageExpression && !d.message && !b.message) {
+    if (norm(d.messageExpression) !== norm(CM_SIZE_DATA_MSG.join(' '))) return null
+    if (norm(b.messageExpression) !== norm(CM_SIZE_BIN_MSG.join(' '))) return null
+    return { maxSizeKB, message: '' }
+  }
+  if (d.message && d.message === b.message && !d.messageExpression && !b.messageExpression) {
+    return { maxSizeKB, message: d.message }
+  }
+  return null
 }
 
 // specForCompare renders a spec for comparison against a regenerated one,
@@ -687,6 +777,26 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     const spec = doc.spec as { validations?: Array<{ expression?: string; message?: string }> }
     if (!spec?.validations?.length) return null
 
+    // ConfigMap size is a whole-spec shape (two fixed validations + variables +
+    // matchConditions), not a per-validation expression, so it branches before
+    // the loop. The regenerate-and-compare guard below still applies.
+    const configMapSizeParsed = parseConfigMapSizeSpec(spec)
+    if (configMapSizeParsed) {
+      if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
+      const result = {
+        name: meta?.name ?? '', ruleType: 'configmap-size' as PolicyRuleType, applyTo: 'workloads' as LabelApplyTo,
+        labelRules: [], imageRules: [], replicaRules: [], resourceLimitRules: [],
+        securityContextRule: emptySecurityContextRule(), hostAccessRule: emptyHostAccessRule(),
+        configMapSizeRule: configMapSizeParsed,
+      }
+      const regen = yaml.load(generatePolicyYaml(
+        result.name, result.ruleType, [], [], [], result.applyTo, [],
+        result.securityContextRule, result.hostAccessRule, configMapSizeParsed,
+      )) as Record<string, unknown> | undefined
+      if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) return null
+      return result
+    }
+
     const labelRules: LabelRule[] = []
     const imageRules: ImageRule[] = []
     const replicaRules: ReplicaRule[] = []
@@ -694,7 +804,6 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     const resourceLimitRules: ResourceLimitRule[] = []
     const scParts: { part: SecurityContextPart; message: string }[] = []
     let hostAccessParsed: HostAccessRule | null = null
-    let configMapSizeParsed: ConfigMapSizeRule | null = null
     for (const v of spec.validations) {
       const lr = parseExpressionToRule(v.expression ?? '', v.message ?? '')
       if (lr) { labelRules.push(lr); continue }
@@ -710,8 +819,6 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       if (scp) { scParts.push({ part: scp, message: v.message ?? '' }); continue }
       const hap = parseExpressionToHostAccessPart(v.expression ?? '')
       if (hap) { hostAccessParsed = { checkType: hap, message: v.message ?? '' }; continue }
-      const cms = parseExpressionToConfigMapSizeRule(v.expression ?? '', v.message ?? '')
-      if (cms) { configMapSizeParsed = cms; continue }
       return null  // unknown expression type — fall through to YAML editor
     }
     // Build security context rule from parts
@@ -724,9 +831,8 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       message: scParts[0]?.message ?? '',
     }
     const hostAccessRule: HostAccessRule = hostAccessParsed ?? emptyHostAccessRule()
-    const configMapSizeRule: ConfigMapSizeRule = configMapSizeParsed ?? emptyConfigMapSizeRule()
     // All rules must be the same type
-    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0, hostAccessParsed !== null, configMapSizeParsed !== null].filter(Boolean).length
+    const typesUsed = [labelRules.length > 0, annotationRules.length > 0, imageRules.length > 0, replicaRules.length > 0, resourceLimitRules.length > 0, scParts.length > 0, hostAccessParsed !== null].filter(Boolean).length
     if (typesUsed > 1) return null
     const ruleType: PolicyRuleType = replicaRules.length > 0 ? 'replica'
       : imageRules.length > 0 ? 'image'
@@ -734,10 +840,9 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       : resourceLimitRules.length > 0 ? 'resource-limits'
       : scParts.length > 0 ? 'security-context'
       : hostAccessParsed !== null ? 'host-access'
-      : configMapSizeParsed !== null ? 'configmap-size'
       : 'label'
     const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
-    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule }
+    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule: emptyConfigMapSizeRule() }
 
     // The builder may only open a policy it can reproduce: saving regenerates
     // the whole manifest, so whatever these fields cannot show — a hand-tuned
@@ -747,7 +852,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
     const regen = yaml.load(generatePolicyYaml(
       result.name, ruleType, result.labelRules, imageRules, replicaRules,
-      applyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule,
+      applyTo, resourceLimitRules, securityContextRule, hostAccessRule,
     )) as Record<string, unknown> | undefined
     if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
       return null
@@ -1537,7 +1642,7 @@ export function VAPPage() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Applies to ConfigMaps. Limits each key in data and binaryData; binaryData is measured base64-encoded.
+                    Applies to ConfigMaps in data and binaryData. New keys must fit the limit; an existing oversized key may stay but not grow. kube-system service accounts are exempt.
                   </p>
                 </div>
               )}

@@ -104,27 +104,49 @@ describe('tryParseBuilderPolicy', () => {
       'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
       [], undefined, undefined, { maxSizeKB: '10', message: '' },
     )
-    // Scoped to configmaps, limit in bytes, and both fields checked — a
-    // data-only limit is bypassed by putting the payload in binaryData.
+    // Scoped to configmaps; the limit lives in the `limit` variable; both data
+    // and binaryData are checked; system service accounts are exempt; the
+    // grandfather clause allows an existing oversized key that is not growing.
     expect(raw).toContain('resources: ["configmaps"]')
-    expect(raw).toContain('object.data[k].size() <= 10240')
-    expect(raw).toContain('object.binaryData[k].size() <= 10240')
+    expect(raw).toContain('expression: "10240"')
+    expect(raw).toContain('bytes(variables.newData[k]).size() <= variables.limit')
+    expect(raw).toContain('(variables.newBin[k].size() * 3) / 4 <= variables.limit')
+    expect(raw).toContain('k in variables.oldData')
+    expect(raw).toContain('system:serviceaccount:kube-system:')
+    expect(raw).toContain('messageExpression')
 
     const parsed = tryParseBuilderPolicy(raw)
     expect(parsed?.ruleType).toBe('configmap-size')
     expect(parsed?.configMapSizeRule.maxSizeKB).toBe('10')
+    expect(parsed?.configMapSizeRule.message).toBe('')
     // And as the apiserver returns it.
     expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
   })
 
-  // A hand-written data-only size check is not what the form generates: opening
-  // it would add the binaryData half on save, so it stays in the YAML editor.
-  it('refuses a data-only ConfigMap size expression', () => {
+  it('round-trips a ConfigMap size policy with a custom message', () => {
+    const raw = generatePolicyYaml(
+      'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
+      [], undefined, undefined, { maxSizeKB: '10', message: 'ConfigMap too large' },
+    )
+    expect(raw).not.toContain('messageExpression')
+    const parsed = tryParseBuilderPolicy(raw)
+    expect(parsed?.configMapSizeRule.message).toBe('ConfigMap too large')
+    expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+  })
+
+  // Tampered variants of the ConfigMap size shape stay in the YAML editor: a
+  // save would regenerate the builder's exact form and silently change them.
+  it('refuses a tampered ConfigMap size policy', () => {
     const raw = generatePolicyYaml(
       'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
       [], undefined, undefined, { maxSizeKB: '10', message: '' },
-    ).replace(/ &&\n        \(!has\(object\.binaryData\).*\)\)/, '')
-    expect(tryParseBuilderPolicy(raw)).toBeNull()
+    )
+    // A hand-changed limit variable that no longer matches whole KB.
+    expect(tryParseBuilderPolicy(raw.replace('expression: "10240"', 'expression: "10000"'))).toBeNull()
+    // A hand-relaxed grandfather clause.
+    expect(tryParseBuilderPolicy(raw.replace('k in variables.oldData', 'true'))).toBeNull()
+    // A hand-changed exemption is caught by the regenerate-and-compare guard.
+    expect(tryParseBuilderPolicy(raw.replace('kube-system:', 'my-ns:'))).toBeNull()
   })
 })
 
