@@ -93,7 +93,7 @@ the quarantine: the new pod is not the one that was contained.
 ### Admission Policy (ValidatingAdmissionPolicy)
 
 - Manage native Kubernetes VAP resources and bindings, via YAML editor or a UI builder that generates CEL
-- The builder covers eight rule types and reverse-parses existing policies so they can be reopened in the form:
+- The builder covers nine rule types and reverse-parses existing policies so they can be reopened in the form:
 
   | Rule Type | Description |
   |---|---|
@@ -104,7 +104,8 @@ the quarantine: the new pod is not the one that was contained.
   | **Resource Limits** | Require CPU and memory limits; covers every workload type and initContainers |
   | **Security Context** | Forbid privileged containers; require runAsNonRoot, honouring pod and container level inheritance |
   | **Host Access** | Forbid hostNetwork, hostPID and hostIPC across Pods and template-based workloads |
-  | **ConfigMap Size Limit** | Cap the size of each ConfigMap key across `data` and `binaryData`. New keys must fit the limit; an existing oversized key is tolerated but may not grow. kube-system service accounts are exempt, and the deny message names the offending keys |
+  | **ConfigMap Size Limit** | Cap each ConfigMap key (`data` and `binaryData`) and the whole object. New keys must fit; an existing oversized key may stay unchanged or shrink but not grow, and the total may not grow past its cap. A cost-budget guard skips maps with over 200 keys so they cannot become permanently unwritable, and the deny message names the offending keys |
+  | **Secret Size Limit** | The same per-key and total caps for Secrets (`data`, base64 decoded). Service-account tokens, bootstrap tokens and Helm release blobs are exempt; `stringData` needs no handling since the apiserver folds it into `data` before admission |
 
 - **Binding Builder** — pick the policy, the namespace scope and validation actions (Deny / Audit / Warn). The scope is all namespaces, **only** a chosen set, or **all except** a chosen set (e.g. everywhere but `kube-system`), with several namespaces selectable at once
 - Resources created through the UI are tagged `sentinel.io/builder: "true"` so Edit reopens the builder

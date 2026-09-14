@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
-  IconShieldLock, IconServer, IconRefresh, IconFileDescription,
+  IconShieldLock, IconServer, IconRefresh, IconFileDescription, IconLock,
 } from '@tabler/icons-react'
 import React from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -34,7 +34,7 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size' | 'secret-size'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
@@ -92,19 +92,21 @@ interface HostAccessRule {
 
 const emptyHostAccessRule = (): HostAccessRule => ({ checkType: 'all', message: '' })
 
-// maxSizeKB is a string so the field can start blank instead of carrying a
-// preset number; the builder refuses to apply until it parses to a positive int.
-interface ConfigMapSizeRule {
-  maxSizeKB: string
+// Shared by the ConfigMap and Secret size rules: a per-key cap and a
+// whole-object cap. The KB fields are strings so they start blank instead of
+// carrying preset numbers; apply is refused until both parse to positive ints.
+interface SizeLimitRule {
+  keyKB: string
+  totalKB: string
   message: string
 }
 
-const emptyConfigMapSizeRule = (): ConfigMapSizeRule => ({ maxSizeKB: '', message: '' })
+const emptySizeLimitRule = (): SizeLimitRule => ({ keyKB: '', totalKB: '', message: '' })
 
-// The generated expression works in whole bytes.
-function configMapSizeBytes(rule: ConfigMapSizeRule): number {
-  const kb = Number(rule.maxSizeKB)
-  return Number.isFinite(kb) && kb > 0 ? Math.floor(kb * 1024) : 0
+// The generated expressions work in whole bytes.
+function kbToBytes(kb: string): number {
+  const n = Number(kb)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n * 1024) : 0
 }
 
 // Module-level constant — single source of truth for both the card grid and
@@ -117,7 +119,8 @@ const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; label:
   { value: 'resource-limits', icon: <IconCpu size={14} />,         label: 'Resources',  desc: 'Require containers to set CPU and/or memory limits',          readonlyLabel: 'Resource Limits' },
   { value: 'security-context',icon: <IconShieldLock size={14} />,  label: 'Security',   desc: 'Deny privileged containers or require runAsNonRoot',          readonlyLabel: 'Security Context' },
   { value: 'host-access',     icon: <IconServer size={14} />,      label: 'Host',       desc: 'Deny hostNetwork, hostPID, and/or hostIPC access',            readonlyLabel: 'Host Access' },
-  { value: 'configmap-size',  icon: <IconFileDescription size={14} />, label: 'ConfigMap Size', desc: 'Limit the size of each ConfigMap key (data and binaryData)', readonlyLabel: 'ConfigMap Size Limit' },
+  { value: 'configmap-size',  icon: <IconFileDescription size={14} />, label: 'ConfigMap Size', desc: 'Limit the size of each ConfigMap key and the whole object', readonlyLabel: 'ConfigMap Size Limit' },
+  { value: 'secret-size',     icon: <IconLock size={14} />,            label: 'Secret Size',    desc: 'Limit the size of each Secret key and the whole object',    readonlyLabel: 'Secret Size Limit' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -392,95 +395,179 @@ function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
   ]
 }
 
-// The ConfigMap size CEL, shared verbatim between the generator and the parser
-// so the two cannot drift. Semantics: a key within the limit always passes; an
-// oversized key passes only if it already existed and is not growing — so
-// existing oversized ConfigMaps keep working, but cannot get any bigger, and
-// new oversized keys are refused outright. The threshold lives in the `limit`
-// variable, which keeps these expressions constant text.
+// The ConfigMap and Secret size CEL, shared verbatim between the generator and
+// the parser so the two cannot drift. Semantics: a key within the limit always
+// passes; an oversized key passes only if it already existed and is unchanged
+// or strictly shrinking — so existing oversized objects keep working but cannot
+// grow, and new oversized keys are refused outright. The whole object is also
+// capped: over the total limit, an update must not grow. The thresholds live in
+// the keyLimit/totalLimit variables, which keeps these expressions constant text.
 const CM_SIZE_DATA_EXPR = [
   'variables.newData.all(k,',
-  '  bytes(variables.newData[k]).size() <= variables.limit ||',
-  '  (k in variables.oldData &&',
-  '   bytes(variables.newData[k]).size() <= bytes(variables.oldData[k]).size())',
+  '  bytes(variables.newData[k]).size() <= variables.keyLimit ||',
+  '  (k in variables.oldData && (',
+  '    variables.newData[k] == variables.oldData[k] ||',
+  '    bytes(variables.newData[k]).size() < bytes(variables.oldData[k]).size()',
+  '  ))',
   ')',
 ]
 // binaryData is base64 in the admission payload, so its decoded size is
 // size()*3/4; growth is compared in the same representation on both sides.
 const CM_SIZE_BIN_EXPR = [
   'variables.newBin.all(k,',
-  '  (variables.newBin[k].size() * 3) / 4 <= variables.limit ||',
-  '  (k in variables.oldBin &&',
-  '   variables.newBin[k].size() <= variables.oldBin[k].size())',
+  '  (variables.newBin[k].size() * 3) / 4 <= variables.keyLimit ||',
+  '  (k in variables.oldBin && (',
+  '    variables.newBin[k] == variables.oldBin[k] ||',
+  '    variables.newBin[k].size() < variables.oldBin[k].size()',
+  '  ))',
   ')',
 ]
+// Secret data values are base64 the same way binaryData is.
+const SECRET_SIZE_DATA_EXPR = [
+  'variables.newData.all(k,',
+  '  (variables.newData[k].size() * 3) / 4 <= variables.keyLimit ||',
+  '  (k in variables.oldData && (',
+  '    variables.newData[k] == variables.oldData[k] ||',
+  '    variables.newData[k].size() < variables.oldData[k].size()',
+  '  ))',
+  ')',
+]
+const SIZE_TOTAL_EXPR = [
+  'variables.newTotal <= variables.totalLimit ||',
+  '(variables.isUpdate && variables.newTotal <= variables.oldTotal)',
+]
 const CM_SIZE_DATA_MSG = [
-  '"ConfigMap data key exceeds " + string(variables.limit) +',
-  '" bytes and is growing; oversized keys: " +',
+  '"ConfigMap data key exceeds " + string(variables.keyLimit) + " bytes: " +',
   'variables.newData.filter(k,',
-  '  bytes(variables.newData[k]).size() > variables.limit',
-  ').join(", ")',
+  '  bytes(variables.newData[k]).size() > variables.keyLimit).join(", ")',
 ]
 const CM_SIZE_BIN_MSG = [
-  '"ConfigMap binaryData key exceeds " + string(variables.limit) +',
-  '" bytes (decoded) and is growing; oversized keys: " +',
+  '"ConfigMap binaryData key exceeds " + string(variables.keyLimit) + " bytes: " +',
   'variables.newBin.filter(k,',
-  '  (variables.newBin[k].size() * 3) / 4 > variables.limit',
-  ').join(", ")',
+  '  (variables.newBin[k].size() * 3) / 4 > variables.keyLimit).join(", ")',
+]
+const SECRET_SIZE_DATA_MSG = [
+  '"Secret data key exceeds " + string(variables.keyLimit) + " bytes: " +',
+  'variables.newData.filter(k,',
+  '  (variables.newData[k].size() * 3) / 4 > variables.keyLimit).join(", ")',
+]
+const CM_SIZE_TOTAL_MSG = [
+  '"ConfigMap total size " + string(variables.newTotal) +',
+  '" bytes exceeds " + string(variables.totalLimit) + " bytes"',
+]
+const SECRET_SIZE_TOTAL_MSG = [
+  '"Secret total size " + string(variables.newTotal) +',
+  '" bytes exceeds " + string(variables.totalLimit) + " bytes"',
 ]
 
-function autoConfigMapSizeMessage(rule: ConfigMapSizeRule): string {
-  const bytes = configMapSizeBytes(rule)
+function autoSizeLimitMessage(kind: 'ConfigMap' | 'Secret', rule: SizeLimitRule): string {
+  const bytes = kbToBytes(rule.keyKB)
   return bytes > 0
-    ? `ConfigMap data key exceeds ${bytes} bytes and is growing; oversized keys: <key names>`
-    : 'ConfigMap key size limit exceeded'
+    ? `${kind} data key exceeds ${bytes} bytes: <key names>`
+    : `${kind} size limit exceeded`
 }
 
-// matchConditions + variables for the ConfigMap size policy, emitted at spec
-// level. kube-system service accounts are exempt so kubelet and controller
-// writes are never blocked; oldObject is null on CREATE, which is what makes
-// the grandfather clause apply to updates only.
-function configMapSizeSpecLines(rule: ConfigMapSizeRule): string[] {
-  const bytes = configMapSizeBytes(rule)
+// matchConditions + variables, emitted at spec level. The skip-huge-maps guard
+// is a CEL cost budget: past ~200 keys the per-key comprehensions risk blowing
+// the runtime cost limit, which under failurePolicy Fail would make the object
+// permanently unwritable — skipping it is the safer failure. oldObject is null
+// on CREATE, which is what scopes the grandfather clause to updates.
+function configMapSizeSpecLines(rule: SizeLimitRule): string[] {
   return [
     '  matchConditions:',
-    '    - name: exclude-system-serviceaccounts',
+    '    - name: skip-huge-maps',
     '      expression: >-',
-    '        !request.userInfo.username.startsWith("system:serviceaccount:kube-system:")',
+    '        (has(object.data) ? size(object.data) : 0) +',
+    '        (has(object.binaryData) ? size(object.binaryData) : 0) <= 200',
     '  variables:',
-    '    - name: limit',
-    `      expression: "${bytes}"`,
+    '    - name: keyLimit',
+    `      expression: "${kbToBytes(rule.keyKB)}"`,
+    '    - name: totalLimit',
+    `      expression: "${kbToBytes(rule.totalKB)}"`,
     '    - name: isUpdate',
     `      expression: 'request.operation == "UPDATE" && oldObject != null'`,
     '    - name: newData',
     '      expression: "has(object.data) ? object.data : {}"',
     '    - name: oldData',
-    '      expression: >-',
-    '        (variables.isUpdate && has(oldObject.data)) ? oldObject.data : {}',
+    '      expression: "(variables.isUpdate && has(oldObject.data)) ? oldObject.data : {}"',
     '    - name: newBin',
     '      expression: "has(object.binaryData) ? object.binaryData : {}"',
     '    - name: oldBin',
+    '      expression: "(variables.isUpdate && has(oldObject.binaryData)) ? oldObject.binaryData : {}"',
+    '    - name: newTotal',
     '      expression: >-',
-    '        (variables.isUpdate && has(oldObject.binaryData)) ? oldObject.binaryData : {}',
+    '        variables.newData.map(k, k.size() + bytes(variables.newData[k]).size()).sum() +',
+    '        variables.newBin.map(k, k.size() + (variables.newBin[k].size() * 3) / 4).sum()',
+    '    - name: oldTotal',
+    '      expression: >-',
+    '        variables.oldData.map(k, k.size() + bytes(variables.oldData[k]).size()).sum() +',
+    '        variables.oldBin.map(k, k.size() + (variables.oldBin[k].size() * 3) / 4).sum()',
   ]
 }
 
-function configMapSizeRuleToYamlLines(rule: ConfigMapSizeRule): string[] {
-  const custom = rule.message.trim()
-  // A custom message replaces the dynamic messageExpression on both
-  // validations; left blank, the deny names the oversized keys.
-  const msgFor = (exprLines: string[]) => custom
-    ? [`      message: "${escapeYaml(custom)}"`]
-    : ['      messageExpression: >-', ...exprLines.map(l => `        ${l}`)]
+// Secrets whose size is controlled by the system, not the user, are skipped:
+// service-account tokens, bootstrap tokens and Helm release blobs would
+// otherwise be denied through no fault of anyone's. stringData needs no
+// handling — the apiserver folds it into data before admission runs.
+function secretSizeSpecLines(rule: SizeLimitRule): string[] {
+  return [
+    '  matchConditions:',
+    '    - name: skip-managed-types',
+    '      expression: >-',
+    '        !(object.type in [',
+    '          "kubernetes.io/service-account-token",',
+    '          "bootstrap.kubernetes.io/token",',
+    '          "helm.sh/release.v1"',
+    '        ])',
+    '    - name: skip-huge-maps',
+    '      expression: "(has(object.data) ? size(object.data) : 0) <= 200"',
+    '  variables:',
+    '    - name: keyLimit',
+    `      expression: "${kbToBytes(rule.keyKB)}"`,
+    '    - name: totalLimit',
+    `      expression: "${kbToBytes(rule.totalKB)}"`,
+    '    - name: isUpdate',
+    `      expression: 'request.operation == "UPDATE" && oldObject != null'`,
+    '    - name: newData',
+    '      expression: "has(object.data) ? object.data : {}"',
+    '    - name: oldData',
+    '      expression: "(variables.isUpdate && has(oldObject.data)) ? oldObject.data : {}"',
+    '    - name: newTotal',
+    '      expression: >-',
+    '        variables.newData.map(k, k.size() + (variables.newData[k].size() * 3) / 4).sum()',
+    '    - name: oldTotal',
+    '      expression: >-',
+    '        variables.oldData.map(k, k.size() + (variables.oldData[k].size() * 3) / 4).sum()',
+  ]
+}
+
+// One validation entry: the expression, then either the caller's custom message
+// or the generated messageExpression naming the offenders.
+function sizeValidationLines(exprLines: string[], msgLines: string[], custom: string): string[] {
   return [
     '    - expression: >-',
-    ...CM_SIZE_DATA_EXPR.map(l => `        ${l}`),
-    ...msgFor(CM_SIZE_DATA_MSG),
+    ...exprLines.map(l => `        ${l}`),
+    ...(custom
+      ? [`      message: "${escapeYaml(custom)}"`]
+      : ['      messageExpression: >-', ...msgLines.map(l => `        ${l}`)]),
     '      reason: Forbidden',
-    '    - expression: >-',
-    ...CM_SIZE_BIN_EXPR.map(l => `        ${l}`),
-    ...msgFor(CM_SIZE_BIN_MSG),
-    '      reason: Forbidden',
+  ]
+}
+
+function configMapSizeRuleToYamlLines(rule: SizeLimitRule): string[] {
+  const custom = rule.message.trim()
+  return [
+    ...sizeValidationLines(CM_SIZE_DATA_EXPR, CM_SIZE_DATA_MSG, custom),
+    ...sizeValidationLines(CM_SIZE_BIN_EXPR, CM_SIZE_BIN_MSG, custom),
+    ...sizeValidationLines(SIZE_TOTAL_EXPR, CM_SIZE_TOTAL_MSG, custom),
+  ]
+}
+
+function secretSizeRuleToYamlLines(rule: SizeLimitRule): string[] {
+  const custom = rule.message.trim()
+  return [
+    ...sizeValidationLines(SECRET_SIZE_DATA_EXPR, SECRET_SIZE_DATA_MSG, custom),
+    ...sizeValidationLines(SIZE_TOTAL_EXPR, SECRET_SIZE_TOTAL_MSG, custom),
   ]
 }
 
@@ -490,7 +577,8 @@ export function generatePolicyYaml(
   resourceLimitRules: ResourceLimitRule[] = [],
   securityContextRule: SecurityContextRule = emptySecurityContextRule(),
   hostAccessRule: HostAccessRule = emptyHostAccessRule(),
-  configMapSizeRule: ConfigMapSizeRule = emptyConfigMapSizeRule(),
+  configMapSizeRule: SizeLimitRule = emptySizeLimitRule(),
+  secretSizeRule: SizeLimitRule = emptySizeLimitRule(),
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
@@ -511,6 +599,8 @@ export function generatePolicyYaml(
     validationLines = hostAccessRuleToYamlLines(hostAccessRule)
   } else if (ruleType === 'configmap-size') {
     validationLines = configMapSizeRuleToYamlLines(configMapSizeRule)
+  } else if (ruleType === 'secret-size') {
+    validationLines = secretSizeRuleToYamlLines(secretSizeRule)
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -528,13 +618,13 @@ export function generatePolicyYaml(
         '      operations: [UPDATE]',
         '      resources: ["deployments/scale", "statefulsets/scale"]',
       ]
-    : ruleType === 'configmap-size'
+    : (ruleType === 'configmap-size' || ruleType === 'secret-size')
     ? [
         '    resourceRules:',
         '      - apiGroups: [""]',
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
-        '        resources: ["configmaps"]',
+        `        resources: ["${ruleType === 'configmap-size' ? 'configmaps' : 'secrets'}"]`,
       ]
     : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context' || ruleType === 'host-access')
     ? [
@@ -571,6 +661,7 @@ export function generatePolicyYaml(
     '  matchConstraints:',
     ...resourceRuleLines,
     ...(ruleType === 'configmap-size' ? configMapSizeSpecLines(configMapSizeRule) : []),
+    ...(ruleType === 'secret-size' ? secretSizeSpecLines(secretSizeRule) : []),
     '  validations:',
     ...validationLines,
   ].join('\n')
@@ -704,37 +795,59 @@ function parseExpressionToHostAccessPart(expr: string): HostAccessCheckType | nu
   return null
 }
 
-// parseConfigMapSizeSpec recognises the whole two-validation shape the builder
-// writes: both expressions verbatim (whitespace aside), the limit read from the
-// `limit` variable, and either the generated messageExpressions (blank message)
-// or one identical plain message on both. Everything else about the spec —
-// variables, matchConditions, matchConstraints — is checked by the regenerate-
-// and-compare guard in tryParseBuilderPolicy.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseConfigMapSizeSpec(spec: any): ConfigMapSizeRule | null {
+// parseSizeLimitSpec recognises the whole validation shape the size-limit
+// builders write: every expression verbatim (whitespace aside), the limits read
+// from the keyLimit/totalLimit variables, and either the generated
+// messageExpressions (blank message) or one identical plain message on every
+// validation. Everything else about the spec — variables, matchConditions,
+// matchConstraints — is checked by the regenerate-and-compare guard in
+// tryParseBuilderPolicy.
+function parseSizeLimitSpec(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  spec: any,
+  shapes: { expr: string[]; msg: string[] }[],
+): SizeLimitRule | null {
   const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
   const vals = spec?.validations ?? []
-  if (vals.length !== 2) return null
-  if (norm(vals[0].expression ?? '') !== norm(CM_SIZE_DATA_EXPR.join(' '))) return null
-  if (norm(vals[1].expression ?? '') !== norm(CM_SIZE_BIN_EXPR.join(' '))) return null
+  if (vals.length !== shapes.length) return null
+  for (let i = 0; i < shapes.length; i++) {
+    if (norm(vals[i].expression ?? '') !== norm(shapes[i].expr.join(' '))) return null
+  }
+
+  const limitOf = (name: string): number => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const v = (spec.variables ?? []).find((v: any) => v?.name === name)
+    const bytes = Number(v?.expression)
+    return Number.isFinite(bytes) && bytes > 0 && bytes % 1024 === 0 ? bytes : 0
+  }
+  const keyBytes = limitOf('keyLimit')
+  const totalBytes = limitOf('totalLimit')
+  if (!keyBytes || !totalBytes) return null
+  const limits = { keyKB: String(keyBytes / 1024), totalKB: String(totalBytes / 1024) }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const limitVar = (spec.variables ?? []).find((v: any) => v?.name === 'limit')
-  const bytes = Number(limitVar?.expression)
-  if (!Number.isFinite(bytes) || bytes <= 0 || bytes % 1024 !== 0) return null
-  const maxSizeKB = String(bytes / 1024)
-
-  const [d, b] = vals
-  if (d.messageExpression && b.messageExpression && !d.message && !b.message) {
-    if (norm(d.messageExpression) !== norm(CM_SIZE_DATA_MSG.join(' '))) return null
-    if (norm(b.messageExpression) !== norm(CM_SIZE_BIN_MSG.join(' '))) return null
-    return { maxSizeKB, message: '' }
+  if (vals.every((v: any) => v.messageExpression && !v.message)) {
+    for (let i = 0; i < shapes.length; i++) {
+      if (norm(vals[i].messageExpression) !== norm(shapes[i].msg.join(' '))) return null
+    }
+    return { ...limits, message: '' }
   }
-  if (d.message && d.message === b.message && !d.messageExpression && !b.messageExpression) {
-    return { maxSizeKB, message: d.message }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (vals.every((v: any) => v.message && v.message === vals[0].message && !v.messageExpression)) {
+    return { ...limits, message: vals[0].message }
   }
   return null
 }
+
+const CM_SIZE_SHAPES = [
+  { expr: CM_SIZE_DATA_EXPR, msg: CM_SIZE_DATA_MSG },
+  { expr: CM_SIZE_BIN_EXPR, msg: CM_SIZE_BIN_MSG },
+  { expr: SIZE_TOTAL_EXPR, msg: CM_SIZE_TOTAL_MSG },
+]
+const SECRET_SIZE_SHAPES = [
+  { expr: SECRET_SIZE_DATA_EXPR, msg: SECRET_SIZE_DATA_MSG },
+  { expr: SIZE_TOTAL_EXPR, msg: SECRET_SIZE_TOTAL_MSG },
+]
 
 // specForCompare renders a spec for comparison against a regenerated one,
 // dropping the values the kube-apiserver defaults on persist — matchPolicy:
@@ -767,7 +880,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
   name: string; ruleType: PolicyRuleType; applyTo: LabelApplyTo
   labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
   resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
-  hostAccessRule: HostAccessRule; configMapSizeRule: ConfigMapSizeRule
+  hostAccessRule: HostAccessRule; configMapSizeRule: SizeLimitRule; secretSizeRule: SizeLimitRule
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -777,21 +890,27 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     const spec = doc.spec as { validations?: Array<{ expression?: string; message?: string }> }
     if (!spec?.validations?.length) return null
 
-    // ConfigMap size is a whole-spec shape (two fixed validations + variables +
-    // matchConditions), not a per-validation expression, so it branches before
+    // The size limits are whole-spec shapes (fixed validations + variables +
+    // matchConditions), not per-validation expressions, so they branch before
     // the loop. The regenerate-and-compare guard below still applies.
-    const configMapSizeParsed = parseConfigMapSizeSpec(spec)
-    if (configMapSizeParsed) {
+    for (const [ruleType, shapes] of [
+      ['configmap-size', CM_SIZE_SHAPES],
+      ['secret-size', SECRET_SIZE_SHAPES],
+    ] as const) {
+      const parsed = parseSizeLimitSpec(spec, [...shapes])
+      if (!parsed) continue
       if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
       const result = {
-        name: meta?.name ?? '', ruleType: 'configmap-size' as PolicyRuleType, applyTo: 'workloads' as LabelApplyTo,
+        name: meta?.name ?? '', ruleType: ruleType as PolicyRuleType, applyTo: 'workloads' as LabelApplyTo,
         labelRules: [], imageRules: [], replicaRules: [], resourceLimitRules: [],
         securityContextRule: emptySecurityContextRule(), hostAccessRule: emptyHostAccessRule(),
-        configMapSizeRule: configMapSizeParsed,
+        configMapSizeRule: ruleType === 'configmap-size' ? parsed : emptySizeLimitRule(),
+        secretSizeRule: ruleType === 'secret-size' ? parsed : emptySizeLimitRule(),
       }
       const regen = yaml.load(generatePolicyYaml(
         result.name, result.ruleType, [], [], [], result.applyTo, [],
-        result.securityContextRule, result.hostAccessRule, configMapSizeParsed,
+        result.securityContextRule, result.hostAccessRule,
+        result.configMapSizeRule, result.secretSizeRule,
       )) as Record<string, unknown> | undefined
       if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) return null
       return result
@@ -842,7 +961,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       : hostAccessParsed !== null ? 'host-access'
       : 'label'
     const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
-    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule: emptyConfigMapSizeRule() }
+    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule: emptySizeLimitRule(), secretSizeRule: emptySizeLimitRule() }
 
     // The builder may only open a policy it can reproduce: saving regenerates
     // the whole manifest, so whatever these fields cannot show — a hand-tuned
@@ -976,7 +1095,8 @@ export function VAPPage() {
   const [resourceLimitRules, setResourceLimitRules] = useState<ResourceLimitRule[]>([emptyResourceLimitRule()])
   const [securityContextRule, setSecurityContextRule] = useState<SecurityContextRule>(emptySecurityContextRule())
   const [hostAccessRule, setHostAccessRule] = useState<HostAccessRule>(emptyHostAccessRule())
-  const [configMapSizeRule, setConfigMapSizeRule] = useState<ConfigMapSizeRule>(emptyConfigMapSizeRule())
+  const [configMapSizeRule, setConfigMapSizeRule] = useState<SizeLimitRule>(emptySizeLimitRule())
+  const [secretSizeRule, setSecretSizeRule] = useState<SizeLimitRule>(emptySizeLimitRule())
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -1008,7 +1128,8 @@ export function VAPPage() {
     setResourceLimitRules([emptyResourceLimitRule()])
     setSecurityContextRule(emptySecurityContextRule())
     setHostAccessRule(emptyHostAccessRule())
-    setConfigMapSizeRule(emptyConfigMapSizeRule())
+    setConfigMapSizeRule(emptySizeLimitRule())
+    setSecretSizeRule(emptySizeLimitRule())
   }
 
   // Binding builder state
@@ -1060,6 +1181,7 @@ export function VAPPage() {
         setSecurityContextRule(parsed.securityContextRule)
         setHostAccessRule(parsed.hostAccessRule)
         setConfigMapSizeRule(parsed.configMapSizeRule)
+        setSecretSizeRule(parsed.secretSizeRule)
         setShowBuilder(true)
         return
       }
@@ -1182,7 +1304,7 @@ export function VAPPage() {
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -1218,7 +1340,7 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule)
     const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
@@ -1228,7 +1350,9 @@ export function VAPPage() {
       : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
       ? true
       : builderRuleType === 'configmap-size'
-      ? configMapSizeBytes(configMapSizeRule) > 0
+      ? kbToBytes(configMapSizeRule.keyKB) > 0 && kbToBytes(configMapSizeRule.totalKB) > 0
+      : builderRuleType === 'secret-size'
+      ? kbToBytes(secretSizeRule.keyKB) > 0 && kbToBytes(secretSizeRule.totalKB) > 0
       : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
     return (
@@ -1283,7 +1407,8 @@ export function VAPPage() {
                               setResourceLimitRules([emptyResourceLimitRule()])
                               setSecurityContextRule(emptySecurityContextRule())
                               setHostAccessRule(emptyHostAccessRule())
-                              setConfigMapSizeRule(emptyConfigMapSizeRule())
+                              setConfigMapSizeRule(emptySizeLimitRule())
+                              setSecretSizeRule(emptySizeLimitRule())
                             }}
                             className={[
                               'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
@@ -1616,36 +1741,53 @@ export function VAPPage() {
                 </div>
               )}
 
-              {/* ── ConfigMap size rule ── */}
-              {builderRuleType === 'configmap-size' && (
-                <div className="flex flex-col gap-3">
-                  <Label>ConfigMap Size Rule</Label>
-                  <div className="flex flex-col gap-3 rounded-lg border p-4">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Max size per key (KB)</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={configMapSizeRule.maxSizeKB}
-                        onChange={e => setConfigMapSizeRule(r => ({ ...r, maxSizeKB: e.target.value }))}
-                        className="h-8 w-40 text-sm"
-                      />
+              {/* ── ConfigMap / Secret size rules — same fields, different target ── */}
+              {(builderRuleType === 'configmap-size' || builderRuleType === 'secret-size') && (() => {
+                const isSecret = builderRuleType === 'secret-size'
+                const rule = isSecret ? secretSizeRule : configMapSizeRule
+                const setRule = isSecret ? setSecretSizeRule : setConfigMapSizeRule
+                return (
+                  <div className="flex flex-col gap-3">
+                    <Label>{isSecret ? 'Secret' : 'ConfigMap'} Size Rule</Label>
+                    <div className="flex flex-col gap-3 rounded-lg border p-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Max size per key (KB)</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={rule.keyKB}
+                          onChange={e => setRule(r => ({ ...r, keyKB: e.target.value }))}
+                          className="h-8 w-40 text-sm"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Max total size (KB)</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={rule.totalKB}
+                          onChange={e => setRule(r => ({ ...r, totalKB: e.target.value }))}
+                          className="h-8 w-40 text-sm"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                        <Input
+                          value={rule.message}
+                          onChange={e => setRule(r => ({ ...r, message: e.target.value }))}
+                          placeholder={autoSizeLimitMessage(isSecret ? 'Secret' : 'ConfigMap', rule)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
-                      <Input
-                        value={configMapSizeRule.message}
-                        onChange={e => setConfigMapSizeRule(r => ({ ...r, message: e.target.value }))}
-                        placeholder={autoConfigMapSizeMessage(configMapSizeRule)}
-                        className="h-8 text-sm"
-                      />
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isSecret
+                        ? 'Applies to Secrets. New keys must fit the limit; an existing oversized key may stay unchanged or shrink, but not grow — the same for the total. Service-account tokens, bootstrap tokens and Helm releases are exempt.'
+                        : 'Applies to ConfigMaps in data and binaryData. New keys must fit the limit; an existing oversized key may stay unchanged or shrink, but not grow — the same for the total.'}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Applies to ConfigMaps in data and binaryData. New keys must fit the limit; an existing oversized key may stay but not grow. kube-system service accounts are exempt.
-                  </p>
-                </div>
-              )}
+                )
+              })()}
             </CardContent>
           </Card>
 

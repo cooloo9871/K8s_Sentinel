@@ -18,7 +18,7 @@ Each layer does what only it can do:
 
 - **Tracing Policy** — process and file whitelist/blacklist rules through a form builder (file rules with read/write scoping and per-process exceptions), with Monitoring / Protect modes and a global switch
 - **Network Policy** — CiliumNetworkPolicy builder with ingress and egress in one policy, whitelist/blacklist per direction, cross-namespace peers and L7 HTTP rules
-- **Admission Policy** — a CEL builder covering eight rule types (labels, annotations, images, replicas, resource limits, security context, host access, ConfigMap size), plus bindings
+- **Admission Policy** — a CEL builder covering nine rule types (labels, annotations, images, replicas, resource limits, security context, host access, ConfigMap and Secret size), plus bindings
 - **Quarantine** — cut a suspect pod off from the network without killing it, so the evidence survives; one click from a Security Event, one to release
 - **Behavior Discovery** — learns what each workload actually executes, and turns it into a policy prefill
 - **Network Topology** — live connection graph from Hubble flows: policy denials in red with the denying policy named, exposure paths traced hop by hop, quarantined pods marked

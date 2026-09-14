@@ -99,54 +99,78 @@ describe('tryParseBuilderPolicy', () => {
     team: platform`))).toBeNull()
   })
 
+  const cmSizePolicy = (message = '') => generatePolicyYaml(
+    'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
+    [], undefined, undefined, { keyKB: '10', totalKB: '64', message },
+  )
+  const secretSizePolicy = (message = '') => generatePolicyYaml(
+    'secret-size-limit', 'secret-size', [], [], [], 'workloads',
+    [], undefined, undefined, undefined, { keyKB: '10', totalKB: '64', message },
+  )
+
   it('round-trips a ConfigMap size policy', () => {
-    const raw = generatePolicyYaml(
-      'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
-      [], undefined, undefined, { maxSizeKB: '10', message: '' },
-    )
-    // Scoped to configmaps; the limit lives in the `limit` variable; both data
-    // and binaryData are checked; system service accounts are exempt; the
-    // grandfather clause allows an existing oversized key that is not growing.
+    const raw = cmSizePolicy()
+    // Scoped to configmaps; limits live in variables; data, binaryData and the
+    // total are all capped; the grandfather clause allows an existing oversized
+    // key only unchanged or strictly shrinking; a cost-budget guard skips maps
+    // with too many keys so they cannot become permanently unwritable.
     expect(raw).toContain('resources: ["configmaps"]')
     expect(raw).toContain('expression: "10240"')
-    expect(raw).toContain('bytes(variables.newData[k]).size() <= variables.limit')
-    expect(raw).toContain('(variables.newBin[k].size() * 3) / 4 <= variables.limit')
-    expect(raw).toContain('k in variables.oldData')
-    expect(raw).toContain('system:serviceaccount:kube-system:')
+    expect(raw).toContain('expression: "65536"')
+    expect(raw).toContain('bytes(variables.newData[k]).size() <= variables.keyLimit')
+    expect(raw).toContain('(variables.newBin[k].size() * 3) / 4 <= variables.keyLimit')
+    expect(raw).toContain('variables.newData[k] == variables.oldData[k]')
+    expect(raw).toContain('variables.newTotal <= variables.totalLimit')
+    expect(raw).toContain('skip-huge-maps')
     expect(raw).toContain('messageExpression')
 
     const parsed = tryParseBuilderPolicy(raw)
     expect(parsed?.ruleType).toBe('configmap-size')
-    expect(parsed?.configMapSizeRule.maxSizeKB).toBe('10')
+    expect(parsed?.configMapSizeRule.keyKB).toBe('10')
+    expect(parsed?.configMapSizeRule.totalKB).toBe('64')
     expect(parsed?.configMapSizeRule.message).toBe('')
     // And as the apiserver returns it.
     expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
   })
 
-  it('round-trips a ConfigMap size policy with a custom message', () => {
-    const raw = generatePolicyYaml(
-      'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
-      [], undefined, undefined, { maxSizeKB: '10', message: 'ConfigMap too large' },
-    )
-    expect(raw).not.toContain('messageExpression')
+  it('round-trips a Secret size policy', () => {
+    const raw = secretSizePolicy()
+    // Scoped to secrets; data is base64 so sizes are decoded as *3/4; managed
+    // secret types whose size the user does not control are exempt.
+    expect(raw).toContain('resources: ["secrets"]')
+    expect(raw).toContain('(variables.newData[k].size() * 3) / 4 <= variables.keyLimit')
+    expect(raw).toContain('kubernetes.io/service-account-token')
+    expect(raw).toContain('helm.sh/release.v1')
+    expect(raw).toContain('variables.newTotal <= variables.totalLimit')
+
     const parsed = tryParseBuilderPolicy(raw)
-    expect(parsed?.configMapSizeRule.message).toBe('ConfigMap too large')
+    expect(parsed?.ruleType).toBe('secret-size')
+    expect(parsed?.secretSizeRule.keyKB).toBe('10')
+    expect(parsed?.secretSizeRule.totalKB).toBe('64')
     expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
   })
 
-  // Tampered variants of the ConfigMap size shape stay in the YAML editor: a
-  // save would regenerate the builder's exact form and silently change them.
-  it('refuses a tampered ConfigMap size policy', () => {
-    const raw = generatePolicyYaml(
-      'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
-      [], undefined, undefined, { maxSizeKB: '10', message: '' },
-    )
+  it('round-trips size policies with a custom message', () => {
+    for (const raw of [cmSizePolicy('Too large'), secretSizePolicy('Too large')]) {
+      expect(raw).not.toContain('messageExpression')
+      const parsed = tryParseBuilderPolicy(raw)
+      expect(parsed).not.toBeNull()
+      const rule = parsed?.ruleType === 'secret-size' ? parsed.secretSizeRule : parsed?.configMapSizeRule
+      expect(rule?.message).toBe('Too large')
+      expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+    }
+  })
+
+  // Tampered variants of the size shapes stay in the YAML editor: a save would
+  // regenerate the builder's exact form and silently change them.
+  it('refuses a tampered size policy', () => {
+    const cm = cmSizePolicy()
     // A hand-changed limit variable that no longer matches whole KB.
-    expect(tryParseBuilderPolicy(raw.replace('expression: "10240"', 'expression: "10000"'))).toBeNull()
+    expect(tryParseBuilderPolicy(cm.replace('expression: "10240"', 'expression: "10000"'))).toBeNull()
     // A hand-relaxed grandfather clause.
-    expect(tryParseBuilderPolicy(raw.replace('k in variables.oldData', 'true'))).toBeNull()
-    // A hand-changed exemption is caught by the regenerate-and-compare guard.
-    expect(tryParseBuilderPolicy(raw.replace('kube-system:', 'my-ns:'))).toBeNull()
+    expect(tryParseBuilderPolicy(cm.replace('variables.newData[k] == variables.oldData[k] ||', ''))).toBeNull()
+    // A hand-edited exemption list is caught by the regenerate-and-compare guard.
+    expect(tryParseBuilderPolicy(secretSizePolicy().replace('"helm.sh/release.v1"', '"example/other"'))).toBeNull()
   })
 })
 
