@@ -789,7 +789,7 @@ function parseSizeLimitSpec(spec: any): { ruleType: 'configmap-size' | 'secret-s
 function metadataBeyondBuilder(doc: Record<string, unknown>): boolean {
   const meta = (doc.metadata ?? {}) as { labels?: Record<string, unknown>; annotations?: Record<string, unknown> }
   if (Object.keys(meta.labels ?? {}).length > 0) return true
-  const ownAnnotations = ['sentinel.io/builder', 'sentinel.io/apply-to', 'kubectl.kubernetes.io/last-applied-configuration']
+  const ownAnnotations = ['sentinel.io/builder', 'sentinel.io/apply-to', 'sentinel.io/created-by', 'kubectl.kubernetes.io/last-applied-configuration']
   return Object.keys(meta.annotations ?? {}).some(k => !ownAnnotations.includes(k))
 }
 

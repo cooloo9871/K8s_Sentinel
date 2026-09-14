@@ -19,6 +19,9 @@ function withServerDefaults(rawYaml: string): string {
     mc.objectSelector ??= {}
     for (const r of mc.resourceRules ?? []) r.scope ??= '*'
   }
+  // Sentinel's own backend stamps this on every create/update (the Created By
+  // column); the round-trip guard must treat it as its own bookkeeping.
+  ;(doc.metadata.annotations ??= {})['sentinel.io/created-by'] = 'admin'
   doc.metadata.uid = '5e2f1a'
   doc.metadata.generation = 1
   return yaml.dump(doc)
