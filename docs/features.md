@@ -104,8 +104,8 @@ the quarantine: the new pod is not the one that was contained.
   | **Resource Limits** | Require CPU and memory limits; covers every workload type and initContainers |
   | **Security Context** | Forbid privileged containers; require runAsNonRoot, honouring pod and container level inheritance |
   | **Host Access** | Forbid hostNetwork, hostPID and hostIPC across Pods and template-based workloads |
-  | **ConfigMap Size Limit** | Cap each ConfigMap key (`data` and `binaryData`) and the whole object. New keys must fit; an existing oversized key may stay unchanged or shrink but not grow, and the total may not grow past its cap. A cost-budget guard skips maps with over 200 keys so they cannot become permanently unwritable, and the deny message names the offending keys |
-  | **Secret Size Limit** | The same per-key and total caps for Secrets (`data`, base64 decoded). Service-account tokens, bootstrap tokens and Helm release blobs are exempt; `stringData` needs no handling since the apiserver folds it into `data` before admission |
+  | **ConfigMap Size Limit** | One cap on the total size of a ConfigMap (`data` and `binaryData` combined, key names included). A new ConfigMap must fit; an existing oversized one may stay or shrink but not grow. A cost-budget guard skips maps with over 200 keys so they cannot become permanently unwritable |
+  | **Secret Size Limit** | The same total cap for Secrets (`data`, base64 decoded). Service-account tokens, bootstrap tokens and Helm release blobs are exempt; `stringData` needs no handling since the apiserver folds it into `data` before admission |
 
 - **Binding Builder** — pick the policy, the namespace scope and validation actions (Deny / Audit / Warn). The scope is all namespaces, **only** a chosen set, or **all except** a chosen set (e.g. everywhere but `kube-system`), with several namespaces selectable at once
 - Resources created through the UI are tagged `sentinel.io/builder: "true"` so Edit reopens the builder
