@@ -80,24 +80,46 @@ func changePwd(users *auth.UserStore, caller string, role auth.Role, target, bod
 }
 
 // Changing your own password must prove the current one; a wrong or missing
-// current password is refused.
+// current password is refused. The bootstrap must-change flag is cleared first,
+// because the forced first-login change deliberately skips that proof.
 func TestChangeOwnPasswordRequiresTheCurrentOne(t *testing.T) {
 	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json"))
-	// admin/admin is the bootstrap credential.
+	if err := users.ChangePassword("admin", "first-password"); err != nil {
+		t.Fatal(err)
+	}
 
 	if w := changePwd(users, "admin", auth.RoleAdmin, "admin",
 		`{"currentPassword":"wrong","password":"a-new-password"}`); w.Code != http.StatusForbidden {
 		t.Errorf("wrong current password: status = %d, want 403", w.Code)
 	}
-	if _, ok := users.Authenticate("admin", "admin"); !ok {
+	if _, ok := users.Authenticate("admin", "first-password"); !ok {
 		t.Error("the password was changed despite a wrong current password")
 	}
 	if w := changePwd(users, "admin", auth.RoleAdmin, "admin",
-		`{"currentPassword":"admin","password":"a-new-password"}`); w.Code != http.StatusNoContent {
+		`{"currentPassword":"first-password","password":"a-new-password"}`); w.Code != http.StatusNoContent {
 		t.Errorf("correct current password: status = %d, want 204", w.Code)
 	}
 	if _, ok := users.Authenticate("admin", "a-new-password"); !ok {
 		t.Error("the password was not changed despite the correct current password")
+	}
+}
+
+// The forced first-login change needs no current password: that session was
+// just created by typing the bootstrap password, which is public knowledge, so
+// asking again proves nothing. Once the flag clears, the proof is required.
+func TestForcedFirstChangeSkipsTheCurrentPassword(t *testing.T) {
+	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json")) // admin flagged
+	if w := changePwd(users, "admin", auth.RoleAdmin, "admin",
+		`{"password":"a-new-password"}`); w.Code != http.StatusNoContent {
+		t.Fatalf("forced change without current password: status = %d, want 204", w.Code)
+	}
+	if _, ok := users.Authenticate("admin", "a-new-password"); !ok {
+		t.Error("the forced change did not take effect")
+	}
+	// The flag is now cleared, so the shortcut is gone.
+	if w := changePwd(users, "admin", auth.RoleAdmin, "admin",
+		`{"password":"another-password"}`); w.Code != http.StatusForbidden {
+		t.Errorf("change without current password after the flag cleared: status = %d, want 403", w.Code)
 	}
 }
 
@@ -130,7 +152,11 @@ func TestChangePasswordRejectsTooShort(t *testing.T) {
 // the admin group, so it carries its own audit middleware, and a rejected
 // attempt (wrong current password) is exactly what the log should keep.
 func TestChangePasswordIsAuditedOnSuccessAndFailure(t *testing.T) {
-	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json")) // admin/admin
+	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json"))
+	// Clear the bootstrap must-change flag so the current-password proof applies.
+	if err := users.ChangePassword("admin", "admin-password"); err != nil {
+		t.Fatal(err)
+	}
 	store := audit.NewStore(filepath.Join(t.TempDir(), "audit.json"))
 
 	r := chi.NewRouter()
@@ -148,8 +174,8 @@ func TestChangePasswordIsAuditedOnSuccessAndFailure(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/api/users/admin/password", strings.NewReader(body))
 		r.ServeHTTP(httptest.NewRecorder(), req)
 	}
-	serve(`{"currentPassword":"wrong","password":"a-new-password"}`) // 403
-	serve(`{"currentPassword":"admin","password":"a-new-password"}`) // 204
+	serve(`{"currentPassword":"wrong","password":"a-new-password"}`)          // 403
+	serve(`{"currentPassword":"admin-password","password":"a-new-password"}`) // 204
 
 	got := store.List() // newest first
 	if len(got) != 2 {

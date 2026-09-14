@@ -18,7 +18,8 @@ interface Props {
 }
 
 export function ForcePasswordChangePage({ username, onDone }: Props) {
-  const [currentPassword, setCurrentPassword] = useState('')
+  // No current-password field: this screen only appears right after signing in
+  // with the bootstrap password, so knowledge of it was just proven.
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
@@ -27,8 +28,7 @@ export function ForcePasswordChangePage({ username, onDone }: Props) {
   const tooShort = newPassword.length > 0 && newPassword.length < MIN_PASSWORD_LENGTH
   const mismatch = confirm.length > 0 && confirm !== newPassword
   const canSubmit =
-    !!currentPassword && newPassword.length >= MIN_PASSWORD_LENGTH &&
-    confirm === newPassword && !saving
+    newPassword.length >= MIN_PASSWORD_LENGTH && confirm === newPassword && !saving
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,13 +36,10 @@ export function ForcePasswordChangePage({ username, onDone }: Props) {
     setError('')
     setSaving(true)
     try {
-      await userApi.changePassword(username, newPassword, currentPassword)
+      await userApi.changePassword(username, newPassword)
       onDone()
-    } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } }).response?.status
-      setError(status === 403
-        ? 'Current password is incorrect.'
-        : 'Could not update the password. Please try again.')
+    } catch {
+      setError('Could not update the password. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -61,21 +58,11 @@ export function ForcePasswordChangePage({ username, onDone }: Props) {
           </p>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="current">Current password</Label>
-              <Input
-                id="current"
-                type="password"
-                autoFocus
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
               <Label htmlFor="new">New password</Label>
               <Input
                 id="new"
                 type="password"
+                autoFocus
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={saving}

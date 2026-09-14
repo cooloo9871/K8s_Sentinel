@@ -14,7 +14,7 @@ import (
 )
 
 type createPolicyRequest struct {
-	Source  string                  `json:"source"`           // "form" or "yaml"
+	Source  string                  `json:"source"` // "form" or "yaml"
 	Form    *policy.PolicyFormInput `json:"form,omitempty"`
 	Action  string                  `json:"action,omitempty"` // "Post" or "Sigkill"
 	RawYAML string                  `json:"rawYaml,omitempty"`

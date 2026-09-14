@@ -133,10 +133,10 @@ func admissionWebhook(store *admission.Store, token string) http.HandlerFunc {
 			const vapAnnotationKey = "validation.policy.admission.k8s.io/validation_failure"
 			if annVal, ok := item.Annotations[vapAnnotationKey]; ok {
 				var violations []struct {
-					Message         string   `json:"message"`
-					Policy          string   `json:"policy"`
-					Binding         string   `json:"binding"`
-					ExpressionIndex int      `json:"expressionIndex"`
+					Message           string   `json:"message"`
+					Policy            string   `json:"policy"`
+					Binding           string   `json:"binding"`
+					ExpressionIndex   int      `json:"expressionIndex"`
 					ValidationActions []string `json:"validationActions"`
 				}
 				if err := json.Unmarshal([]byte(annVal), &violations); err == nil {

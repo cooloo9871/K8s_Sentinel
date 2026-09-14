@@ -327,8 +327,11 @@ func changePasswordHandler(users *auth.UserStore) http.HandlerFunc {
 		// Changing your own password requires proving you know the current one,
 		// so a hijacked session cannot silently lock the owner out. An admin
 		// resetting someone else's password is a separate, audit-logged action
-		// that does not need the old one.
-		if claims.Username == username {
+		// that does not need the old one. The forced first-login change skips
+		// the proof too: that session was created seconds ago by typing the
+		// bootstrap password, which is public knowledge anyway, so asking for
+		// it again protects nothing.
+		if claims.Username == username && !users.RequiresPasswordChange(username) {
 			if _, ok := users.Authenticate(username, body.CurrentPassword); !ok {
 				http.Error(w, "current password is incorrect", http.StatusForbidden)
 				return
