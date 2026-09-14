@@ -241,18 +241,32 @@ function imageRuleToYamlLines(rule: ImageRule): string[] {
   const m = escapeYaml(rule.message.trim() || autoImageMessage(rule))
   const regRaw = rule.registry.trim() || 'registry.example.com'
   // Ensure trailing slash to prevent subdomain bypass (registry.example.com.evil.io would
-  // pass a startsWith('registry.example.com') check without the slash).
-  const reg = escapeCel(regRaw.endsWith('/') ? regRaw : `${regRaw}/`)
-  // Check containers at all three workload paths using CEL optional chaining (?.)
-  // so the same expression covers Pods, Deployments/StatefulSets/DaemonSets, and CronJobs.
+  // pass a startsWith('registry.example.com') check without the slash). Lowercased
+  // because image hosts are case-insensitive: Registry.Example.Com/app pulls from
+  // the same registry and must not slip past the prefix check. Repository paths
+  // are lowercase by image-reference syntax, so lowering the whole image is safe.
+  const reg = escapeCel((regRaw.endsWith('/') ? regRaw : `${regRaw}/`).toLowerCase())
+  // The tag colon is looked for in the last path segment only: in
+  // myregistry:5000/app the colon belongs to the registry port and the image is
+  // still untagged (implicitly :latest). A digest (@sha256:...) keeps a colon in
+  // the last segment and passes, which is right — a digest pin is stricter than
+  // a tag.
   const check = rule.type === 'no-latest'
-    ? `all(c, c.image.contains(':') && !c.image.endsWith(':latest'))`
-    : `all(c, c.image.startsWith('${reg}'))`
+    ? `all(c, c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') && !c.image.endsWith(':latest'))`
+    : `all(c, c.image.lowerAscii().startsWith('${reg}'))`
+  // Every container list a workload can carry: containers and initContainers at
+  // the three template depths, plus ephemeralContainers, which only exist on
+  // Pods (injected by kubectl debug through the pods/ephemeralcontainers
+  // subresource — matched in matchConstraints for exactly that reason).
   return [
     '    - expression: >-',
     `        object.spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?initContainers.orValue([]).${check} &&`,
+    `        object.spec.?ephemeralContainers.orValue([]).${check} &&`,
     `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
-    `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check}`,
+    `        object.spec.?template.?spec.?initContainers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${check}`,
     `      message: "${m}"`,
     '      reason: Forbidden',
   ]
@@ -307,10 +321,14 @@ function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
   const nonRoot = rule.checkType === 'run-as-non-root' || rule.checkType === 'both'
   if (noPriv) {
     const check = `all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || c.securityContext.privileged == false)`
+    // ephemeralContainers only exist on Pods, injected by kubectl debug through
+    // the pods/ephemeralcontainers subresource — a privileged debug container is
+    // exactly what this rule is for, so that path is checked too.
     lines.push(
       '    - expression: >-',
       `        object.spec.?containers.orValue([]).${check} &&`,
       `        object.spec.?initContainers.orValue([]).${check} &&`,
+      `        object.spec.?ephemeralContainers.orValue([]).${check} &&`,
       `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
       `        object.spec.?template.?spec.?initContainers.orValue([]).${check} &&`,
       `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
@@ -330,6 +348,7 @@ function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
       '    - expression: >-',
       `        object.spec.?containers.orValue([]).${podCheck} &&`,
       `        object.spec.?initContainers.orValue([]).${podCheck} &&`,
+      `        object.spec.?ephemeralContainers.orValue([]).${podCheck} &&`,
       `        object.spec.?template.?spec.?containers.orValue([]).${tmplCheck} &&`,
       `        object.spec.?template.?spec.?initContainers.orValue([]).${tmplCheck} &&`,
       `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${jobCheck} &&`,
@@ -380,12 +399,15 @@ function autoReplicaMessage(rule: ReplicaRule): string {
 function replicaRuleToYamlLines(rule: ReplicaRule): string[] {
   const max = rule.maxReplicas > 0 ? rule.maxReplicas : 5
   const m = escapeYaml(rule.message.trim() || autoReplicaMessage(rule))
-  // Use kind guard so multiple rules with different types can coexist
-  // in the same policy with shared matchConstraints.
+  // The guard reads request.resource.resource, NOT object.kind: a kubectl scale
+  // or HPA change arrives through the scale subresource, where the object's
+  // kind is 'Scale' whichever workload it belongs to — a kind guard was always
+  // true there and single-type rules let every scale request through. The
+  // request resource stays 'deployments'/'statefulsets' on both paths.
   const expr = rule.resourceType === 'deployments'
-    ? `object.kind != 'Deployment' || object.spec.replicas <= ${max}`
+    ? `request.resource.resource != 'deployments' || object.spec.replicas <= ${max}`
     : rule.resourceType === 'statefulsets'
-    ? `object.kind != 'StatefulSet' || object.spec.replicas <= ${max}`
+    ? `request.resource.resource != 'statefulsets' || object.spec.replicas <= ${max}`
     : `object.spec.replicas <= ${max}`
   return [
     `    - expression: "${expr}"`,
@@ -554,7 +576,10 @@ export function generatePolicyYaml(
         '      - apiGroups: [""]',
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
-        '        resources: ["pods"]',
+        // ReplicationControllers carry a pod template the existing template.spec
+        // paths already read; leaving them out of the match let a plain
+        // `kubectl create rc` slip past every pod-template rule.
+        '        resources: ["pods", "replicationcontrollers"]',
         '      - apiGroups: ["apps"]',
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
@@ -563,6 +588,14 @@ export function generatePolicyYaml(
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
         '        resources: ["jobs", "cronjobs"]',
+        // kubectl debug injects containers through this subresource; without it
+        // an ephemeral container never reaches the image and privilege checks.
+        ...(ruleType === 'image' || ruleType === 'security-context' ? [
+          '      - apiGroups: [""]',
+          '        apiVersions: ["v1"]',
+          '        operations: [UPDATE]',
+          '        resources: ["pods/ephemeralcontainers"]',
+        ] : []),
       ]
     : applyToResourceRuleLines(applyTo)
 
@@ -574,7 +607,7 @@ export function generatePolicyYaml(
     'apiVersion: admissionregistration.k8s.io/v1',
     'kind: ValidatingAdmissionPolicy',
     'metadata:',
-    `  name: "${safeName}"`,
+    `  name: "${escapeYaml(safeName)}"`,
     '  annotations:',
     '    sentinel.io/builder: "true"',
     ...applyToAnnotation,
@@ -608,11 +641,11 @@ export function generateBindingYaml(
     'apiVersion: admissionregistration.k8s.io/v1',
     'kind: ValidatingAdmissionPolicyBinding',
     'metadata:',
-    `  name: "${safeName}"`,
+    `  name: "${escapeYaml(safeName)}"`,
     '  annotations:',
     '    sentinel.io/builder: "true"',
     'spec:',
-    `  policyName: "${safePolicy}"`,
+    `  policyName: "${escapeYaml(safePolicy)}"`,
     `  validationActions: [${actStr}]`,
   ]
   if (nsMode !== 'all' && nsList.length > 0) {
@@ -657,16 +690,16 @@ function parseExpressionToImageRule(expr: string, msg: string): ImageRule | null
   const e = expr.replace(/\s+/g, ' ').trim()
   if (e.includes("!c.image.endsWith(':latest')"))
     return { type: 'no-latest', registry: '', message: msg }
-  const m = e.match(/c\.image\.startsWith\('([^']+)'\)/)
+  const m = e.match(/c\.image\.lowerAscii\(\)\.startsWith\('([^']+)'\)/)
   if (m) return { type: 'required-registry', registry: m[1], message: msg }
   return null
 }
 
 function parseExpressionToReplicaRule(expr: string, msg: string): ReplicaRule | null {
   const e = expr.replace(/\s+/g, ' ').trim()
-  let m = e.match(/^object\.kind != 'Deployment' \|\| object\.spec\.replicas <= (\d+)$/)
+  let m = e.match(/^request\.resource\.resource != 'deployments' \|\| object\.spec\.replicas <= (\d+)$/)
   if (m) return { maxReplicas: parseInt(m[1], 10), resourceType: 'deployments', message: msg }
-  m = e.match(/^object\.kind != 'StatefulSet' \|\| object\.spec\.replicas <= (\d+)$/)
+  m = e.match(/^request\.resource\.resource != 'statefulsets' \|\| object\.spec\.replicas <= (\d+)$/)
   if (m) return { maxReplicas: parseInt(m[1], 10), resourceType: 'statefulsets', message: msg }
   m = e.match(/^object\.spec\.replicas\s*<=\s*(\d+)$/)
   if (m) return { maxReplicas: parseInt(m[1], 10), resourceType: 'both', message: msg }
@@ -749,6 +782,17 @@ function parseSizeLimitSpec(spec: any): { ruleType: 'configmap-size' | 'secret-s
   return { ruleType, rule: { totalKB, message: isDefault ? '' : message } }
 }
 
+// metadataBeyondBuilder reports metadata a form save would silently drop: any
+// labels, or annotations other than the builder's own and kubectl's bookkeeping
+// (which kubectl rewrites on its next apply anyway). Saving regenerates the
+// whole manifest, so such a resource must stay in the YAML editor.
+function metadataBeyondBuilder(doc: Record<string, unknown>): boolean {
+  const meta = (doc.metadata ?? {}) as { labels?: Record<string, unknown>; annotations?: Record<string, unknown> }
+  if (Object.keys(meta.labels ?? {}).length > 0) return true
+  const ownAnnotations = ['sentinel.io/builder', 'sentinel.io/apply-to', 'kubectl.kubernetes.io/last-applied-configuration']
+  return Object.keys(meta.annotations ?? {}).some(k => !ownAnnotations.includes(k))
+}
+
 // specForCompare renders a spec for comparison against a regenerated one,
 // dropping the values the kube-apiserver defaults on persist — matchPolicy:
 // Equivalent, empty selectors, per-rule scope "*". The builder never writes
@@ -795,7 +839,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     // the loop. The regenerate-and-compare guard below still applies.
     const sized = parseSizeLimitSpec(spec)
     if (sized) {
-      if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
+      if (metadataBeyondBuilder(doc)) return null
       const result = {
         name: meta?.name ?? '', ruleType: sized.ruleType as PolicyRuleType, applyTo: 'workloads' as LabelApplyTo,
         labelRules: [], imageRules: [], replicaRules: [], resourceLimitRules: [],
@@ -864,7 +908,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     // matchConstraints, matchConditions, failurePolicy: Ignore — is deleted on
     // save, not preserved. Regenerate from the parsed state and demand the spec
     // come out identical; anything else opens in the YAML editor, which shows it.
-    if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
+    if (metadataBeyondBuilder(doc)) return null
     const regen = yaml.load(generatePolicyYaml(
       result.name, ruleType, result.labelRules, imageRules, replicaRules,
       applyTo, resourceLimitRules, securityContextRule, hostAccessRule,
@@ -934,7 +978,7 @@ export function tryParseBuilderBinding(rawYaml: string): {
     // Same bar as the policy: the form may only open a binding it can
     // reproduce, or a paramRef or objectSelector added by hand would be
     // silently deleted on the next save.
-    if (Object.keys((doc.metadata as { labels?: Record<string, unknown> })?.labels ?? {}).length > 0) return null
+    if (metadataBeyondBuilder(doc)) return null
     const regen = yaml.load(generateBindingYaml(
       result.name, result.policyName, result.nsMode, result.namespaces, result.actions,
     )) as Record<string, unknown> | undefined
@@ -1348,6 +1392,7 @@ export function VAPPage() {
                         <SelectItem value="serviceaccounts">ServiceAccounts</SelectItem>
                         <SelectItem value="ingresses">Ingresses</SelectItem>
                         <SelectItem value="networkpolicies">NetworkPolicies</SelectItem>
+                        <SelectItem value="namespaces">Namespaces</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
@@ -1775,7 +1820,7 @@ export function VAPPage() {
                 )}
                 <p className="text-xs text-muted-foreground">
                   {bindingNsMode === 'all'
-                    ? 'No namespace filter. Applies cluster-wide.'
+                    ? 'No namespace filter. Applies cluster-wide, including kube-system; with Deny this can block system components. Consider excluding system namespaces.'
                     : bindingNamespaces.length === 0
                       ? 'Pick at least one namespace.'
                       : bindingNsMode === 'include'

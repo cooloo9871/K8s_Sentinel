@@ -99,6 +99,96 @@ describe('tryParseBuilderPolicy', () => {
     team: platform`))).toBeNull()
   })
 
+  // A custom annotation would be dropped the same way labels would: a save
+  // regenerates the whole manifest. kubectl's own bookkeeping is tolerated,
+  // since kubectl rewrites it on its next apply anyway.
+  it('refuses custom metadata annotations, tolerates kubectl bookkeeping', () => {
+    expect(tryParseBuilderPolicy(labelPolicy().replace('  annotations:', `  annotations:
+    owner: team-x`))).toBeNull()
+    expect(tryParseBuilderPolicy(labelPolicy().replace('  annotations:', `  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: "{}"`))).not.toBeNull()
+  })
+
+  // Every container list is covered: a bad image in an initContainer or an
+  // ephemeral (kubectl debug) container must not slip past, and the debug
+  // subresource must be matched or the check never runs on injection.
+  it('image rules cover initContainers and ephemeral containers', () => {
+    const raw = generatePolicyYaml('no-latest', 'image', [],
+      [{ type: 'no-latest', registry: '', message: '' }], [])
+    expect(raw).toContain('object.spec.?initContainers.orValue([])')
+    expect(raw).toContain('object.spec.?ephemeralContainers.orValue([])')
+    expect(raw).toContain('object.spec.?template.?spec.?initContainers.orValue([])')
+    expect(raw).toContain('resources: ["pods/ephemeralcontainers"]')
+    expect(raw).toContain('"pods", "replicationcontrollers"')
+    // The tag colon is looked for after the last slash, so a registry port
+    // (myreg:5000/app, still untagged) cannot satisfy the tag check.
+    expect(raw).toContain("c.image.substring(c.image.lastIndexOf('/') + 1).contains(':')")
+    expect(tryParseBuilderPolicy(raw)).not.toBeNull()
+    expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+  })
+
+  // The registry prefix is compared case-insensitively (image hosts are
+  // case-insensitive) and always ends with a slash (subdomain bypass).
+  it('required-registry round-trips lowercased with a trailing slash', () => {
+    const raw = generatePolicyYaml('from-registry', 'image', [],
+      [{ type: 'required-registry', registry: 'Registry.Example.Com', message: '' }], [])
+    expect(raw).toContain("c.image.lowerAscii().startsWith('registry.example.com/')")
+    const parsed = tryParseBuilderPolicy(raw)
+    expect(parsed?.imageRules[0]?.registry).toBe('registry.example.com/')
+    expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+  })
+
+  // Single-type replica rules guard on the request resource, not object.kind:
+  // a kubectl scale or HPA change arrives as kind Scale, where a kind guard was
+  // always true and let every scale request through.
+  it('replica rules guard on the request resource so scale is covered', () => {
+    const dep = generatePolicyYaml('max-replicas', 'replica', [], [],
+      [{ resourceType: 'deployments', maxReplicas: 5, message: '' }])
+    expect(dep).toContain("request.resource.resource != 'deployments' || object.spec.replicas <= 5")
+    expect(dep).not.toContain('object.kind')
+    expect(tryParseBuilderPolicy(dep)?.replicaRules[0]?.resourceType).toBe('deployments')
+
+    const sts = generatePolicyYaml('max-replicas', 'replica', [], [],
+      [{ resourceType: 'statefulsets', maxReplicas: 3, message: '' }])
+    expect(tryParseBuilderPolicy(sts)?.replicaRules[0]?.resourceType).toBe('statefulsets')
+
+    const both = generatePolicyYaml('max-replicas', 'replica', [], [],
+      [{ resourceType: 'both', maxReplicas: 7, message: '' }])
+    expect(tryParseBuilderPolicy(both)?.replicaRules[0]?.resourceType).toBe('both')
+  })
+
+  // Round-trips for the branches that had no coverage: annotation, resource
+  // limits, security context (including the two-validation 'both'), host access.
+  it('round-trips the remaining rule kinds', () => {
+    const annotation = generatePolicyYaml('require-note', 'annotation',
+      [{ key: 'owner', condition: '!=', value: 'platform', message: '' }], [], [], 'configmaps')
+    const annParsed = tryParseBuilderPolicy(annotation)
+    expect(annParsed?.ruleType).toBe('annotation')
+    expect(annParsed?.applyTo).toBe('configmaps')
+
+    for (const limitType of ['cpu', 'memory', 'both'] as const) {
+      const raw = generatePolicyYaml('limits', 'resource-limits', [], [], [], 'workloads',
+        [{ limitType, message: '' }])
+      expect(tryParseBuilderPolicy(raw)?.resourceLimitRules[0]?.limitType, limitType).toBe(limitType)
+      expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+    }
+
+    for (const checkType of ['no-privileged', 'run-as-non-root', 'both'] as const) {
+      const raw = generatePolicyYaml('sc', 'security-context', [], [], [], 'workloads', [],
+        { checkType, message: '' })
+      expect(tryParseBuilderPolicy(raw)?.securityContextRule.checkType, checkType).toBe(checkType)
+      expect(raw).toContain('object.spec.?ephemeralContainers.orValue([])')
+      expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+    }
+
+    for (const checkType of ['all', 'no-host-network', 'no-host-pid', 'no-host-ipc'] as const) {
+      const raw = generatePolicyYaml('host', 'host-access', [], [], [], 'workloads', [],
+        undefined, { checkType, message: '' })
+      expect(tryParseBuilderPolicy(raw)?.hostAccessRule.checkType, checkType).toBe(checkType)
+      expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
+    }
+  })
+
   const cmSizePolicy = (message = '') => generatePolicyYaml(
     'configmap-size-limit', 'configmap-size', [], [], [], 'workloads',
     [], undefined, undefined, { totalKB: '64', message },
