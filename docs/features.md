@@ -224,7 +224,7 @@ Graphs live pod network connections from Cilium Hubble flows.
 - The running version is shown at the bottom of the sidebar, so a `kubectl rollout restart` can be confirmed from the UI
 - **Users** — local accounts with JWT sessions and revocation on logout, Admin / Viewer roles, session timeout. The default admin must change its password on first login; passwords are at least 8 characters, changing your own requires the current one, and failed logins are rate limited per source IP
 - **Event Retention** — Security Events (warning and critical caps, TTL 1–90 days) and Admission Events (cap, TTL 1–365 days)
-- **Alerts** — push Security and Admission events to Slack, Teams, Discord or any webhook, with filters and cooldown. Deliveries are paced per webhook (about one per second) and retried on HTTP 429 honouring `Retry-After`, so a burst of events does not trip the provider's rate limit or silently drop alerts
+- **Alerts** — push Security and Admission events to a Slack incoming webhook, with filters and cooldown. The payload is Slack-formatted: Discord accepts it when `/slack` is appended to the Discord webhook URL, while Microsoft Teams is not supported (it expects its own card format). Deliveries are paced per webhook (about one per second) and retried on HTTP 429 honouring `Retry-After`, so a burst of events does not trip the provider's rate limit or silently drop alerts
 - **Syslog** — forward events to a rsyslog/syslog server over UDP or TCP
 
 ## Things worth knowing before you enforce
