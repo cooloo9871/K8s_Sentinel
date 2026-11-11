@@ -46,6 +46,8 @@ func TestEveryRouteIsRegistered(t *testing.T) {
 		{http.MethodPut, "/api/security-events/retention"},
 		{http.MethodGet, "/api/admission-events"},
 		{http.MethodGet, "/api/network-topology"},
+		{http.MethodGet, "/api/vulnerabilities"},
+		{http.MethodGet, "/api/vulnerabilities/demo/Deployment/web"},
 		{http.MethodGet, "/api/cilium/status"},
 
 		{http.MethodGet, "/api/alerts"},

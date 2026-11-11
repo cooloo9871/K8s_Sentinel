@@ -89,6 +89,11 @@ rules:
   - apiGroups: ["networking.istio.io"]
     resources: ["virtualservices", "gateways"]
     verbs: ["get", "list"]
+  # Trivy Operator's scan results, shown on the Vulnerabilities page. Optional:
+  # without the operator the CRD is absent and the page says so.
+  - apiGroups: ["aquasecurity.github.io"]
+    resources: ["vulnerabilityreports"]
+    verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list"]

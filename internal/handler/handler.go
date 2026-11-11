@@ -105,6 +105,8 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/cnp", listCNP(cfg.Store))
 		r.Get("/api/cnp/{name}", getCNP(cfg.Store))
 		r.Get("/api/quarantine", listQuarantined(cfg.Store))
+		r.Get("/api/vulnerabilities", getVulnerabilities(cfg.Store))
+		r.Get("/api/vulnerabilities/{namespace}/{kind}/{name}", getWorkloadVulnerabilities(cfg.Store))
 
 		// Admin-only (writes)
 		r.Group(func(r chi.Router) {
