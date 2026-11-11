@@ -97,9 +97,10 @@ type Store struct {
 	nodeIPExpiry time.Time
 
 	// Vulnerability overview cache — see VulnerabilityOverview.
-	vulnMu     sync.RWMutex
-	vulnData   VulnOverview
-	vulnExpiry time.Time
+	vulnMu      sync.RWMutex
+	vulnRefresh sync.Mutex
+	vulnData    VulnOverview
+	vulnExpiry  time.Time
 }
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the

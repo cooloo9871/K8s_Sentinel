@@ -94,6 +94,11 @@ rules:
   - apiGroups: ["aquasecurity.github.io"]
     resources: ["vulnerabilityreports"]
     verbs: ["get", "list"]
+  # A CronJob's pods are owned by a Job; this is how they are traced back to the
+  # CronJob, which is what Trivy Operator scans.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list"]
