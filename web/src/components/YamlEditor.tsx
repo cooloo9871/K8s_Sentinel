@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import MonacoEditor from '@monaco-editor/react'
+import { lazy, Suspense, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import yaml from 'js-yaml'
+
+const MonacoEditor = lazy(() => import('./monaco'))
 
 interface Props {
   initialValue?: string
@@ -34,14 +35,16 @@ export function YamlEditor({ initialValue = '', onValueChange, readOnly = false 
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <MonacoEditor
-        height="500px"
-        language="yaml"
-        theme="vs-dark"
-        defaultValue={initialValue}
-        onChange={handleChange}
-        options={{ minimap: { enabled: false }, fontSize: 13, readOnly }}
-      />
+      <Suspense fallback={<div className="h-[500px]" />}>
+        <MonacoEditor
+          height="500px"
+          language="yaml"
+          theme="vs-dark"
+          defaultValue={initialValue}
+          onChange={handleChange}
+          options={{ minimap: { enabled: false }, fontSize: 13, readOnly }}
+        />
+      </Suspense>
     </div>
   )
 }
