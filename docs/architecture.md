@@ -343,25 +343,57 @@ be simpler and would be wrong in both directions:
 - A report outlives its workload until the operator garbage-collects it. Starting
   from pods, a report nobody runs any more is never shown.
 
-Each pod's direct controller is looked up among the reports by Trivy Operator's
-owner labels (`trivy-operator.resource.kind` / `.name`, plus
-`trivy-operator.container.name`). The operator files a Deployment's reports under
-its active **ReplicaSet**, so pods are then rolled up through the ReplicaSet's
-owner to the Deployment. Mid-rollout a Deployment has two ReplicaSets and two
-images; both are listed, each with its own report. An owner name longer than a
-label value may be (63 characters) is carried in an annotation of the same key,
-which is checked when the label is absent.
+Reports are matched by Trivy Operator's owner labels
+(`trivy-operator.resource.kind` / `.name`, plus `trivy-operator.container.name`).
+An owner name longer than a label value may be (63 characters) is carried in an
+annotation of the same key, which is checked when the label is absent.
+
+**Where the operator files a report is not always where the pod's owner is**, so
+each pod has two answers: the workload it is listed under, and the owner its
+report is looked up under. These were checked against the operator's source
+(`pkg/operator/workload/helper.go`, `pkg/kube/object.go`), not observed on a
+cluster:
+
+| Pod's controller | Listed as | Report looked up under |
+|---|---|---|
+| ReplicaSet owned by a Deployment | Deployment | the **ReplicaSet** |
+| StatefulSet, DaemonSet, bare ReplicaSet, ReplicationController | itself | itself |
+| Job owned by a CronJob | CronJob | the **CronJob** |
+| Job | Job | Job |
+| Anything else (a custom resource such as a database operator's `Cluster`) | that owner | the **Pod** |
+| None, or a Node (static pod) | Pod | Pod |
+
+Pods carrying `app.kubernetes.io/managed-by=trivy-operator` are the operator's
+own scan jobs, which it does not scan, and are left out.
+
+**The image is matched as well as the container.** The operator scans the
+controller's pod *template*, not each pod. A StatefulSet or DaemonSet whose
+template has moved on while old pods keep running (`OnDelete`, a partition, a
+stuck rollout) has a report for the new image only. Matching on the container
+name alone would show the old image with the new image's findings, or as clean.
+`scannedImage` compares the report's `artifact.repository` and tag or digest with
+the image the pod runs, and an image that does not match is not scanned. The
+registry is not compared: the two sides write it differently (`docker.io`
+against `index.docker.io`). Mid-rollout a Deployment runs two ReplicaSets; by
+default the operator keeps the report of the current one only, so the outgoing
+image shows as not scanned until its pods are gone.
 
 **Exposure is joined in, not recomputed.** The `exposed` flag comes from
 `CachedPodExposures` (§6), so this page and the topology cannot disagree about
 what is reachable from outside.
 
 **Reports are large.** Each carries every finding inline and can run to
-megabytes, so the list is read in pages of 100 and only the summary of each
-report is kept: counts, the number of fixable findings, the scan time and the
-report's name. The findings themselves are fetched by that name when a row is
-expanded. The aggregate is cached for 60 seconds; failures are not cached, so
+megabytes, so the list is read in pages of 20 and only the summary of each
+report is kept: counts, the number of fixable findings, the scan time, the image
+and the report's name. The findings themselves are fetched by that name when a
+row is expanded. The aggregate is cached for 60 seconds and one refresh runs at
+a time; the Refresh button bypasses the cache. Failures are not cached, so
 installing the operator or fixing the ClusterRole shows on the next load.
+
+**A report can vanish between the list and the read.** The operator deletes and
+rewrites each report when it rescans (every 24 hours by default). A read that
+fails is returned as `unavailable` for that container and the page says so; it
+is never folded into "no findings".
 
 **An empty page always says why.** A missing CRD (`not-installed`), a ClusterRole
 without the rule (`forbidden`) and any other failure (`error`) are distinct
@@ -369,8 +401,11 @@ states, because the operator does something different about each. The
 `forbidden` case is the one an upgrade produces: a new image against the old
 ClusterRole.
 
-Not handled: pods of a Job owned by a CronJob are looked up under the Job, and
-show as not scanned if the operator filed the report under the CronJob.
+Known gap: a container added at admission (a service mesh sidecar, a secrets
+agent) is not in the pod template, so the operator never scans it. Its workload
+shows as **partial** permanently. That is accurate, since the sidecar is running
+and unscanned, but in a meshed cluster it makes "partial" the norm. Ephemeral
+containers are not listed.
 
 ---
 

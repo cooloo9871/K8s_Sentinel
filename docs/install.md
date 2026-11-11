@@ -154,7 +154,7 @@ The operator scans every workload once after it starts and again when a workload
 kubectl get vulnerabilityreports -A
 ```
 
-**Upgrading Sentinel from a version before the Vulnerabilities page:** re-apply `deploy/sentinel.yaml`. The ClusterRole gained a read-only rule for `vulnerabilityreports`; without it the page reports that Sentinel is not permitted to read them.
+**Upgrading Sentinel from a version before the Vulnerabilities page:** re-apply `deploy/sentinel.yaml`. The ClusterRole gained read-only rules for `vulnerabilityreports` and for `jobs`; without the first the page reports that Sentinel is not permitted to read reports.
 
 ### Air-gapped clusters
 
@@ -181,6 +181,16 @@ helm install trivy-operator aqua/trivy-operator \
   --namespace trivy-system \
   --create-namespace \
   --values trivy-values.yaml
+```
+
+Sentinel reads only the vulnerability reports. The operator's other scanners (configuration audit, RBAC and infrastructure assessment, compliance) are on by default and pull more images, `mirror.gcr.io/aquasec/trivy-checks` and `ghcr.io/aquasecurity/node-collector`. Mirror those as well, or turn the scanners off:
+
+```yaml
+operator:
+  configAuditScannerEnabled: false
+  rbacAssessmentScannerEnabled: false
+  infraAssessmentScannerEnabled: false
+  clusterComplianceEnabled: false
 ```
 
 The database is only as current as the copy in your registry, so refresh the mirror on a schedule. The operator's own image and the registries your workloads pull from need the same treatment; the [Trivy Operator documentation](https://aquasecurity.github.io/trivy-operator/) covers private registries and credentials.
@@ -283,3 +293,4 @@ label; everything else is read-only.
 | `networking.istio.io` | `virtualservices`, `gateways` | get, list |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 | `aquasecurity.github.io` | `vulnerabilityreports` | get, list |
+| `batch` | `jobs` | get, list |

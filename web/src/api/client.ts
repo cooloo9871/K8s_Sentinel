@@ -405,10 +405,17 @@ export interface Vulnerability {
   image: string
 }
 
+export interface VulnDetail {
+  findings: Vulnerability[]
+  /** Containers whose report could not be read just now. */
+  unavailable: string[]
+}
+
 export const vulnApi = {
-  overview: (): Promise<VulnOverview> =>
-    api.get('/vulnerabilities').then((r) => r.data),
-  detail: (namespace: string, kind: string, name: string): Promise<Vulnerability[]> =>
+  // refresh asks the server past its cache, for the Refresh button.
+  overview: (refresh = false): Promise<VulnOverview> =>
+    api.get('/vulnerabilities', { params: refresh ? { refresh: 1 } : undefined }).then((r) => r.data),
+  detail: (namespace: string, kind: string, name: string): Promise<VulnDetail> =>
     api.get(`/vulnerabilities/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`)
       .then((r) => r.data),
 }

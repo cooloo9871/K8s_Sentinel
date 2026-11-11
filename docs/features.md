@@ -183,13 +183,14 @@ Lists every running workload with the known vulnerabilities in its images.
 
 - **Ordered by what to fix first.** A workload with a critical finding that is also reachable from outside the cluster comes first, then by critical and high counts. "Reachable from outside" is the same exposure detection the Network Topology uses, so the **Exposed** badge here and the exposure badge there always agree
 - **One row per workload**, not per report. Trivy Operator files reports under the active ReplicaSet; Sentinel rolls them up to the Deployment, which is the object you would actually edit
-- **Not scanned is not clean.** The list is built from the pods that are running, so a workload with no report appears as **Not scanned** with dashes for counts, never as zeros. A workload where only some containers have a report is marked **partial**
+- **Not scanned is not clean.** The list is built from the pods that are running, so a workload with no report appears as **Not scanned** with dashes for counts, never as zeros. A workload where only some images have a report is marked **partial**. Trivy Operator scans a workload's pod template, so two things stay unscanned by design: a sidecar injected at admission (a service mesh proxy), and an old image still running after the template changed
 - **Stale** marks a scan more than 7 days old. Trivy Operator rescans on its own schedule; an old report says nothing about CVEs published since
 - **Fixable** counts the findings that name a fixed version, the ones an image upgrade removes
 - **Filters**: search by workload or image, several namespaces at once, severity, and **Show only** Exposed / Fix available / Not fully scanned. The flags combine, so Exposed plus Fix available is a to-do list
-- **Expand a row** for each image's own counts and the findings: severity, CVE ID linking to its advisory, package, installed version and fixed version. Worst first, and within a severity the ones with a fix first. 50 are shown until you ask for the rest
+- **Expand a row** for each image's own counts and the findings: severity, CVE ID linking to its advisory, package, installed version and fixed version. Worst first, and within a severity the ones with a fix first. 50 are shown until you ask for the rest. If a report cannot be read at that moment (Trivy Operator rewrites it on every rescan) the row says so, instead of showing no findings
+- **Refresh** re-reads the cluster. The list is otherwise cached for a minute
 - **Export CSV** writes what is on screen, one line per image
-- Init containers are included. Finished pods (completed Jobs) are not
+- Init containers are included. Finished pods (completed Jobs) and Trivy Operator's own scan jobs are not. A CronJob's running pods are listed under the CronJob
 - When there is nothing to show, the page says why: Trivy Operator was not found, or Sentinel's ClusterRole lacks the rule to read reports (an upgrade from an earlier version needs `deploy/sentinel.yaml` re-applied)
 
 ## Notifications

@@ -2,7 +2,7 @@ import type { WorkloadVuln } from '../api/client'
 import { matchesScopeFilter } from '../components/ScopeFilter'
 import { formatTWTime } from './time'
 
-export type VulnSeverity = 'critical' | 'high' | 'medium' | 'low'
+export type VulnSeverity = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
 export type VulnFlag = 'fixable' | 'exposed' | 'unscanned'
 
 export interface VulnFilter {

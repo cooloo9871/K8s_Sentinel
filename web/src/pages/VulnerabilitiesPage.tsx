@@ -1,10 +1,11 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { vulnApi } from '../api/client'
-import type { ImageVuln, VulnOverview, Vulnerability, WorkloadVuln } from '../api/client'
+import type { ImageVuln, VulnDetail, VulnOverview, WorkloadVuln } from '../api/client'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,7 +48,7 @@ function Count({ value, scanned, className }: { value: number; scanned: boolean;
 // the registry and path are in the tooltip and the expanded row.
 const shortImage = (image: string) => image.slice(image.lastIndexOf('/') + 1)
 
-type Detail = Vulnerability[] | 'loading' | 'error'
+type Detail = VulnDetail | 'loading' | 'error'
 
 export function VulnerabilitiesPage() {
   const [overview, setOverview] = useState<VulnOverview | null>(null)
@@ -61,14 +62,21 @@ export function VulnerabilitiesPage() {
   const [details, setDetails] = useState<Record<string, Detail>>({})
   const [showAll, setShowAll] = useState<Set<string>>(new Set())
 
-  const load = useCallback(async () => {
+  // Bumped on every load, so findings requested before a refresh are dropped
+  // when they arrive after it instead of being shown against the new list.
+  const generation = useRef(0)
+
+  const load = useCallback(async (refresh = false) => {
     setLoading(true)
     try {
-      setOverview(await vulnApi.overview())
+      const next = await vulnApi.overview(refresh)
+      generation.current++
+      setOverview(next)
       setLoadError('')
       // Findings already fetched may describe an older scan.
       setDetails({})
       setExpanded(new Set())
+      setShowAll(new Set())
     } catch (e) {
       setLoadError(e instanceof Error && e.message ? e.message : 'Failed to load vulnerabilities')
     } finally {
@@ -86,11 +94,13 @@ export function VulnerabilitiesPage() {
       opening ? next.add(key) : next.delete(key)
       return next
     })
-    if (opening && w.scan !== 'none' && !Array.isArray(details[key])) {
-      setDetails(prev => ({ ...prev, [key]: 'loading' }))
-      vulnApi.detail(w.namespace, w.kind, w.name)
-        .then(v => setDetails(prev => ({ ...prev, [key]: v })))
-        .catch(() => setDetails(prev => ({ ...prev, [key]: 'error' })))
+    if (opening && w.scan !== 'none' && typeof details[key] !== 'object') {
+      const asked = generation.current
+      const settle = (d: Detail) => {
+        if (generation.current === asked) setDetails(prev => ({ ...prev, [key]: d }))
+      }
+      settle('loading')
+      vulnApi.detail(w.namespace, w.kind, w.name).then(settle).catch(() => settle('error'))
     }
   }
 
@@ -104,7 +114,7 @@ export function VulnerabilitiesPage() {
       </div>
       <div className="flex gap-2">
         {actions}
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => load(true)} disabled={loading}>
           <IconRefresh size={14} className="mr-1" /> Refresh
         </Button>
       </div>
@@ -182,6 +192,14 @@ export function VulnerabilitiesPage() {
         </Button>,
       )}
 
+      {loadError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            The list could not be refreshed, so what is shown may be out of date. {loadError}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="mb-4 flex items-center gap-2">
         <Input placeholder="Search workload or image..."
           value={search} onChange={e => setSearch(e.target.value)}
@@ -202,6 +220,7 @@ export function VulnerabilitiesPage() {
               { key: 'high', label: 'High' },
               { key: 'medium', label: 'Medium' },
               { key: 'low', label: 'Low' },
+              { key: 'unknown', label: 'Unknown' },
             ],
           },
           {
@@ -249,15 +268,16 @@ export function VulnerabilitiesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
-                  <TableHead className="w-64">Workload</TableHead>
-                  <TableHead className="w-32">Namespace</TableHead>
+                  <TableHead className="w-60">Workload</TableHead>
+                  <TableHead className="w-28">Namespace</TableHead>
                   <TableHead>Image</TableHead>
                   <TableHead className="w-16 text-right">Critical</TableHead>
                   <TableHead className="w-14 text-right">High</TableHead>
                   <TableHead className="w-18 text-right">Medium</TableHead>
                   <TableHead className="w-14 text-right">Low</TableHead>
+                  <TableHead className="w-20 text-right">Unknown</TableHead>
                   <TableHead className="w-18 text-right">Fixable</TableHead>
-                  <TableHead className="w-32">Scanned</TableHead>
+                  <TableHead className="w-28">Scanned</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -316,6 +336,9 @@ export function VulnerabilitiesPage() {
                           <Count value={w.counts.low} scanned={scanned} className="text-foreground" />
                         </TableCell>
                         <TableCell className="text-right text-sm">
+                          <Count value={w.counts.unknown} scanned={scanned} className="text-foreground" />
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
                           <Count value={w.fixable} scanned={scanned} className="text-foreground" />
                         </TableCell>
                         <TableCell className="text-sm">
@@ -332,7 +355,7 @@ export function VulnerabilitiesPage() {
                       </TableRow>
                       {open && (
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableCell colSpan={10} className="py-3 pl-10 pr-6">
+                          <TableCell colSpan={11} className="py-3 pl-10 pr-6">
                             <WorkloadDetail
                               workload={w}
                               detail={details[key]}
@@ -359,6 +382,7 @@ function imageStatus(i: ImageVuln) {
   return (
     <span className="text-muted-foreground">
       {i.counts.critical} critical, {i.counts.high} high, {i.counts.medium} medium, {i.counts.low} low
+      {i.counts.unknown > 0 && `, ${i.counts.unknown} unknown`}
       {i.stale && <span className="text-amber-700">, scan is more than 7 days old</span>}
     </span>
   )
@@ -370,7 +394,9 @@ function WorkloadDetail({ workload, detail, showAll, onShowAll }: {
   showAll: boolean
   onShowAll: () => void
 }) {
-  const findings = Array.isArray(detail) ? detail : []
+  const loaded = typeof detail === 'object' ? detail : null
+  const findings = loaded?.findings ?? []
+  const unavailable = loaded?.unavailable ?? []
   const shown = showAll ? findings : findings.slice(0, DETAIL_PAGE)
   const severalImages = workload.images.length > 1
 
@@ -393,7 +419,13 @@ function WorkloadDetail({ workload, detail, showAll, onShowAll }: {
       )}
       {detail === 'loading' && <p className="text-muted-foreground">Loading findings...</p>}
       {detail === 'error' && <p className="text-destructive">The findings could not be loaded.</p>}
-      {Array.isArray(detail) && findings.length === 0 && (
+      {unavailable.length > 0 && (
+        <p className="text-amber-700">
+          The report for {unavailable.join(', ')} could not be read just now, so its findings are
+          missing below. Trivy Operator rewrites a report each time it rescans. Refresh to try again.
+        </p>
+      )}
+      {loaded && findings.length === 0 && unavailable.length === 0 && (
         <p className="text-muted-foreground">No known vulnerabilities in the scanned images.</p>
       )}
 
