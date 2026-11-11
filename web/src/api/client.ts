@@ -355,3 +355,60 @@ export const quarantineApi = {
   release: (namespace: string, pod: string): Promise<void> =>
     api.delete(`/quarantine/${namespace}/${pod}`),
 }
+
+export interface VulnCounts {
+  critical: number
+  high: number
+  medium: number
+  low: number
+  unknown: number
+}
+
+export interface ImageVuln {
+  container: string
+  image: string
+  scanned: boolean
+  scannedAt?: string
+  stale: boolean
+  counts: VulnCounts
+  fixable: number
+}
+
+export interface WorkloadVuln {
+  namespace: string
+  kind: string
+  name: string
+  images: ImageVuln[]
+  counts: VulnCounts
+  fixable: number
+  scan: 'full' | 'partial' | 'none'
+  scannedAt?: string
+  stale: boolean
+  exposed: boolean
+}
+
+export interface VulnOverview {
+  status: 'ok' | 'not-installed' | 'forbidden' | 'error'
+  message?: string
+  workloads: WorkloadVuln[]
+}
+
+export interface Vulnerability {
+  id: string
+  severity: string
+  package: string
+  installedVersion: string
+  fixedVersion: string
+  title: string
+  link: string
+  container: string
+  image: string
+}
+
+export const vulnApi = {
+  overview: (): Promise<VulnOverview> =>
+    api.get('/vulnerabilities').then((r) => r.data),
+  detail: (namespace: string, kind: string, name: string): Promise<Vulnerability[]> =>
+    api.get(`/vulnerabilities/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`)
+      .then((r) => r.data),
+}

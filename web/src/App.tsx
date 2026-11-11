@@ -27,6 +27,7 @@ import { RsyslogPage } from './pages/RsyslogPage'
 import { SecurityRetentionPage } from './pages/SecurityRetentionPage'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
+import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 
 function AppRoutes() {
   const { user, loading, logout, refresh } = useAuth()
@@ -85,6 +86,7 @@ function AppRoutes() {
           <Route path="/policies/network/:name/edit" element={<CNPPage />} />
           <Route path="/policies/quarantine" element={<QuarantinePage />} />
           <Route path="/network/topology" element={<NetworkTopologyPage />} />
+          <Route path="/vulnerabilities" element={<VulnerabilitiesPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

@@ -109,6 +109,11 @@ export function AppSidebar() {
                   <NavLink to="/network/topology">Network Topology</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/vulnerabilities')} className={TOP_LEVEL_CLASS}>
+                  <NavLink to="/vulnerabilities">Vulnerabilities</NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

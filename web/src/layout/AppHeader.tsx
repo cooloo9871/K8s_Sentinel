@@ -66,6 +66,9 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
   '/network/topology': [
     { label: 'Network Topology' },
   ],
+  '/vulnerabilities': [
+    { label: 'Vulnerabilities' },
+  ],
   '/policies/network': [
     { label: 'Policies' },
     { label: 'Network Policy' },
