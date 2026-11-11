@@ -136,6 +136,55 @@ no kustomize:
 kubectl apply -f deploy/sentinel.yaml
 ```
 
+## Vulnerability scanning (optional)
+
+The Vulnerabilities page shows what [Trivy Operator](https://github.com/aquasecurity/trivy-operator) finds. Sentinel does not scan images itself, so without the operator the page says scanning is not enabled and everything else works as before.
+
+```bash
+helm repo add aqua https://aquasecurity.github.io/helm-charts/
+helm repo update
+helm install trivy-operator aqua/trivy-operator \
+  --namespace trivy-system \
+  --create-namespace
+```
+
+The operator scans every workload once after it starts and again when a workload changes or a report expires (24 hours by default). Reports appear as they finish:
+
+```bash
+kubectl get vulnerabilityreports -A
+```
+
+**Upgrading Sentinel from a version before the Vulnerabilities page:** re-apply `deploy/sentinel.yaml`. The ClusterRole gained a read-only rule for `vulnerabilityreports`; without it the page reports that Sentinel is not permitted to read them.
+
+### Air-gapped clusters
+
+Trivy downloads its vulnerability database as an OCI artifact, and by default pulls it and its own image from `mirror.gcr.io`. In a cluster with no internet access, copy these into a registry the cluster can reach and point the chart at it:
+
+| What | Default location |
+|---|---|
+| Trivy image | `mirror.gcr.io/aquasec/trivy` |
+| Vulnerability database | `mirror.gcr.io/aquasec/trivy-db` |
+| Java index database | `mirror.gcr.io/aquasec/trivy-java-db` |
+
+```yaml
+trivy:
+  image:
+    registry: registry.internal.example
+  dbRegistry: registry.internal.example
+  dbRepository: aquasec/trivy-db
+  javaDbRegistry: registry.internal.example
+  javaDbRepository: aquasec/trivy-java-db
+```
+
+```bash
+helm install trivy-operator aqua/trivy-operator \
+  --namespace trivy-system \
+  --create-namespace \
+  --values trivy-values.yaml
+```
+
+The database is only as current as the copy in your registry, so refresh the mirror on a schedule. The operator's own image and the registries your workloads pull from need the same treatment; the [Trivy Operator documentation](https://aquasecurity.github.io/trivy-operator/) covers private registries and credentials.
+
 ## Container image
 
 ```
@@ -233,3 +282,4 @@ label; everything else is read-only.
 | `projectcontour.io` | `httpproxies` | get, list |
 | `networking.istio.io` | `virtualservices`, `gateways` | get, list |
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
+| `aquasecurity.github.io` | `vulnerabilityreports` | get, list |

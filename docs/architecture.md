@@ -328,6 +328,52 @@ Deployment in seconds.
 
 ---
 
+## 6.6 Vulnerabilities
+
+Sentinel does not scan images. Trivy Operator does, and writes one
+`VulnerabilityReport` per container of each workload; `internal/k8s/vulnerability.go`
+reads them. This is the same division as Tetragon and Hubble: a dedicated engine
+does the work, Sentinel correlates and presents.
+
+**The list is built from running pods, not from reports.** Listing reports would
+be simpler and would be wrong in both directions:
+
+- A workload nothing has scanned would be absent, which reads as "nothing to
+  worry about". Starting from pods, it is present and marked not scanned.
+- A report outlives its workload until the operator garbage-collects it. Starting
+  from pods, a report nobody runs any more is never shown.
+
+Each pod's direct controller is looked up among the reports by Trivy Operator's
+owner labels (`trivy-operator.resource.kind` / `.name`, plus
+`trivy-operator.container.name`). The operator files a Deployment's reports under
+its active **ReplicaSet**, so pods are then rolled up through the ReplicaSet's
+owner to the Deployment. Mid-rollout a Deployment has two ReplicaSets and two
+images; both are listed, each with its own report. An owner name longer than a
+label value may be (63 characters) is carried in an annotation of the same key,
+which is checked when the label is absent.
+
+**Exposure is joined in, not recomputed.** The `exposed` flag comes from
+`CachedPodExposures` (§6), so this page and the topology cannot disagree about
+what is reachable from outside.
+
+**Reports are large.** Each carries every finding inline and can run to
+megabytes, so the list is read in pages of 100 and only the summary of each
+report is kept: counts, the number of fixable findings, the scan time and the
+report's name. The findings themselves are fetched by that name when a row is
+expanded. The aggregate is cached for 60 seconds; failures are not cached, so
+installing the operator or fixing the ClusterRole shows on the next load.
+
+**An empty page always says why.** A missing CRD (`not-installed`), a ClusterRole
+without the rule (`forbidden`) and any other failure (`error`) are distinct
+states, because the operator does something different about each. The
+`forbidden` case is the one an upgrade produces: a new image against the old
+ClusterRole.
+
+Not handled: pods of a Job owned by a CronJob are looked up under the Job, and
+show as not scanned if the operator filed the report under the CronJob.
+
+---
+
 ## 7. Storage
 
 | Data | Where |
