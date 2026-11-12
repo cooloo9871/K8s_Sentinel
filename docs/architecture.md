@@ -386,9 +386,24 @@ what is reachable from outside.
 megabytes, so the list is read in pages of 20 and only the summary of each
 report is kept: counts, the number of fixable findings, the scan time, the image
 and the report's name. The findings themselves are fetched by that name when a
-row is expanded. The aggregate is cached for 60 seconds and one refresh runs at
-a time; the Refresh button bypasses the cache. Failures are not cached, so
-installing the operator or fixing the ClusterRole shows on the next load.
+row is expanded. One refresh runs at a time, and the two halves are cached
+separately: the aggregate, rebuilt from the pod informer, for 60 seconds, and
+the report summaries for five minutes, since reports change only when a workload
+does or on the daily rescan. The Refresh button bypasses both. Failures are not
+cached, so installing the operator or fixing the ClusterRole shows on the next
+load.
+
+**The topology does not wait for a scan.** It polls every few seconds and marks
+pods from `PodVulnCounts`, which returns the last per-pod counts at once and,
+when they have expired, starts one refresh in the background. The counts are
+per pod, summed over that pod's own matched reports, so the image-matching rule
+above holds for the mark too. A failed read clears them: a mark Sentinel can no
+longer vouch for is removed rather than left standing.
+
+**The scanner's health is read off the reports.** Trivy Operator is not a stream
+with a connection to watch. `reports` and `lastScanAt` in the overview cover
+every report in the cluster, including those of workloads no longer running, so
+Event Sources can tell "installed and writing" from "installed and silent".
 
 **A report can vanish between the list and the read.** The operator deletes and
 rewrites each report when it rescans (every 24 hours by default). A read that

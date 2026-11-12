@@ -708,7 +708,7 @@ export function NetworkTopologyPage() {
           {legend.vulnerable && (
             <span className="flex items-center gap-1">
               <IconBug size={12} className="text-red-600" />
-              Critical vulnerabilities
+              Critical CVEs
             </span>
           )}
           {legend.arrows.map(a => (

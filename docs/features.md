@@ -188,10 +188,16 @@ Lists every running workload with the known vulnerabilities in its images.
 - **Fixable** counts the findings that name a fixed version, the ones an image upgrade removes
 - **Filters**: search by workload or image, several namespaces at once, severity, and **Show only** Exposed / Fix available / Not fully scanned. The flags combine, so Exposed plus Fix available is a to-do list
 - **Expand a row** for each image's own counts and the findings: severity, CVE ID linking to its advisory, package, installed version and fixed version. Worst first, and within a severity the ones with a fix first. 50 are shown until you ask for the rest. If a report cannot be read at that moment (Trivy Operator rewrites it on every rescan) the row says so, instead of showing no findings
-- **Refresh** re-reads the cluster. The list is otherwise cached for a minute
+- **Refresh** re-reads the cluster. Otherwise the list of workloads is cached for a minute and the scan reports for five, so a scan that has just finished can take up to five minutes to appear
 - **Export CSV** writes what is on screen, one line per image
 - Init containers are included. Finished pods (completed Jobs) and Trivy Operator's own scan jobs are not. A CronJob's running pods are listed under the CronJob
 - When there is nothing to show, the page says why: Trivy Operator was not found, or Sentinel's ClusterRole lacks the rule to read reports (an upgrade from an earlier version needs `deploy/sentinel.yaml` re-applied)
+
+The same results appear in three other places:
+
+- **Network Topology** marks a pod whose own images have critical findings with a red bug in its top-left corner, next to whatever the other corner says about its network state. The detail panel gives the count, and says so when the pod is also reachable from outside the cluster. The mark follows each pod's own image, so a pod still running an old, unscanned image is not marked on the strength of its replacement
+- **Dashboard** has a Vulnerabilities card: critical and high totals, how many workloads are both critical and exposed, how many are not fully scanned, and the five workloads to fix first
+- **Event Sources** shows Trivy Operator as a source: **Reporting**, **Not detected**, **No reports yet**, **Not permitted** or **Error**, with the number of reports and the time of the newest. It turns **Stale** when no report has been written for 7 days, which with the operator's default daily rescan means it has stopped
 
 ## Notifications
 
@@ -233,6 +239,7 @@ Lists every running workload with the known vulnerabilities in its images.
 ## Dashboard
 
 - **Tetragon Agents** — per-node health (ready / total), red when an agent is not ready or its gRPC stream is not actually delivering events; a banner appears when any source (Tetragon or Hubble) has failed. Full per-source ingestion detail is on the **Event Sources** page
+- **Vulnerabilities** — critical and high totals from Trivy Operator's reports and the five workloads to fix first. Always shown: without a scanner it says scanning is not enabled, never an empty table that could pass for a clean cluster
 - Security and Admission event counts by severity, updating live, plus Global Protect Mode status
 - Recent Tracing Policy, Admission Policy and Network Policy lists
 - **Quarantine** — what is currently contained, with who asked and when. The count turns red when it is not zero, because a contained pod is an incident in progress
