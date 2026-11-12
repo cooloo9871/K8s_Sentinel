@@ -119,7 +119,8 @@ subjects:
 ---
 # Registry scanning runs Trivy in a Job per image, here in Sentinel's own
 # namespace and nowhere else. The Secret verbs are for the registry
-# credentials a scan pod reads; they are created for one Job and go with it.
+# credentials a scan pod reads: one is created per Job, owned by it, and goes
+# with it. Sentinel cannot read Secrets, its own or anyone else's.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -137,7 +138,7 @@ rules:
     verbs: ["get"]
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["create", "get", "update", "delete"]
+    verbs: ["create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

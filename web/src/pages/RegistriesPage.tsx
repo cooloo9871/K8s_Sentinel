@@ -57,7 +57,7 @@ function RunStatus({ registry }: { registry: Registry }) {
       </span>
     )
   }
-  if (run.error) return <Badge variant="destructive" className="font-medium">Could not list</Badge>
+  if (run.error) return <Badge variant="destructive" className="font-medium">Scan failed</Badge>
   if (!run.finishedAt) return <span className="text-sm text-muted-foreground">Not scanned yet</span>
   return <RelativeTime iso={run.finishedAt} />
 }
@@ -83,9 +83,10 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
   const [tested, setTested] = useState<
     { matched: number; maxImages: number; sample: string[] } | { error: string } | null
   >(null)
+  const edited = () => { revision.current++; setTested(null) }
   const set = <K extends keyof RegistryInput>(k: K, v: RegistryInput[K]) => {
     setForm(f => ({ ...f, [k]: v }))
-    setTested(null)
+    edited()
   }
 
   const days = Number(interval)
@@ -94,13 +95,18 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
   const value = (): RegistryInput => ({ ...form, filters, intervalDays: intervalOk ? days : 1 })
   const complete = form.name.trim() !== '' && form.url.trim() !== '' && filters.length > 0
 
+  // Bumped by every edit, so an answer about what the form used to say is
+  // dropped instead of being shown against what it says now.
+  const revision = useRef(0)
   const test = async () => {
     setTesting(true)
     setTested(null)
+    const asked = revision.current
     try {
-      setTested(await registryApi.test(value()))
+      const result = await registryApi.test(value())
+      if (revision.current === asked) setTested(result)
     } catch (e) {
-      setTested({ error: errorText(e, 'The registry could not be reached') })
+      if (revision.current === asked) setTested({ error: errorText(e, 'The registry could not be reached') })
     } finally {
       setTesting(false)
     }
@@ -144,7 +150,7 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
         </div>
         <p className="col-span-2 text-xs text-muted-foreground">
           {hasPassword
-            ? 'A password is saved. Leave the field empty to keep it.'
+            ? 'A password is saved. Leave the field empty to keep it, unless the URL changes.'
             : 'Leave both empty for a registry that allows anonymous pulls.'}
         </p>
       </div>
@@ -154,7 +160,7 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
         <textarea
           className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           value={filterText}
-          onChange={e => { setFilterText(e.target.value); setTested(null) }}
+          onChange={e => { setFilterText(e.target.value); edited() }}
         />
         <p className="text-xs text-muted-foreground">
           One per line, as repository or repository:tag, with * as a wildcard. <span className="font-mono">library/*</span> is
@@ -357,8 +363,9 @@ function RegistryImages({ id, isAdmin }: { id: string; isAdmin: boolean }) {
       {run.error && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>
-            The last scan could not list the registry, so nothing was scanned
-            {images.length > 0 && ' and the results below are from the scan before it'}. {run.error}
+            The last scan did not complete
+            {images.length > 0 && ', so some or all of the results below are from the scan before it'}. It will be
+            tried again within the hour. {run.error}
           </AlertDescription>
         </Alert>
       )}

@@ -324,6 +324,6 @@ Registry scanning adds a **Role in `sentinel-system` only**, for the Trivy Jobs 
 | `batch` | `jobs` | create, get, list, delete |
 | `""` (core) | `pods` | get, list |
 | `""` (core) | `pods/log` | get |
-| `""` (core) | `secrets` | create, get, update, delete |
+| `""` (core) | `secrets` | create, delete |
 
-The Secret verbs carry a registry's credentials to its scan pod. They also let Sentinel read the other Secrets in its own namespace, which is the price of not writing a password into a Job.
+The Secret verbs carry a registry's credentials to its scan pod, so the password is never written into a Job. Sentinel cannot read Secrets.

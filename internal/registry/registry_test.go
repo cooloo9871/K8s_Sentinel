@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -360,7 +362,7 @@ func TestParseOutput(t *testing.T) {
 	out := `2026-11-12T02:00:00Z	WARN	something Trivy wanted to say
 {"fixedVersion":"2.6.2","id":"CVE-2026-1","installedVersion":"2.6.1","link":"https://x/1","package":"apt","severity":"HIGH","title":"t"}
 {"fixedVersion":"","id":"CVE-2026-2","installedVersion":"1","link":"","package":"zlib","severity":"CRITICAL","title":"t"}
-` + completeMarker + "\n"
+` + completeMarker + " 2\n"
 	findings, err := parseOutput(out)
 	if err != nil || len(findings) != 2 {
 		t.Fatalf("findings = %+v, err = %v", findings, err)
@@ -374,7 +376,7 @@ func TestParseOutput(t *testing.T) {
 	}
 
 	// An image with nothing found still finishes, and is told apart from...
-	if findings, err := parseOutput(completeMarker); err != nil || len(findings) != 0 {
+	if findings, err := parseOutput(completeMarker + " 0"); err != nil || len(findings) != 0 {
 		t.Errorf("clean image: %v, %v", findings, err)
 	}
 	// ...a scan that died, which gives Trivy's reason and no findings.
@@ -389,6 +391,12 @@ func TestParseOutput(t *testing.T) {
 	}
 	if _, err := parseOutput(""); err == nil {
 		t.Errorf("an empty log was accepted")
+	}
+	// The kubelet rotates a long log, and only its tail is read back. The
+	// marker survives that; the findings before it do not.
+	_, err = parseOutput(`{"id":"CVE-2026-9","severity":"LOW"}` + "\n" + completeMarker + " 30000\n")
+	if err == nil || !strings.Contains(err.Error(), "30000 findings but only 1") {
+		t.Errorf("err = %v, want a truncated log refused", err)
 	}
 }
 
@@ -422,21 +430,33 @@ func TestBuildJobIsRestrictedAndCarriesNoPassword(t *testing.T) {
 	}
 	env := map[string]string{}
 	for _, e := range c.Env {
-		if e.ValueFrom != nil {
-			env[e.Name] = "secret:" + e.ValueFrom.SecretKeyRef.Name + "/" + e.ValueFrom.SecretKeyRef.Key
-		} else {
-			env[e.Name] = e.Value
-		}
+		env[e.Name] = e.Value
 	}
 	want := map[string]string{
-		"TRIVY_USERNAME":      "secret:registry-scan-abc/username",
-		"TRIVY_PASSWORD":      "secret:registry-scan-abc/password",
+		"DOCKER_CONFIG":       "/docker",
 		"TRIVY_INSECURE":      "true",
 		"TRIVY_NON_SSL":       "true",
 		"TRIVY_DB_REPOSITORY": "mirror.internal/trivy-db",
 	}
 	if !reflect.DeepEqual(env, want) {
 		t.Errorf("env = %v\n want %v", env, want)
+	}
+	// The login reaches the pod as a file naming its registry, never as
+	// TRIVY_USERNAME/TRIVY_PASSWORD, which Trivy would also offer to the
+	// registry its database comes from.
+	var mounted bool
+	for _, v := range pod.Volumes {
+		mounted = mounted || (v.Secret != nil && v.Secret.SecretName == "registry-scan-abc")
+	}
+	if !mounted {
+		t.Errorf("the credentials Secret is not mounted")
+	}
+	var dc struct {
+		Auths map[string]struct{ Auth string }
+	}
+	_ = json.Unmarshal(dockerConfig(cfg), &dc)
+	if got, _ := base64.StdEncoding.DecodeString(dc.Auths["registry.internal:5000"].Auth); string(got) != "robot:s3cret" || len(dc.Auths) != 1 {
+		t.Errorf("docker config = %+v", dc)
 	}
 	if job.Labels[ScanLabel] != "r1" || job.Spec.Template.Labels[ScanLabel] != "r1" {
 		t.Errorf("the scan label is missing")
@@ -447,21 +467,23 @@ func TestBuildJobIsRestrictedAndCarriesNoPassword(t *testing.T) {
 	if n := len(plain.Spec.Template.Spec.Containers[0].Env); n != 1 {
 		t.Errorf("env has %d entries for an anonymous https registry, want only the DB repository", n)
 	}
+	if n := len(plain.Spec.Template.Spec.Volumes); n != 1 {
+		t.Errorf("an anonymous scan mounts %d volumes, want only /tmp", n)
+	}
 }
 
-// What the fake API server can show: the Secret is created and tied to the
-// Job, the pod's output decides the result, and both are removed afterwards.
+// What the fake API server can show: the Secret is created owned by the Job,
+// the pod's output decides the result, and both are removed afterwards.
 func TestScanCreatesAndRemovesItsJobAndSecret(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	var created *batchv1.Job
 	client.PrependReactor("get", "jobs", func(a k8stesting.Action) (bool, runtime.Object, error) {
 		j, err := client.Tracker().Get(batchv1.SchemeGroupVersion.WithResource("jobs"), "ns", a.(k8stesting.GetAction).GetName())
 		if err != nil {
 			return true, nil, err
 		}
-		created = j.(*batchv1.Job).DeepCopy()
-		created.Status.Failed = 1
-		return true, created, nil
+		done := j.(*batchv1.Job).DeepCopy()
+		done.Status.Failed = 1
+		return true, done, nil
 	})
 	r := &JobRunner{Client: client, Namespace: "ns", TrivyImage: "trivy:x", poll: time.Millisecond}
 	cfg := validConfig()
@@ -473,24 +495,52 @@ func TestScanCreatesAndRemovesItsJobAndSecret(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "no pod") {
 		t.Errorf("err = %v, want the missing pod reported", err)
 	}
-	if created == nil {
-		t.Fatalf("no Job was created")
-	}
-	owned := false
+	owned, order := false, []string{}
 	for _, a := range client.Actions() {
-		if u, ok := a.(k8stesting.UpdateAction); ok && a.GetResource().Resource == "secrets" {
-			refs := u.GetObject().(metav1.Object).GetOwnerReferences()
-			owned = len(refs) == 1 && refs[0].Kind == "Job" && refs[0].Name == created.Name
+		if c, ok := a.(k8stesting.CreateAction); ok {
+			order = append(order, a.GetResource().Resource)
+			if a.GetResource().Resource == "secrets" {
+				refs := c.GetObject().(metav1.Object).GetOwnerReferences()
+				owned = len(refs) == 1 && refs[0].Kind == "Job"
+			}
+		}
+		// The Role grants create and delete on Secrets and nothing else.
+		if a.GetResource().Resource == "secrets" && a.GetVerb() != "create" && a.GetVerb() != "delete" {
+			t.Errorf("Secret %s is not in the Role", a.GetVerb())
 		}
 	}
-	if !owned {
-		t.Errorf("the Secret was not tied to the Job")
+	if !owned || !reflect.DeepEqual(order, []string{"jobs", "secrets"}) {
+		t.Errorf("created %v, Secret owned by the Job: %v", order, owned)
 	}
 	if jobs, _ := client.BatchV1().Jobs("ns").List(context.Background(), metav1.ListOptions{}); len(jobs.Items) != 0 {
 		t.Errorf("%d Jobs left behind", len(jobs.Items))
 	}
 	if secrets, _ := client.CoreV1().Secrets("ns").List(context.Background(), metav1.ListOptions{}); len(secrets.Items) != 0 {
 		t.Errorf("%d Secrets left behind", len(secrets.Items))
+	}
+}
+
+// A scan pod that cannot pull its image is given up on early, as a failure of
+// the scanning itself rather than of the image.
+func TestScanGivesUpOnAPodThatCannotStart(t *testing.T) {
+	client := k8sfake.NewSimpleClientset()
+	client.PrependReactor("create", "jobs", func(a k8stesting.Action) (bool, runtime.Object, error) {
+		job := a.(k8stesting.CreateAction).GetObject().(*batchv1.Job)
+		_ = client.Tracker().Add(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: job.Name + "-x", Labels: map[string]string{"job-name": job.Name}},
+			Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{
+				State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff", Message: "pull access denied"}},
+			}}},
+		})
+		return false, nil, nil
+	})
+	r := &JobRunner{Client: client, Namespace: "ns", TrivyImage: "nope:x", poll: time.Millisecond}
+
+	_, err := r.Scan(context.Background(), validConfig(), "x/y:1")
+
+	var ie *InfraError
+	if !errors.As(err, &ie) || !strings.Contains(err.Error(), "ImagePullBackOff") {
+		t.Errorf("err = %v, want an InfraError naming ImagePullBackOff", err)
 	}
 }
 
@@ -765,5 +815,153 @@ func TestScansAreLimited(t *testing.T) {
 
 	if peak > maxConcurrentScans || peak == 0 {
 		t.Errorf("peak = %d, want at most %d", peak, maxConcurrentScans)
+	}
+}
+
+// A run that scanned nothing is tried again within the hour, not after the
+// registry's whole interval.
+func TestAFailedRunIsRetriedSoon(t *testing.T) {
+	f := &fakeScans{listErr: errors.New("the registry refused access")}
+	s, store, _ := newTestScanner(t, f)
+	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	cfg, _ := store.Get("r1")
+	_ = s.Start("r1")
+	waitDone(t, s, "r1")
+
+	now = now.Add(59 * time.Minute)
+	if s.due(cfg) {
+		t.Errorf("due before the retry delay")
+	}
+	now = now.Add(2 * time.Minute)
+	if !s.due(cfg) {
+		t.Errorf("a failed run is not due an hour later")
+	}
+}
+
+// When the scan pods cannot run, every image would fail the same way. The run
+// stops, says why, and does not write the images off as failed scans.
+func TestRunStopsWhenScanPodsCannotRun(t *testing.T) {
+	images := make([]string, 40)
+	for i := range images {
+		images[i] = fmt.Sprintf("h/a:%d", i)
+	}
+	f := &fakeScans{images: images}
+	s, _, _ := newTestScanner(t, f)
+	var mu sync.Mutex
+	calls := 0
+	s.scan = func(context.Context, Config, string) ([]Finding, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		return nil, &InfraError{"the scan pod cannot start: ImagePullBackOff"}
+	}
+
+	_ = s.Start("r1")
+	r := waitDone(t, s, "r1")
+
+	if !strings.Contains(r.Run.Error, "ImagePullBackOff") || r.Run.FinishedAt == "" {
+		t.Errorf("run = %+v", r.Run)
+	}
+	if len(r.Images) != 0 {
+		t.Errorf("%d images recorded as failed scans, want none", len(r.Images))
+	}
+	if calls > 2*maxConcurrentScans {
+		t.Errorf("%d scans were started after the first could not run", calls)
+	}
+}
+
+// Found in review: a run that had just stopped reporting "running" still held
+// its place, and gave it up a moment later, taking away the place of a run
+// started in between. That run could then be neither stopped nor restarted.
+func TestARunStartedAsAnotherEndsKeepsItsPlace(t *testing.T) {
+	f := &fakeScans{images: []string{"h/a:1"}}
+	s, _, _ := newTestScanner(t, f)
+	for range 300 {
+		_ = s.Start("r1")
+		for s.Report("r1").Run.Running {
+		}
+		// The instant the first run reads as finished, start another and block it.
+		gate := make(chan struct{})
+		f.mu.Lock()
+		f.block = gate
+		f.mu.Unlock()
+		if err := s.Start("r1"); err != nil {
+			t.Fatalf("start after a finished run: %v", err)
+		}
+		s.mu.Lock()
+		_, held := s.cancels["r1"]
+		s.mu.Unlock()
+		if !held {
+			t.Fatalf("the running scan lost its place and can no longer be stopped")
+		}
+		f.mu.Lock()
+		f.block = nil
+		f.mu.Unlock()
+		close(gate)
+		waitDone(t, s, "r1")
+	}
+}
+
+// quay.io answers an anonymous _catalog with 200 and nothing in it, so the
+// login has to be offered rather than waited for.
+func TestResolveListsPrivateQuayRepositoriesWhenLoggedIn(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authed := r.Header.Get("Authorization") == "Bearer tok"
+		switch {
+		case r.URL.Path == "/api/v1/repository":
+			_, _ = w.Write([]byte(`{"repositories":[]}`))
+		case r.URL.Path == "/token":
+			if u, p, _ := r.BasicAuth(); u != "org+robot" || p != "pw" || r.URL.Query().Get("scope") != "registry:catalog:*" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"token":"tok"}`))
+		case r.URL.Path == "/v2/":
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s/token",service="quay"`, srv.URL))
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.URL.Path == "/v2/_catalog" && authed:
+			_, _ = w.Write([]byte(`{"repositories":["org/private","other/x"]}`))
+		case r.URL.Path == "/v2/_catalog":
+			_, _ = w.Write([]byte(`{"repositories":[]}`))
+		case strings.HasSuffix(r.URL.Path, "/tags/list"):
+			_, _ = w.Write([]byte(`{"tags":["1"]}`))
+		}
+	}))
+	defer srv.Close()
+	cfg := Config{Type: TypeQuay, URL: srv.URL, Filters: []string{"org/*"}, Username: "org+robot", Password: "pw"}
+
+	images, _, err := Resolve(context.Background(), cfg)
+	if err != nil || !reflect.DeepEqual(images, []string{hostOf(srv.URL) + "/org/private:1"}) {
+		t.Errorf("images = %v, err = %v", images, err)
+	}
+
+	// With the wrong password the private repositories cannot be listed, and
+	// saying "no images" would hide that.
+	cfg.Password = "wrong"
+	if _, _, err := Resolve(context.Background(), cfg); err == nil {
+		t.Errorf("a refused login was reported as an empty organisation")
+	}
+}
+
+// A repository the catalog lists but that has no tags to give is skipped; the
+// rest of the registry is still scanned.
+func TestResolveSkipsARepositoryThatVanished(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/_catalog":
+			_, _ = w.Write([]byte(`{"repositories":["a/gone","a/here"]}`))
+		case "/v2/a/here/tags/list":
+			_, _ = w.Write([]byte(`{"tags":["1"]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	images, _, err := Resolve(context.Background(), Config{Type: TypeDocker, URL: srv.URL, Filters: []string{"a/*"}})
+	if err != nil || !reflect.DeepEqual(images, []string{hostOf(srv.URL) + "/a/here:1"}) {
+		t.Errorf("images = %v, err = %v", images, err)
 	}
 }

@@ -120,6 +120,23 @@ func TestRegistryLifecycle(t *testing.T) {
 		t.Errorf("the saved password was lost by an edit")
 	}
 
+	// Pointing the registry somewhere else must not carry the saved password
+	// there: neither a test nor a save may send it to the new host.
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("the new host was contacted: %s (authorization %q)", r.URL.Path, r.Header.Get("Authorization"))
+	}))
+	defer elsewhere.Close()
+	body["url"] = elsewhere.URL
+	if w = call(testRegistry(store), http.MethodPost, "/", body, nil); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "enter the password again") {
+		t.Errorf("test against a new URL with the saved password = %d %s", w.Code, w.Body)
+	}
+	if w = call(updateRegistry(store, scans), http.MethodPut, "/", body, map[string]string{"id": created.ID}); w.Code != http.StatusBadRequest {
+		t.Errorf("update to a new URL with the saved password = %d %s", w.Code, w.Body)
+	}
+	if c, _ := store.Get(created.ID); c.URL != url {
+		t.Errorf("the refused update was saved")
+	}
+
 	if w = call(deleteRegistry(store, scans), http.MethodDelete, "/", nil, map[string]string{"id": created.ID}); w.Code != http.StatusNoContent {
 		t.Errorf("delete = %d", w.Code)
 	}

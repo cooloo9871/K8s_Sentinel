@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,13 +79,54 @@ func (c *client) getV2(ctx context.Context, rawURL string) (*http.Response, erro
 		for _, m := range challengeParam.FindAllStringSubmatch(rest, -1) {
 			params[m[1]] = m[2]
 		}
-		token, err := c.token(ctx, params["realm"], params["service"], params["scope"])
-		if err != nil {
-			return nil, err
-		}
-		return c.do(ctx, rawURL, "Bearer "+token)
+		return c.withToken(ctx, rawURL, params["realm"], params["service"], params["scope"])
 	}
 	return nil, fmt.Errorf("the registry answered 401 with an unsupported challenge %q", challenge)
+}
+
+// withToken fetches a URL with a bearer token for the scope. A token kept from
+// an earlier page may have expired since, so a refusal is tried once more with
+// a new one.
+func (c *client) withToken(ctx context.Context, rawURL, realm, service, scope string) (*http.Response, error) {
+	_, cached := c.tokens[scope]
+	token, err := c.token(ctx, realm, service, scope)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(ctx, rawURL, "Bearer "+token)
+	if err != nil || resp.StatusCode != http.StatusUnauthorized || !cached {
+		return resp, err
+	}
+	resp.Body.Close()
+	delete(c.tokens, scope)
+	if token, err = c.token(ctx, realm, service, scope); err != nil {
+		return nil, err
+	}
+	return c.do(ctx, rawURL, "Bearer "+token)
+}
+
+// loggedInCatalog lists /v2/_catalog as the configured user. quay.io answers an
+// anonymous request for it with 200 and an empty list instead of a challenge,
+// so waiting to be asked for credentials would never send them; the challenge
+// is taken from /v2/, which always asks.
+func (c *client) loggedInCatalog(ctx context.Context, what string) ([]string, error) {
+	resp, err := c.do(ctx, c.cfg.URL+"/v2/", "")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	challenge := resp.Header.Get("WWW-Authenticate")
+	resp.Body.Close()
+	scheme, rest, _ := strings.Cut(challenge, " ")
+	if !strings.EqualFold(scheme, "bearer") {
+		return c.v2List(ctx, "/v2/_catalog", "repositories", what)
+	}
+	params := map[string]string{}
+	for _, m := range challengeParam.FindAllStringSubmatch(rest, -1) {
+		params[m[1]] = m[2]
+	}
+	return c.v2ListWith(ctx, "/v2/_catalog", "repositories", what, func(ctx context.Context, u string) (*http.Response, error) {
+		return c.withToken(ctx, u, params["realm"], params["service"], "registry:catalog:*")
+	})
 }
 
 func (c *client) doBasic(ctx context.Context, rawURL string) (*http.Response, error) {
@@ -141,6 +183,8 @@ func (c *client) token(ctx context.Context, realm, service, scope string) (strin
 	return t, nil
 }
 
+var errNotFound = errors.New("not found on the registry")
+
 func decode(resp *http.Response, what string, v any) error {
 	defer resp.Body.Close()
 	switch resp.StatusCode {
@@ -148,7 +192,7 @@ func decode(resp *http.Response, what string, v any) error {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return fmt.Errorf("%s: the registry refused access (HTTP %d); check the credentials and what they may read", what, resp.StatusCode)
 	case http.StatusNotFound:
-		return fmt.Errorf("%s: not found on the registry", what)
+		return fmt.Errorf("%s: %w", what, errNotFound)
 	default:
 		return fmt.Errorf("%s: the registry answered HTTP %d", what, resp.StatusCode)
 	}
@@ -163,10 +207,20 @@ var linkNext = regexp.MustCompile(`<([^>]+)>\s*;\s*rel="?next"?`)
 // v2List reads every page of a Registry v2 listing. field is the JSON key that
 // holds the names: "repositories" or "tags".
 func (c *client) v2List(ctx context.Context, path, field, what string) ([]string, error) {
+	return c.v2ListWith(ctx, path, field, what, c.getV2)
+}
+
+// A listing longer than this is a registry answering in circles.
+const maxPages = 2000
+
+func (c *client) v2ListWith(ctx context.Context, path, field, what string, get func(context.Context, string) (*http.Response, error)) ([]string, error) {
 	var out []string
 	next := c.cfg.URL + path + "?n=" + fmt.Sprint(pageSize)
-	for next != "" {
-		resp, err := c.getV2(ctx, next)
+	for pages := 0; next != ""; pages++ {
+		if pages == maxPages {
+			return nil, fmt.Errorf("%s: the registry's listing did not end after %d pages", what, maxPages)
+		}
+		resp, err := get(ctx, next)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", what, err)
 		}
@@ -262,12 +316,15 @@ func (c *client) quayRepositories(ctx context.Context, org string) ([]string, er
 		}
 	}
 	if c.cfg.Username != "" {
-		// Best-effort: the public listing above already answered.
-		if private, err := c.v2List(ctx, "/v2/_catalog", "repositories", what); err == nil {
-			for _, name := range private {
-				if strings.HasPrefix(name, org+"/") {
-					add(name)
-				}
+		// A failure here fails the listing: without it the private
+		// repositories would be missing and nothing would say so.
+		private, err := c.loggedInCatalog(ctx, what)
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range private {
+			if strings.HasPrefix(name, org+"/") {
+				add(name)
 			}
 		}
 	}
@@ -324,7 +381,14 @@ func Resolve(ctx context.Context, cfg Config) (images []string, matched int, err
 			// repository whether it exists or not.
 			tags := []string{f.tag}
 			if strings.Contains(f.tag, "*") || strings.Contains(f.repo, "*") {
-				if tags, err = c.tags(ctx, repo); err != nil {
+				tags, err = c.tags(ctx, repo)
+				// A repository the wildcard found but that has since gone, or
+				// was listed while empty, is nothing to scan rather than a
+				// reason to scan nothing. One named outright is an error.
+				if errors.Is(err, errNotFound) && strings.Contains(f.repo, "*") {
+					continue
+				}
+				if err != nil {
 					return nil, 0, fmt.Errorf("filter %q: %w", raw, err)
 				}
 			}

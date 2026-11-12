@@ -88,6 +88,9 @@ func updateRegistry(store *registry.Store, scans *registry.Scanner) http.Handler
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if !keepPassword(store, &c, w) {
+			return
+		}
 		if !store.Update(c) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -97,6 +100,24 @@ func updateRegistry(store *registry.Store, scans *registry.Scanner) http.Handler
 		saved, _ := store.Get(c.ID)
 		writeJSON(w, http.StatusOK, viewRegistry(saved, scans))
 	}
+}
+
+// keepPassword fills in the saved password for an edit that left the field
+// empty, as the form does when the password is not being changed. Only for the
+// registry it was saved for: with a different URL the saved password would be
+// sent to a host its owner never gave it to, so it has to be typed again.
+// Called after Validate, which normalises the URL.
+func keepPassword(store *registry.Store, c *registry.Config, w http.ResponseWriter) bool {
+	saved, found := store.Get(c.ID)
+	if !found || c.Password != "" || c.Username == "" || saved.Password == "" {
+		return true
+	}
+	if saved.URL != c.URL {
+		writeError(w, http.StatusBadRequest, "the URL has changed, so enter the password again")
+		return false
+	}
+	c.Password = saved.Password
+	return true
 }
 
 func deleteRegistry(store *registry.Store, scans *registry.Scanner) http.HandlerFunc {
@@ -132,10 +153,6 @@ func testRegistry(store *registry.Store) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// Editing an existing registry: the form does not hold its password.
-		if saved, found := store.Get(c.ID); found && c.Password == "" && c.Username != "" {
-			c.Password = saved.Password
-		}
 		if c.Name == "" {
 			c.Name = "test"
 		}
@@ -144,6 +161,9 @@ func testRegistry(store *registry.Store) http.HandlerFunc {
 		}
 		if err := c.Validate(); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !keepPassword(store, &c, w) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)

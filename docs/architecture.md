@@ -466,17 +466,31 @@ reports how many the filters matched, so the cap is never silent.
 **Results come back through the pod log.** Trivy's JSON report runs to megabytes
 an image, more than is safe to carry through a log the kubelet rotates, so the
 Job uses an output template: one JSON object per finding with seven fields, then
-a completion marker. `parseOutput` treats a log without the marker as a failed
-scan and Trivy's last message as the reason. Findings printed before a failure
+a completion marker carrying the number of findings printed. `parseOutput`
+treats a log without the marker as a failed scan and Trivy's last message as the
+reason, and a log with fewer findings than the marker states as one whose
+beginning the kubelet rotated away. Findings printed before a failure
 are discarded: a scan cut short is not a result.
 
 **Credentials.** The password lives in `registries.json` and is stripped from
-every API response. For a scan it goes into a Secret created for that Job, owned
-by it, and referenced by `secretKeyRef`; it is never in the Job spec.
+every API response. For a scan it goes into a Secret created after the Job and
+owned by it from the start, as a Docker `config.json` keyed by the registry
+host, mounted and pointed to with `DOCKER_CONFIG`. `TRIVY_USERNAME` and
+`TRIVY_PASSWORD` are not used: they name no host, and Trivy offers them to every
+registry it contacts, the one serving its database included (confirmed against
+Trivy 0.76.1 with a listening socket). An edit that changes the URL without
+giving the password is refused, so a saved password cannot be pointed at
+another host. Sentinel's Role can create and delete Secrets, not read them.
 
 **Storage.** `registry-scans/{id}/index.json` holds the run and one summary per
 image and is all that is kept in memory; each image's findings are in a file of
 their own beside it, read when a row is expanded.
+
+**A pod that cannot run stops the run.** A scan pod still unable to start after
+two minutes (image pull failure, unschedulable, refused by admission) ends its
+scan with an `InfraError`, and the run stops there with that as its error rather
+than spending a timeout on each remaining image. Such a run, like one that could
+not list the registry, is retried after an hour.
 
 **Scheduling.** A loop checks once a minute and starts a registry whose last run
 began more than its interval ago. A run interrupted by a restart has no finish
@@ -489,10 +503,13 @@ may have changed.
 `deploy/trivy-operator-values.yaml` sets `skipResourceByLabels` so the operator
 does not scan Trivy scanning.
 
-**Not verified on a cluster.** The listing code ran against quay.io, Docker Hub
-and a public Harbor, and the Trivy command line ran in a local container under
-the same user and filesystem restrictions. The Job itself, the Role, and reading
-the log back have only been tested against a fake API server.
+**What has and has not run for real.** The listing code ran against quay.io,
+Docker Hub and a public Harbor. The Trivy command line, its output template and
+the `DOCKER_CONFIG` login ran in a local container under the same user and
+filesystem restrictions. Trivy Operator's own scan pods have been seen running
+as non-root in a namespace enforcing the restricted level. Sentinel's own Job,
+its Role, and reading the log back have only been tested against a fake API
+server.
 
 ## 7. Storage
 

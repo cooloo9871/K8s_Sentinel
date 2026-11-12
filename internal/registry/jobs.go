@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,8 +27,14 @@ const (
 	// it, and the Vulnerabilities page leaves the pods out of its workloads.
 	ScanLabel = "sentinel.io/registry-scan"
 
-	// Printed last by the scan pod. A log without it is a scan that did not finish.
+	// Printed last by the scan pod, followed by how many findings it printed. A
+	// log without it is a scan that did not finish; one with fewer findings
+	// than it states has lost its beginning to log rotation.
 	completeMarker = "SENTINEL-SCAN-COMPLETE"
+
+	// How long a scan pod may sit unable to start before the scan gives up on
+	// it, rather than waiting out the whole timeout.
+	startGrace = 2 * time.Minute
 
 	scanTimeout  = 15 * time.Minute
 	pollInterval = 3 * time.Second
@@ -35,8 +43,14 @@ const (
 
 // One JSON object per finding, then the marker. Trivy's full JSON report runs
 // to megabytes an image, more than is safe to carry through a pod log.
-var outputTemplate = `{{ range . }}{{ range .Vulnerabilities }}{{ toJson (dict "id" .VulnerabilityID "severity" .Severity "package" .PkgName "installedVersion" .InstalledVersion "fixedVersion" .FixedVersion "title" .Title "link" .PrimaryURL) }}
-{{ end }}{{ end }}` + completeMarker
+var outputTemplate = `{{ $n := 0 }}{{ range . }}{{ range .Vulnerabilities }}{{ $n = add $n 1 }}{{ toJson (dict "id" .VulnerabilityID "severity" .Severity "package" .PkgName "installedVersion" .InstalledVersion "fixedVersion" .FixedVersion "title" .Title "link" .PrimaryURL) }}
+{{ end }}{{ end }}` + completeMarker + ` {{ $n }}`
+
+// InfraError is a scan that failed because its pod could not run at all, which
+// will be just as true of the next image.
+type InfraError struct{ msg string }
+
+func (e *InfraError) Error() string { return e.msg }
 
 // JobRunner scans one image by running Trivy in a Job in Sentinel's namespace.
 type JobRunner struct {
@@ -49,6 +63,13 @@ type JobRunner struct {
 	JavaDBRepository string
 
 	poll time.Duration
+}
+
+func (r *JobRunner) grace() time.Duration {
+	if r.poll > 0 {
+		return 20 * r.poll // tests
+	}
+	return startGrace
 }
 
 func (r *JobRunner) interval() time.Duration {
@@ -68,16 +89,18 @@ func randomSuffix() string {
 // registry credentials, or is empty when there are none.
 func (r *JobRunner) buildJob(name string, cfg Config, image, secret string) *batchv1.Job {
 	env := []corev1.EnvVar{}
+	volumes := []corev1.Volume{{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}}}
+	// The databases and the image's layers are unpacked in /tmp.
+	mounts := []corev1.VolumeMount{{Name: "tmp", MountPath: "/tmp"}}
 	if secret != "" {
-		ref := func(key string) *corev1.EnvVarSource {
-			return &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: secret}, Key: key,
-			}}
-		}
-		env = append(env,
-			corev1.EnvVar{Name: "TRIVY_USERNAME", ValueFrom: ref("username")},
-			corev1.EnvVar{Name: "TRIVY_PASSWORD", ValueFrom: ref("password")},
-		)
+		// A Docker config file names the host the credentials are for.
+		// TRIVY_USERNAME and TRIVY_PASSWORD name none, and Trivy offers them to
+		// every registry it talks to, the one serving its database included.
+		env = append(env, corev1.EnvVar{Name: "DOCKER_CONFIG", Value: "/docker"})
+		volumes = append(volumes, corev1.Volume{Name: "docker", VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: secret},
+		}})
+		mounts = append(mounts, corev1.VolumeMount{Name: "docker", MountPath: "/docker", ReadOnly: true})
 	}
 	if cfg.SkipTLSVerify {
 		env = append(env, corev1.EnvVar{Name: "TRIVY_INSECURE", Value: "true"})
@@ -143,10 +166,9 @@ func (r *JobRunner) buildJob(name string, cfg Config, image, secret string) *bat
 								corev1.ResourceMemory: resource.MustParse("1Gi"),
 							},
 						},
-						// The databases and the image's layers are unpacked here.
-						VolumeMounts: []corev1.VolumeMount{{Name: "tmp", MountPath: "/tmp"}},
+						VolumeMounts: mounts,
 					}},
-					Volumes: []corev1.Volume{{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}}},
+					Volumes: volumes,
 				},
 			},
 		},
@@ -170,39 +192,39 @@ func (r *JobRunner) Scan(ctx context.Context, cfg Config, image string) ([]Findi
 	secret := ""
 	if cfg.Username != "" {
 		secret = name
-		_, err := secrets.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: r.Namespace, Labels: map[string]string{ScanLabel: cfg.ID}},
-			StringData: map[string]string{"username": cfg.Username, "password": cfg.Password},
-		}, metav1.CreateOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("creating the credentials Secret: %w", err)
-		}
-		defer cleanup(func(c context.Context) error { return secrets.Delete(c, name, metav1.DeleteOptions{}) })
 	}
-
 	job, err := jobs.Create(ctx, r.buildJob(name, cfg, image, secret), metav1.CreateOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("creating the scan Job: %w", err)
+		return nil, &InfraError{fmt.Sprintf("creating the scan Job: %v", err)}
 	}
 	background := metav1.DeletePropagationBackground
 	defer cleanup(func(c context.Context) error {
 		return jobs.Delete(c, name, metav1.DeleteOptions{PropagationPolicy: &background})
 	})
 	if secret != "" {
-		// So the Secret goes with the Job even if Sentinel stops before the
-		// deferred delete runs.
-		if s, err := secrets.Get(ctx, name, metav1.GetOptions{}); err == nil {
-			s.OwnerReferences = []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: "Job", Name: job.Name, UID: job.UID}}
-			_, _ = secrets.Update(ctx, s, metav1.UpdateOptions{})
+		// After the Job, so the Secret can be owned by it from the start and
+		// goes with it even if Sentinel stops before the delete below. The pod
+		// waits for the Secret to appear.
+		_, err := secrets.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name, Namespace: r.Namespace, Labels: map[string]string{ScanLabel: cfg.ID},
+				OwnerReferences: []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: "Job", Name: job.Name, UID: job.UID}},
+			},
+			Data: map[string][]byte{"config.json": dockerConfig(cfg)},
+		}, metav1.CreateOptions{})
+		if err != nil {
+			return nil, &InfraError{fmt.Sprintf("creating the credentials Secret: %v", err)}
 		}
+		defer cleanup(func(c context.Context) error { return secrets.Delete(c, name, metav1.DeleteOptions{}) })
 	}
 
+	started := time.Now()
 	finished := false
 	for !finished {
 		select {
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return nil, fmt.Errorf("the scan did not finish in %s%s", scanTimeout, r.podProblem(name))
+				return nil, fmt.Errorf("the scan did not finish in %s", scanTimeout)
 			}
 			return nil, ctx.Err()
 		case <-time.After(r.interval()):
@@ -212,6 +234,11 @@ func (r *JobRunner) Scan(ctx context.Context, cfg Config, image string) ([]Findi
 			return nil, fmt.Errorf("reading the scan Job: %w", err)
 		}
 		finished = j.Status.Succeeded > 0 || j.Status.Failed > 0
+		if !finished && time.Since(started) > r.grace() {
+			if problem := r.podProblem(ctx, name); problem != "" {
+				return nil, &InfraError{problem}
+			}
+		}
 	}
 
 	out, err := r.podLog(ctx, name)
@@ -232,26 +259,36 @@ func (r *JobRunner) pod(ctx context.Context, job string) (*corev1.Pod, error) {
 	return &pods.Items[0], nil
 }
 
-// podProblem says why a scan pod is not getting anywhere, when the pod itself
-// knows: an image that cannot be pulled, a pod nothing will admit.
-func (r *JobRunner) podProblem(job string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+// podProblem says why a scan pod is not getting anywhere, when it has not
+// started: an image that cannot be pulled, a pod nothing will admit or
+// schedule. Empty once the container has run.
+func (r *JobRunner) podProblem(ctx context.Context, job string) string {
 	pod, err := r.pod(ctx, job)
 	if err != nil {
-		return ""
+		// No pod this long after the Job: its creation is being refused.
+		return "the scan Job has no pod; see the Job's events in namespace " + r.Namespace
 	}
 	for _, cs := range pod.Status.ContainerStatuses {
-		if w := cs.State.Waiting; w != nil && w.Reason != "" {
-			return fmt.Sprintf(": the scan pod is waiting, %s %s", w.Reason, w.Message)
+		if cs.State.Running != nil || cs.State.Terminated != nil {
+			return ""
+		}
+		if w := cs.State.Waiting; w != nil && w.Reason != "" && w.Reason != "ContainerCreating" && w.Reason != "PodInitializing" {
+			return fmt.Sprintf("the scan pod cannot start: %s %s", w.Reason, w.Message)
 		}
 	}
 	for _, c := range pod.Status.Conditions {
 		if c.Type == corev1.PodScheduled && c.Status == corev1.ConditionFalse {
-			return ": the scan pod could not be scheduled, " + c.Message
+			return "the scan pod could not be scheduled: " + c.Message
 		}
 	}
 	return ""
+}
+
+// dockerConfig is a Docker client config file holding one registry's login.
+func dockerConfig(cfg Config) []byte {
+	auth := base64.StdEncoding.EncodeToString([]byte(cfg.Username + ":" + cfg.Password))
+	b, _ := json.Marshal(map[string]any{"auths": map[string]any{cfg.Host(): map[string]string{"auth": auth}}})
+	return b
 }
 
 func (r *JobRunner) podLog(ctx context.Context, job string) (string, error) {
@@ -279,7 +316,7 @@ var logPrefix = regexp.MustCompile(`^\S+Z\s+(FATAL|ERROR)\s+(Fatal error\s+)?`)
 // reason.
 func parseOutput(out string) ([]Finding, error) {
 	findings := []Finding{}
-	complete := false
+	stated := -1
 	lastMessage := ""
 	sc := bufio.NewScanner(strings.NewReader(out))
 	sc.Buffer(make([]byte, 0, 64*1024), 4<<20)
@@ -287,8 +324,10 @@ func parseOutput(out string) ([]Finding, error) {
 		line := strings.TrimSpace(sc.Text())
 		switch {
 		case line == "":
-		case line == completeMarker:
-			complete = true
+		case strings.HasPrefix(line, completeMarker+" "):
+			if n, err := strconv.Atoi(strings.TrimPrefix(line, completeMarker+" ")); err == nil {
+				stated = n
+			}
 		case strings.HasPrefix(line, "{"):
 			var f Finding
 			if json.Unmarshal([]byte(line), &f) == nil && f.ID != "" {
@@ -300,7 +339,7 @@ func parseOutput(out string) ([]Finding, error) {
 			lastMessage = line
 		}
 	}
-	if !complete {
+	if stated < 0 {
 		if lastMessage == "" {
 			return nil, errors.New("the scan ended without output")
 		}
@@ -311,6 +350,9 @@ func parseOutput(out string) ([]Finding, error) {
 			lastMessage = lastMessage[:600] + "…"
 		}
 		return nil, errors.New(lastMessage)
+	}
+	if stated != len(findings) {
+		return nil, fmt.Errorf("the scan reported %d findings but only %d could be read back from the pod's log", stated, len(findings))
 	}
 	return findings, nil
 }

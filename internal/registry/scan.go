@@ -59,7 +59,8 @@ type Run struct {
 	Done  int `json:"done"`
 	// Images the filters cover. More than Total when the run was capped.
 	Matched int `json:"matched"`
-	// Why the run could not start: the registry could not be listed.
+	// Why the run scanned nothing or stopped early: the registry could not be
+	// listed, or the scan pods could not run.
 	Error string `json:"error,omitempty"`
 }
 
@@ -192,36 +193,46 @@ func (s *Scanner) due(c Config) bool {
 	if r.Run.Running {
 		return false
 	}
+	wait := time.Duration(c.IntervalDays) * 24 * time.Hour
+	if r.Run.Error != "" {
+		// A run that scanned nothing is not a reason to wait days for the next.
+		wait = retryAfterError
+	}
 	started, err := time.Parse(time.RFC3339, r.Run.StartedAt)
-	return err != nil || !s.now().Before(started.Add(time.Duration(c.IntervalDays)*24*time.Hour))
+	return err != nil || !s.now().Before(started.Add(wait))
 }
+
+// How soon a run that could not list the registry, or could not run its pods,
+// is tried again.
+const retryAfterError = time.Hour
 
 var ErrAlreadyRunning = errors.New("a scan of this registry is already running")
 var ErrNotFound = errors.New("no such registry")
 
 // Start begins a scan of one registry in the background.
 func (s *Scanner) Start(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Read under the lock, so a registry deleted or edited at this moment is
+	// seen as it now is, and Forget cannot be overtaken.
 	cfg, ok := s.store.Get(id)
 	if !ok {
 		return ErrNotFound
 	}
-	s.mu.Lock()
+	if _, busy := s.cancels[id]; busy {
+		return ErrAlreadyRunning
+	}
 	r := s.reports[id]
 	if r == nil {
 		r = &Report{Images: []ImageResult{}}
 		s.reports[id] = r
 	}
-	if r.Run.Running {
-		s.mu.Unlock()
-		return ErrAlreadyRunning
-	}
 	r.Run = Run{Running: true, StartedAt: s.now().UTC().Format(time.RFC3339)}
 	ctx, cancel := context.WithCancel(s.base)
 	s.cancels[id] = cancel
 	s.save(id)
-	s.mu.Unlock()
 
-	go s.run(ctx, cfg)
+	go s.run(ctx, cancel, cfg)
 	return nil
 }
 
@@ -263,10 +274,14 @@ func (s *Scanner) stop(id string) {
 	}
 }
 
-func (s *Scanner) run(ctx context.Context, cfg Config) {
+// How long listing a registry may take before the run gives up.
+const resolveTimeout = 10 * time.Minute
+
+func (s *Scanner) run(ctx context.Context, cancel context.CancelFunc, cfg Config) {
 	id := cfg.ID
-	// update applies a change to the report if this run still owns it, and
-	// saves. A registry deleted mid-run has no report left to write to.
+	defer cancel()
+	// update applies a change to the report, if the registry still has one,
+	// and saves.
 	update := func(f func(r *Report)) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -275,26 +290,38 @@ func (s *Scanner) run(ctx context.Context, cfg Config) {
 			s.save(id)
 		}
 	}
-	defer func() {
+	// finish is the run's last word. The report stops saying "running" and the
+	// run gives up its place in one step, so nothing can start in between and
+	// have its own place taken away.
+	finish := func(f func(r *Report)) {
 		s.mu.Lock()
+		defer s.mu.Unlock()
+		if r := s.reports[id]; r != nil {
+			r.Run.Running = false
+			f(r)
+			s.save(id)
+		}
 		delete(s.cancels, id)
-		s.mu.Unlock()
-	}()
+	}
+	stamp := func() string { return s.now().UTC().Format(time.RFC3339) }
 
-	images, matched, err := s.resolve(ctx, cfg)
+	listCtx, listDone := context.WithTimeout(ctx, resolveTimeout)
+	images, matched, err := s.resolve(listCtx, cfg)
+	listDone()
 	if ctx.Err() != nil {
-		update(func(r *Report) { r.Run.Running = false })
+		finish(func(*Report) {}) // cancelled: no finish time, so it is due again
 		return
 	}
 	if err != nil {
-		update(func(r *Report) {
-			r.Run.Running = false
-			r.Run.Error = err.Error()
-			r.Run.FinishedAt = s.now().UTC().Format(time.RFC3339)
-		})
+		finish(func(r *Report) { r.Run.Error, r.Run.FinishedAt = err.Error(), stamp() })
 		return
 	}
 	update(func(r *Report) { r.Run.Total, r.Run.Matched = len(images), matched })
+
+	// Set when a scan pod could not run at all. The rest of the run would fail
+	// the same way, one timeout at a time, so it stops there.
+	var infraMu sync.Mutex
+	infra := ""
 
 	var wg sync.WaitGroup
 	for _, image := range images {
@@ -307,6 +334,10 @@ func (s *Scanner) run(ctx context.Context, cfg Config) {
 		if !acquired {
 			break
 		}
+		if ctx.Err() != nil {
+			<-s.sem
+			break
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -315,7 +346,17 @@ func (s *Scanner) run(ctx context.Context, cfg Config) {
 			if ctx.Err() != nil {
 				return // cancelled, not failed: say nothing about the image
 			}
-			res := ImageResult{Image: image, ScannedAt: s.now().UTC().Format(time.RFC3339)}
+			var ie *InfraError
+			if errors.As(err, &ie) {
+				infraMu.Lock()
+				if infra == "" {
+					infra = ie.Error()
+				}
+				infraMu.Unlock()
+				cancel()
+				return // says nothing about the image either
+			}
+			res := ImageResult{Image: image, ScannedAt: stamp()}
 			if err != nil {
 				res.Error = err.Error()
 				_ = os.Remove(s.findingsPath(id, image))
@@ -342,12 +383,18 @@ func (s *Scanner) run(ctx context.Context, cfg Config) {
 	}
 	wg.Wait()
 
-	if ctx.Err() != nil {
-		// Leave no finish time, so the run is due again.
-		update(func(r *Report) { r.Run.Running = false })
+	if infra != "" {
+		finish(func(r *Report) {
+			r.Run.Error = "The scan was stopped because its pods cannot run: " + infra
+			r.Run.FinishedAt = stamp()
+		})
 		return
 	}
-	update(func(r *Report) {
+	if ctx.Err() != nil {
+		finish(func(*Report) {})
+		return
+	}
+	finish(func(r *Report) {
 		// Images the filters no longer cover leave the list with this run.
 		current := make(map[string]bool, len(images))
 		for _, image := range images {
@@ -362,8 +409,7 @@ func (s *Scanner) run(ctx context.Context, cfg Config) {
 			}
 		}
 		r.Images = kept
-		r.Run.Running = false
-		r.Run.FinishedAt = s.now().UTC().Format(time.RFC3339)
+		r.Run.FinishedAt = stamp()
 	})
 }
 
