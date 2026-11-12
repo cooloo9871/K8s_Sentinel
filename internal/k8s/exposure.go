@@ -91,7 +91,11 @@ func (s *Store) CachedPodExposures(ctx context.Context) map[string][]Exposure {
 	}
 	s.exposureMu.RUnlock()
 
-	fresh := s.listPodExposures(ctx)
+	// Not on the caller's context, for the reason cachedAttribution gives: a
+	// cancelled refresh would be cached as "nothing is exposed".
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+	defer cancel()
+	fresh := s.listPodExposures(loadCtx)
 	for _, exps := range fresh {
 		sortByReach(exps)
 	}

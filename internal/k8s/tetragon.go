@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
 	corev1 "k8s.io/api/core/v1"
@@ -118,26 +119,67 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 		return err
 	}
 
-	// When ANY pod's stream ends — a broken or restarted agent — cancel the rest
-	// and return, so the caller's reconnect loop re-lists pods and redials every
-	// node. Without this, waiting for all goroutines meant a single dead node was
-	// never redialed while healthy nodes kept their streams open, leaving that
-	// node's ingestion health stuck showing blind even after it recovered.
-	streamCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// Each agent has its own stream and its own reconnect loop, and the agents
+	// are listed again every half minute. Ending every stream when one ended
+	// meant a single agent that could not be dialled tore the healthy ones down
+	// every ten seconds, and a node that joined later was not connected to until
+	// some other stream happened to break.
+	running := map[podEndpoint]context.CancelFunc{}
 	var wg sync.WaitGroup
-	for _, pod := range pods {
-		wg.Add(1)
-		go func(p podEndpoint) {
-			defer wg.Done()
-			defer cancel()
-			if err := s.streamFromPod(streamCtx, p, out); err != nil && streamCtx.Err() == nil {
-				log.Printf("tetragon-stream: pod %s: %v", p.Name, err)
+	defer wg.Wait()
+	defer func() {
+		for _, cancel := range running {
+			cancel()
+		}
+	}()
+	relist := time.NewTicker(30 * time.Second)
+	defer relist.Stop()
+	for {
+		alive := make(map[podEndpoint]bool, len(pods))
+		for _, p := range pods {
+			alive[p] = true
+			if _, ok := running[p]; ok {
+				continue
 			}
-		}(pod)
+			podCtx, cancel := context.WithCancel(ctx)
+			running[p] = cancel
+			wg.Add(1)
+			go func(p podEndpoint) {
+				defer wg.Done()
+				s.streamFromPodUntilDone(podCtx, p, out)
+			}(p)
+		}
+		for p, cancel := range running {
+			if !alive[p] {
+				cancel()
+				delete(running, p)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-relist.C:
+		}
+		// A list that fails keeps the streams there are.
+		if next, err := s.findAllTetragonPods(ctx); err == nil {
+			pods = next
+		}
 	}
-	wg.Wait()
-	return nil
+}
+
+// streamFromPodUntilDone keeps one agent's stream open, dialling again ten
+// seconds after it ends, until the context is cancelled.
+func (s *Store) streamFromPodUntilDone(ctx context.Context, p podEndpoint, out chan<- TetragonEvent) {
+	for {
+		if err := s.streamFromPod(ctx, p, out); err != nil && ctx.Err() == nil {
+			log.Printf("tetragon-stream: pod %s: %v", p.Name, err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
 }
 
 func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- TetragonEvent) error {

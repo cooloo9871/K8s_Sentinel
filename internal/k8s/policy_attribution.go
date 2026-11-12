@@ -72,27 +72,42 @@ func (s *Store) cachedAttribution(ctx context.Context) attributionData {
 	}
 	s.attrMu.RUnlock()
 
-	fresh := s.loadAttributionData(ctx)
+	// Not on the caller's context: a browser tab closing mid-refresh cancelled
+	// the lists, and the empty result was then served to everyone for half a
+	// minute, during which a policy denial could not be attributed and raised
+	// no security event at all.
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+	defer cancel()
+	fresh, ok := s.loadAttributionData(loadCtx)
 	s.attrMu.Lock()
+	defer s.attrMu.Unlock()
+	if !ok && s.attrData != nil {
+		// Keep what was known, and try again soon.
+		s.attrExpiry = time.Now().Add(5 * time.Second)
+		return *s.attrData
+	}
 	s.attrData = &fresh
 	s.attrExpiry = time.Now().Add(30 * time.Second)
-	s.attrMu.Unlock()
 	return fresh
 }
 
-func (s *Store) loadAttributionData(ctx context.Context) attributionData {
+// loadAttributionData reports false when the pod list, which everything else
+// here hangs on, could not be read.
+func (s *Store) loadAttributionData(ctx context.Context) (attributionData, bool) {
 	d := attributionData{
 		podLabels:    map[string]map[string]string{},
 		podContainer: map[string]string{},
 		podProbes:    map[string]podProbeTargets{},
 	}
+	ok := true
 	if s.typed == nil || s.client == nil {
-		return d
+		return d, true
 	}
 
 	pods, err := s.typed.CoreV1().Pods("").List(ctx, fromCache)
 	switch {
 	case err != nil:
+		ok = false
 		// Previously discarded. A failed list leaves both policy attribution and
 		// the container lookup empty, so a denial silently loses its policy name
 		// and its container with nothing said about why.
@@ -174,7 +189,7 @@ func (s *Store) loadAttributionData(ctx context.Context) attributionData {
 	if list, err := s.client.Resource(ccnpGVR).List(ctx, fromCache); err == nil {
 		collect(list.Items, true)
 	}
-	return d
+	return d, ok
 }
 
 // runningContainers returns the containers that live for the pod's whole life:

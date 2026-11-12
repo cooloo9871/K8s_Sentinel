@@ -413,12 +413,22 @@ func (s *Store) EverSawCiliumFlow() bool {
 // fans out to all subscribers. No-op when Cilium is not detected.
 func (s *Store) StartCiliumBroadcast(ctx context.Context) {
 	go func() {
-		if !s.DetectCilium(ctx) {
-			log.Printf("cilium-broadcast: Cilium not detected, skipping")
+		// Looked for again every minute: Cilium may be installed after
+		// Sentinel, and a lookup that failed once at startup used to switch flow
+		// collection off until the next restart.
+		for logged := false; !s.DetectCilium(ctx); {
+			if !logged {
+				log.Printf("cilium-broadcast: Cilium not detected, will keep looking")
+				logged = true
+			}
 			// Record it so the UI shows Hubble ingestion as off rather than
 			// silently omitting it — "not detected" is itself a finding.
 			s.ingestion.MarkHubbleError(fmt.Errorf("Cilium not detected"))
-			return
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+			}
 		}
 		log.Printf("cilium-broadcast: Cilium detected, starting flow stream")
 		for {

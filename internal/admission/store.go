@@ -211,26 +211,26 @@ func (s *Store) flushLocked() {
 			log.Printf("admission-store: flush marshal error: %v", err)
 			return
 		}
+		// One flush at a time, from the staleness check through the rename.
+		// The writes used to happen outside the lock, all to the same .tmp:
+		// an older snapshot could land in the file after a newer one and be
+		// renamed into place, or the two could interleave into broken JSON.
+		s.flushMu.Lock()
+		defer s.flushMu.Unlock()
+		s.mu.RLock()
+		stale := s.flushGen != gen
+		s.mu.RUnlock()
+		if stale {
+			return // a newer snapshot is on its way
+		}
 		tmp := s.path + ".tmp"
 		if err := os.WriteFile(tmp, data, 0600); err != nil {
 			log.Printf("admission-store: flush write error: %v", err)
 			return
 		}
-		s.flushMu.Lock()
-		s.mu.RLock()
-		stale := s.flushGen != gen
-		s.mu.RUnlock()
-		if stale {
-			s.flushMu.Unlock()
-			// Do NOT remove tmp here — a newer goroutine may have written
-			// its data to the same .tmp path. Removing it would cause that
-			// goroutine's subsequent Rename to fail with ENOENT.
-			return
-		}
 		if err := os.Rename(tmp, s.path); err != nil {
 			log.Printf("admission-store: flush rename error: %v", err)
 		}
-		s.flushMu.Unlock()
 	}()
 }
 
