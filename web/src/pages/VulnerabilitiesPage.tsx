@@ -14,7 +14,7 @@ import { FilterPopover } from '../components/FilterPopover'
 import { RelativeTime } from '../components/RelativeTime'
 import { downloadCSV } from '../utils/csv'
 import {
-  filterWorkloads, workloadCsvRows, workloadKey, WORKLOAD_CSV_HEADERS,
+  filterWorkloads, summarizeWorkloads, workloadCsvRows, workloadKey, WORKLOAD_CSV_HEADERS,
 } from '../utils/vulnerabilities'
 import {
   IconChevronDown, IconChevronRight, IconDownload, IconRefresh,
@@ -176,10 +176,7 @@ export function VulnerabilitiesPage() {
   const isFiltered = search.trim() !== '' || namespaceFilter.length > 0 ||
     severities.length > 0 || flags.length > 0
 
-  const critical = filtered.reduce((n, w) => n + w.counts.critical, 0)
-  const high = filtered.reduce((n, w) => n + w.counts.high, 0)
-  const exposedCritical = filtered.filter(w => w.exposed && w.counts.critical > 0).length
-  const unscanned = filtered.filter(w => w.scan !== 'full').length
+  const { critical, high, exposedCritical, unscanned } = summarizeWorkloads(filtered)
 
   const exportCsv = () =>
     downloadCSV('vulnerabilities.csv', WORKLOAD_CSV_HEADERS, workloadCsvRows(filtered))

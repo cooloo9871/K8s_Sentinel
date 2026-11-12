@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatTWTime } from '../utils/time'
 import { isNotDetected } from '../utils/ingestion'
+import { vulnApi, type VulnOverview } from '../api/client'
+import { scannerState } from '../utils/vulnerabilities'
 
 interface TetragonAgent {
   podName: string
@@ -71,6 +73,7 @@ function hubbleState(h: IngestSource | null): { label: string; down: boolean; mu
 export function TetragonStatusPage() {
   const [agents, setAgents] = useState<TetragonAgent[]>([])
   const [hubble, setHubble] = useState<IngestSource | null>(null)
+  const [scan, setScan] = useState<VulnOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [error, setError] = useState('')
@@ -87,6 +90,8 @@ export function TetragonStatusPage() {
         const ing = await fetch('/api/ingestion/health').then(r => r.json())
         setHubble((ing.sources ?? []).find((s: IngestSource) => s.kind === 'hubble') ?? null)
       } catch { /* leave hubble as-is */ }
+      // Best-effort for the same reason.
+      try { setScan(await vulnApi.overview()) } catch { /* leave as-is */ }
       setLastUpdated(new Date())
       setError('')
     } catch (e: any) {
@@ -105,6 +110,8 @@ export function TetragonStatusPage() {
   const healthy = agents.filter(isHealthy).length
   const total = agents.length
   const hb = hubbleState(hubble)
+  const sc = scannerState(scan)
+  const scanUnscanned = (scan?.workloads ?? []).filter(w => w.scan !== 'full').length
 
   return (
     <>
@@ -112,7 +119,7 @@ export function TetragonStatusPage() {
         <div>
           <h4 className="text-xl font-semibold">Event Sources</h4>
           <p className="text-sm text-muted-foreground">
-            Whether Sentinel is actually ingesting from each source: Tetragon agents per node, and Hubble
+            Whether Sentinel is actually ingesting from each source: Tetragon agents per node, Hubble, and the vulnerability scanner
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -284,6 +291,60 @@ export function TetragonStatusPage() {
               {hb.down && hubble?.lastError && (
                 <div className="mt-2 rounded bg-destructive/10 px-2 py-1 text-destructive break-words">
                   {hubble.lastError}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Trivy Operator is not a stream: its health is whether reports
+              exist, can be read, and are still being written. */}
+          <h5 className="mb-3 mt-8 text-sm font-semibold text-muted-foreground">Vulnerability scanner</h5>
+          <Card className={sc.tone === 'down' ? 'border-destructive/40 bg-destructive/5' : ''}>
+            <CardHeader className="border-b pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Trivy Operator</CardTitle>
+                {sc.tone === 'down' ? (
+                  <Badge variant="destructive" className="font-medium">{sc.label}</Badge>
+                ) : sc.tone === 'warn' ? (
+                  <Badge className="bg-amber-500/15 text-amber-700 font-medium">{sc.label}</Badge>
+                ) : sc.tone === 'muted' ? (
+                  <Badge className="bg-muted text-muted-foreground font-medium">{sc.label}</Badge>
+                ) : (
+                  <Badge className="bg-green-500/15 text-green-700 font-medium">{sc.label}</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Source</span>
+                <span>VulnerabilityReport resources</span>
+              </div>
+              {scan?.status === 'ok' && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Reports</span>
+                    <span>{scan.reports}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Newest report</span>
+                    <span>{scan.lastScanAt ? formatTWTime(scan.lastScanAt) : 'None yet'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Workloads not fully scanned</span>
+                    <span className={scanUnscanned > 0 ? 'text-amber-600 font-medium' : ''}>
+                      {scanUnscanned} of {scan.workloads.length}
+                    </span>
+                  </div>
+                </>
+              )}
+              {sc.tone === 'warn' && (
+                <div className="mt-2 rounded bg-amber-500/10 px-2 py-1 text-amber-700">
+                  No report has been written for over a week. Trivy Operator rescans daily by default, so check that it is running.
+                </div>
+              )}
+              {sc.tone === 'down' && scan?.message && (
+                <div className="mt-2 rounded bg-destructive/10 px-2 py-1 text-destructive break-words">
+                  {scan.message}
                 </div>
               )}
             </CardContent>

@@ -1,4 +1,4 @@
-import type { WorkloadVuln } from '../api/client'
+import type { VulnOverview, WorkloadVuln } from '../api/client'
 import { matchesScopeFilter } from '../components/ScopeFilter'
 import { formatTWTime } from './time'
 
@@ -48,4 +48,36 @@ export function workloadCsvRows(workloads: WorkloadVuln[]): string[][] {
       : ['', '', '', '', '', '']),
     i.scanned ? formatTWTime(i.scannedAt) : 'Not scanned',
   ]))
+}
+
+/** The headline numbers, shared so the page and the dashboard cannot disagree. */
+export function summarizeWorkloads(workloads: WorkloadVuln[]) {
+  return {
+    critical: workloads.reduce((n, w) => n + w.counts.critical, 0),
+    high: workloads.reduce((n, w) => n + w.counts.high, 0),
+    exposedCritical: workloads.filter(w => w.exposed && w.counts.critical > 0).length,
+    unscanned: workloads.filter(w => w.scan !== 'full').length,
+  }
+}
+
+// The same age at which a single scan result is marked stale.
+const SCANNER_STALE_MS = 7 * 24 * 60 * 60 * 1000
+
+export interface ScannerState {
+  label: string
+  tone: 'ok' | 'muted' | 'warn' | 'down'
+}
+
+/**
+ * Whether the scanner is delivering. Not installed is a fact about the cluster
+ * and reads muted; installed but unreadable, or silent for a week, does not.
+ */
+export function scannerState(o: VulnOverview | null, now = Date.now()): ScannerState {
+  if (!o) return { label: 'Not measured', tone: 'muted' }
+  if (o.status === 'not-installed') return { label: 'Not detected', tone: 'muted' }
+  if (o.status === 'forbidden') return { label: 'Not permitted', tone: 'down' }
+  if (o.status === 'error') return { label: 'Error', tone: 'down' }
+  if (o.reports === 0 || !o.lastScanAt) return { label: 'No reports yet', tone: 'muted' }
+  if (now - new Date(o.lastScanAt).getTime() > SCANNER_STALE_MS) return { label: 'Stale', tone: 'warn' }
+  return { label: 'Reporting', tone: 'ok' }
 }

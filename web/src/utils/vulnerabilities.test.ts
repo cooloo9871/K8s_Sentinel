@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { WorkloadVuln } from '../api/client'
-import { filterWorkloads, workloadCsvRows, workloadKey } from './vulnerabilities'
+import type { VulnOverview, WorkloadVuln } from '../api/client'
+import { filterWorkloads, workloadCsvRows, workloadKey, summarizeWorkloads, scannerState } from './vulnerabilities'
 
 const zero = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 }
 
@@ -92,5 +92,42 @@ describe('workloadKey', () => {
   it('tells apart same-named workloads of different kinds and namespaces', () => {
     expect(workloadKey(workload({}))).not.toBe(workloadKey(workload({ kind: 'StatefulSet' })))
     expect(workloadKey(workload({}))).not.toBe(workloadKey(workload({ namespace: 'prod' })))
+  })
+})
+
+describe('summarizeWorkloads', () => {
+  it('counts findings, and exposure only where there is a critical finding', () => {
+    const s = summarizeWorkloads([
+      workload({ counts: { ...zero, critical: 2, high: 1 }, exposed: true }),
+      workload({ counts: { ...zero, high: 4 }, exposed: true }),
+      workload({ counts: { ...zero, critical: 1 }, scan: 'partial' }),
+      workload({ scan: 'none' }),
+    ])
+    expect(s).toEqual({ critical: 3, high: 5, exposedCritical: 1, unscanned: 2 })
+  })
+})
+
+describe('scannerState', () => {
+  const now = new Date('2026-11-12T00:00:00Z').getTime()
+  const ok = (over: Partial<VulnOverview>): VulnOverview =>
+    ({ status: 'ok', workloads: [], reports: 4, lastScanAt: '2026-11-11T20:00:00Z', ...over })
+
+  it('is reporting when a recent report exists', () => {
+    expect(scannerState(ok({}), now)).toEqual({ label: 'Reporting', tone: 'ok' })
+  })
+  it('is muted, not an alarm, when the scanner is absent or has not reported yet', () => {
+    expect(scannerState(null, now).tone).toBe('muted')
+    expect(scannerState(ok({ status: 'not-installed', reports: 0, lastScanAt: undefined }), now))
+      .toEqual({ label: 'Not detected', tone: 'muted' })
+    expect(scannerState(ok({ reports: 0, lastScanAt: undefined }), now))
+      .toEqual({ label: 'No reports yet', tone: 'muted' })
+  })
+  it('is a problem when reports exist but cannot be read', () => {
+    expect(scannerState(ok({ status: 'forbidden' }), now).tone).toBe('down')
+    expect(scannerState(ok({ status: 'error' }), now).tone).toBe('down')
+  })
+  it('warns when the newest report is over a week old', () => {
+    expect(scannerState(ok({ lastScanAt: '2026-11-04T23:00:00Z' }), now)).toEqual({ label: 'Stale', tone: 'warn' })
+    expect(scannerState(ok({ lastScanAt: '2026-11-05T01:00:00Z' }), now).tone).toBe('ok')
   })
 })

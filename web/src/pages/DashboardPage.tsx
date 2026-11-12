@@ -8,6 +8,8 @@ import {
   IconArrowRight,
   IconRefresh,
   IconServer,
+  IconBug,
+  IconWorld,
 } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -17,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { policyApi, modeApi, vapApi, cnpApi, type VAPRecord, type VAPBindingRecord, type CNPRecord, quarantineApi,
-  type QuarantinedPod,
+  type QuarantinedPod, vulnApi, type VulnOverview,
 } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
@@ -25,6 +27,7 @@ import { useSecurityEvents } from '../layout/SecurityEventsProvider'
 import { useAdmissionEvents } from '../layout/AdmissionEventsProvider'
 import { RelativeTime } from '../components/RelativeTime'
 import { isIngestProblem } from '../utils/ingestion'
+import { summarizeWorkloads, workloadKey } from '../utils/vulnerabilities'
 import type { PolicyRecord, Mode } from '../api/types'
 
 interface StatProps {
@@ -80,6 +83,7 @@ export function DashboardPage() {
   const [vapBindings, setVapBindings] = useState<VAPBindingRecord[]>([])
   const [cnps, setCnps] = useState<CNPRecord[]>([])
   const [quarantined, setQuarantined] = useState<QuarantinedPod[]>([])
+  const [vulns, setVulns] = useState<VulnOverview | null>(null)
   // null until the first fetch; false on clusters without Cilium, where the
   // card is hidden rather than shown permanently empty.
   const [cnpAvailable, setCnpAvailable] = useState<boolean | null>(null)
@@ -108,6 +112,9 @@ export function DashboardPage() {
       .catch(() => setCnpAvailable(false))
     quarantineApi.list()
       .then(setQuarantined)
+      .catch(() => {})
+    vulnApi.overview()
+      .then(setVulns)
       .catch(() => {})
     fetch('/api/tetragon/agents')
       .then(r => r.json())
@@ -138,6 +145,12 @@ export function DashboardPage() {
   const secCritical = secEvents.filter(e => e.severity === 'critical').length
   const admCritical = admissionEvents.filter(e => e.severity === 'critical').length
   const admWarning = admissionEvents.filter(e => e.severity === 'warning').length
+
+  const vulnSummary = summarizeWorkloads(vulns?.workloads ?? [])
+  // The server sorts by what to fix first, so the head of the list is the answer.
+  const vulnTop = (vulns?.workloads ?? [])
+    .filter(w => w.counts.critical > 0 || w.counts.high > 0)
+    .slice(0, 5)
 
   const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
 
@@ -402,6 +415,76 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Vulnerabilities — always shown, and never as an empty table: a cluster
+          nothing is scanning must not read the same as a clean one. */}
+      <Card>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold">Vulnerabilities</h3>
+            <p className={`text-sm ${vulnSummary.exposedCritical > 0 ? 'font-medium text-red-600' : 'text-muted-foreground'}`}>
+              {vulns === null ? 'Loading…'
+                : vulns.status === 'not-installed' ? 'Scanning is not enabled'
+                : vulns.status === 'forbidden' ? 'Sentinel is not permitted to read scan reports'
+                : vulns.status === 'error' ? 'Scan reports could not be read'
+                : [
+                    `${vulnSummary.critical} critical, ${vulnSummary.high} high`,
+                    vulnSummary.exposedCritical > 0 &&
+                      `${vulnSummary.exposedCritical} workload${vulnSummary.exposedCritical !== 1 ? 's' : ''} critical and exposed`,
+                    vulnSummary.unscanned > 0 && `${vulnSummary.unscanned} not fully scanned`,
+                  ].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" className="gap-1 text-sm" onClick={() => navigate('/vulnerabilities')}>
+            View all <IconArrowRight size={14} />
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {vulnTop.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+              <IconBug size={36} strokeWidth={1.5} />
+              <p className="text-sm">
+                {vulns?.status !== 'ok' ? 'No scan results'
+                  : vulnSummary.unscanned > 0 ? 'No critical or high findings in what was scanned'
+                  : 'No critical or high findings'}
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Workload</TableHead>
+                  <TableHead>Namespace</TableHead>
+                  <TableHead className="text-right">Critical</TableHead>
+                  <TableHead className="text-right">High</TableHead>
+                  <TableHead className="text-right">Fixable</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vulnTop.map(w => (
+                  <TableRow key={workloadKey(w)}>
+                    <TableCell className="font-medium">
+                      {w.name}
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">{w.kind}</span>
+                      {w.exposed && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-amber-600">
+                          <IconWorld size={12} /> Exposed
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{w.namespace}</TableCell>
+                    <TableCell className={`text-right ${w.counts.critical > 0 ? 'font-semibold text-red-600' : 'text-muted-foreground'}`}>
+                      {w.counts.critical}
+                    </TableCell>
+                    <TableCell className="text-right">{w.counts.high}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{w.fixable}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quarantine — always shown, unlike the Network Policy card above, because
           "nothing is contained" is a statement about the cluster worth making

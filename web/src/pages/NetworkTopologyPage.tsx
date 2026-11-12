@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld, IconAdjustmentsHorizontal, IconLock,
+import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid, IconWorld, IconAdjustmentsHorizontal, IconLock, IconBug,
 } from '@tabler/icons-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScopeFilter } from '../components/ScopeFilter'
@@ -35,6 +35,8 @@ interface TopologyNode {
   }[]
   // Cut off from the network by Sentinel, container left running
   quarantined?: boolean
+  // Critical findings in the images this pod runs, per Trivy Operator
+  criticalVulns?: number
   // Derived client-side: this pod receives traffic from an ext: source
   extInbound?: boolean
 }
@@ -101,6 +103,9 @@ function PodNode({ data }: { data: TopologyNode }) {
         : anomaly
         ? <IconAlertTriangle size={12} className="absolute right-1 top-1 text-red-500" />
         : exposed && <IconWorld size={12} className="absolute right-1 top-1 text-amber-500" />}
+      {/* Its own corner: a vulnerable image is a fact about the pod that holds
+          alongside whichever network state the other corner is showing. */}
+      {(data.criticalVulns ?? 0) > 0 && <IconBug size={12} className="absolute left-1 top-1 text-red-600" />}
       <div className="text-[10px] text-muted-foreground mb-0.5">{data.namespace}</div>
       <div className="text-xs font-medium truncate max-w-[140px]" title={data.pod}>{data.pod}</div>
       <Handle type="source" position={Position.Right} className="!bg-primary" />
@@ -551,6 +556,7 @@ export function NetworkTopologyPage() {
       ] as const).filter(a => colours.has(a.colour)),
       exposed: nodes.some(n => ((n.data as TopologyNode).exposures?.length ?? 0) > 0),
       quarantined: nodes.some(n => (n.data as TopologyNode).quarantined),
+      vulnerable: nodes.some(n => ((n.data as TopologyNode).criticalVulns ?? 0) > 0),
       blocked: edges.some(e => (e.data as EdgeVisualData | undefined)?.blocked),
     }
   }, [nodes, edges])
@@ -697,6 +703,12 @@ export function NetworkTopologyPage() {
             <span className="flex items-center gap-1">
               <IconLock size={12} className="text-red-600" />
               Quarantined
+            </span>
+          )}
+          {legend.vulnerable && (
+            <span className="flex items-center gap-1">
+              <IconBug size={12} className="text-red-600" />
+              Critical vulnerabilities
             </span>
           )}
           {legend.arrows.map(a => (
@@ -913,6 +925,16 @@ export function NetworkTopologyPage() {
                             <span className="font-medium">Quarantined.</span> Cut off from the network
                             but still running, so the process and its memory are intact. Only the
                             kubelet's probes still reach it. Release it from the Quarantine page.
+                          </div>
+                        )}
+                        {(selectedNode.criticalVulns ?? 0) > 0 && (
+                          <div className="rounded bg-red-50 px-2 py-1.5 text-[11px] leading-snug text-red-700">
+                            <span className="font-medium">
+                              {selectedNode.criticalVulns} critical vulnerabilit{selectedNode.criticalVulns === 1 ? 'y' : 'ies'}
+                            </span>{' '}
+                            in the images this pod runs
+                            {(selectedNode.exposures?.length ?? 0) > 0 && ', and it is reachable from outside the cluster'}.
+                            The findings are on the Vulnerabilities page.
                           </div>
                         )}
                         {selectedNode.extInbound && !(selectedNode.exposures?.length) && (

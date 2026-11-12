@@ -391,6 +391,9 @@ export interface VulnOverview {
   status: 'ok' | 'not-installed' | 'forbidden' | 'error'
   message?: string
   workloads: WorkloadVuln[]
+  /** Every report in the cluster, and when the newest was written. */
+  reports: number
+  lastScanAt?: string
 }
 
 export interface Vulnerability {
