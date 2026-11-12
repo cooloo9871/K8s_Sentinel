@@ -246,6 +246,24 @@ Registry scans are started by Sentinel, not by the operator, so they take the sa
 
 The database is only as current as the copy in your registry, so refresh the mirror on a schedule. The operator's own image and the registries your workloads pull from need the same treatment; the [Trivy Operator documentation](https://aquasecurity.github.io/trivy-operator/) covers private registries and credentials.
 
+## Uninstall
+
+```bash
+bash deploy/uninstall.sh --dry-run   # shows what would be removed
+bash deploy/uninstall.sh             # asks, then removes
+```
+
+It removes K8s Sentinel with the `sentinel-system` namespace (settings, accounts and stored events included), Trivy Operator with its Trivy server, Tetragon, and what the installer Job left in `kube-system`. The quarantine policy and the quarantine labels go as well, because a pod left isolated with no Sentinel to release it would stay that way.
+
+| Option | Effect |
+|---|---|
+| `--dry-run` | Lists what would be deleted and deletes nothing |
+| `--keep-tetragon` | Leaves Tetragon alone, for a cluster where it was installed before Sentinel |
+| `--purge` | Also deletes the tracing, network and admission policies made in Sentinel, every vulnerability report, and the Tetragon and Trivy CRDs |
+| `--yes` | Does not ask |
+
+Without `--purge` the policies stay and go on being enforced: network policies by Cilium, admission policies by the API server. Tracing policies are kept as objects but do nothing once Tetragon is gone. Set `TETRAGON_NAMESPACE` if Tetragon is not in `kube-system`. A persistent volume you added for Sentinel's data is deleted with the namespace's claim, subject to its reclaim policy.
+
 ## Container image
 
 ```
