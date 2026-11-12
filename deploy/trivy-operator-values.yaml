@@ -17,6 +17,36 @@ operator:
   clusterComplianceEnabled: false
   exposedSecretScannerEnabled: false
   sbomGenerationEnabled: false
+  # One Trivy server holds the vulnerability database and the scan cache, and
+  # the scan pods are its clients. Without it every scan pod downloads the
+  # database for itself, and the containers of one scan pod, one per image of
+  # the workload, compete for a single cache lock: the losers fail with "cache
+  # may be in use by another process" and their images stay unscanned.
+  builtInTrivyServer: true
+
+trivy:
+  mode: ClientServer
+  # The server keeps its database in an emptyDir and downloads it again after a
+  # restart, so no StorageClass is needed.
+  storageClassEnabled: false
+  # The chart's 500M is not enough for a large image: the scan is OOM-killed.
+  resources:
+    limits:
+      memory: 1Gi
+  server:
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      fsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
 
 # sentinel-system enforces the restricted Pod Security level. The chart's
 # defaults already drop capabilities and forbid privilege escalation; these add

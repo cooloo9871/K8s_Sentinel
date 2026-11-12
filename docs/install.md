@@ -151,10 +151,11 @@ helm install trivy-operator aqua/trivy-operator \
   --values deploy/trivy-operator-values.yaml
 ```
 
-`deploy/trivy-operator-values.yaml` does two things:
+`deploy/trivy-operator-values.yaml` does three things:
 
 - **Turns off every scanner except the vulnerability scanner.** Sentinel reads `VulnerabilityReport` and nothing else, so configuration audit, RBAC and infrastructure assessment, compliance, exposed-secret scanning and SBOM generation would only add load. The infrastructure assessment also starts a `node-collector` pod with host access on every node
 - **Fits the pods to the namespace.** `sentinel-system` enforces the restricted Pod Security level, so the operator and its scan pods run as a non-root user with the default seccomp profile
+- **Runs one Trivy server for all scans.** A `trivy-server` pod holds the vulnerability database and the scan cache, and the scan pods are its clients. Left to the chart's default, every scan pod downloads the database for itself, and the containers of one scan pod compete for a single cache lock: the ones that lose fail with `cache may be in use by another process`, and a workload with several images stays partly scanned or not scanned. The server keeps its database in an `emptyDir`, so it needs no StorageClass and downloads the database again after a restart
 
 The operator scans every workload once after it starts and again when a workload changes or a report expires (24 hours by default). Each scan is a short-lived `scan-vulnerabilityreport-*` pod in `sentinel-system`, one per workload with one container per image, at most ten at a time (`operator.scanJobsConcurrentLimit`). A burst of them right after install is the first pass over the cluster; they are removed as they finish. Reports appear as they complete:
 
@@ -187,6 +188,12 @@ Leave these alone if you read them with another tool; Sentinel does not use them
 helm upgrade trivy-operator aqua/trivy-operator \
   --namespace sentinel-system \
   --values deploy/trivy-operator-values.yaml
+```
+
+**Workloads that stay partial or not scanned :** an operator installed from an earlier copy of the values file runs without the Trivy server described above. Pass it the current values with the same `helm upgrade` command, then restart it so it scans what is missing:
+
+```bash
+kubectl -n sentinel-system rollout restart deployment/trivy-operator
 ```
 
 **Upgrading Sentinel from a version before the Vulnerabilities page:** re-apply `deploy/sentinel.yaml`. The ClusterRole gained read-only rules for `vulnerabilityreports` and for `jobs`; without the first the page reports that Sentinel is not permitted to read reports.
