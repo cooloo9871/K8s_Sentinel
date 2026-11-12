@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/handler"
+	"github.com/cooloo9871/K8s_Sentinel/internal/registry"
 	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
 	"github.com/cooloo9871/K8s_Sentinel/internal/security"
 	k8sclient "github.com/cooloo9871/K8s_Sentinel/internal/k8s"
@@ -77,6 +79,19 @@ func main() {
 	rsyslogDispatch := rsyslog.NewDispatcher(rsyslogs, securityStore, admissionStore)
 	go rsyslogDispatch.Run(ctx)
 
+	// Registry scanning: Trivy in a Job per image, in Sentinel's own namespace.
+	registries := registry.NewStore(data("registries.json"))
+	scanJobs := &registry.JobRunner{
+		Client:           typedClient,
+		Namespace:        ownNamespace(),
+		TrivyImage:       envOr("TRIVY_IMAGE", "mirror.gcr.io/aquasec/trivy:0.76.1"),
+		DBRepository:     os.Getenv("TRIVY_DB_REPOSITORY"),
+		JavaDBRepository: os.Getenv("TRIVY_JAVA_DB_REPOSITORY"),
+	}
+	scanJobs.CleanupStale(ctx)
+	registryScans := registry.NewScanner(registries, data("registry-scans"), scanJobs.Scan)
+	go registryScans.Run(ctx)
+
 	cfg := handler.Config{
 		Store:           store,
 		Users:           users,
@@ -88,6 +103,8 @@ func main() {
 		Admission:       admissionStore,
 		Security:        securityStore,
 		Audit:           auditStore,
+		Registries:      registries,
+		RegistryScans:   registryScans,
 		// Optional shared secret for the audit webhook. Unset keeps the endpoint
 		// open, matching apiserver configs written before the token existed.
 		AuditWebhookToken: os.Getenv("AUDIT_WEBHOOK_TOKEN"),
@@ -126,6 +143,22 @@ func main() {
 		log.Printf("server shutdown error: %v", err)
 	}
 	log.Printf("shutdown complete")
+}
+
+func envOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// ownNamespace is the namespace Sentinel runs in, which is where it starts its
+// scan Jobs: the one place its Role lets it.
+func ownNamespace() string {
+	if b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil && len(b) > 0 {
+		return strings.TrimSpace(string(b))
+	}
+	return envOr("POD_NAMESPACE", "sentinel-system")
 }
 
 func spaHandler(fsys http.FileSystem) http.Handler {

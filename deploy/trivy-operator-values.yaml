@@ -29,6 +29,9 @@ podSecurityContext:
     type: RuntimeDefault
 
 trivyOperator:
+  # Sentinel's registry scan Jobs carry this label. They are Trivy scanning an
+  # image; having the operator scan them in turn would be Trivy scanning Trivy.
+  skipResourceByLabels: sentinel.io/registry-scan
   scanJobPodTemplatePodSecurityContext:
     runAsNonRoot: true
     runAsUser: 10000

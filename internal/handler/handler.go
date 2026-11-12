@@ -15,6 +15,7 @@ import (
 	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/registry"
 	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
 	"github.com/cooloo9871/K8s_Sentinel/internal/security"
 )
@@ -31,6 +32,8 @@ type Config struct {
 	Admission       *admission.Store
 	Security        *security.Store
 	Audit           *audit.Store
+	Registries      *registry.Store
+	RegistryScans   *registry.Scanner
 	// Shared secret for the kube-apiserver audit webhook. When set, the webhook
 	// requires it as a bearer token; when empty, the endpoint stays open — the
 	// route predates the token and existing apiserver configs carry none.
@@ -107,6 +110,9 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/quarantine", listQuarantined(cfg.Store))
 		r.Get("/api/vulnerabilities", getVulnerabilities(cfg.Store))
 		r.Get("/api/vulnerabilities/{namespace}/{kind}/{name}", getWorkloadVulnerabilities(cfg.Store))
+		r.Get("/api/registries", listRegistries(cfg.Registries, cfg.RegistryScans))
+		r.Get("/api/registries/{id}/images", registryImages(cfg.Registries, cfg.RegistryScans))
+		r.Get("/api/registries/{id}/findings", registryFindings(cfg.RegistryScans))
 
 		// Admin-only (writes)
 		r.Group(func(r chi.Router) {
@@ -150,6 +156,11 @@ func New(cfg Config) http.Handler {
 			r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
 			r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))
 			r.Put("/api/security-events/retention", setSecurityRetention(cfg.Security))
+			r.Post("/api/registries", createRegistry(cfg.Registries, cfg.RegistryScans))
+			r.Post("/api/registries/test", testRegistry(cfg.Registries))
+			r.Put("/api/registries/{id}", updateRegistry(cfg.Registries, cfg.RegistryScans))
+			r.Delete("/api/registries/{id}", deleteRegistry(cfg.Registries, cfg.RegistryScans))
+			r.Post("/api/registries/{id}/scan", scanRegistry(cfg.RegistryScans))
 			r.Put("/api/admission-events/retention", setAdmissionRetention(cfg.Admission))
 		})
 	})

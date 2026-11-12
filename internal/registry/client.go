@@ -18,6 +18,9 @@ import (
 // database, so an accidental "*" on a large registry must not become thousands.
 const maxImages = 500
 
+// MaxImages is the cap, for the API to state alongside a count that exceeds it.
+const MaxImages = maxImages
+
 const pageSize = 100
 
 // client lists what a registry holds. It speaks the Registry v2 API, which
