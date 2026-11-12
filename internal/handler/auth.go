@@ -50,6 +50,15 @@ func authMiddleware(secret []byte, users *auth.UserStore) func(http.Handler) htt
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
+			// The token says who signed in; what they may do now is the store's
+			// to say. A deleted account, or a session from before a password
+			// change, is refused, and the role is the current one.
+			u, ok := users.Get(claims.Username)
+			if !ok || (claims.IssuedAt != nil && claims.IssuedAt.Unix() < u.PasswordChangedAt) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			claims.Role = u.Role
 			ctx := context.WithValue(r.Context(), claimsKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -73,7 +82,7 @@ func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimit
 		// the earlier failures from this IP already recorded the attack, so writing
 		// an audit entry per blocked request would only let an attacker flood the
 		// (shared, capped) audit log and evict real admin-action evidence.
-		if limiter.Blocked(ip) {
+		if !limiter.Attempt(ip) {
 			http.Error(w, "too many attempts, try again shortly", http.StatusTooManyRequests)
 			return
 		}
@@ -90,7 +99,6 @@ func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimit
 		}
 		u, ok := users.Authenticate(body.Username, body.Password)
 		if !ok {
-			limiter.Fail(ip)
 			recordLogin(auditStore, body.Username, ip, http.StatusUnauthorized)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
@@ -308,7 +316,7 @@ func deleteUserHandler(users *auth.UserStore) http.HandlerFunc {
 	}
 }
 
-func changePasswordHandler(users *auth.UserStore) http.HandlerFunc {
+func changePasswordHandler(users *auth.UserStore, secret []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := claimsFromCtx(r)
 		username := chi.URLParam(r, "username")
@@ -344,6 +352,19 @@ func changePasswordHandler(users *auth.UserStore) http.HandlerFunc {
 			}
 			http.Error(w, err.Error(), status)
 			return
+		}
+		// The change ends every session of that account, this one included when
+		// it is the user's own, so they are given a new one.
+		if claims.Username == username {
+			if u, ok := users.Get(username); ok {
+				ttl := users.GetSessionTTL()
+				if token, err := auth.SignToken(secret, u, time.Duration(ttl)*time.Second); err == nil {
+					http.SetCookie(w, &http.Cookie{
+						Name: "sentinel_token", Value: token, Path: "/", HttpOnly: true,
+						Secure: isSecureRequest(r), SameSite: http.SameSiteStrictMode, MaxAge: ttl,
+					})
+				}
+			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}

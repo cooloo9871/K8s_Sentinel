@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -242,7 +243,7 @@ func (d *Dispatcher) deliver(ctx context.Context, q queuedSend) {
 	for attempt := 0; ; attempt++ {
 		resp, err := d.client.Post(q.url, "application/json", bytes.NewReader(q.body))
 		if err != nil {
-			log.Printf("alert-dispatcher: %s POST %q error: %v", q.kind, q.url, err)
+			log.Printf("alert-dispatcher: %s POST %q error: %v", q.kind, RedactURL(q.url), err)
 			d.nextSend[q.url] = time.Now().Add(minSendInterval)
 			return
 		}
@@ -259,7 +260,7 @@ func (d *Dispatcher) deliver(ctx context.Context, q queuedSend) {
 			// Retrying sooner would just be refused again, so give up now rather
 			// than spin through retries that are bound to fail.
 			if retryAfter > maxRetryWait {
-				log.Printf("alert-dispatcher: %s POST %q asked to wait %v (over %v cap), giving up", q.kind, q.url, retryAfter, maxRetryWait)
+				log.Printf("alert-dispatcher: %s POST %q asked to wait %v (over %v cap), giving up", q.kind, RedactURL(q.url), retryAfter, maxRetryWait)
 				d.nextSend[q.url] = time.Now().Add(minSendInterval)
 				return
 			}
@@ -274,9 +275,9 @@ func (d *Dispatcher) deliver(ctx context.Context, q queuedSend) {
 		}
 		if status >= 400 {
 			if attempt > 0 {
-				log.Printf("alert-dispatcher: %s POST %q still %d after %d retries, giving up", q.kind, q.url, status, attempt)
+				log.Printf("alert-dispatcher: %s POST %q still %d after %d retries, giving up", q.kind, RedactURL(q.url), status, attempt)
 			} else {
-				log.Printf("alert-dispatcher: %s POST %q returned %d", q.kind, q.url, status)
+				log.Printf("alert-dispatcher: %s POST %q returned %d", q.kind, RedactURL(q.url), status)
 			}
 		}
 		d.nextSend[q.url] = time.Now().Add(minSendInterval)
@@ -546,4 +547,14 @@ func (d *Dispatcher) SendTest(webhookURL string) error {
 		return fmt.Errorf("webhook returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// RedactURL keeps the scheme and host of a webhook URL and drops the rest,
+// which for Slack and Discord is the secret.
+func RedactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "(webhook)"
+	}
+	return u.Scheme + "://" + u.Host + "/..."
 }

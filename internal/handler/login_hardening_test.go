@@ -75,7 +75,7 @@ func changePwd(users *auth.UserStore, caller string, role auth.Role, target, bod
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rc))
 	r = withClaims(r, caller, role)
 	w := httptest.NewRecorder()
-	changePasswordHandler(users)(w, r)
+	changePasswordHandler(users, []byte("0123456789abcdef0123456789abcdef"))(w, r)
 	return w
 }
 
@@ -168,7 +168,7 @@ func TestChangePasswordIsAuditedOnSuccessAndFailure(t *testing.T) {
 		})
 	})
 	r.With(auditMiddleware(store)).
-		Put("/api/users/{username}/password", changePasswordHandler(users))
+		Put("/api/users/{username}/password", changePasswordHandler(users, []byte("0123456789abcdef0123456789abcdef")))
 
 	serve := func(body string) {
 		req := httptest.NewRequest(http.MethodPut, "/api/users/admin/password", strings.NewReader(body))

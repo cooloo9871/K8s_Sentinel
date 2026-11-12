@@ -26,6 +26,9 @@ type User struct {
 	// but changing itself; cleared on the first successful password change.
 	MustChangePassword bool   `json:"mustChangePassword,omitempty"`
 	CreatedAt          string `json:"createdAt"`
+	// Unix seconds of the last password change. A session signed before it is
+	// no longer accepted, so resetting a password ends whoever was using it.
+	PasswordChangedAt int64 `json:"passwordChangedAt,omitempty"`
 }
 
 // MinPasswordLength is the shortest password accepted. Short enough not to
@@ -169,7 +172,7 @@ func (s *UserStore) bootstrap() {
 
 // dummyHash is used to perform a constant-time bcrypt comparison for unknown
 // usernames, preventing timing-based username enumeration.
-var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy"), bcrypt.MinCost)
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy"), bcrypt.DefaultCost)
 
 func (s *UserStore) Authenticate(username, password string) (User, bool) {
 	s.mu.RLock()
@@ -247,9 +250,18 @@ func (s *UserStore) ChangePassword(username, newPassword string) error {
 	u.PassHash = string(hash)
 	// Changing the password is what clears the forced-change gate.
 	u.MustChangePassword = false
+	u.PasswordChangedAt = time.Now().Unix()
 	s.users[username] = u
 	s.flush()
 	return nil
+}
+
+// Get returns the account as it is now.
+func (s *UserStore) Get(username string) (User, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	u, ok := s.users[username]
+	return u, ok
 }
 
 // RequiresPasswordChange reports whether the user must change their password

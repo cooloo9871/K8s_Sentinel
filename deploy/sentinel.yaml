@@ -49,7 +49,7 @@ rules:
     resources: ["events"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
-    resources: ["pods", "pods/log"]
+    resources: ["pods"]
     # patch is for the quarantine label; the rest reads workloads. Events are
     # collected over the Tetragon and Hubble gRPC APIs, so no pods/exec — which
     # would have been equivalent to running any command in any container.

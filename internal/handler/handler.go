@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -51,6 +52,7 @@ func New(cfg Config) http.Handler {
 	r.Use(securityHeaders)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(sameOriginWrites)
 
 	// Outside the session auth — the caller is the kube-apiserver, which has no
 	// session. With AuditWebhookToken set it requires that bearer token instead;
@@ -68,6 +70,8 @@ func New(cfg Config) http.Handler {
 		// A user who must change their password can reach only /me and their own
 		// password change until they do.
 		r.Use(mustChangeGate(cfg.Users))
+		// No request a signed-in user sends is anywhere near this size.
+		r.Use(middleware.RequestSize(4 << 20))
 
 		// Viewer + Admin (read-only)
 		r.Get("/api/auth/me", meHandler(cfg.Users))
@@ -88,7 +92,7 @@ func New(cfg Config) http.Handler {
 		// may change their own password, so it cannot sit under adminOnly, but a
 		// password change (success or failure) is exactly what the log is for.
 		r.With(auditMiddleware(cfg.Audit)).
-			Put("/api/users/{username}/password", changePasswordHandler(cfg.Users))
+			Put("/api/users/{username}/password", changePasswordHandler(cfg.Users, cfg.Secret))
 		r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
 		r.Get("/api/alerts", listAlerts(cfg.Alerts))
 		r.Get("/api/admission-events", listAdmissionEvents(cfg.Admission))
@@ -174,6 +178,40 @@ func New(cfg Config) http.Handler {
 // (the one 'unsafe-inline'), data: URIs for embedded images, and same-origin
 // fetch/SSE. Nothing external is ever loaded, so everything else is locked to
 // 'self' or off.
+// sameOriginWrites refuses a state-changing request that a browser says came
+// from another origin. The session cookie is SameSite=Strict, but "site" is
+// wider than "origin": another port on localhost during a port-forward, or a
+// sibling subdomain, is the same site and its pages would send the cookie.
+// A caller that is not a browser sends neither header and is let through; it
+// has no cookie to borrow.
+func sameOriginWrites(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+		if site := r.Header.Get("Sec-Fetch-Site"); site != "" {
+			if site != "same-origin" && site != "none" {
+				http.Error(w, "cross-origin request refused", http.StatusForbidden)
+				return
+			}
+		} else if origin := r.Header.Get("Origin"); origin != "" {
+			u, err := url.Parse(origin)
+			if err != nil || (u.Host != r.Host && u.Host != r.Header.Get("X-Forwarded-Host")) {
+				http.Error(w, "cross-origin request refused", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SecurityHeaders is exported for the server, which also puts it in front of
+// the SPA: a Content-Security-Policy protects the document it arrives with, so
+// one sent only with API responses protected nothing.
+func SecurityHeaders(next http.Handler) http.Handler { return securityHeaders(next) }
+
 func securityHeaders(next http.Handler) http.Handler {
 	csp := strings.Join([]string{
 		"default-src 'self'",

@@ -117,7 +117,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("embed sub: %v", err)
 	}
-	mux.Handle("/", spaHandler(http.FS(staticFS)))
+	mux.Handle("/", handler.SecurityHeaders(spaHandler(http.FS(staticFS))))
 
 	srv := &http.Server{
 		Addr:    ":8080",

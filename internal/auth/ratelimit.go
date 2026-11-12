@@ -36,33 +36,25 @@ func NewLoginLimiter(max int, window time.Duration) *LoginLimiter {
 	}
 }
 
-// Blocked reports whether the key has exhausted its allowance in the current
-// window. A window that has elapsed is reset here, so the block lifts on its own.
-func (l *LoginLimiter) Blocked(key string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	w := l.attempts[key]
-	if w == nil {
-		return false
-	}
-	if time.Since(w.start) >= l.window {
-		delete(l.attempts, key)
-		return false
-	}
-	return w.count >= l.max
-}
-
-// Fail records one failed attempt.
-func (l *LoginLimiter) Fail(key string) {
+// Attempt counts one login attempt and reports whether it may go ahead. The
+// check and the count are one step, taken before the request body is read:
+// counting only once a password had been checked let a client open many
+// connections, pass the check on all of them, and then send every guess. A
+// login that succeeds calls Reset, so only failures stay counted.
+func (l *LoginLimiter) Attempt(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.gcLocked()
 	w := l.attempts[key]
 	if w == nil || time.Since(w.start) >= l.window {
 		l.attempts[key] = &attemptWindow{count: 1, start: time.Now()}
-		return
+		return true
+	}
+	if w.count >= l.max {
+		return false
 	}
 	w.count++
+	return true
 }
 
 // gcLocked drops elapsed windows once the map grows large, so a flood of

@@ -320,7 +320,7 @@ label; everything else is read-only.
 | `cilium.io` | `ciliumnodes` | get, list |
 | `admissionregistration.k8s.io` | `validatingadmissionpolicies`, `validatingadmissionpolicybindings` | CRUD |
 | `""` (core) | `namespaces` | get, list |
-| `""` (core) | `pods`, `pods/log` | get, list, watch, **patch** |
+| `""` (core) | `pods` | get, list, watch, **patch** |
 | `""` (core) | `events` | get, list, watch |
 | `""` (core) | `nodes`, `services` | get, list |
 | `discovery.k8s.io` | `endpointslices` | get, list |

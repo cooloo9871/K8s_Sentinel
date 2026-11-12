@@ -9,11 +9,20 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/cooloo9871/K8s_Sentinel/internal/alert"
+	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 )
 
 func listAlerts(store *alert.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, store.List())
+		rules := store.List()
+		// A webhook URL is a credential: whoever holds it can post to the
+		// channel. Only an admin, who can edit it, is shown it.
+		if c := claimsFromCtx(r); c == nil || c.Role != auth.RoleAdmin {
+			for i := range rules {
+				rules[i].WebhookURL = alert.RedactURL(rules[i].WebhookURL)
+			}
+		}
+		writeJSON(w, http.StatusOK, rules)
 	}
 }
 

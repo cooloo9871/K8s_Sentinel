@@ -125,7 +125,7 @@ func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
 		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
 		return
 	}
-	msg := buildMessage(evt, severity)
+	msg := oneLine(buildMessage(evt, severity))
 	var sendErr error
 	if severity == "critical" {
 		sendErr = w.Crit(msg)
@@ -261,7 +261,7 @@ func (d *Dispatcher) sendAdmission(cfg Config, evt admission.Event, severity str
 		log.Printf("rsyslog-dispatcher: admission connect %s:%d error: %v", cfg.Host, cfg.Port, err)
 		return
 	}
-	msg := buildAdmissionMessage(evt, severity)
+	msg := oneLine(buildAdmissionMessage(evt, severity))
 	var sendErr error
 	if severity == "warning" {
 		sendErr = w.Warning(msg)
@@ -310,4 +310,16 @@ func buildAdmissionMessage(evt admission.Event, severity string) string {
 		parts = append(parts, fmt.Sprintf("violation=%q", evt.Message))
 	}
 	return strings.Join(parts, " ")
+}
+
+// oneLine replaces control characters with spaces. The values come from the
+// cluster, a file name or an object name among them, and a line break in one
+// would start a second syslog record of the sender's choosing.
+func oneLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
 }

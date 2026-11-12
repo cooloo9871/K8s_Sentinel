@@ -94,3 +94,8 @@ spec:
               echo ""
               echo "Done. Access K8s Sentinel:"
               echo "  kubectl port-forward -n sentinel-system svc/sentinel 8080:80"
+
+              # Last, because nothing after it can talk to the API: the
+              # installer gives up cluster-admin instead of leaving a
+              # ServiceAccount with it in kube-system for good.
+              kubectl delete clusterrolebinding sentinel-installer --ignore-not-found

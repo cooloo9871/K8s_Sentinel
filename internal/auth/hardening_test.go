@@ -35,33 +35,32 @@ func TestBootstrapAdminMustChangePassword(t *testing.T) {
 func TestLoginLimiterBlocksAfterMax(t *testing.T) {
 	l := NewLoginLimiter(3, time.Minute)
 	for i := 0; i < 3; i++ {
-		if l.Blocked("1.2.3.4") {
+		if !l.Attempt("1.2.3.4") {
 			t.Fatalf("blocked at attempt %d, before the limit", i)
 		}
-		l.Fail("1.2.3.4")
 	}
-	if !l.Blocked("1.2.3.4") {
+	if l.Attempt("1.2.3.4") {
 		t.Error("not blocked after reaching the failure limit")
 	}
 	// Another source is unaffected — one attacker cannot lock out everyone.
-	if l.Blocked("5.6.7.8") {
+	if !l.Attempt("5.6.7.8") {
 		t.Error("a different IP is blocked by another IP's failures")
 	}
 	// A success clears the block.
 	l.Reset("1.2.3.4")
-	if l.Blocked("1.2.3.4") {
+	if !l.Attempt("1.2.3.4") {
 		t.Error("still blocked after a reset")
 	}
 }
 
 func TestLoginLimiterWindowExpires(t *testing.T) {
 	l := NewLoginLimiter(1, 20*time.Millisecond)
-	l.Fail("ip")
-	if !l.Blocked("ip") {
+	l.Attempt("ip")
+	if l.Attempt("ip") {
 		t.Fatal("not blocked immediately after the limit")
 	}
 	time.Sleep(30 * time.Millisecond)
-	if l.Blocked("ip") {
+	if !l.Attempt("ip") {
 		t.Error("still blocked after the window elapsed")
 	}
 }
