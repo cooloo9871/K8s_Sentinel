@@ -615,7 +615,7 @@ func TestRunRecordsEveryImageAndNeverCallsAFailureClean(t *testing.T) {
 	f := &fakeScans{
 		images: []string{"h/a:1", "h/b:1", "h/c:1"},
 		found: map[string][]Finding{
-			"h/a:1": {{ID: "CVE-1", Severity: "CRITICAL", FixedVersion: "2"}, {ID: "CVE-2", Severity: "LOW"}},
+			"h/a:1": {{ID: "CVE-2", Severity: "LOW"}, {ID: "CVE-1", Severity: "CRITICAL", FixedVersion: "2"}},
 			"h/b:1": {},
 		},
 		fail: map[string]error{"h/c:1": errors.New("unable to find the specified image")},
@@ -648,7 +648,8 @@ func TestRunRecordsEveryImageAndNeverCallsAFailureClean(t *testing.T) {
 		t.Errorf("order = %v", got)
 	}
 
-	if findings, ok := s.Findings("r1", "h/a:1"); !ok || len(findings) != 2 {
+	// Kept worst first, whatever order the scanner printed them in.
+	if findings, ok := s.Findings("r1", "h/a:1"); !ok || len(findings) != 2 || findings[0].ID != "CVE-1" {
 		t.Errorf("findings of a = %v, %v", findings, ok)
 	}
 	if _, ok := s.Findings("r1", "h/c:1"); ok {

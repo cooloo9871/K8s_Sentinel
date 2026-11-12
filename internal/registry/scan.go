@@ -363,6 +363,7 @@ func (s *Scanner) run(ctx context.Context, cancel context.CancelFunc, cfg Config
 			} else {
 				res.Scanned = true
 				res.Counts, res.Fixable = summarize(findings)
+				sortFindings(findings)
 			}
 			update(func(r *Report) {
 				if err == nil {
@@ -410,6 +411,30 @@ func (s *Scanner) run(ctx context.Context, cancel context.CancelFunc, cfg Config
 		}
 		r.Images = kept
 		r.Run.FinishedAt = stamp()
+	})
+}
+
+var severityRank = map[string]int{"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
+// sortFindings puts the worst first and, within a severity, the ones with a
+// fix first: the same order the workload list uses. Only the top of a long
+// list is shown until asked, so the order decides what is seen.
+func sortFindings(findings []Finding) {
+	rank := func(f Finding) int {
+		if r, ok := severityRank[f.Severity]; ok {
+			return r
+		}
+		return len(severityRank)
+	}
+	sort.SliceStable(findings, func(i, j int) bool {
+		a, b := findings[i], findings[j]
+		if rank(a) != rank(b) {
+			return rank(a) < rank(b)
+		}
+		if af, bf := a.FixedVersion != "", b.FixedVersion != ""; af != bf {
+			return af
+		}
+		return a.ID < b.ID
 	})
 }
 
