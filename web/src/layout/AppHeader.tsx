@@ -68,6 +68,7 @@ const PATH_OVERRIDES: Record<string, { label: string; to?: string }[]> = {
   ],
   '/vulnerabilities': [
     { label: 'Vulnerabilities' },
+    { label: 'Workloads' },
   ],
   '/policies/network': [
     { label: 'Policies' },
@@ -80,6 +81,10 @@ function useBreadcrumbs() {
 
   if (PATH_OVERRIDES[pathname]) {
     return [{ label: 'Home', to: '/dashboard' }, ...PATH_OVERRIDES[pathname]]
+  }
+  // The rest of a registry's path is its generated id, which names nothing.
+  if (pathname === '/registries' || pathname.startsWith('/registries/')) {
+    return [{ label: 'Home', to: '/dashboard' }, { label: 'Vulnerabilities' }, { label: 'Registries' }]
   }
 
   const segments = pathname.split('/').filter(Boolean)

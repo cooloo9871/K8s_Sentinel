@@ -422,3 +422,78 @@ export const vulnApi = {
     api.get(`/vulnerabilities/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`)
       .then((r) => r.data),
 }
+
+// ── Registry scanning ───────────────────────────────────────────────────────
+
+export type RegistryType = 'docker' | 'harbor' | 'quay'
+
+/** What the form edits. The password is write-only: it is never sent back. */
+export interface RegistryInput {
+  id?: string
+  name: string
+  type: RegistryType
+  url: string
+  username: string
+  password: string
+  /** "repository[:tag]" with * as a wildcard. */
+  filters: string[]
+  intervalDays: number
+  skipTLSVerify: boolean
+}
+
+export interface RegistryRun {
+  running: boolean
+  startedAt?: string
+  finishedAt?: string
+  total: number
+  done: number
+  /** Images the filters cover; more than total when the run was capped. */
+  matched: number
+  /** Why the registry could not be listed. */
+  error?: string
+}
+
+export interface Registry extends Omit<RegistryInput, 'password'> {
+  id: string
+  hasPassword: boolean
+  run: RegistryRun
+  images: number
+  failed: number
+  counts: VulnCounts
+  maxImages: number
+}
+
+export interface RegistryImage {
+  image: string
+  /** False, with error set, when the scan failed. */
+  scanned: boolean
+  counts: VulnCounts
+  fixable: number
+  scannedAt?: string
+  error?: string
+}
+
+export interface RegistryFinding {
+  id: string
+  severity: string
+  package: string
+  installedVersion: string
+  fixedVersion: string
+  title: string
+  link: string
+}
+
+export const registryApi = {
+  list: (): Promise<Registry[]> => api.get('/registries').then((r) => r.data ?? []),
+  create: (c: RegistryInput): Promise<Registry> => api.post('/registries', c).then((r) => r.data),
+  update: (id: string, c: RegistryInput): Promise<Registry> => api.put(`/registries/${id}`, c).then((r) => r.data),
+  delete: (id: string): Promise<void> => api.delete(`/registries/${id}`),
+  scan: (id: string): Promise<void> => api.post(`/registries/${id}/scan`),
+  // Lists the registry, which can take a while on a large one.
+  test: (c: RegistryInput): Promise<{ matched: number; maxImages: number; sample: string[] }> =>
+    api.post('/registries/test', c, { timeout: 95_000 }).then((r) => r.data),
+  images: (id: string): Promise<{ registry: Registry; images: RegistryImage[] }> =>
+    api.get(`/registries/${id}/images`).then((r) => r.data),
+  findings: (id: string, image: string): Promise<RegistryFinding[]> =>
+    api.get(`/registries/${id}/findings`, { params: { image } }).then((r) => r.data.findings ?? []),
+}

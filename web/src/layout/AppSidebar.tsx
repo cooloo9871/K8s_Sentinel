@@ -23,6 +23,14 @@ type NavGroup = { label: string; items: NavItem[]; adminOnly?: boolean }
 // declaring them here keeps that state and the markup from drifting apart.
 const GROUPS: NavGroup[] = [
   {
+    // Two views of the same question: what is running, and what could be.
+    label: 'Vulnerabilities',
+    items: [
+      { to: '/vulnerabilities', label: 'Workloads' },
+      { to: '/registries', label: 'Registries' },
+    ],
+  },
+  {
     label: 'Policies',
     items: [
       { to: '/policies/tracing', label: 'Tracing Policy' },
@@ -107,11 +115,6 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/network/topology')} className={TOP_LEVEL_CLASS}>
                   <NavLink to="/network/topology">Network Topology</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/vulnerabilities')} className={TOP_LEVEL_CLASS}>
-                  <NavLink to="/vulnerabilities">Vulnerabilities</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

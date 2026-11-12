@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { ScopeFilter } from '../components/ScopeFilter'
 import { FilterPopover } from '../components/FilterPopover'
 import { RelativeTime } from '../components/RelativeTime'
+import { Count, FindingsTable } from '../components/FindingsTable'
 import { downloadCSV } from '../utils/csv'
 import {
   filterWorkloads, summarizeWorkloads, workloadCsvRows, workloadKey, WORKLOAD_CSV_HEADERS,
@@ -19,30 +20,6 @@ import {
 import {
   IconChevronDown, IconChevronRight, IconDownload, IconRefresh,
 } from '@tabler/icons-react'
-
-// How many findings an expanded workload shows before asking. A base image can
-// carry hundreds, and the ones worth reading are sorted to the top.
-const DETAIL_PAGE = 50
-
-const SEVERITY_CLASS: Record<string, string> = {
-  CRITICAL: 'bg-destructive/15 text-destructive hover:bg-destructive/15',
-  HIGH: 'bg-orange-500/15 text-orange-700 hover:bg-orange-500/15',
-  MEDIUM: 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/15',
-}
-const SEVERITY_MUTED = 'bg-muted text-muted-foreground hover:bg-muted'
-
-function SeverityBadge({ severity }: { severity: string }) {
-  const label = severity.charAt(0) + severity.slice(1).toLowerCase()
-  return <Badge className={`font-medium ${SEVERITY_CLASS[severity] ?? SEVERITY_MUTED}`}>{label}</Badge>
-}
-
-// A count in the list. Zero recedes so the eye lands on what is there, and a
-// workload with no report shows a dash, since zero would claim it is clean.
-function Count({ value, scanned, className }: { value: number; scanned: boolean; className: string }) {
-  if (!scanned) return <span className="text-muted-foreground">—</span>
-  if (value === 0) return <span className="text-muted-foreground">0</span>
-  return <span className={`font-semibold ${className}`}>{value}</span>
-}
 
 // The list has room for the name and tag, which are what tell images apart;
 // the registry and path are in the tooltip and the expanded row.
@@ -389,7 +366,6 @@ function WorkloadDetail({ workload, detail, showAll, onShowAll }: {
   const loaded = typeof detail === 'object' ? detail : null
   const findings = loaded?.findings ?? []
   const unavailable = loaded?.unavailable ?? []
-  const shown = showAll ? findings : findings.slice(0, DETAIL_PAGE)
   const severalImages = workload.images.length > 1
 
   return (
@@ -421,47 +397,7 @@ function WorkloadDetail({ workload, detail, showAll, onShowAll }: {
         <p className="text-muted-foreground">No known vulnerabilities in the scanned images.</p>
       )}
 
-      {shown.length > 0 && (
-        <Table className="table-fixed text-xs">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="h-8 w-24">Severity</TableHead>
-              <TableHead className="h-8 w-40">ID</TableHead>
-              <TableHead className="h-8 w-40">Package</TableHead>
-              <TableHead className="h-8 w-32">Installed</TableHead>
-              <TableHead className="h-8 w-32">Fixed in</TableHead>
-              {severalImages && <TableHead className="h-8 w-32">Container</TableHead>}
-              <TableHead className="h-8">Summary</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {shown.map((v, i) => (
-              <TableRow key={`${v.container}|${v.id}|${v.package}|${i}`} className="hover:bg-transparent">
-                <TableCell className="py-1.5"><SeverityBadge severity={v.severity} /></TableCell>
-                <TableCell className="py-1.5 font-mono">
-                  {v.link
-                    ? <a href={v.link} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-primary">{v.id}</a>
-                    : v.id}
-                </TableCell>
-                <TableCell className="truncate py-1.5 font-mono" title={v.package}>{v.package}</TableCell>
-                <TableCell className="truncate py-1.5 font-mono" title={v.installedVersion}>{v.installedVersion}</TableCell>
-                <TableCell className="truncate py-1.5 font-mono" title={v.fixedVersion}>
-                  {v.fixedVersion || <span className="font-sans text-muted-foreground">no fix yet</span>}
-                </TableCell>
-                {severalImages && <TableCell className="truncate py-1.5" title={v.container}>{v.container}</TableCell>}
-                <TableCell className="truncate py-1.5" title={v.title}>{v.title}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-      {findings.length > shown.length && (
-        <div>
-          <Button variant="outline" size="sm" onClick={onShowAll}>
-            Show all {findings.length} findings
-          </Button>
-        </div>
-      )}
+      <FindingsTable findings={findings} showContainer={severalImages} showAll={showAll} onShowAll={onShowAll} />
     </div>
   )
 }

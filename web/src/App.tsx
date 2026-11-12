@@ -28,6 +28,7 @@ import { SecurityRetentionPage } from './pages/SecurityRetentionPage'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
 import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
+import { RegistriesPage } from './pages/RegistriesPage'
 
 function AppRoutes() {
   const { user, loading, logout, refresh } = useAuth()
@@ -87,6 +88,10 @@ function AppRoutes() {
           <Route path="/policies/quarantine" element={<QuarantinePage />} />
           <Route path="/network/topology" element={<NetworkTopologyPage />} />
           <Route path="/vulnerabilities" element={<VulnerabilitiesPage />} />
+          <Route path="/registries" element={<RegistriesPage />} />
+          <Route path="/registries/new" element={<RegistriesPage />} />
+          <Route path="/registries/:id" element={<RegistriesPage />} />
+          <Route path="/registries/:id/edit" element={<RegistriesPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
