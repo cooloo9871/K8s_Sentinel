@@ -226,6 +226,19 @@ Trivy Operator only looks at workloads in the cluster, so here Sentinel starts t
 - Viewers can read the results; adding, editing, deleting and starting scans are for Admins and recorded in the Audit Log
 - This does not block deployments, and does not yet mark which registry images are running in the cluster
 
+### Deployment gate
+
+**Vulnerabilities → Deployment Gate** keeps an image with too many known vulnerabilities from being deployed.
+
+- **The limit** is a number of critical vulnerabilities, a number of high ones, or both. An image with more than that is over the limit
+- **Warn or Deny.** Warn admits the workload and returns a warning to whoever applied it; Deny refuses it, with the image and its counts in the message. Start with Warn and look at the list the page shows before switching to Deny
+- **What is checked** is a workload being created or changed (Deployment, StatefulSet, DaemonSet, Job, CronJob) and a pod created on its own. Pods that a controller creates for a workload already admitted are not checked, so a node restart or a reschedule brings back what was running even if its image has gone over the limit since. Changing such a workload is checked, which includes a `kubectl rollout restart`; scaling it is not
+- **Only what has been scanned can be refused.** The results come from the two places Sentinel has them, the workload reports and the registry scans. An image neither has seen is admitted. To have images checked before their first deployment, add their registry under Registries
+- **Namespaces left alone.** `kube-system` and Sentinel's own namespace always are, so the cluster's components are never held back; add your own to the list
+- **The same image under another name** is covered: `nginx`, `nginx:latest` and `docker.io/library/nginx:latest` are one image. A tag and a digest of the same image are not matched to each other, so a scan of `app:v1` does not stop `app@sha256:...`
+
+It is a ValidatingAdmissionPolicy, which cannot look anything up while it decides. Sentinel therefore keeps the images over the limit in an object of its own kind, `VulnerabilityGate`, which the policy reads, and rewrites it within two minutes of a scan result changing. If Sentinel is down the policy goes on working from the last list. The policy, its binding and the list are all named `sentinel-vulnerability-gate` and are removed when the gate is switched off. A refusal is returned to whoever applied the workload; it reaches Admission Events only where the [audit webhook](audit-webhook.md) is set up.
+
 ## Notifications
 
 ### Security Events

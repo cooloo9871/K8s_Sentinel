@@ -199,6 +199,8 @@ kubectl delete clustersbomreports,clusterconfigauditreports,clusterrbacassessmen
 
 Leave these alone if you read them with another tool; Sentinel does not use them.
 
+**Upgrading to a version with the deployment gate (v0.65.0):** re-apply `deploy/sentinel.yaml`. It defines the `VulnerabilityGate` kind the gate keeps its list in and lets Sentinel write it; until then the Deployment Gate page says the kind is not installed, and nothing else is affected.
+
 **Upgrading to a version with registry scanning (v0.62.0):** re-apply `deploy/sentinel.yaml`, which adds a Role in `sentinel-system` for the scan Jobs; without it every registry scan fails with a permission error. Then pass the current values to the operator, so it leaves those Jobs alone:
 
 ```bash
@@ -353,6 +355,7 @@ label; everything else is read-only.
 | `cilium.io` | `ciliumnetworkpolicies`, `ciliumclusterwidenetworkpolicies` | CRUD |
 | `cilium.io` | `ciliumnodes` | get, list |
 | `admissionregistration.k8s.io` | `validatingadmissionpolicies`, `validatingadmissionpolicybindings` | CRUD |
+| `sentinel.io` | `vulnerabilitygates` | get, list, create, update, delete |
 | `""` (core) | `namespaces` | get, list |
 | `""` (core) | `pods` | get, list, watch, **patch** |
 | `""` (core) | `events` | get, list, watch |
