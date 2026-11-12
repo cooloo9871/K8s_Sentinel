@@ -190,7 +190,7 @@ helm upgrade trivy-operator aqua/trivy-operator \
   --values deploy/trivy-operator-values.yaml
 ```
 
-**Workloads that stay partial or not scanned :** an operator installed from an earlier copy of the values file runs without the Trivy server described above. Pass it the current values with the same `helm upgrade` command, then restart it so it scans what is missing:
+**Workloads that stay partial or not scanned:** an operator installed from an earlier copy of the values file runs without the Trivy server described above. Pass it the current values with the same `helm upgrade` command, then restart it so it scans what is missing:
 
 ```bash
 kubectl -n sentinel-system rollout restart deployment/trivy-operator
