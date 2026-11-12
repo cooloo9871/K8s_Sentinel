@@ -101,6 +101,15 @@ if served ciliumclusterwidenetworkpolicies; then
   fi
 fi
 
+# ── Deployment gate ───────────────────────────────────────────────────────────
+# Left behind, it would go on refusing images from a list nobody updates.
+echo "[deployment gate] removing"
+del validatingadmissionpolicybinding sentinel-vulnerability-gate
+del validatingadmissionpolicy sentinel-vulnerability-gate
+if served vulnerabilitygates.sentinel.io; then
+  del vulnerabilitygates.sentinel.io sentinel-vulnerability-gate
+fi
+
 # ── Policies made in Sentinel (--purge) ───────────────────────────────────────
 # Before Tetragon and the CRDs go, while the objects can still be listed.
 if $PURGE; then
@@ -145,7 +154,7 @@ fi
 # ── Reports and CRDs (--purge) ────────────────────────────────────────────────
 if $PURGE; then
   echo "[crds] removing reports and CRDs"
-  crds="$(kubectl get crd -o name 2>/dev/null | grep -E '\.aquasecurity\.github\.io$' || true)"
+  crds="$(kubectl get crd -o name 2>/dev/null | grep -E '(\.aquasecurity\.github\.io|/vulnerabilitygates\.sentinel\.io)$' || true)"
   if ! $KEEP_TETRAGON; then
     crds="$crds $(kubectl get crd -o name 2>/dev/null | grep -E '/(tracingpolicies|tracingpoliciesnamespaced|podinfo)\.cilium\.io$' || true)"
   fi

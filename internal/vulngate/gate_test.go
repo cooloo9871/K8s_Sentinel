@@ -9,6 +9,10 @@ import (
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -28,11 +32,11 @@ func TestOnlyImagesOverTheLimitAreListed(t *testing.T) {
 		"quay.io/org/bad:1": true, "quay.io/org/clean:1": false,
 		"quay.io/org/highs:1": true, "quay.io/org/fewhighs:1": false,
 	} {
-		if _, got := list.Data[Key(image)]; got != want {
+		if _, got := list.Data[(image)]; got != want {
 			t.Errorf("%s listed = %v, want %v", image, got, want)
 		}
 	}
-	if got := list.Data[Key("quay.io/org/bad:1")]; got != "1 critical, 0 high" {
+	if got := list.Data[("quay.io/org/bad:1")]; got != "1 critical, 0 high" {
 		t.Errorf("reason = %q", got)
 	}
 }
@@ -56,11 +60,11 @@ func TestEverySpellingOfADockerHubImageIsListed(t *testing.T) {
 			"nginx", "nginx:latest", "library/nginx", "docker.io/nginx", "docker.io/library/nginx:latest",
 			"index.docker.io/library/nginx",
 		} {
-			if _, ok := list.Data[Key(written)]; !ok {
+			if _, ok := list.Data[(written)]; !ok {
 				t.Errorf("scanned as %q: a pod writing %q is not stopped", scannedAs, written)
 			}
 		}
-		if _, ok := list.Data[Key("nginx:1.27")]; ok {
+		if _, ok := list.Data[("nginx:1.27")]; ok {
 			t.Errorf("scanned as %q: another tag was listed", scannedAs)
 		}
 		if len(list.Images) != 1 {
@@ -79,11 +83,11 @@ func TestOrganisationAndPrivateRegistryImages(t *testing.T) {
 		"bitnami/redis:7", "docker.io/bitnami/redis:7",
 		"harbor.internal:8443/team/app:v1", "quay.io/org/app@sha256:abc",
 	} {
-		if _, ok := list.Data[Key(written)]; !ok {
+		if _, ok := list.Data[(written)]; !ok {
 			t.Errorf("%q is not stopped", written)
 		}
 	}
-	if _, ok := list.Data[Key("library/bitnami/redis:7")]; ok {
+	if _, ok := list.Data[("library/bitnami/redis:7")]; ok {
 		t.Error("an organisation image was given the library/ prefix")
 	}
 }
@@ -96,21 +100,6 @@ func TestTheWorseOfTwoResultsForOneImageWins(t *testing.T) {
 	}, limits(0, -1))
 	if len(list.Images) != 1 || list.Images[0].Critical != 4 {
 		t.Fatalf("images = %+v", list.Images)
-	}
-}
-
-func TestKeysAreValidConfigMapKeys(t *testing.T) {
-	list := Build([]ScannedImage{{Ref: "harbor.internal:8443/a_b/c.d-e:v1.0_x@sha256:0123abcd", Critical: 1}}, limits(0, -1))
-	if len(list.Data) == 0 {
-		t.Fatal("nothing listed")
-	}
-	for k := range list.Data {
-		for _, r := range k {
-			ok := r == '-' || r == '_' || r == '.' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
-			if !ok {
-				t.Fatalf("key %q has %q, which a ConfigMap refuses", k, r)
-			}
-		}
 	}
 }
 
@@ -168,10 +157,25 @@ func TestSettingsValidation(t *testing.T) {
 	}
 }
 
+func newDyn() *dynfake.FakeDynamicClient {
+	return dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{ListGVR: "VulnerabilityGateList"})
+}
+
+func listed(t *testing.T, g *Gate) map[string]string {
+	t.Helper()
+	obj, err := g.dyn.Resource(ListGVR).Get(context.Background(), Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _, _ := unstructured.NestedStringMap(obj.Object, "spec", "images")
+	return m
+}
+
 func newGate(t *testing.T, scanned []ScannedImage) (*Gate, *fake.Clientset) {
 	t.Helper()
 	client := fake.NewSimpleClientset()
-	g := New(client, "sentinel-system", filepath.Join(t.TempDir(), "gate.json"),
+	g := New(client, newDyn(), "sentinel-system", filepath.Join(t.TempDir(), "gate.json"),
 		func(context.Context) []ScannedImage { return scanned })
 	return g, client
 }
@@ -184,12 +188,8 @@ func TestEnablingWritesTheListThePolicyAndTheBinding(t *testing.T) {
 	}
 	g.reconcile(ctx)
 
-	cm, err := client.CoreV1().ConfigMaps("sentinel-system").Get(ctx, Name, metav1.GetOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cm.Data[Key("nginx:1.25")] != "7 critical, 50 high" {
-		t.Errorf("list = %v", cm.Data)
+	if got := listed(t, g); got["nginx:1.25"] != "7 critical, 50 high" {
+		t.Errorf("list = %v", got)
 	}
 	if _, err := client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Get(ctx, Name, metav1.GetOptions{}); err != nil {
 		t.Fatal(err)
@@ -221,9 +221,8 @@ func TestEnablingWritesTheListThePolicyAndTheBinding(t *testing.T) {
 			t.Error("warn mode still denies")
 		}
 	}
-	cm, _ = client.CoreV1().ConfigMaps("sentinel-system").Get(ctx, Name, metav1.GetOptions{})
-	if len(cm.Data) != 0 {
-		t.Errorf("the list kept an image no scan reports any more: %v", cm.Data)
+	if got := listed(t, g); len(got) != 0 {
+		t.Errorf("the list kept an image no scan reports any more: %v", got)
 	}
 }
 
@@ -240,7 +239,7 @@ func TestDisablingRemovesEverything(t *testing.T) {
 	if _, err := client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Get(ctx, Name, metav1.GetOptions{}); !k8serrors.IsNotFound(err) {
 		t.Errorf("policy still there: %v", err)
 	}
-	if _, err := client.CoreV1().ConfigMaps("sentinel-system").Get(ctx, Name, metav1.GetOptions{}); !k8serrors.IsNotFound(err) {
+	if _, err := g.dyn.Resource(ListGVR).Get(ctx, Name, metav1.GetOptions{}); !k8serrors.IsNotFound(err) {
 		t.Errorf("list still there: %v", err)
 	}
 	if st := g.Status(); st.Error != "" {
@@ -252,7 +251,7 @@ func TestDisablingRemovesEverything(t *testing.T) {
 func TestSettingsAreKept(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gate.json")
 	scanned := func(context.Context) []ScannedImage { return nil }
-	g := New(fake.NewSimpleClientset(), "sentinel-system", path, scanned)
+	g := New(fake.NewSimpleClientset(), newDyn(), "sentinel-system", path, scanned)
 	if g.Settings().Enabled {
 		t.Fatal("the gate is on before anyone switched it on")
 	}
@@ -260,7 +259,7 @@ func TestSettingsAreKept(t *testing.T) {
 	if err := g.Save(want); err != nil {
 		t.Fatal(err)
 	}
-	got := New(fake.NewSimpleClientset(), "sentinel-system", path, scanned).Settings()
+	got := New(fake.NewSimpleClientset(), newDyn(), "sentinel-system", path, scanned).Settings()
 	if got.Mode != "deny" || !got.Enabled || got.CriticalLimit != 2 || got.HighLimit != 30 || len(got.ExcludeNamespaces) != 1 {
 		t.Errorf("reloaded %+v", got)
 	}

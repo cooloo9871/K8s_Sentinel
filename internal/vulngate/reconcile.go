@@ -7,13 +7,16 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	admissionv1 "k8s.io/api/admissionregistration/v1"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -30,10 +33,14 @@ type Status struct {
 	LeftOut int `json:"leftOut"`
 }
 
+// ListGVR is the kind the list is kept in. deploy/sentinel.yaml defines it.
+var ListGVR = schema.GroupVersionResource{Group: "sentinel.io", Version: "v1", Resource: "vulnerabilitygates"}
+
 // Gate owns the three objects in the cluster and keeps them matching the
 // settings and the scan results.
 type Gate struct {
 	client    kubernetes.Interface
+	dyn       dynamic.Interface
 	namespace string
 	path      string
 	// Every image a scan has a result for, from wherever results are kept.
@@ -45,11 +52,11 @@ type Gate struct {
 	wake     chan struct{}
 }
 
-// New loads the settings kept at path. namespace is Sentinel's own, where the
-// ConfigMap lives.
-func New(client kubernetes.Interface, namespace, path string, scanned func(ctx context.Context) []ScannedImage) *Gate {
+// New loads the settings kept at path. namespace is Sentinel's own, which the
+// gate never applies to.
+func New(client kubernetes.Interface, dyn dynamic.Interface, namespace, path string, scanned func(ctx context.Context) []ScannedImage) *Gate {
 	g := &Gate{
-		client: client, namespace: namespace, path: path, scanned: scanned,
+		client: client, dyn: dyn, namespace: namespace, path: path, scanned: scanned,
 		settings: DefaultSettings(), status: Status{Images: []ScannedImage{}},
 		wake: make(chan struct{}, 1),
 	}
@@ -131,7 +138,7 @@ func (g *Gate) Run(ctx context.Context) {
 }
 
 func (g *Gate) reconcile(ctx context.Context) {
-	if g.client == nil {
+	if g.client == nil || g.dyn == nil {
 		return
 	}
 	s := g.Settings()
@@ -176,7 +183,8 @@ func (g *Gate) remove(ctx context.Context) error {
 	if err := gone(adm.ValidatingAdmissionPolicies().Delete(ctx, Name, metav1.DeleteOptions{})); err != nil {
 		return fmt.Errorf("remove the policy: %w", err)
 	}
-	if err := gone(g.client.CoreV1().ConfigMaps(g.namespace).Delete(ctx, Name, metav1.DeleteOptions{})); err != nil {
+	// With the kind itself not installed there is no list to remove either.
+	if err := gone(g.dyn.Resource(ListGVR).Delete(ctx, Name, metav1.DeleteOptions{})); err != nil && !noSuchKind(err) {
 		return fmt.Errorf("remove the list: %w", err)
 	}
 	return nil
@@ -185,21 +193,36 @@ func (g *Gate) remove(ctx context.Context) error {
 // apply writes the list, then the policy, then the binding, so that nothing
 // enforces before there is something to enforce with.
 func (g *Gate) apply(ctx context.Context, s Settings, list List) error {
-	cms := g.client.CoreV1().ConfigMaps(g.namespace)
-	wantCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: Name, Namespace: g.namespace, Labels: labels()},
-		Data:       list.Data,
+	lists := g.dyn.Resource(ListGVR)
+	images := make(map[string]any, len(list.Data))
+	for k, v := range list.Data {
+		images[k] = v
 	}
-	if cur, err := cms.Get(ctx, Name, metav1.GetOptions{}); k8serrors.IsNotFound(err) {
-		if _, err := cms.Create(ctx, wantCM, metav1.CreateOptions{}); err != nil {
+	cur, err := lists.Get(ctx, Name, metav1.GetOptions{})
+	switch {
+	case noSuchKind(err):
+		return fmt.Errorf("the VulnerabilityGate kind is not installed: apply deploy/sentinel.yaml again, which defines it")
+	case k8serrors.IsNotFound(err):
+		obj := &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": ListGVR.Group + "/" + ListGVR.Version,
+			"kind":       "VulnerabilityGate",
+			"metadata":   map[string]any{"name": Name, "labels": map[string]any{"app.kubernetes.io/managed-by": "k8s-sentinel"}},
+			"spec":       map[string]any{"images": images},
+		}}
+		if _, err := lists.Create(ctx, obj, metav1.CreateOptions{}); err != nil {
 			return fmt.Errorf("write the list: %w", err)
 		}
-	} else if err != nil {
+	case err != nil:
 		return fmt.Errorf("read the list: %w", err)
-	} else if !sameData(cur.Data, wantCM.Data) {
-		cur.Data = wantCM.Data
-		if _, err := cms.Update(ctx, cur, metav1.UpdateOptions{}); err != nil {
-			return fmt.Errorf("write the list: %w", err)
+	default:
+		have, _, _ := unstructured.NestedStringMap(cur.Object, "spec", "images")
+		if !sameData(have, list.Data) {
+			if err := unstructured.SetNestedMap(cur.Object, images, "spec", "images"); err != nil {
+				return fmt.Errorf("write the list: %w", err)
+			}
+			if _, err := lists.Update(ctx, cur, metav1.UpdateOptions{}); err != nil {
+				return fmt.Errorf("write the list: %w", err)
+			}
 		}
 	}
 
@@ -235,6 +258,20 @@ func (g *Gate) apply(ctx context.Context, s Settings, list List) error {
 		}
 	}
 	return nil
+}
+
+// noSuchKind reports the API server not serving the list's kind at all, which
+// is what a missing CRD looks like, as opposed to the one object being absent.
+func noSuchKind(err error) bool {
+	if err == nil {
+		return false
+	}
+	if st, ok := err.(k8serrors.APIStatus); ok && k8serrors.IsNotFound(err) {
+		if d := st.Status().Details; d != nil && d.Name == "" {
+			return true
+		}
+	}
+	return strings.Contains(err.Error(), "the server could not find the requested resource")
 }
 
 func sameData(a, b map[string]string) bool {
@@ -280,7 +317,7 @@ func policy() *admissionv1.ValidatingAdmissionPolicy {
 		},
 		Spec: admissionv1.ValidatingAdmissionPolicySpec{
 			FailurePolicy: &ignore,
-			ParamKind:     &admissionv1.ParamKind{APIVersion: "v1", Kind: "ConfigMap"},
+			ParamKind:     &admissionv1.ParamKind{APIVersion: ListGVR.Group + "/" + ListGVR.Version, Kind: "VulnerabilityGate"},
 			MatchConstraints: &admissionv1.MatchResources{
 				ResourceRules: []admissionv1.NamedRuleWithOperations{
 					rule("", "pods"),
@@ -303,13 +340,13 @@ func policy() *admissionv1.ValidatingAdmissionPolicy {
 				},
 				{
 					Name:       "over",
-					Expression: "has(params.data) ? variables.images.filter(i, " + keyExpr + " in params.data) : []",
+					Expression: "has(params.spec) && has(params.spec.images) ? variables.images.filter(i, i in params.spec.images) : []",
 				},
 			},
 			Validations: []admissionv1.Validation{{
 				Expression: "size(variables.over) == 0",
 				MessageExpression: "'image ' + variables.over[0] + ' is over the vulnerability limit set in K8s Sentinel: ' + " +
-					"variables.over.map(i, params.data[" + keyExpr + "])[0]",
+					"params.spec.images[variables.over[0]]",
 				Reason: &forbidden,
 			}},
 		},
@@ -318,7 +355,7 @@ func policy() *admissionv1.ValidatingAdmissionPolicy {
 
 // binding switches the policy on, in the mode and for the namespaces chosen.
 func binding(s Settings, ownNamespace string) *admissionv1.ValidatingAdmissionPolicyBinding {
-	// No list is no limit: with the ConfigMap missing, everything is admitted.
+	// No list is no limit: with the object missing, everything is admitted.
 	allow := admissionv1.AllowAction
 	actions := []admissionv1.ValidationAction{admissionv1.Warn, admissionv1.Audit}
 	if s.Mode == "deny" {
@@ -341,7 +378,7 @@ func binding(s Settings, ownNamespace string) *admissionv1.ValidatingAdmissionPo
 			PolicyName:        Name,
 			ValidationActions: actions,
 			ParamRef: &admissionv1.ParamRef{
-				Name: Name, Namespace: ownNamespace, ParameterNotFoundAction: &allow,
+				Name: Name, ParameterNotFoundAction: &allow,
 			},
 			MatchResources: &admissionv1.MatchResources{
 				NamespaceSelector: &metav1.LabelSelector{

@@ -96,7 +96,7 @@ func main() {
 	// The vulnerability gate: a ValidatingAdmissionPolicy that refuses images
 	// some scan found over the limit, from the workload reports and the
 	// registry scans alike.
-	vulnGate := vulngate.New(typedClient, ownNamespace(), data("vulnerability-gate.json"),
+	vulnGate := vulngate.New(typedClient, dynClient, ownNamespace(), data("vulnerability-gate.json"),
 		func(ctx context.Context) []vulngate.ScannedImage {
 			var out []vulngate.ScannedImage
 			for _, w := range store.VulnerabilityOverview(ctx, false).Workloads {

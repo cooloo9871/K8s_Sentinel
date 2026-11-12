@@ -28,6 +28,38 @@ metadata:
   name: sentinel
   namespace: sentinel-system
 ---
+# The kind the deployment gate keeps its list in: images some scan found over
+# the vulnerability limit, each with the reason. See the ClusterRole below for
+# why this is a kind of its own.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: vulnerabilitygates.sentinel.io
+spec:
+  group: sentinel.io
+  scope: Cluster
+  names:
+    kind: VulnerabilityGate
+    listKind: VulnerabilityGateList
+    plural: vulnerabilitygates
+    singular: vulnerabilitygate
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                images:
+                  description: An image reference to why it is refused.
+                  type: object
+                  additionalProperties:
+                    type: string
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -60,6 +92,13 @@ rules:
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # The deployment gate's list of images over the vulnerability limit, which
+  # its ValidatingAdmissionPolicy takes as a parameter. A policy's author must
+  # be able to read every object of its parameter kind; with a kind of
+  # Sentinel's own that is this one list, not every ConfigMap in the cluster.
+  - apiGroups: ["sentinel.io"]
+    resources: ["vulnerabilitygates"]
+    verbs: ["get", "list", "create", "update", "delete"]
 
   - apiGroups: [""]
     resources: ["nodes"]
@@ -139,11 +178,6 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create", "delete"]
-  # The vulnerability gate keeps its list of images over the limit in one
-  # ConfigMap here, which its ValidatingAdmissionPolicy reads as a parameter.
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["create", "get", "update", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

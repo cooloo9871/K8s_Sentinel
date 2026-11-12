@@ -4,8 +4,14 @@
 // A ValidatingAdmissionPolicy cannot ask anyone anything while it decides: it
 // sees the object being admitted and a parameter object already in the cluster.
 // So Sentinel does the knowing ahead of time. It works out which scanned images
-// are over the limit, writes them into a ConfigMap, and the policy refuses a
-// workload whose image is listed there.
+// are over the limit, writes them into an object of its own kind, a
+// VulnerabilityGate, and the policy refuses a workload whose image is listed
+// there.
+//
+// The kind is Sentinel's own for a reason. Whoever creates a policy has to be
+// allowed to read every object of the kind it takes as its parameter, across
+// the cluster. With a ConfigMap as the parameter that would be every ConfigMap
+// there is; with this kind it is the one list.
 //
 // What Sentinel has not scanned is not listed, and is therefore admitted. The
 // gate acts on what is known, as NeuVector's does; it is not a guarantee that
@@ -18,11 +24,11 @@ import (
 	"strings"
 )
 
-// Name is what the ConfigMap, the policy and its binding are all called.
+// Name is what the list, the policy and its binding are all called.
 const Name = "sentinel-vulnerability-gate"
 
-// A ConfigMap holds 1 MiB. Staying well under leaves room for the object's own
-// metadata and for an update not to be refused at the edge.
+// An object may be about 1.5 MiB in etcd. Staying well under leaves room for
+// its own metadata and for an update not to be refused at the edge.
 const maxListBytes = 900 << 10
 
 // Settings is what the administrator chooses.
@@ -91,12 +97,13 @@ type ScannedImage struct {
 
 // List is the images over the limit, as the policy will read them.
 type List struct {
-	// ConfigMap data: an encoded image reference to the reason it is refused.
+	// An image reference, in every spelling a pod spec may use, to the reason
+	// it is refused.
 	Data map[string]string
 	// The images behind Data, worst first, one entry per image whatever number
 	// of spellings it is listed under.
 	Images []ScannedImage
-	// Images over the limit that did not fit in the ConfigMap.
+	// Images over the limit that did not fit in the list.
 	LeftOut int
 }
 
@@ -141,12 +148,7 @@ func Build(scanned []ScannedImage, s Settings) List {
 		reason := fmt.Sprintf("%d critical, %d high", img.Critical, img.High)
 		keys := []string{}
 		add := 0
-		for _, spelling := range spellings(img.Ref) {
-			k := Key(spelling)
-			// A ConfigMap key is at most 253 characters.
-			if len(k) > 253 {
-				continue
-			}
+		for _, k := range spellings(img.Ref) {
 			if _, dup := list.Data[k]; dup {
 				continue
 			}
@@ -168,17 +170,6 @@ func Build(scanned []ScannedImage, s Settings) List {
 	}
 	return list
 }
-
-// Key encodes an image reference as a ConfigMap key, which may hold letters,
-// digits, '-', '_' and '.' only. The policy's CEL does the same three
-// replacements on the image it is looking at; keyExpr below must stay in step.
-func Key(image string) string {
-	r := strings.NewReplacer("/", "_.._", ":", "_._", "@", "_..._")
-	return r.Replace(image)
-}
-
-// keyExpr is Key written in CEL, for an image held in the variable i.
-const keyExpr = `i.replace('/', '_.._').replace(':', '_._').replace('@', '_..._')`
 
 var dockerHubHosts = map[string]bool{
 	"docker.io": true, "index.docker.io": true, "registry-1.docker.io": true, "registry.hub.docker.com": true,
