@@ -5,17 +5,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Helm (for Tetragon and Trivy Operator, auto-downloaded if absent) ──────────────────
 
-find_or_download_helm() {
+HELM=""
+
+# Sets HELM. Called directly rather than through $(...): the download's cleanup
+# trap would otherwise fire when the subshell exits, deleting the binary before
+# it is used.
+ensure_helm() {
+  if [[ -n "${HELM}" ]]; then
+    return
+  fi
   if command -v helm &>/dev/null; then
-    echo "helm"
+    HELM="helm"
     return
   fi
 
-  echo "[helm] not found, downloading to temp dir..." >&2
+  echo "[helm] not found, downloading to temp dir..."
 
-  local os arch helm_version tmp_dir
-  tmp_dir="$(mktemp -d)"
-  trap "rm -rf '${tmp_dir}'" RETURN
+  local os arch helm_version
+  HELM_TMP="$(mktemp -d)"
+  trap 'rm -rf "${HELM_TMP}"' EXIT
 
   os="$(uname -s | tr '[:upper:]' '[:lower:]')"
   arch="$(uname -m)"
@@ -28,18 +36,9 @@ find_or_download_helm() {
     | grep '"tag_name"' | head -1 | cut -d'"' -f4)"
 
   curl -fsSL "https://get.helm.sh/helm-${helm_version}-${os}-${arch}.tar.gz" \
-    | tar xz -C "${tmp_dir}"
+    | tar xz -C "${HELM_TMP}"
 
-  # Copy binary out of temp (trap deletes tmp_dir on RETURN, so copy first)
-  local bin_dir
-  bin_dir="$(mktemp -d)"
-  cp "${tmp_dir}/${os}-${arch}/helm" "${bin_dir}/helm"
-  chmod +x "${bin_dir}/helm"
-
-  # Register cleanup of bin_dir on script exit
-  trap "rm -rf '${bin_dir}'" EXIT
-
-  echo "${bin_dir}/helm"
+  HELM="${HELM_TMP}/${os}-${arch}/helm"
 }
 
 # ── Tetragon ──────────────────────────────────────────────────────────────────
@@ -49,7 +48,7 @@ if kubectl get daemonset tetragon -n kube-system &>/dev/null; then
 else
   echo "[tetragon] not found, installing latest version..."
 
-  HELM="$(find_or_download_helm)"
+  ensure_helm
 
   "${HELM}" repo add cilium https://helm.cilium.io --force-update
   "${HELM}" repo update cilium
@@ -82,7 +81,7 @@ if kubectl get crd vulnerabilityreports.aquasecurity.github.io &>/dev/null; then
 else
   echo "[trivy-operator] not found, installing latest version..."
 
-  HELM="$(find_or_download_helm)"
+  ensure_helm
 
   "${HELM}" repo add aqua https://aquasecurity.github.io/helm-charts/ --force-update
   "${HELM}" repo update aqua
