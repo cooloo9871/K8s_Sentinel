@@ -106,12 +106,7 @@ export function VulnerabilitiesPage() {
 
   const header = (actions?: React.ReactNode) => (
     <div className="mb-4 flex items-start justify-between">
-      <div>
-        <h4 className="text-xl font-semibold">Vulnerabilities</h4>
-        <p className="text-sm text-muted-foreground">
-          Known vulnerabilities in the images of running workloads, as reported by Trivy Operator.
-        </p>
-      </div>
+      <h4 className="text-xl font-semibold">Vulnerabilities</h4>
       <div className="flex gap-2">
         {actions}
         <Button variant="outline" size="sm" onClick={() => load(true)} disabled={loading}>
