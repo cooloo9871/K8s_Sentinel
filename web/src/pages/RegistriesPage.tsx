@@ -489,7 +489,7 @@ function RegistryImages({ id, isAdmin }: { id: string; isAdmin: boolean }) {
                             <div className="flex flex-col gap-3 text-xs">
                               <span className="font-mono" style={{ wordBreak: 'break-all' }}>{img.image}</span>
                               {!img.scanned && (
-                                <p className="text-amber-700" style={{ wordBreak: 'break-word' }}>
+                                <p className="whitespace-normal text-amber-700" style={{ wordBreak: 'break-word' }}>
                                   The scan failed, so nothing is known about this image. {img.error}
                                 </p>
                               )}
@@ -654,13 +654,13 @@ export function RegistriesPage() {
                 <TableRow>
                   <TableHead>Registry</TableHead>
                   <TableHead>Filters</TableHead>
-                  <TableHead className="w-32">Schedule</TableHead>
-                  <TableHead className="w-36">Last scan</TableHead>
-                  <TableHead className="w-20 text-right">Images</TableHead>
-                  <TableHead className="w-20 text-right">Critical</TableHead>
-                  <TableHead className="w-20 text-right">High</TableHead>
-                  <TableHead className="w-20 text-right">Failed</TableHead>
-                  {isAdmin && <TableHead className="w-52" />}
+                  <TableHead className="w-28">Schedule</TableHead>
+                  <TableHead className="w-32">Last scan</TableHead>
+                  <TableHead className="w-16 text-right">Images</TableHead>
+                  <TableHead className="w-16 text-right">Critical</TableHead>
+                  <TableHead className="w-16 text-right">High</TableHead>
+                  <TableHead className="w-16 text-right">Failed</TableHead>
+                  {isAdmin && <TableHead className="w-48" />}
                 </TableRow>
               </TableHeader>
               <TableBody>

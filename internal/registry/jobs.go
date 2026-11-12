@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -270,6 +271,8 @@ func (r *JobRunner) podLog(ctx context.Context, job string) (string, error) {
 	return string(data), nil
 }
 
+var logPrefix = regexp.MustCompile(`^\S+Z\s+(FATAL|ERROR)\s+(Fatal error\s+)?`)
+
 // parseOutput reads a scan pod's log. Trivy's own messages share the stream
 // with the findings, so a line is a finding only if it is a JSON object; and
 // without the closing marker the scan failed, with Trivy's last message as the
@@ -301,6 +304,9 @@ func parseOutput(out string) ([]Finding, error) {
 		if lastMessage == "" {
 			return nil, errors.New("the scan ended without output")
 		}
+		// Trivy prefixes its messages with a timestamp and level; the reason
+		// is what follows.
+		lastMessage = logPrefix.ReplaceAllString(lastMessage, "")
 		if len(lastMessage) > 600 {
 			lastMessage = lastMessage[:600] + "…"
 		}

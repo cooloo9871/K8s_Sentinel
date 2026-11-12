@@ -379,7 +379,7 @@ func TestParseOutput(t *testing.T) {
 	}
 	// ...a scan that died, which gives Trivy's reason and no findings.
 	_, err = parseOutput("2026-11-12T02:00:00Z\tFATAL\tFatal error\tunable to find the specified image\n")
-	if err == nil || !strings.Contains(err.Error(), "unable to find the specified image") {
+	if err == nil || err.Error() != "unable to find the specified image" {
 		t.Errorf("err = %v, want Trivy's message", err)
 	}
 	// Findings printed before the failure are not a result either.
