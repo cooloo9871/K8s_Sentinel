@@ -346,15 +346,12 @@ export function VulnerabilitiesPage() {
   )
 }
 
+// Only what the row above does not already say: which image of several has no
+// scan, or an old one. The counts are in the list.
 function imageStatus(i: ImageVuln) {
   if (!i.scanned) return <span className="text-muted-foreground">not scanned</span>
-  return (
-    <span className="text-muted-foreground">
-      {i.counts.critical} critical, {i.counts.high} high, {i.counts.medium} medium, {i.counts.low} low
-      {i.counts.unknown > 0 && `, ${i.counts.unknown} unknown`}
-      {i.stale && <span className="text-amber-700">, scan is more than 7 days old</span>}
-    </span>
-  )
+  if (i.stale) return <span className="text-amber-700">scan is more than 7 days old</span>
+  return null
 }
 
 function WorkloadDetail({ workload, detail, showAll, onShowAll }: {
