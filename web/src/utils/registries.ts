@@ -58,4 +58,4 @@ export const scheduleLabel = (days: number) => (days === 1 ? 'Every day' : `Ever
 export const leftOut = (r: Registry) => Math.max(0, r.run.matched - r.run.total)
 
 /** One filter per line, as the form's text box holds them. */
-export const parseFilters = (text: string) => text.split('\n').map(s => s.trim()).filter(Boolean)
+export const parseFilters = (text: string) => text.split(/[\n,]/).map(s => s.trim()).filter(Boolean)

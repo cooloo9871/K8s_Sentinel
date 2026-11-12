@@ -208,7 +208,7 @@ Trivy Operator only looks at workloads in the cluster, so here Sentinel starts t
 
 - **Registries**: Harbor, a self-hosted Docker Registry, and quay.io. Each has a URL and optional credentials
 - **A registry with a certificate from your own CA**: paste the contents of the CA's `ca.pem` into **CA certificate** and the registry is verified against it, for listing and for the scans alike. The CA is added to the public ones, not swapped for them, so a scan can still download its vulnerability database. **Skip TLS certificate verification** is the other way in, and checks nothing
-- **Filters choose what is scanned**, one per line, as `repository` or `repository:tag` with `*` as a wildcard:
+- **Filters choose what is scanned**, one per line or separated by commas, as `repository` or `repository:tag` with `*` as a wildcard:
   - `library/*` is every image in the project `library`
   - `team/app` is every tag of one repository
   - `team/app:v1.*` is its v1 tags

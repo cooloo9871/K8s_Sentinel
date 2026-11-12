@@ -58,4 +58,7 @@ describe('small helpers', () => {
   it('reads one filter per line', () => {
     expect(parseFilters(' library/* \n\n team/app:v1.* \n')).toEqual(['library/*', 'team/app:v1.*'])
   })
+  it('reads filters separated by commas', () => {
+    expect(parseFilters('library/*, team/app:v1.*,\nops/*:*')).toEqual(['library/*', 'team/app:v1.*', 'ops/*:*'])
+  })
 })

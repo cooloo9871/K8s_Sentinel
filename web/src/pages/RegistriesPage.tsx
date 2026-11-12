@@ -148,11 +148,11 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
           <Input className="h-8 text-sm" type="password" autoComplete="new-password" value={form.password}
             onChange={e => set('password', e.target.value)} />
         </div>
-        <p className="col-span-2 text-xs text-muted-foreground">
-          {hasPassword
-            ? 'A password is saved. Leave the field empty to keep it, unless the URL changes.'
-            : 'Leave both empty for a registry that allows anonymous pulls.'}
-        </p>
+        {hasPassword && (
+          <p className="col-span-2 text-xs text-muted-foreground">
+            A password is saved. Leave the field empty to keep it, unless the URL changes.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1">
@@ -163,9 +163,7 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
           onChange={e => { setFilterText(e.target.value); edited() }}
         />
         <p className="text-xs text-muted-foreground">
-          One per line, as repository or repository:tag, with * as a wildcard. <span className="font-mono">library/*</span> is
-          every image in the project library, <span className="font-mono">team/app:v1.*</span> is the v1 tags of one repository.
-          {form.type !== 'docker' && ' The project or organisation before the first slash must be written out.'}
+          Sample: <span className="font-mono">library/nginx:latest, library/*, library/*:*, library/n*:1*</span>
         </p>
       </div>
 
@@ -176,9 +174,7 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
             onChange={e => setIntervalText(e.target.value)} />
           <span className="text-sm text-muted-foreground">days</span>
         </div>
-        <p className={`text-xs ${intervalOk ? 'text-muted-foreground' : 'text-destructive'}`}>
-          From 1 to 30. New vulnerabilities are published daily, so a result is only as current as the last scan.
-        </p>
+        {!intervalOk && <p className="text-xs text-destructive">From 1 to 30.</p>}
       </div>
 
       <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -197,10 +193,6 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
             value={form.caCert}
             onChange={e => set('caCert', e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">
-            For a registry whose certificate was signed by your own CA: paste the contents of its ca.pem, and the
-            registry is verified against it. Leave empty for a registry with a publicly trusted certificate.
-          </p>
         </div>
       )}
 
