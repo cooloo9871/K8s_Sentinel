@@ -170,7 +170,16 @@ kubectl delete namespace trivy-system
 bash deploy/install.sh
 ```
 
-Existing reports stay where they are, in the namespaces of the workloads they describe.
+Existing vulnerability reports stay where they are, in the namespaces of the workloads they describe.
+
+**Clearing what the other scanners left behind.** An operator that ever ran with the chart's defaults wrote reports for every scanner, and switching a scanner off does not remove what it already wrote. Nothing reads them now, nothing will expire them, and the SBOM reports alone can outweigh all the vulnerability reports put together. Delete them once:
+
+```bash
+kubectl delete sbomreports,configauditreports,exposedsecretreports,rbacassessmentreports,infraassessmentreports --all --all-namespaces
+kubectl delete clustersbomreports,clusterconfigauditreports,clusterrbacassessmentreports,clusterinfraassessmentreports --all
+```
+
+Leave these alone if you read them with another tool; Sentinel does not use them.
 
 **Upgrading to a version with registry scanning (v0.62.0):** re-apply `deploy/sentinel.yaml`, which adds a Role in `sentinel-system` for the scan Jobs; without it every registry scan fails with a permission error. Then pass the current values to the operator, so it leaves those Jobs alone:
 
