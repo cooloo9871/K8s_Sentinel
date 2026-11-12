@@ -379,6 +379,19 @@ against `index.docker.io`). Mid-rollout a Deployment runs two ReplicaSets; by
 default the operator keeps the report of the current one only, so the outgoing
 image shows as not scanned until its pods are gone.
 
+**A container with no report of its own borrows one of the same image**
+(`reportForImage`). Two things leave such containers behind. The operator scans
+all of a workload's containers side by side in one pod; they share a scan cache,
+and with several the losers of the lock fail and are not retried until the
+report TTL brings the next rescan (seen on a cluster: Cilium's agent pod, seven
+containers on one image, one report). And a sidecar injected at admission is not
+in the pod template at all. Findings are a property of the image, so a report of
+the same repository and tag or digest answers for it. A report of the same
+workload is preferred; one from another workload must also match the registry,
+since a name and tag on two registries are not promised to be one image. The
+borrowed report may be in another namespace, so each image carries the namespace
+its findings are read from.
+
 **Exposure is joined in, not recomputed.** The `exposed` flag comes from
 `CachedPodExposures` (§6), so this page and the topology cannot disagree about
 what is reachable from outside.
