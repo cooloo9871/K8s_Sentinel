@@ -45,6 +45,10 @@ type Store struct {
 	typed      kubernetes.Interface
 	modeMu     sync.RWMutex
 	globalMode string // explicitly set by user; never auto-derived from policies
+	// False until SetMode has run in this process. The switch is not stored
+	// anywhere, so after a restart it is read back from the policies instead
+	// of being reported as Monitoring while every policy still kills.
+	modeSet    bool
 	Discovery  *DiscoveryProfileStore
 	Templates  *TemplateStore
 	containers *containerResolver
@@ -675,6 +679,11 @@ func (s *Store) ListClusterIPs(ctx context.Context) (map[string]IPInfo, error) {
 			if p.Spec.HostNetwork {
 				continue
 			}
+			// A finished pod keeps its address in status after the address has
+			// been given to another pod, and would take that pod's place here.
+			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+				continue
+			}
 			if p.Status.PodIP != "" {
 				result[p.Status.PodIP] = IPInfo{
 					IP:        p.Status.PodIP,
@@ -838,8 +847,21 @@ func IPInCIDRs(ip string, cidrs []string) bool {
 // It never auto-derives the mode from policy actions.
 func (s *Store) GetMode(ctx context.Context) (string, error) {
 	s.modeMu.RLock()
-	defer s.modeMu.RUnlock()
-	return s.globalMode, nil
+	mode, set := s.globalMode, s.modeSet
+	s.modeMu.RUnlock()
+	if set {
+		return mode, nil
+	}
+	records, err := s.List(ctx)
+	if err != nil || len(records) == 0 {
+		return mode, nil
+	}
+	for _, r := range records {
+		if r.Mode != "Protect" {
+			return mode, nil
+		}
+	}
+	return "Protect", nil
 }
 
 // SetMode applies the enforcement mode to all policies first, then updates the
@@ -860,6 +882,7 @@ func (s *Store) SetMode(ctx context.Context, mode string) error {
 	// Only update cached mode after all policies are successfully applied.
 	s.modeMu.Lock()
 	s.globalMode = mode
+	s.modeSet = true
 	s.modeMu.Unlock()
 	return nil
 }

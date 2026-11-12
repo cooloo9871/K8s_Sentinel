@@ -317,6 +317,12 @@ func (s *Store) addGatewayRouteExposures(ctx context.Context, add func(ns, svc s
 
 			// A parentRef without a namespace means the route's own.
 			gwHops, detail := gatewayHops(route, routeNs, listeners)
+			// A route attached to no Gateway, such as a service-mesh route
+			// whose parent is a Service, carries traffic inside the cluster
+			// only.
+			if len(gwHops) == 0 {
+				continue
+			}
 			routeHop := ExposureHop{Kind: routeKind, Name: qualified(routeNs, route.GetName())}
 
 			rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "rules")

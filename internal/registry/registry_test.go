@@ -578,9 +578,12 @@ func (f *fakeScans) resolve(context.Context, Config) ([]string, int, error) {
 }
 
 func (f *fakeScans) scan(ctx context.Context, _ Config, image string) ([]Finding, error) {
-	if f.block != nil {
+	f.mu.Lock()
+	block := f.block
+	f.mu.Unlock()
+	if block != nil {
 		select {
-		case <-f.block:
+		case <-block:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}

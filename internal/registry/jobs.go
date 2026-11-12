@@ -289,13 +289,15 @@ func (r *JobRunner) Scan(ctx context.Context, cfg Config, image string) ([]Findi
 	return parseOutput(out)
 }
 
+var errNoPod = errors.New("the scan Job has no pod")
+
 func (r *JobRunner) pod(ctx context.Context, job string) (*corev1.Pod, error) {
 	pods, err := r.Client.CoreV1().Pods(r.Namespace).List(ctx, metav1.ListOptions{LabelSelector: "job-name=" + job})
 	if err != nil {
 		return nil, fmt.Errorf("finding the scan pod: %w", err)
 	}
 	if len(pods.Items) == 0 {
-		return nil, errors.New("the scan Job has no pod")
+		return nil, errNoPod
 	}
 	return &pods.Items[0], nil
 }
@@ -305,9 +307,12 @@ func (r *JobRunner) pod(ctx context.Context, job string) (*corev1.Pod, error) {
 // schedule. Empty once the container has run.
 func (r *JobRunner) podProblem(ctx context.Context, job string) string {
 	pod, err := r.pod(ctx, job)
-	if err != nil {
+	if errors.Is(err, errNoPod) {
 		// No pod this long after the Job: its creation is being refused.
 		return "the scan Job has no pod; see the Job's events in namespace " + r.Namespace
+	}
+	if err != nil {
+		return "" // the list failed this once, which says nothing about the pod
 	}
 	for _, cs := range pod.Status.ContainerStatuses {
 		if cs.State.Running != nil || cs.State.Terminated != nil {

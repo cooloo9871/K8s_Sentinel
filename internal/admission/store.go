@@ -12,6 +12,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -295,6 +296,11 @@ func (s *Store) watchOnce(ctx context.Context, typed kubernetes.Interface) {
 		case res, ok := <-watcher.ResultChan():
 			if !ok {
 				return
+			}
+			// A deleted Event is the apiserver expiring an old one, not a new
+			// violation.
+			if res.Type != watch.Added && res.Type != watch.Modified {
+				continue
 			}
 			e, ok := res.Object.(*corev1.Event)
 			if !ok {
