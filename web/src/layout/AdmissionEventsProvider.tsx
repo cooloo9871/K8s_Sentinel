@@ -41,8 +41,10 @@ export function AdmissionEventsProvider({ children }: { children: React.ReactNod
       try {
         const evt: AdmissionEvent = JSON.parse(raw.data)
         setEvents(prev => {
-          // A repeat of a known event carries its new count and time.
-          return [evt, ...prev.filter(x => x.id !== evt.id)].slice(0, capRef.current)
+          // A repeat of a known event carries its new count and time, and
+          // keeps its place.
+          if (prev.some(x => x.id === evt.id)) return prev.map(x => x.id === evt.id ? evt : x)
+          return [evt, ...prev].slice(0, capRef.current)
         })
       } catch { /* ignore */ }
     }

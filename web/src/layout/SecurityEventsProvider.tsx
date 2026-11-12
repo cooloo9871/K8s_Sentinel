@@ -67,13 +67,17 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
       try {
         const evt: DisplayEvent = JSON.parse(raw.data)
         setEvents(prev => {
-          // An event seen before comes back whole and goes to the top, as the
-          // server has it: it is the latest thing that happened, and it may now
-          // carry fields the first sighting lacked. Updating only the count in
-          // place left a pod that was still retrying far down the list.
+          // An event seen before comes back whole: its new count and time, and
+          // any field the first sighting lacked. It keeps its place in the list.
+          // Moving it to the top on every repeat made the page reshuffle for as
+          // long as a few events kept recurring, with nothing new in it.
+          if (prev.some(x => x.id === evt.id)) {
+            return prev.map(x => x.id === evt.id ? evt : x)
+          }
+          // New event: prepend then cap — capRef is always current here
           const { maxWarnings, maxCriticals } = capRef.current
           let warn = 0, crit = 0
-          return [evt, ...prev.filter(x => x.id !== evt.id)].filter(e => {
+          return [evt, ...prev].filter(e => {
             if (e.severity === 'critical' && crit < maxCriticals) { crit++; return true }
             if (e.severity === 'warning'  && warn < maxWarnings)  { warn++; return true }
             return false
