@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -225,6 +226,9 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 		if !ok {
 			continue
 		}
+		if evt.isOwnExportWrite() {
+			continue
+		}
 		// For runc events with no pod context, resolve container ID → pod via K8s API.
 		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
 		// The container ID is still in evt.Arguments (from the calling runc process),
@@ -249,6 +253,18 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 			return nil
 		}
 	}
+}
+
+// isOwnExportWrite reports the agent writing its own export log.
+//
+// Tetragon appends every event it records to /var/log/tetragon/. Under a
+// policy that watches file writes everywhere, each of those appends is itself
+// an event, which is appended in turn: one row that is refreshed for as long as
+// anything at all happens on the node, sits at the top of the list for good,
+// and says nothing about the workloads. Only this is dropped. The agent
+// touching any other file is reported like any other process.
+func (e TetragonEvent) isOwnExportWrite() bool {
+	return path.Base(e.Binary) == "tetragon" && strings.HasPrefix(e.FilePath, "/var/log/tetragon/")
 }
 
 func (s *Store) findAllTetragonPods(ctx context.Context) ([]podEndpoint, error) {

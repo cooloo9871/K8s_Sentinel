@@ -212,3 +212,21 @@ func TestKprobeBaseline(t *testing.T) {
 		t.Error("a hook event with no policy name must not enter the security stream")
 	}
 }
+
+// A policy watching file writes everywhere caught Tetragon appending to its own
+// export log, once for every event it recorded.
+func TestTheAgentsOwnExportWritesAreNotEvents(t *testing.T) {
+	own := TetragonEvent{Binary: "/usr/bin/tetragon", FilePath: "/var/log/tetragon/tetragon.log", FileOp: "write"}
+	if !own.isOwnExportWrite() {
+		t.Error("the agent writing its export log is still reported")
+	}
+	for name, e := range map[string]TetragonEvent{
+		"another file":    {Binary: "/usr/bin/tetragon", FilePath: "/etc/shadow"},
+		"another process": {Binary: "/bin/sh", FilePath: "/var/log/tetragon/tetragon.log"},
+		"no file":         {Binary: "/usr/bin/tetragon"},
+	} {
+		if e.isOwnExportWrite() {
+			t.Errorf("%s was dropped", name)
+		}
+	}
+}
