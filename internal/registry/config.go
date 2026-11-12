@@ -5,6 +5,7 @@
 package registry
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ const (
 
 	minIntervalDays = 1
 	maxIntervalDays = 30
+	maxCACertBytes  = 256 << 10
 )
 
 // Config is one registry and what to scan in it.
@@ -41,6 +43,9 @@ type Config struct {
 	Filters       []string `json:"filters"`
 	IntervalDays  int      `json:"intervalDays"`
 	SkipTLSVerify bool     `json:"skipTLSVerify"`
+	// PEM certificates to trust for this registry in addition to the public
+	// ones: the CA that signed a private registry's certificate. Not a secret.
+	CACert string `json:"caCert"`
 }
 
 // PublicConfig is a Config as the API returns it.
@@ -97,6 +102,16 @@ func (c *Config) Validate() error {
 		return errors.New("at least one filter is required")
 	}
 	c.Filters = filters
+	c.CACert = strings.TrimSpace(c.CACert)
+	if c.CACert != "" {
+		if len(c.CACert) > maxCACertBytes {
+			return errors.New("the CA certificate is too large")
+		}
+		if !x509.NewCertPool().AppendCertsFromPEM([]byte(c.CACert)) {
+			return errors.New("the CA certificate is not a PEM certificate; paste the file's contents, starting with -----BEGIN CERTIFICATE-----")
+		}
+		c.CACert += "\n"
+	}
 	if c.IntervalDays < minIntervalDays || c.IntervalDays > maxIntervalDays {
 		return fmt.Errorf("interval must be %d to %d days", minIntervalDays, maxIntervalDays)
 	}

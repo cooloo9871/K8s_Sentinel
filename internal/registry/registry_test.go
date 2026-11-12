@@ -2,10 +2,16 @@ package registry
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -964,5 +970,124 @@ func TestResolveSkipsARepositoryThatVanished(t *testing.T) {
 	images, _, err := Resolve(context.Background(), Config{Type: TypeDocker, URL: srv.URL, Filters: []string{"a/*"}})
 	if err != nil || !reflect.DeepEqual(images, []string{hostOf(srv.URL) + "/a/here:1"}) {
 		t.Errorf("images = %v, err = %v", images, err)
+	}
+}
+
+func pemOf(srv *httptest.Server) string {
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}))
+}
+
+// A registry signed by a private CA is verified against the CA that was pasted
+// in, and is still refused without it.
+func TestResolveTrustsThePastedCA(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"tags":["1"]}`))
+	}))
+	defer srv.Close()
+	cfg := Config{Type: TypeDocker, URL: srv.URL, Filters: []string{"a/b:*"}}
+
+	if _, _, err := Resolve(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "certificate") {
+		t.Fatalf("err = %v, want the unknown certificate refused", err)
+	}
+	cfg.CACert = pemOf(srv)
+	images, _, err := Resolve(context.Background(), cfg)
+	if err != nil || len(images) != 1 {
+		t.Errorf("with the CA: images = %v, err = %v", images, err)
+	}
+
+	// Another CA does not make this registry trusted.
+	other := httptest.NewTLSServer(nil)
+	other.Close()
+	otherKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	tmpl := &x509.Certificate{SerialNumber: big.NewInt(7), Subject: pkix.Name{CommonName: "another CA"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true}
+	der, _ := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &otherKey.PublicKey, otherKey)
+	cfg.CACert = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	if _, _, err := Resolve(context.Background(), cfg); err == nil {
+		t.Errorf("a registry was trusted on the strength of an unrelated CA")
+	}
+}
+
+func TestValidateCACert(t *testing.T) {
+	srv := httptest.NewTLSServer(nil)
+	defer srv.Close()
+
+	c := validConfig()
+	c.CACert = "\n  " + pemOf(srv) + "\n\n"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("a PEM certificate was rejected: %v", err)
+	}
+	if !strings.HasPrefix(c.CACert, "-----BEGIN CERTIFICATE-----") || !strings.HasSuffix(c.CACert, "-----END CERTIFICATE-----\n") {
+		t.Errorf("not trimmed: %q", c.CACert)
+	}
+	// It is shown again when the registry is edited: a CA is public.
+	if c.Public().CACert == "" {
+		t.Errorf("the CA is withheld from the edit form")
+	}
+
+	for name, bad := range map[string]string{
+		"not PEM":       "MIIBhTCCASugAwIBAgIQ",
+		"a private key": "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----",
+		"a path":        "/etc/ssl/ca.pem",
+	} {
+		c := validConfig()
+		c.CACert = bad
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "CA certificate") {
+			t.Errorf("%s: err = %v, want it refused", name, err)
+		}
+	}
+}
+
+// The scan pod gets the CA as an addition to its trusted roots, and nothing it
+// has no use for.
+func TestBuildJobMountsTheCA(t *testing.T) {
+	r := &JobRunner{Namespace: "ns", TrivyImage: "trivy:x"}
+	cfg := validConfig()
+	cfg.CACert = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"
+	if !needsSecret(cfg) {
+		t.Fatalf("a registry with only a CA gets no Secret to carry it")
+	}
+
+	pod := r.buildJob("j", cfg, "h/a:1", "j").Spec.Template.Spec
+	env := map[string]string{}
+	for _, e := range pod.Containers[0].Env {
+		env[e.Name] = e.Value
+	}
+	// SSL_CERT_DIR adds to the system bundle. SSL_CERT_FILE would replace it,
+	// and Trivy could no longer download its database.
+	if !reflect.DeepEqual(env, map[string]string{"SSL_CERT_DIR": "/registry-ca"}) {
+		t.Errorf("env = %v", env)
+	}
+	var keys []string
+	for _, v := range pod.Volumes {
+		if v.Secret != nil {
+			keys = append(keys, v.Secret.Items[0].Key)
+		}
+	}
+	if !reflect.DeepEqual(keys, []string{"ca.crt"}) {
+		t.Errorf("mounted Secret keys = %v, want only the CA", keys)
+	}
+	if data := secretData(cfg); len(data) != 1 || string(data["ca.crt"]) != cfg.CACert {
+		t.Errorf("secret data = %v", data)
+	}
+
+	// With a login as well, both are mounted, each in its own directory.
+	cfg.Username, cfg.Password = "robot", "pw"
+	if data := secretData(cfg); len(data) != 2 {
+		t.Errorf("secret keys with a login and a CA = %d, want 2", len(data))
+	}
+	if n := len(r.buildJob("j", cfg, "h/a:1", "j").Spec.Template.Spec.Containers[0].VolumeMounts); n != 3 {
+		t.Errorf("mounts = %d, want /tmp, /docker and /registry-ca", n)
+	}
+
+	// Skipping verification makes a CA pointless; it is not mounted.
+	cfg.Username, cfg.SkipTLSVerify = "", true
+	if needsSecret(cfg) {
+		t.Errorf("a CA is carried to a scan that does not verify certificates")
+	}
+	for _, e := range r.buildJob("j", cfg, "h/a:1", "").Spec.Template.Spec.Containers[0].Env {
+		if e.Name == "SSL_CERT_DIR" {
+			t.Errorf("SSL_CERT_DIR set although verification is skipped")
+		}
 	}
 }

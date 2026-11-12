@@ -85,6 +85,29 @@ func randomSuffix() string {
 	return hex.EncodeToString(b)
 }
 
+const (
+	secretKeyDocker = "config.json"
+	secretKeyCA     = "ca.crt"
+)
+
+// needsSecret reports whether a scan of this registry has anything to mount.
+func needsSecret(cfg Config) bool {
+	return cfg.Username != "" || (cfg.CACert != "" && !cfg.SkipTLSVerify)
+}
+
+// secretData is what a scan pod is given: the registry login and the CA to
+// trust, whichever apply.
+func secretData(cfg Config) map[string][]byte {
+	data := map[string][]byte{}
+	if cfg.Username != "" {
+		data[secretKeyDocker] = dockerConfig(cfg)
+	}
+	if cfg.CACert != "" && !cfg.SkipTLSVerify {
+		data[secretKeyCA] = []byte(cfg.CACert)
+	}
+	return data
+}
+
 // buildJob is the Job that scans one image. secret names the Secret holding the
 // registry credentials, or is empty when there are none.
 func (r *JobRunner) buildJob(name string, cfg Config, image, secret string) *batchv1.Job {
@@ -92,18 +115,30 @@ func (r *JobRunner) buildJob(name string, cfg Config, image, secret string) *bat
 	volumes := []corev1.Volume{{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}}}
 	// The databases and the image's layers are unpacked in /tmp.
 	mounts := []corev1.VolumeMount{{Name: "tmp", MountPath: "/tmp"}}
-	if secret != "" {
+	// One Secret, mounted as a directory per use so neither sees the other's file.
+	fromSecret := func(volume, key, path string) {
+		volumes = append(volumes, corev1.Volume{Name: volume, VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: secret, Items: []corev1.KeyToPath{{Key: key, Path: key}}},
+		}})
+		mounts = append(mounts, corev1.VolumeMount{Name: volume, MountPath: path, ReadOnly: true})
+	}
+	if cfg.Username != "" {
 		// A Docker config file names the host the credentials are for.
 		// TRIVY_USERNAME and TRIVY_PASSWORD name none, and Trivy offers them to
 		// every registry it talks to, the one serving its database included.
 		env = append(env, corev1.EnvVar{Name: "DOCKER_CONFIG", Value: "/docker"})
-		volumes = append(volumes, corev1.Volume{Name: "docker", VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{SecretName: secret},
-		}})
-		mounts = append(mounts, corev1.VolumeMount{Name: "docker", MountPath: "/docker", ReadOnly: true})
+		fromSecret("docker", secretKeyDocker, "/docker")
 	}
-	if cfg.SkipTLSVerify {
+	switch {
+	case cfg.SkipTLSVerify:
 		env = append(env, corev1.EnvVar{Name: "TRIVY_INSECURE", Value: "true"})
+	case cfg.CACert != "":
+		// Trivy has no option for a CA, but it is a Go program, and Go reads
+		// every certificate in SSL_CERT_DIR on top of the system's bundle file.
+		// SSL_CERT_FILE would replace that bundle, and with it the roots Trivy
+		// needs to download its database.
+		env = append(env, corev1.EnvVar{Name: "SSL_CERT_DIR", Value: "/registry-ca"})
+		fromSecret("registry-ca", secretKeyCA, "/registry-ca")
 	}
 	if strings.HasPrefix(cfg.URL, "http://") {
 		env = append(env, corev1.EnvVar{Name: "TRIVY_NON_SSL", Value: "true"})
@@ -190,7 +225,7 @@ func (r *JobRunner) Scan(ctx context.Context, cfg Config, image string) ([]Findi
 	}
 
 	secret := ""
-	if cfg.Username != "" {
+	if needsSecret(cfg) {
 		secret = name
 	}
 	job, err := jobs.Create(ctx, r.buildJob(name, cfg, image, secret), metav1.CreateOptions{})
@@ -210,7 +245,7 @@ func (r *JobRunner) Scan(ctx context.Context, cfg Config, image string) ([]Findi
 				Name: name, Namespace: r.Namespace, Labels: map[string]string{ScanLabel: cfg.ID},
 				OwnerReferences: []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: "Job", Name: job.Name, UID: job.UID}},
 			},
-			Data: map[string][]byte{"config.json": dockerConfig(cfg)},
+			Data: secretData(cfg),
 		}, metav1.CreateOptions{})
 		if err != nil {
 			return nil, &InfraError{fmt.Sprintf("creating the credentials Secret: %v", err)}

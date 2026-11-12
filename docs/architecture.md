@@ -482,6 +482,15 @@ Trivy 0.76.1 with a listening socket). An edit that changes the URL without
 giving the password is refused, so a saved password cannot be pointed at
 another host. Sentinel's Role can create and delete Secrets, not read them.
 
+**A private CA.** A registry's `caCert` is added to the system roots for
+Sentinel's own listing requests. The scan pod is harder: Trivy has no option for
+a CA. It is a Go program, though, and Go loads every certificate in
+`SSL_CERT_DIR` on top of the system bundle file, so the CA travels in the Job's
+Secret and is mounted where that variable points. `SSL_CERT_FILE` is avoided
+because it replaces the bundle, and with it the roots Trivy needs to fetch its
+database (both behaviours confirmed against Trivy 0.76.1 and a registry signed
+by a throwaway CA).
+
 **Storage.** `registry-scans/{id}/index.json` holds the run and one summary per
 image and is all that is kept in memory; each image's findings are in a file of
 their own beside it, read when a row is expanded.

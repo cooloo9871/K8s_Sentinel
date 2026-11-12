@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,8 +37,18 @@ type client struct {
 
 func newClient(cfg Config) *client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	if cfg.SkipTLSVerify {
+	switch {
+	case cfg.SkipTLSVerify:
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	case cfg.CACert != "":
+		// Added to the public roots, not instead of them: a registry's token
+		// service may sit on another host with a public certificate.
+		pool, err := x509.SystemCertPool()
+		if err != nil || pool == nil {
+			pool = x509.NewCertPool()
+		}
+		pool.AppendCertsFromPEM([]byte(cfg.CACert))
+		tr.TLSClientConfig = &tls.Config{RootCAs: pool}
 	}
 	return &client{cfg: cfg, http: &http.Client{Timeout: 30 * time.Second, Transport: tr}, tokens: map[string]string{}}
 }

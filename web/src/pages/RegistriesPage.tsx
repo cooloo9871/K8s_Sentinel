@@ -66,7 +66,7 @@ function RunStatus({ registry }: { registry: Registry }) {
 
 const EMPTY: RegistryInput = {
   name: '', type: 'harbor', url: '', username: '', password: '',
-  filters: [], intervalDays: 7, skipTLSVerify: false,
+  filters: [], intervalDays: 7, skipTLSVerify: false, caCert: '',
 }
 
 function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
@@ -185,8 +185,24 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
         <input type="checkbox" className="h-4 w-4 cursor-pointer accent-primary"
           checked={form.skipTLSVerify} onChange={e => set('skipTLSVerify', e.target.checked)} />
         Skip TLS certificate verification
-        <span className="text-xs text-muted-foreground">for a registry with a self-signed certificate</span>
+        <span className="text-xs text-muted-foreground">accepts any certificate, so the registry's identity is not checked</span>
       </label>
+
+      {!form.skipTLSVerify && (
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">CA certificate</Label>
+          <textarea
+            className="min-h-28 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            spellCheck={false}
+            value={form.caCert}
+            onChange={e => set('caCert', e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            For a registry whose certificate was signed by your own CA: paste the contents of its ca.pem, and the
+            registry is verified against it. Leave empty for a registry with a publicly trusted certificate.
+          </p>
+        </div>
+      )}
 
       {tested && ('error' in tested ? (
         <Alert variant="destructive">
@@ -620,6 +636,7 @@ export function RegistriesPage() {
                     id: editTarget.id, name: editTarget.name, type: editTarget.type, url: editTarget.url,
                     username: editTarget.username, password: '', filters: editTarget.filters,
                     intervalDays: editTarget.intervalDays, skipTLSVerify: editTarget.skipTLSVerify,
+                    caCert: editTarget.caCert ?? '',
                   }
                 : EMPTY}
               hasPassword={editTarget?.hasPassword ?? false}

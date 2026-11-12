@@ -439,6 +439,8 @@ export interface RegistryInput {
   filters: string[]
   intervalDays: number
   skipTLSVerify: boolean
+  /** PEM of the CA that signed the registry's certificate; empty for a public one. */
+  caCert: string
 }
 
 export interface RegistryRun {
