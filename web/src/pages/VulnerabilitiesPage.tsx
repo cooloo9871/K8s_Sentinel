@@ -254,11 +254,10 @@ export function VulnerabilitiesPage() {
                   const key = workloadKey(w)
                   const open = expanded.has(key)
                   const scanned = w.scan !== 'none'
-                  const urgent = w.exposed && w.counts.critical > 0
                   return (
                     <Fragment key={key}>
                       <TableRow
-                        className={`cursor-pointer ${urgent ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}`}
+                        className="cursor-pointer hover:bg-muted/50"
                         onClick={() => toggle(w)}
                       >
                         <TableCell className="py-2 pl-3 pr-0">
