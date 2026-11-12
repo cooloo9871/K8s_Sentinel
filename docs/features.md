@@ -179,7 +179,7 @@ Graphs live pod network connections from Cilium Hubble flows.
 
 Lists every running workload with the known vulnerabilities in its images.
 
-**Sentinel does not scan.** [Trivy Operator](https://github.com/aquasecurity/trivy-operator) does, and Sentinel reads the `VulnerabilityReport` resources it writes. Trivy Operator is optional; see [install.md](install.md#vulnerability-scanning-optional).
+**Sentinel does not scan.** [Trivy Operator](https://github.com/aquasecurity/trivy-operator) does, and Sentinel reads the `VulnerabilityReport` resources it writes. The installers set Trivy Operator up; Sentinel runs without it. See [install.md](install.md#vulnerability-scanning).
 
 - **Ordered by what to fix first.** A workload with a critical finding that is also reachable from outside the cluster comes first, then by critical and high counts. "Reachable from outside" is the same exposure detection the Network Topology uses, so the **Exposed** badge here and the exposure badge there always agree
 - **One row per workload**, not per report. Trivy Operator files reports under the active ReplicaSet; Sentinel rolls them up to the Deployment, which is the object you would actually edit

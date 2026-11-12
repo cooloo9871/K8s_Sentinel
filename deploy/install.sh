@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ── Helm (used only for Tetragon, auto-downloaded if absent) ──────────────────
+# ── Helm (for Tetragon and Trivy Operator, auto-downloaded if absent) ──────────────────
 
 find_or_download_helm() {
   if command -v helm &>/dev/null; then
@@ -72,6 +72,27 @@ kubectl apply -f "${SCRIPT_DIR}/sentinel.yaml"
 
 echo "[sentinel] waiting for deployment to be ready..."
 kubectl rollout status deployment/sentinel -n sentinel-system --timeout=120s
+
+# ── Trivy Operator ────────────────────────────────────────────────────────────
+
+# Scans the images of running workloads; the Vulnerabilities page reads its
+# reports. Last, so a failure here leaves Sentinel itself installed.
+if kubectl get crd vulnerabilityreports.aquasecurity.github.io &>/dev/null; then
+  echo "[trivy-operator] already installed, skipping"
+else
+  echo "[trivy-operator] not found, installing latest version..."
+
+  HELM="$(find_or_download_helm)"
+
+  "${HELM}" repo add aqua https://aquasecurity.github.io/helm-charts/ --force-update
+  "${HELM}" repo update aqua
+  "${HELM}" install trivy-operator aqua/trivy-operator \
+    -n trivy-system --create-namespace
+
+  echo "[trivy-operator] waiting for Deployment to be ready..."
+  kubectl rollout status deployment/trivy-operator -n trivy-system --timeout=180s
+  echo "[trivy-operator] ready"
+fi
 
 echo ""
 echo "Done. Access via:"

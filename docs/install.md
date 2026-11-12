@@ -114,31 +114,34 @@ git clone https://github.com/cooloo9871/K8s_Sentinel.git
 cd K8s_Sentinel
 ```
 
-**Option A — Kubernetes Job** — installs Tetragon and K8s Sentinel, no local
-helm needed. Runs in the cluster, so it needs egress to `helm.cilium.io` and
-`raw.githubusercontent.com`.
+**Option A — Kubernetes Job** — installs Tetragon, K8s Sentinel and Trivy
+Operator, no local helm needed. Runs in the cluster, so it needs egress to
+`helm.cilium.io`, `raw.githubusercontent.com`, `aquasecurity.github.io` and
+`github.com`.
 
 ```bash
 kubectl apply -f deploy/install-job.yaml
 kubectl logs -n kube-system job/sentinel-installer -f
 ```
 
-**Option B — local script** — the same two steps, run from your machine.
+**Option B — local script** — the same three steps, run from your machine.
 
 ```bash
 bash deploy/install.sh
 ```
 
 **Option C — manifests only** — when Tetragon is already installed. One file,
-no kustomize:
+no kustomize. This does not install Trivy Operator; see the next section.
 
 ```bash
 kubectl apply -f deploy/sentinel.yaml
 ```
 
-## Vulnerability scanning (optional)
+## Vulnerability scanning
 
 The Vulnerabilities page shows what [Trivy Operator](https://github.com/aquasecurity/trivy-operator) finds. Sentinel does not scan images itself, so without the operator the page says scanning is not enabled and everything else works as before.
+
+Options A and B install the operator into `trivy-system` as the Helm release `trivy-operator`, and skip it when the `VulnerabilityReport` CRD already exists. With Option C, or to add it to an existing install, run the same command yourself:
 
 ```bash
 helm repo add aqua https://aquasecurity.github.io/helm-charts/

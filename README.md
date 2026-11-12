@@ -36,7 +36,7 @@ Requires **Kubernetes 1.32+**, **Cilium** (kube-proxy replacement + Hubble Relay
 ```bash
 git clone https://github.com/cooloo9871/K8s_Sentinel.git && cd K8s_Sentinel
 
-# Installs Tetragon and Sentinel from inside the cluster
+# Installs Tetragon, Sentinel and Trivy Operator from inside the cluster
 kubectl apply -f deploy/install-job.yaml
 
 kubectl port-forward -n sentinel-system svc/sentinel 8080:80
