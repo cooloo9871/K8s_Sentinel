@@ -23,9 +23,15 @@ operator:
   # the workload, compete for a single cache lock: the losers fail with "cache
   # may be in use by another process" and their images stay unscanned.
   builtInTrivyServer: true
+  # The chart allows a scan 5 minutes, which pulling a large image over a slow
+  # link does not fit in. A scan that runs out of time is removed without an
+  # error in the operator's log, and the workload simply stays unscanned.
+  scanJobTimeout: 15m
 
 trivy:
   mode: ClientServer
+  # Trivy's own limit, kept in step with scanJobTimeout above.
+  timeout: 15m0s
   # The server keeps its database in an emptyDir and downloads it again after a
   # restart, so no StorageClass is needed.
   storageClassEnabled: false
