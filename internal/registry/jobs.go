@@ -36,7 +36,12 @@ const (
 	// it, rather than waiting out the whole timeout.
 	startGrace = 2 * time.Minute
 
-	scanTimeout  = 15 * time.Minute
+	scanTimeout = 15 * time.Minute
+	// Trivy gives up on its own after 5 minutes unless told otherwise, which a
+	// large image on a slow link does not fit in: the database download and
+	// every layer count against it. It is given most of the scan's time, with
+	// the rest left for the pod to start.
+	trivyTimeout = "13m"
 	pollInterval = 3 * time.Second
 	maxLogBytes  = 64 << 20
 )
@@ -182,6 +187,7 @@ func (r *JobRunner) buildJob(name string, cfg Config, image, secret string) *bat
 						Image: r.TrivyImage,
 						Args: []string{
 							"image", "--quiet", "--scanners", "vuln",
+							"--timeout", trivyTimeout,
 							"--cache-dir", "/tmp/trivy",
 							"--format", "template", "--template", outputTemplate,
 							image,

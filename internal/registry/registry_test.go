@@ -431,6 +431,9 @@ func TestBuildJobIsRestrictedAndCarriesNoPassword(t *testing.T) {
 	if *pod.AutomountServiceAccountToken {
 		t.Errorf("the scan pod mounts a service account token it has no use for")
 	}
+	if !strings.Contains(strings.Join(c.Args, " "), "--timeout 13m") {
+		t.Errorf("Trivy is left on its own 5 minute timeout: %v", c.Args)
+	}
 	if c.Args[len(c.Args)-1] != "registry.internal:5000/a/b:1" {
 		t.Errorf("args = %v", c.Args)
 	}
