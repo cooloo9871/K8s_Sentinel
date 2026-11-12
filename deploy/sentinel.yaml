@@ -139,6 +139,11 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create", "delete"]
+  # The vulnerability gate keeps its list of images over the limit in one
+  # ConfigMap here, which its ValidatingAdmissionPolicy reads as a parameter.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "update", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

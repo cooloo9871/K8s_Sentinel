@@ -17,6 +17,7 @@ import (
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/handler"
 	"github.com/cooloo9871/K8s_Sentinel/internal/registry"
+	"github.com/cooloo9871/K8s_Sentinel/internal/vulngate"
 	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
 	"github.com/cooloo9871/K8s_Sentinel/internal/security"
 	k8sclient "github.com/cooloo9871/K8s_Sentinel/internal/k8s"
@@ -92,6 +93,36 @@ func main() {
 	registryScans := registry.NewScanner(registries, data("registry-scans"), scanJobs.Scan)
 	go registryScans.Run(ctx)
 
+	// The vulnerability gate: a ValidatingAdmissionPolicy that refuses images
+	// some scan found over the limit, from the workload reports and the
+	// registry scans alike.
+	vulnGate := vulngate.New(typedClient, ownNamespace(), data("vulnerability-gate.json"),
+		func(ctx context.Context) []vulngate.ScannedImage {
+			var out []vulngate.ScannedImage
+			for _, w := range store.VulnerabilityOverview(ctx, false).Workloads {
+				for _, img := range w.Images {
+					if img.Scanned {
+						out = append(out, vulngate.ScannedImage{
+							Ref: img.Image, Critical: img.Counts.Critical, High: img.Counts.High,
+							Source: w.Kind + " " + w.Namespace + "/" + w.Name,
+						})
+					}
+				}
+			}
+			for _, c := range registries.List() {
+				for _, img := range registryScans.Report(c.ID).Images {
+					if img.Scanned {
+						out = append(out, vulngate.ScannedImage{
+							Ref: img.Image, Critical: img.Counts.Critical, High: img.Counts.High,
+							Source: "registry " + c.Name,
+						})
+					}
+				}
+			}
+			return out
+		})
+	go vulnGate.Run(ctx)
+
 	cfg := handler.Config{
 		Store:           store,
 		Users:           users,
@@ -105,6 +136,7 @@ func main() {
 		Audit:           auditStore,
 		Registries:      registries,
 		RegistryScans:   registryScans,
+		VulnGate:        vulnGate,
 		// Optional shared secret for the audit webhook. Unset keeps the endpoint
 		// open, matching apiserver configs written before the token existed.
 		AuditWebhookToken: os.Getenv("AUDIT_WEBHOOK_TOKEN"),

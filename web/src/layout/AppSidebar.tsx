@@ -28,6 +28,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { to: '/vulnerabilities', label: 'Workloads' },
       { to: '/registries', label: 'Registries' },
+      { to: '/vulnerability-gate', label: 'Deployment Gate' },
     ],
   },
   {

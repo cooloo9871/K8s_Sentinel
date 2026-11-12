@@ -498,6 +498,30 @@ export interface RegistryFinding {
   link: string
 }
 
+export interface VulnGateSettings {
+  enabled: boolean
+  mode: 'warn' | 'deny'
+  /** Over the limit with more than this many; -1 when the severity is not counted. */
+  criticalLimit: number
+  highLimit: number
+  excludeNamespaces: string[]
+}
+
+export interface VulnGate {
+  settings: VulnGateSettings
+  status: {
+    updatedAt?: string
+    error?: string
+    images: { image: string; critical: number; high: number; source: string }[]
+    leftOut: number
+  }
+}
+
+export const vulnGateApi = {
+  get: (): Promise<VulnGate> => api.get('/vulnerability-gate').then((r) => r.data),
+  save: (s: VulnGateSettings): Promise<VulnGate> => api.put('/vulnerability-gate', s).then((r) => r.data),
+}
+
 export const registryApi = {
   list: (): Promise<Registry[]> => api.get('/registries').then((r) => r.data ?? []),
   create: (c: RegistryInput): Promise<Registry> => api.post('/registries', c).then((r) => r.data),

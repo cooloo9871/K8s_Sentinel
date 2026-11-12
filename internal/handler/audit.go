@@ -119,6 +119,7 @@ var actionLabels = map[string]string{
 	"DELETE /api/templates/{id}":               "Delete policy template",
 	"DELETE /api/discovery/profiles":           "Clear behavior discovery",
 	"PUT /api/security-events/retention":       "Set security event retention",
+	"PUT /api/vulnerability-gate":              "Change vulnerability gate",
 	"POST /api/registries":                     "Add registry",
 	"PUT /api/registries/{id}":                 "Update registry",
 	"DELETE /api/registries/{id}":              "Delete registry",
