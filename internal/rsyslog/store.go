@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"sync"
 )
 
@@ -89,6 +90,13 @@ func (s *Store) List() []Config {
 	for _, c := range s.configs {
 		out = append(out, c)
 	}
+	// Map order would reshuffle the page on every load.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 

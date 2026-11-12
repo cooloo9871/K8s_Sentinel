@@ -121,8 +121,11 @@ Operator, no local helm needed. Runs in the cluster, so it needs egress to
 
 ```bash
 kubectl apply -f deploy/install-job.yaml
+kubectl wait --for=condition=ready pod -l job-name=sentinel-installer -n kube-system --timeout=120s
 kubectl logs -n kube-system job/sentinel-installer -f
 ```
+
+The Job always installs what is on the `main` branch: it fetches `deploy/sentinel.yaml` and `deploy/trivy-operator-values.yaml` from GitHub and does not read your clone. To install a pinned version or edited manifests, use Option B or C. The Job runs as cluster-admin and removes that binding itself as its last step; the Job is deleted ten minutes after it finishes.
 
 **Option B — local script** — the same three steps, run from your machine.
 

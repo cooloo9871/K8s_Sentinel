@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { securityRetentionApi } from '../api/client'
+import { securityRetentionApi, SESSION_CHECK } from '../api/client'
 
 export type Severity = 'warning' | 'critical'
 
@@ -67,14 +67,13 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
       try {
         const evt: DisplayEvent = JSON.parse(raw.data)
         setEvents(prev => {
-          // Update existing event (dedup / count increment)
-          if (prev.some(x => x.id === evt.id)) {
-            return prev.map(x => x.id === evt.id ? { ...x, count: evt.count, time: evt.time } : x)
-          }
-          // New event: prepend then cap — capRef is always current here
+          // An event seen before comes back whole and goes to the top, as the
+          // server has it: it is the latest thing that happened, and it may now
+          // carry fields the first sighting lacked. Updating only the count in
+          // place left a pod that was still retrying far down the list.
           const { maxWarnings, maxCriticals } = capRef.current
           let warn = 0, crit = 0
-          return [evt, ...prev].filter(e => {
+          return [evt, ...prev.filter(x => x.id !== evt.id)].filter(e => {
             if (e.severity === 'critical' && crit < maxCriticals) { crit++; return true }
             if (e.severity === 'warning'  && warn < maxWarnings)  { warn++; return true }
             return false
@@ -82,7 +81,10 @@ export function SecurityEventsProvider({ children }: { children: React.ReactNode
         })
       } catch { /* ignore malformed */ }
     }
-    es.onerror = () => setConnected(false)
+    es.onerror = () => {
+      setConnected(false)
+      if (es.readyState === EventSource.CLOSED) window.dispatchEvent(new Event(SESSION_CHECK))
+    }
   }, [])
 
   // reconnect: re-fetch retention then start SSE (used by error recovery / manual trigger)

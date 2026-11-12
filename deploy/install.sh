@@ -79,7 +79,11 @@ kubectl rollout status deployment/sentinel -n sentinel-system --timeout=120s
 # last so a failure here leaves Sentinel itself installed. The values switch off
 # the scanners Sentinel does not read and fit the pods to that namespace's
 # restricted Pod Security level.
-if kubectl get deployment -A -l app.kubernetes.io/name=trivy-operator -o name | grep -q .; then
+# Asked on its own line: inside the condition, a kubectl that failed (no
+# permission to list across namespaces, say) read as "not installed" and a
+# second operator was installed beside the first.
+existing_operator="$(kubectl get deployment -A -l app.kubernetes.io/name=trivy-operator -o name)"
+if [ -n "$existing_operator" ]; then
   echo "[trivy-operator] already installed, skipping"
 else
   echo "[trivy-operator] not found, installing latest version..."

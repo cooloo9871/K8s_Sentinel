@@ -75,13 +75,13 @@ export function UsersPage() {
   }, [showForm, me, navigate])
 
   const handleCreate = async () => {
-    if (!newUsername.trim() || !newPassword.trim() || creating) return
+    if (!newUsername.trim() || !newPassword || creating) return
     if (newPassword.length < MIN_PASSWORD_LENGTH) {
       toast.error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`); return
     }
     setCreating(true)
     try {
-      await userApi.create(newUsername.trim(), newPassword.trim(), newRole)
+      await userApi.create(newUsername.trim(), newPassword, newRole)
       toast.success(`User "${newUsername.trim()}" created.`)
       closeForm()
       load()
@@ -103,7 +103,7 @@ export function UsersPage() {
   const changingOwn = pwTarget === me?.username
 
   const handleChangePassword = async () => {
-    if (!pwTarget || !newPw.trim()) return
+    if (!pwTarget || !newPw) return
     if (newPw.length < MIN_PASSWORD_LENGTH) {
       toast.error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`); return
     }
@@ -111,7 +111,7 @@ export function UsersPage() {
       toast.error('Enter your current password.'); return
     }
     try {
-      await userApi.changePassword(pwTarget, newPw.trim(), changingOwn ? currentPw : undefined)
+      await userApi.changePassword(pwTarget, newPw, changingOwn ? currentPw : undefined)
       toast.success('Password updated.')
       setPwTarget(null); setNewPw(''); setCurrentPw('')
     } catch (err: unknown) {
@@ -152,7 +152,7 @@ export function UsersPage() {
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={closeForm} disabled={creating}>Cancel</Button>
-              <Button size="sm" onClick={handleCreate} disabled={creating || !newUsername.trim() || !newPassword.trim()}>
+              <Button size="sm" onClick={handleCreate} disabled={creating || !newUsername.trim() || !newPassword}>
                 {creating ? 'Creating...' : 'Create'}
               </Button>
             </div>

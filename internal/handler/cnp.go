@@ -112,6 +112,13 @@ func deleteCNP(store *k8s.Store) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "namespace is required for namespaced policies")
 			return
 		}
+		// Deleting it from the policy list would lift every quarantine at once
+		// while the pods still carried the label and every page still called
+		// them quarantined.
+		if scope == "cluster" && chi.URLParam(r, "name") == k8s.QuarantinePolicyName {
+			writeError(w, http.StatusConflict, "this policy is what isolates quarantined pods; release them on the Quarantine page instead")
+			return
+		}
 		if err := store.DeleteCNP(r.Context(), scope, ns, chi.URLParam(r, "name")); err != nil {
 			writeError(w, http.StatusNotFound, err.Error())
 			return

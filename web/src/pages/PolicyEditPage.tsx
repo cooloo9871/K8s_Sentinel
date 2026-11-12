@@ -200,8 +200,10 @@ export function PolicyEditPage() {
           </h4>
         </div>
         <div className="flex items-center gap-3">
-          {/* Per-policy mode selector */}
-          <div className="flex items-center gap-2">
+          {/* Per-policy mode selector. The form writes it into every rule; a
+              manifest carries its own actions, so in the YAML editor it would
+              be a control that changes nothing. */}
+          {mode === 'form' && <div className="flex items-center gap-2">
             <Label className="text-sm text-muted-foreground">Mode</Label>
             <Select
               value={policyMode}
@@ -217,7 +219,7 @@ export function PolicyEditPage() {
                 </SelectGroup>
               </SelectContent>
             </Select>
-          </div>
+          </div>}
           {mode === 'yaml' && formCapable && (
             <Button
               variant="outline"

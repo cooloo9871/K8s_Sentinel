@@ -422,3 +422,40 @@ spec:
     expect(yamlToForm(yaml)).toBeNull()
   })
 })
+
+// Each of these loaded into the form before, showed only its labels and its
+// binaries, and lost the rest on save.
+describe('yamlToForm — what the form cannot hold stays in the YAML editor', () => {
+  const policy = (spec: string) => `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: p
+  namespace: demo
+spec:
+${spec}`
+  const kprobe = (action: string) => `  - call: sys_execve
+    syscall: true
+    args:
+      - index: 0
+        type: string
+    selectors:
+      - matchArgs:
+          - index: 0
+            operator: Equal
+            values: ["/bin/sh"]
+        matchActions:
+          - action: ${action}
+`
+  it('accepts what the builder writes', () => {
+    expect(yamlToForm(policy(`  podSelector:\n    matchLabels:\n      app: web\n  kprobes:\n${kprobe('Post')}`))).not.toBeNull()
+  })
+  it('refuses a selector with matchExpressions', () => {
+    expect(yamlToForm(policy(`  podSelector:\n    matchLabels:\n      app: web\n    matchExpressions:\n      - key: tier\n        operator: In\n        values: [a]\n  kprobes:\n${kprobe('Post')}`))).toBeNull()
+  })
+  it('refuses a policy with tracepoints', () => {
+    expect(yamlToForm(policy(`  tracepoints:\n    - subsystem: raw_syscalls\n      event: sys_exit\n  kprobes:\n${kprobe('Post')}`))).toBeNull()
+  })
+  it('refuses rules that do not share one action', () => {
+    expect(yamlToForm(policy(`  kprobes:\n${kprobe('Post')}${kprobe('Sigkill')}`))).toBeNull()
+  })
+})

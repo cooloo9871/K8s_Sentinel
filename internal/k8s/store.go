@@ -623,6 +623,13 @@ var noisyLabelPrefixes = []string{
 	"pod-template-hash",
 	"controller-revision-hash",
 	"statefulset.kubernetes.io/pod-name",
+	// These change with every rollout or name one pod or one run: a policy
+	// selecting on them stops matching without anything saying so.
+	"pod-template-generation",
+	"apps.kubernetes.io/pod-index",
+	"job-name",
+	"controller-uid",
+	"batch.kubernetes.io/",
 }
 
 // GetPodLabels returns the meaningful labels of a pod, filtering auto-generated noise.

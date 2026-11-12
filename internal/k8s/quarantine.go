@@ -30,6 +30,8 @@ const (
 	quarantineAtAnnotation = "sentinel.io/quarantined-at"
 
 	quarantinePolicyName = "sentinel-quarantine"
+	// QuarantinePolicyName is the policy that isolates quarantined pods.
+	QuarantinePolicyName = quarantinePolicyName
 )
 
 // QuarantinedPod is a contained pod as reported to the UI.

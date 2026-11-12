@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconAlertTriangle, IconRefresh,
@@ -426,13 +426,21 @@ export function CNPPage() {
   const { pathname, search: routeSearch } = useLocation()
   const [searchParams] = useSearchParams()
   const isNew = !!useMatch('/policies/network/new')
+  const openedNewRef = useRef('')
   const editParam = useMatch('/policies/network/:name/edit')?.params.name
 
   useEffect(() => {
     if (isNew) {
-      openCreate(searchParams.get('mode') === 'yaml' ? 'yaml' : 'form')
+      // Once per visit: this effect also runs when the policy list finishes
+      // loading, and opening the form again then wiped what had been typed.
+      const visit = pathname + routeSearch
+      if (openedNewRef.current !== visit) {
+        openedNewRef.current = visit
+        openCreate(searchParams.get('mode') === 'yaml' ? 'yaml' : 'form')
+      }
       return
     }
+    openedNewRef.current = ''
     if (editParam) {
       if (!policiesLoaded) return
       const scope = searchParams.get('scope') ?? 'namespace'

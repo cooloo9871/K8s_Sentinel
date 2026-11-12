@@ -57,6 +57,17 @@ func createPolicy(store *k8s.Store) http.HandlerFunc {
 		}
 
 		createdBy := claimsFromCtx(r).Username
+		// Creating under a name that is taken used to replace that policy
+		// without a word: Behavior Discovery always proposes the same name for
+		// a workload, so a second "Create Policy" swapped a tuned, enforcing
+		// policy for a new monitoring one.
+		if name, ns, ok := newPolicyIdentity(req); ok {
+			if _, err := store.Get(r.Context(), name, ns); err == nil {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": fmt.Sprintf(
+					"a policy named %q already exists; open it to edit it, or choose another name", name)})
+				return
+			}
+		}
 		if req.Source == "yaml" {
 			if err := store.ApplyRaw(r.Context(), req.RawYAML, createdBy); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -242,4 +253,29 @@ func getClusterCIDR(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, store.GetClusterCIDR(r.Context()))
 	}
+}
+
+// newPolicyIdentity is the name and namespace a create request would write to
+// ("" for a cluster-scoped policy). False when the request does not say.
+func newPolicyIdentity(req createPolicyRequest) (name, namespace string, ok bool) {
+	if req.Source != "yaml" {
+		if req.Form == nil || req.Form.Name == "" {
+			return "", "", false
+		}
+		return req.Form.Name, req.Form.Namespace, true
+	}
+	var manifest struct {
+		Kind     string `json:"kind"`
+		Metadata struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	}
+	if yaml.Unmarshal([]byte(req.RawYAML), &manifest) != nil || manifest.Metadata.Name == "" {
+		return "", "", false
+	}
+	if manifest.Kind != "TracingPolicyNamespaced" {
+		return manifest.Metadata.Name, "", true
+	}
+	return manifest.Metadata.Name, manifest.Metadata.Namespace, true
 }

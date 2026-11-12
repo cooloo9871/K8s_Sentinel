@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"sync"
 	"time"
 )
@@ -81,6 +82,13 @@ func (s *Store) List() []AlertRule {
 	for _, r := range s.rules {
 		rules = append(rules, r)
 	}
+	// Map order would reshuffle the page on every load.
+	sort.Slice(rules, func(i, j int) bool {
+		if rules[i].Name != rules[j].Name {
+			return rules[i].Name < rules[j].Name
+		}
+		return rules[i].ID < rules[j].ID
+	})
 	return rules
 }
 

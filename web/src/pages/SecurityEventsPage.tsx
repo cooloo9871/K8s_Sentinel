@@ -210,12 +210,13 @@ export function SecurityEventsPage() {
   useEffect(() => {
     if (paused) {
       // Accumulate new events as pending
-      if (allEvents.length !== prevLengthRef.current) {
-        const newOnes = allEvents.filter(e => !displayEvents.some(d => d.id === e.id))
-        pendingRef.current = [...newOnes, ...pendingRef.current]
-        setPendingCount(pendingRef.current.length)
-        prevLengthRef.current = allEvents.length
-      }
+      // Counted afresh each time. Adding the not-yet-shown events onto the
+      // previous tally counted the same ones again on every arrival (1, 3, 6,
+      // 10), and gating on the list's length missed arrivals once it was full.
+      const shown = new Set(displayEvents.map(d => d.id))
+      pendingRef.current = allEvents.filter(e => !shown.has(e.id))
+      setPendingCount(pendingRef.current.length)
+      prevLengthRef.current = allEvents.length
     } else {
       setDisplayEvents(allEvents)
       prevLengthRef.current = allEvents.length

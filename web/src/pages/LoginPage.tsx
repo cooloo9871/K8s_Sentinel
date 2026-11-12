@@ -23,8 +23,11 @@ export function LoginPage({ onLogin }: Props) {
     try {
       const user = await authApi.login(username, password)
       onLogin(user)
-    } catch {
-      setError('Invalid username or password')
+    } catch (e) {
+      // Being rate limited is not a wrong password, and saying it is sends
+      // people off to reset one that was right.
+      const limited = (e as { response?: { status?: number } })?.response?.status === 429
+      setError(limited ? 'Too many attempts. Try again in a minute.' : 'Invalid username or password')
     } finally {
       setLoading(false)
     }

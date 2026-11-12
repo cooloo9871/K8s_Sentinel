@@ -63,6 +63,19 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
 
   if (!doc || typeof doc !== 'object' || !doc.metadata?.name) return null
 
+  // The form writes a pod selector by labels and a list of kprobes, all with
+  // one action. Anything beside that would not be shown and would be gone after
+  // a save: matchExpressions dropped, so the policy widens to every pod the
+  // labels match; tracepoints dropped; a Sigkill rule next to a Post rule
+  // rewritten to whichever the form's single mode says.
+  const spec = doc.spec ?? {}
+  if (typeof spec !== 'object') return null
+  if (Object.keys(spec).some(k => k !== 'podSelector' && k !== 'kprobes')) return null
+  if (Object.keys(spec.podSelector ?? {}).some(k => k !== 'matchLabels')) return null
+  const actions = new Set<string>((spec.kprobes ?? []).flatMap((kp: any) =>
+    (kp?.selectors ?? []).flatMap((sel: any) => (sel?.matchActions ?? []).map((a: any) => String(a?.action)))))
+  if (actions.size > 1 || [...actions].some(a => a !== 'Post' && a !== 'Sigkill')) return null
+
   const matchLabels = doc.spec?.podSelector?.matchLabels
   const result: PolicyFormInput = {
     name: doc.metadata.name ?? '',

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -196,6 +197,8 @@ func (s *UserStore) List() []User {
 	for _, u := range s.users {
 		users = append(users, u)
 	}
+	// Map order would reshuffle the page on every load.
+	sort.Slice(users, func(i, j int) bool { return users[i].Username < users[j].Username })
 	return users
 }
 

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { admissionRetentionApi } from '../api/client'
+import { admissionRetentionApi, SESSION_CHECK } from '../api/client'
 import type { AdmissionEvent } from '../api/client'
 
 interface AdmissionEventsContextValue {
@@ -41,12 +41,15 @@ export function AdmissionEventsProvider({ children }: { children: React.ReactNod
       try {
         const evt: AdmissionEvent = JSON.parse(raw.data)
         setEvents(prev => {
-          if (prev.some(x => x.id === evt.id)) return prev
-          return [evt, ...prev].slice(0, capRef.current)
+          // A repeat of a known event carries its new count and time.
+          return [evt, ...prev.filter(x => x.id !== evt.id)].slice(0, capRef.current)
         })
       } catch { /* ignore */ }
     }
-    es.onerror = () => setConnected(false)
+    es.onerror = () => {
+      setConnected(false)
+      if (es.readyState === EventSource.CLOSED) window.dispatchEvent(new Event(SESSION_CHECK))
+    }
   }, [])
 
   const reconnect = useCallback(() => {

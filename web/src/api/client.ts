@@ -3,6 +3,13 @@ import type { PolicyRecord, CreatePolicyPayload, Mode, PolicyFormInput } from '.
 
 const api = axios.create({ baseURL: '/api', withCredentials: true })
 
+// Fired when the server answers 401 to a signed-in page.
+export const SESSION_ENDED = 'sentinel:session-ended'
+// Fired by an event stream the server closed, which is how an expired session
+// looks to an EventSource: it cannot see the status code, so the session is
+// asked about instead.
+export const SESSION_CHECK = 'sentinel:session-check'
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -14,6 +21,12 @@ api.interceptors.response.use(
     const data = err?.response?.data
     const detail = typeof data === 'string' ? data.trim() : data?.error
     if (detail) err.message = detail
+    // A session that has ended: the provider sends the user back to sign in,
+    // instead of every page quietly showing nothing. A wrong password on the
+    // sign-in form is also a 401, and is that form's to report.
+    if (err?.response?.status === 401 && !String(err?.config?.url ?? '').includes('/auth/login')) {
+      window.dispatchEvent(new Event(SESSION_ENDED))
+    }
     return Promise.reject(err)
   }
 )
@@ -110,11 +123,11 @@ export const userApi = {
   create: (username: string, password: string, role: 'admin' | 'viewer'): Promise<void> =>
     api.post('/users', { username, password, role }),
   delete: (username: string): Promise<void> =>
-    api.delete(`/users/${username}`),
+    api.delete(`/users/${encodeURIComponent(username)}`),
   // currentPassword is required when changing your own password; an admin
   // resetting another user's may leave it blank.
   changePassword: (username: string, password: string, currentPassword?: string): Promise<void> =>
-    api.put(`/users/${username}/password`, { password, currentPassword }),
+    api.put(`/users/${encodeURIComponent(username)}/password`, { password, currentPassword }),
 }
 
 export interface AlertRule {

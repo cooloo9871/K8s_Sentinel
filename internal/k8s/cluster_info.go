@@ -28,7 +28,8 @@ type ClusterCIDR struct {
 //  1. kube-apiserver pod args (--service-cluster-ip-range)
 //  2. kube-proxy ConfigMap (clusterCIDR comment / service config)
 func (s *Store) GetClusterCIDR(ctx context.Context) ClusterCIDR {
-	result := ClusterCIDR{}
+	// Empty rather than nil, so the page gets [] and not null.
+	result := ClusterCIDR{PodCIDRs: []string{}, ServiceCIDRs: []string{}, NodeIPs: []string{}}
 
 	// ── 1. Control-plane pod args ────────────────────────────────────────────
 	for _, component := range []string{"kube-controller-manager", "kube-apiserver"} {

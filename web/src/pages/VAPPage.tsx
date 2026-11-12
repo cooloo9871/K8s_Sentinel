@@ -1215,7 +1215,7 @@ export function VAPPage() {
       load()
       navigate('/policies/admission')
     } catch (e: unknown) {
-      toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
+      toast.error((e as Error)?.message || 'Failed to apply')
     } finally { setSaving(false) }
   }
 
@@ -1251,7 +1251,7 @@ export function VAPPage() {
       load()
       navigate('/policies/admission')
     } catch (e: unknown) {
-      toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
+      toast.error((e as Error)?.message || 'Failed to apply')
     } finally { setBuilderSaving(false) }
   }
 
@@ -1267,7 +1267,7 @@ export function VAPPage() {
       load()
       navigate('/policies/admission')
     } catch (e: unknown) {
-      toast.error((e as { response?: { data?: string } })?.response?.data || 'Failed to apply')
+      toast.error((e as Error)?.message || 'Failed to apply')
     } finally { setBindingBuilderSaving(false) }
   }
 

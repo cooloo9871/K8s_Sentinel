@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { CommaListInput } from '@/components/CommaListInput'
 import { useMatch, useNavigate, useParams } from 'react-router-dom'
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -95,14 +96,14 @@ function RuleForm({
       </div>
       <div className="flex flex-col gap-1">
         <Label className="text-xs">Namespaces <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
-        <Input className="h-8 text-sm" value={form.namespaces.join(',')}
-          onChange={e => set('namespaces', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+        <CommaListInput className="h-8 text-sm" value={form.namespaces}
+          onChange={list => set('namespaces', list)}
           placeholder="default, kube-system" />
       </div>
       <div className="flex flex-col gap-1">
         <Label className="text-xs">Policies <span className="text-muted-foreground font-normal">(comma-separated, empty = all)</span></Label>
-        <Input className="h-8 text-sm" value={form.policies.join(',')}
-          onChange={e => set('policies', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+        <CommaListInput className="h-8 text-sm" value={form.policies}
+          onChange={list => set('policies', list)}
           placeholder="monitor-all-exec, monitor-all-file" />
       </div>
       <div className="flex justify-end gap-2 pt-1">

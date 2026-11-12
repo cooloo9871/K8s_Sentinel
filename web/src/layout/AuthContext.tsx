@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { authApi, type AuthUser } from '../api/client'
+import { authApi, SESSION_CHECK, SESSION_ENDED, type AuthUser } from '../api/client'
 
 interface AuthState {
   user: AuthUser | null
@@ -21,6 +21,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const ended = () => setUser(null)
+    // me() answering 401 fires SESSION_ENDED through the interceptor.
+    const check = () => { authApi.me().catch(() => {}) }
+    window.addEventListener(SESSION_ENDED, ended)
+    window.addEventListener(SESSION_CHECK, check)
+    return () => {
+      window.removeEventListener(SESSION_ENDED, ended)
+      window.removeEventListener(SESSION_CHECK, check)
+    }
   }, [])
 
   const logout = async () => {
