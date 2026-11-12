@@ -920,7 +920,12 @@ func TestResolveListsPrivateQuayRepositoriesWhenLoggedIn(t *testing.T) {
 		case r.URL.Path == "/api/v1/repository":
 			_, _ = w.Write([]byte(`{"repositories":[]}`))
 		case r.URL.Path == "/token":
-			if u, p, _ := r.BasicAuth(); u != "org+robot" || p != "pw" || r.URL.Query().Get("scope") != "registry:catalog:*" {
+			// quay.io: "Unable to decode repository and actions: registry:catalog:*"
+			if r.URL.Query().Has("scope") {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if u, p, _ := r.BasicAuth(); u != "org+robot" || p != "pw" {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}

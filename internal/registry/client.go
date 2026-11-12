@@ -119,7 +119,9 @@ func (c *client) withToken(ctx context.Context, rawURL, realm, service, scope st
 // loggedInCatalog lists /v2/_catalog as the configured user. quay.io answers an
 // anonymous request for it with 200 and an empty list instead of a challenge,
 // so waiting to be asked for credentials would never send them; the challenge
-// is taken from /v2/, which always asks.
+// is taken from /v2/, which always asks. The token is asked for without a
+// scope: quay.io turns down "registry:catalog:*" as a malformed request, and a
+// token that only says who is asking is what its catalog goes by.
 func (c *client) loggedInCatalog(ctx context.Context, what string) ([]string, error) {
 	resp, err := c.do(ctx, c.cfg.URL+"/v2/", "")
 	if err != nil {
@@ -136,7 +138,7 @@ func (c *client) loggedInCatalog(ctx context.Context, what string) ([]string, er
 		params[m[1]] = m[2]
 	}
 	return c.v2ListWith(ctx, "/v2/_catalog", "repositories", what, func(ctx context.Context, u string) (*http.Response, error) {
-		return c.withToken(ctx, u, params["realm"], params["service"], "registry:catalog:*")
+		return c.withToken(ctx, u, params["realm"], params["service"], "")
 	})
 }
 

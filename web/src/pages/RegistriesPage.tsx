@@ -69,6 +69,12 @@ const EMPTY: RegistryInput = {
   filters: [], intervalDays: 7, skipTLSVerify: false, caCert: '',
 }
 
+const urlSample: Record<RegistryInput['type'], string> = {
+  harbor: 'https://harbor.example.com',
+  docker: 'https://registry.hub.docker.com',
+  quay: 'https://quay.io',
+}
+
 function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
   initial: RegistryInput
   hasPassword: boolean
@@ -133,7 +139,7 @@ function RegistryForm({ initial, hasPassword, onSave, onCancel, saving }: {
         <Label className="text-xs">URL <span className="text-destructive">*</span></Label>
         <Input className="h-8 font-mono text-sm" value={form.url} onChange={e => set('url', e.target.value)} />
         <p className="text-xs text-muted-foreground">
-          The scheme and host only, such as https://harbor.internal or https://quay.io.
+          Sample: <span className="font-mono">{urlSample[form.type]}</span>
         </p>
       </div>
 
