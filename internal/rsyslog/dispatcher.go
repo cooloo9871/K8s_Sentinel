@@ -22,7 +22,14 @@ type Dispatcher struct {
 	events   *security.Store
 	admStore *admission.Store
 	mu       sync.Mutex
-	writers  map[string]*gosyslog.Writer // keyed by config ID
+	writers  map[string]cachedWriter // keyed by config ID
+}
+
+// cachedWriter remembers where its connection goes, so a config edited to
+// point somewhere else is noticed.
+type cachedWriter struct {
+	w      *gosyslog.Writer
+	target string
 }
 
 func NewDispatcher(store *Store, events *security.Store, admStore *admission.Store) *Dispatcher {
@@ -30,7 +37,7 @@ func NewDispatcher(store *Store, events *security.Store, admStore *admission.Sto
 		store:    store,
 		events:   events,
 		admStore: admStore,
-		writers:  make(map[string]*gosyslog.Writer),
+		writers:  make(map[string]cachedWriter),
 	}
 }
 
@@ -69,33 +76,45 @@ func (d *Dispatcher) dispatch(evt k8s.TetragonEvent) {
 }
 
 func (d *Dispatcher) writer(cfg Config) (*gosyslog.Writer, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if w, ok := d.writers[cfg.ID]; ok {
-		// Invalidate cached writer if connection parameters have changed.
-		if stored, found := d.store.Get(cfg.ID); found &&
-			(stored.Host != cfg.Host || stored.Port != cfg.Port || stored.Protocol != cfg.Protocol) {
-			w.Close()
-			delete(d.writers, cfg.ID)
-		} else {
-			return w, nil
-		}
-	}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	target := fmt.Sprintf("%s://%s#%d", cfg.Protocol, addr, cfg.Facility)
+
+	d.mu.Lock()
+	c, ok := d.writers[cfg.ID]
+	if ok && c.target != target {
+		c.w.Close()
+		delete(d.writers, cfg.ID)
+		ok = false
+	}
+	d.mu.Unlock()
+	if ok {
+		return c.w, nil
+	}
+
+	// Dialled without the lock: a destination that does not answer would
+	// otherwise hold up delivery to every other one.
 	priority := gosyslog.Priority(cfg.Facility*8) | gosyslog.LOG_WARNING
 	w, err := gosyslog.Dial(cfg.Protocol, addr, priority, "sentinel")
 	if err != nil {
 		return nil, err
 	}
-	d.writers[cfg.ID] = w
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if c, ok := d.writers[cfg.ID]; ok && c.target == target {
+		w.Close() // another send connected first
+		return c.w, nil
+	}
+	d.writers[cfg.ID] = cachedWriter{w: w, target: target}
 	return w, nil
 }
 
-func (d *Dispatcher) invalidate(id string) {
+// invalidate drops the writer that failed. Only that one: by now another send
+// may have replaced it with a connection that works.
+func (d *Dispatcher) invalidate(id string, w *gosyslog.Writer) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if w, ok := d.writers[id]; ok {
-		w.Close()
+	if c, ok := d.writers[id]; ok && c.w == w {
+		c.w.Close()
 		delete(d.writers, id)
 	}
 }
@@ -104,7 +123,6 @@ func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
 	w, err := d.writer(cfg)
 	if err != nil {
 		log.Printf("rsyslog-dispatcher: connect %s:%d error: %v", cfg.Host, cfg.Port, err)
-		d.invalidate(cfg.ID)
 		return
 	}
 	msg := buildMessage(evt, severity)
@@ -116,7 +134,7 @@ func (d *Dispatcher) send(cfg Config, evt k8s.TetragonEvent, severity string) {
 	}
 	if sendErr != nil {
 		log.Printf("rsyslog-dispatcher: send error: %v", sendErr)
-		d.invalidate(cfg.ID)
+		d.invalidate(cfg.ID, w)
 	}
 }
 
@@ -241,7 +259,6 @@ func (d *Dispatcher) sendAdmission(cfg Config, evt admission.Event, severity str
 	w, err := d.writer(cfg)
 	if err != nil {
 		log.Printf("rsyslog-dispatcher: admission connect %s:%d error: %v", cfg.Host, cfg.Port, err)
-		d.invalidate(cfg.ID)
 		return
 	}
 	msg := buildAdmissionMessage(evt, severity)
@@ -253,7 +270,7 @@ func (d *Dispatcher) sendAdmission(cfg Config, evt admission.Event, severity str
 	}
 	if sendErr != nil {
 		log.Printf("rsyslog-dispatcher: admission send error: %v", sendErr)
-		d.invalidate(cfg.ID)
+		d.invalidate(cfg.ID, w)
 	}
 }
 

@@ -25,7 +25,10 @@ func createTemplate(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id, name and yaml are required"})
 			return
 		}
-		store.Templates.Add(t)
+		if !store.Templates.Add(t) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "a template with this id already exists"})
+			return
+		}
 		writeJSON(w, http.StatusCreated, t)
 	}
 }

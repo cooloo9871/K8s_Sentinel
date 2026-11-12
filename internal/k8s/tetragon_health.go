@@ -44,12 +44,17 @@ func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, e
 	}
 
 	var agents []TetragonAgentStatus
+	var listErr error
 
 	for _, sel := range []string{"app.kubernetes.io/name=tetragon", "app=tetragon"} {
 		list, err := s.typed.CoreV1().Pods(tetragonNamespace()).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 		})
-		if err != nil || len(list.Items) == 0 {
+		if err != nil {
+			listErr = err
+			continue
+		}
+		if len(list.Items) == 0 {
 			continue
 		}
 		for _, pod := range list.Items {
@@ -96,5 +101,6 @@ func (s *Store) GetTetragonAgents(ctx context.Context) ([]TetragonAgentStatus, e
 		return agents, nil
 	}
 
-	return agents, nil
+	// A list that failed is not a cluster without agents.
+	return agents, listErr
 }

@@ -96,11 +96,20 @@ func (s *UserStore) IsTokenRevoked(jti string) bool {
 
 func (s *UserStore) load() {
 	data, err := os.ReadFile(s.path)
-	if err != nil {
+	if os.IsNotExist(err) {
 		return
+	}
+	// Any other failure must not fall through to bootstrap, which would replace
+	// every account with admin/admin: a file that could not be read this once
+	// is not a file with no users in it.
+	if err != nil {
+		log.Fatalf("auth: cannot read %s: %v", s.path, err)
 	}
 	var f userFile
 	if err := json.Unmarshal(data, &f); err != nil {
+		// Unreadable for good. Keep it beside the new one rather than overwrite it.
+		log.Printf("auth: %s is not valid JSON (%v); kept as %s.corrupt", s.path, err, s.path)
+		_ = os.Rename(s.path, s.path+".corrupt")
 		return
 	}
 	if f.SessionTTL > 0 {

@@ -45,6 +45,9 @@ func (s *Store) load() {
 	}
 	var f configFile
 	if err := json.Unmarshal(data, &f); err != nil {
+		// The next write would replace the file, so keep what is there.
+		log.Printf("rsyslog: %s is not valid JSON (%v); kept as %s.corrupt", s.path, err, s.path)
+		_ = os.Rename(s.path, s.path+".corrupt")
 		return
 	}
 	for _, c := range f.Configs {
@@ -111,6 +114,12 @@ func (s *Store) Update(c Config) bool {
 	defer s.mu.Unlock()
 	if _, ok := s.configs[c.ID]; !ok {
 		return false
+	}
+	if c.Port == 0 {
+		c.Port = 514
+	}
+	if c.Protocol == "" {
+		c.Protocol = "udp"
 	}
 	s.configs[c.ID] = c
 	s.flush()

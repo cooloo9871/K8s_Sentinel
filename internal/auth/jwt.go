@@ -41,6 +41,10 @@ func LoadOrCreateSecret(path string) ([]byte, error) {
 		if trimmed := []byte(strings.TrimRight(string(data), " \t\r\n")); len(trimmed) == 32 {
 			return trimmed, nil
 		}
+	} else if !os.IsNotExist(err) {
+		// A secret that could not be read this once is still the secret:
+		// replacing it would log everyone out.
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {

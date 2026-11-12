@@ -37,13 +37,20 @@ func (ts *TemplateStore) List() []CustomTemplate {
 	return out
 }
 
-func (ts *TemplateStore) Add(t CustomTemplate) {
+// Add stores a template, and reports false when its ID is already taken.
+func (ts *TemplateStore) Add(t CustomTemplate) bool {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
+	for _, existing := range ts.items {
+		if existing.ID == t.ID {
+			return false
+		}
+	}
 	ts.items = append(ts.items, t)
 	if err := ts.flush(); err != nil {
 		fmt.Printf("[sentinel-templates] flush error: %v\n", err)
 	}
+	return true
 }
 
 func (ts *TemplateStore) Update(t CustomTemplate) bool {
@@ -100,6 +107,9 @@ func (ts *TemplateStore) load() {
 	}
 	var items []CustomTemplate
 	if err := json.Unmarshal(data, &items); err != nil {
+		// The next write would replace the file, so keep what is there.
+		fmt.Printf("[sentinel-templates] %s is not valid JSON (%v); kept as %s.corrupt\n", ts.filePath, err, ts.filePath)
+		_ = os.Rename(ts.filePath, ts.filePath+".corrupt")
 		ts.items = []CustomTemplate{}
 		return
 	}

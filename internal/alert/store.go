@@ -44,6 +44,9 @@ func (s *Store) load() {
 	}
 	var f alertFile
 	if err := json.Unmarshal(data, &f); err != nil {
+		// The next write would replace the file, so keep what is there.
+		log.Printf("alert: %s is not valid JSON (%v); kept as %s.corrupt", s.path, err, s.path)
+		_ = os.Rename(s.path, s.path+".corrupt")
 		return
 	}
 	for _, r := range f.Rules {

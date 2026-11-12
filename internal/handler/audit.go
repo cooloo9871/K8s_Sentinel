@@ -30,7 +30,9 @@ func auditMiddleware(store *audit.Store) func(http.Handler) http.Handler {
 			var body []byte
 			if r.Body != nil {
 				body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20))
-				r.Body = io.NopCloser(bytes.NewReader(body))
+				// What lies past the cap is still the handler's to read: cutting
+				// it off here turned a large request into a "bad request".
+				r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(body), r.Body))
 			}
 
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}

@@ -139,7 +139,9 @@ func NewStore(path string) *Store {
 	if data, err := os.ReadFile(path); err == nil {
 		var list []Config
 		if err := json.Unmarshal(data, &list); err != nil {
-			log.Printf("registry: %s is unreadable: %v", path, err)
+			// The next write would replace the file, so keep what is there.
+			log.Printf("registry: %s is not valid JSON (%v); kept as %s.corrupt", path, err, path)
+			_ = os.Rename(path, path+".corrupt")
 		}
 		for _, c := range list {
 			s.configs[c.ID] = c
