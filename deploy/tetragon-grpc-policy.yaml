@@ -1,0 +1,39 @@
+# Who may reach the Tetragon gRPC API.
+#
+# Tetragon's gRPC server has no authentication and no TLS. Whoever can connect
+# reads every process started on the node, command line included, and can list,
+# disable or delete tracing policies. K8s Sentinel needs it on the pod network,
+# so this policy lets Sentinel in and nobody else.
+#
+# It only has an effect when Tetragon runs off the host network
+# (hostNetwork=false, as deploy/install-job.yaml and deploy/install.sh install
+# it): a NetworkPolicy does not apply to a hostNetwork pod.
+#
+# Adjust the two namespaces if Tetragon or Sentinel is installed elsewhere.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tetragon-grpc
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tetragon
+  policyTypes:
+    - Ingress
+  ingress:
+    # gRPC: K8s Sentinel only.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sentinel-system
+          podSelector:
+            matchLabels:
+              app: sentinel
+      ports:
+        - protocol: TCP
+          port: 54321
+    # Prometheus metrics stay open to scrapers.
+    - ports:
+        - protocol: TCP
+          port: 2112

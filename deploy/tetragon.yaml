@@ -94,9 +94,10 @@ data:
   enable-k8s-api: "true"
   metrics-server: :2112
   metrics-label-filter: namespace,workload,pod,binary
-  # TCP on the pod network (Tetragon is hostNetwork, so this is the node IP),
-  # so Sentinel collects events over gRPC instead of kubectl exec. Default is a
-  # unix socket, reachable only from inside the pod.
+  # TCP on the pod network, so Sentinel collects events over gRPC instead of
+  # kubectl exec. The API has no authentication: the pod is kept off the host
+  # network (hostNetwork: false below) so that tetragon-grpc-policy.yaml can
+  # limit the port to Sentinel.
   server-address: 0.0.0.0:54321
   health-server-address: :6789
   health-server-interval: "10"
@@ -439,7 +440,7 @@ spec:
       
       tolerations:
         - operator: Exists
-      hostNetwork: true
+      hostNetwork: false
       dnsPolicy: Default
       terminationGracePeriodSeconds: 1
       volumes:

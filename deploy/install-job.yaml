@@ -52,14 +52,21 @@ spec:
                 echo "  installing via Helm..."
                 helm repo add cilium https://helm.cilium.io --force-update
                 helm repo update cilium
-                # gRPC on the pod network, so Sentinel collects events over
-                # it rather than kubectl exec.
+                # Sentinel collects events over the Tetragon gRPC API. That
+                # API has no authentication, so it goes on the pod network
+                # rather than the node's (hostNetwork=false), where the
+                # NetworkPolicy applied below can limit it to Sentinel.
                 helm install tetragon cilium/tetragon -n kube-system \
+                  --set hostNetwork=false \
                   --set tetragon.grpc.address=0.0.0.0:54321
                 echo "  waiting for DaemonSet..."
                 kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s
                 echo "  ready"
               fi
+
+              # No effect on a Tetragon that was already installed on the
+              # host network; docs/install.md says how to move one.
+              kubectl apply -f https://raw.githubusercontent.com/cooloo9871/K8s_Sentinel/main/deploy/tetragon-grpc-policy.yaml
 
               # ── K8s Sentinel ────────────────────────────────────────
               # One manifest, fetched directly. The namespace is in it, and

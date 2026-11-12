@@ -52,15 +52,25 @@ else
 
   "${HELM}" repo add cilium https://helm.cilium.io --force-update
   "${HELM}" repo update cilium
-  # Expose the Tetragon gRPC server on the pod network (default is localhost),
-  # so Sentinel can collect events over it instead of kubectl exec.
-  "${HELM}" template tetragon cilium/tetragon -n kube-system \
-    --set tetragon.grpc.address=0.0.0.0:54321 | kubectl apply -f -
+  # Sentinel collects events over the Tetragon gRPC API, which the agent binds
+  # to localhost by default. That API has no authentication, so it is put on
+  # the pod network rather than the node's (hostNetwork=false), where the
+  # NetworkPolicy applied below can limit it to Sentinel.
+  #
+  # Installed as a Helm release, the way install-job.yaml does: applied as
+  # rendered templates there was no release for a later `helm upgrade`.
+  "${HELM}" install tetragon cilium/tetragon -n kube-system \
+    --set hostNetwork=false \
+    --set tetragon.grpc.address=0.0.0.0:54321
 
   echo "[tetragon] waiting for DaemonSet to be ready..."
   kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s
   echo "[tetragon] ready"
 fi
+
+# Applied whether or not Tetragon was installed just now. It has no effect on a
+# Tetragon that is still on the host network; docs/install.md says how to move one.
+kubectl apply -f "${SCRIPT_DIR}/tetragon-grpc-policy.yaml"
 
 # ── Sentinel ──────────────────────────────────────────────────────────────────
 
