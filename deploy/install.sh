@@ -75,8 +75,11 @@ kubectl rollout status deployment/sentinel -n sentinel-system --timeout=120s
 # ── Trivy Operator ────────────────────────────────────────────────────────────
 
 # Scans the images of running workloads; the Vulnerabilities page reads its
-# reports. Last, so a failure here leaves Sentinel itself installed.
-if kubectl get crd vulnerabilityreports.aquasecurity.github.io &>/dev/null; then
+# reports. It lives in sentinel-system, which the step above created, and comes
+# last so a failure here leaves Sentinel itself installed. The values switch off
+# the scanners Sentinel does not read and fit the pods to that namespace's
+# restricted Pod Security level.
+if kubectl get deployment -A -l app.kubernetes.io/name=trivy-operator -o name | grep -q .; then
   echo "[trivy-operator] already installed, skipping"
 else
   echo "[trivy-operator] not found, installing latest version..."
@@ -85,11 +88,11 @@ else
 
   "${HELM}" repo add aqua https://aquasecurity.github.io/helm-charts/ --force-update
   "${HELM}" repo update aqua
-  "${HELM}" install trivy-operator aqua/trivy-operator \
-    -n trivy-system --create-namespace
+  "${HELM}" install trivy-operator aqua/trivy-operator -n sentinel-system \
+    -f "${SCRIPT_DIR}/trivy-operator-values.yaml"
 
   echo "[trivy-operator] waiting for Deployment to be ready..."
-  kubectl rollout status deployment/trivy-operator -n trivy-system --timeout=180s
+  kubectl rollout status deployment/trivy-operator -n sentinel-system --timeout=180s
   echo "[trivy-operator] ready"
 fi
 

@@ -1,0 +1,37 @@
+# Helm values for Trivy Operator as K8s Sentinel installs it, into
+# sentinel-system next to Sentinel itself. Used by deploy/install-job.yaml and
+# deploy/install.sh; for a manual install:
+#
+#   helm install trivy-operator aqua/trivy-operator \
+#     --namespace sentinel-system \
+#     --values deploy/trivy-operator-values.yaml
+
+operator:
+  # Sentinel reads VulnerabilityReport and nothing else, so the other scanners
+  # would only add load and reports nobody looks at. The infra assessment also
+  # runs a node-collector pod with host access on every node, which the
+  # restricted Pod Security level of sentinel-system does not admit.
+  configAuditScannerEnabled: false
+  rbacAssessmentScannerEnabled: false
+  infraAssessmentScannerEnabled: false
+  clusterComplianceEnabled: false
+  exposedSecretScannerEnabled: false
+  sbomGenerationEnabled: false
+
+# sentinel-system enforces the restricted Pod Security level. The chart's
+# defaults already drop capabilities and forbid privilege escalation; these add
+# the rest, for the operator and for the scan pods it starts.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10000
+  runAsGroup: 10000
+  seccompProfile:
+    type: RuntimeDefault
+
+trivyOperator:
+  scanJobPodTemplatePodSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10000
+    runAsGroup: 10000
+    seccompProfile:
+      type: RuntimeDefault

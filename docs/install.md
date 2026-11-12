@@ -141,21 +141,36 @@ kubectl apply -f deploy/sentinel.yaml
 
 The Vulnerabilities page shows what [Trivy Operator](https://github.com/aquasecurity/trivy-operator) finds. Sentinel does not scan images itself, so without the operator the page says scanning is not enabled and everything else works as before.
 
-Options A and B install the operator into `trivy-system` as the Helm release `trivy-operator`, and skip it when the `VulnerabilityReport` CRD already exists. With Option C, or to add it to an existing install, run the same command yourself:
+Options A and B install the operator into `sentinel-system`, next to Sentinel, as the Helm release `trivy-operator`, and skip it when a Trivy Operator Deployment already exists in any namespace. With Option C, or to add it to an existing install, run the same command yourself after `deploy/sentinel.yaml` has created the namespace:
 
 ```bash
 helm repo add aqua https://aquasecurity.github.io/helm-charts/
 helm repo update
 helm install trivy-operator aqua/trivy-operator \
-  --namespace trivy-system \
-  --create-namespace
+  --namespace sentinel-system \
+  --values deploy/trivy-operator-values.yaml
 ```
 
-The operator scans every workload once after it starts and again when a workload changes or a report expires (24 hours by default). Reports appear as they finish:
+`deploy/trivy-operator-values.yaml` does two things:
+
+- **Turns off every scanner except the vulnerability scanner.** Sentinel reads `VulnerabilityReport` and nothing else, so configuration audit, RBAC and infrastructure assessment, compliance, exposed-secret scanning and SBOM generation would only add load. The infrastructure assessment also starts a `node-collector` pod with host access on every node
+- **Fits the pods to the namespace.** `sentinel-system` enforces the restricted Pod Security level, so the operator and its scan pods run as a non-root user with the default seccomp profile
+
+The operator scans every workload once after it starts and again when a workload changes or a report expires (24 hours by default). Each scan is a short-lived `scan-vulnerabilityreport-*` pod in `sentinel-system`, one per workload with one container per image, at most ten at a time (`operator.scanJobsConcurrentLimit`). A burst of them right after install is the first pass over the cluster; they are removed as they finish. Reports appear as they complete:
 
 ```bash
 kubectl get vulnerabilityreports -A
 ```
+
+**Moving an operator installed into `trivy-system` by an earlier version:**
+
+```bash
+helm uninstall trivy-operator --namespace trivy-system
+kubectl delete namespace trivy-system
+bash deploy/install.sh
+```
+
+Existing reports stay where they are, in the namespaces of the workloads they describe.
 
 **Upgrading Sentinel from a version before the Vulnerabilities page:** re-apply `deploy/sentinel.yaml`. The ClusterRole gained read-only rules for `vulnerabilityreports` and for `jobs`; without the first the page reports that Sentinel is not permitted to read reports.
 
@@ -181,19 +196,9 @@ trivy:
 
 ```bash
 helm install trivy-operator aqua/trivy-operator \
-  --namespace trivy-system \
-  --create-namespace \
+  --namespace sentinel-system \
+  --values deploy/trivy-operator-values.yaml \
   --values trivy-values.yaml
-```
-
-Sentinel reads only the vulnerability reports. The operator's other scanners (configuration audit, RBAC and infrastructure assessment, compliance) are on by default and pull more images, `mirror.gcr.io/aquasec/trivy-checks` and `ghcr.io/aquasecurity/node-collector`. Mirror those as well, or turn the scanners off:
-
-```yaml
-operator:
-  configAuditScannerEnabled: false
-  rbacAssessmentScannerEnabled: false
-  infraAssessmentScannerEnabled: false
-  clusterComplianceEnabled: false
 ```
 
 The database is only as current as the copy in your registry, so refresh the mirror on a schedule. The operator's own image and the registries your workloads pull from need the same treatment; the [Trivy Operator documentation](https://aquasecurity.github.io/trivy-operator/) covers private registries and credentials.
