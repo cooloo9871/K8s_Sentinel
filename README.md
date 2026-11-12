@@ -4,7 +4,7 @@
   <img src="assets/sentinel-lockup-light.svg" alt="K8s Sentinel" width="340" />
 </p>
 
-**K8s Sentinel** is a Kubernetes security console that runs inside the cluster. It puts Cilium Tetragon runtime monitoring, Cilium network policy enforcement and ValidatingAdmissionPolicy admission control behind one web UI — manage policies, watch security events, route alerts and see live network topology without hand-writing YAML.
+**K8s Sentinel** is a Kubernetes security console that runs inside the cluster. It puts Cilium Tetragon runtime monitoring, Cilium network policy enforcement and ValidatingAdmissionPolicy admission control behind one web UI — manage policies, watch security events, route alerts and see live network topology without hand-writing YAML. It also shows the known vulnerabilities in the images you run and in the registries you pull from, scanned by Trivy.
 
 Each layer does what only it can do:
 
@@ -13,6 +13,7 @@ Each layer does what only it can do:
 | **Tracing Policy** (Tetragon) | Process execution and file access, with full process context — it can tell a legitimate server process apart from a cryptominer inside the same pod, and kill it |
 | **Network Policy** (Cilium) | Network access control by workload identity — cannot be bypassed by connecting straight to a pod IP; drops packets instead of killing processes |
 | **Admission Policy** (VAP) | Rejects non-compliant resources before they are admitted to the cluster |
+| **Vulnerability scanning** (Trivy) | Known CVEs in container images, both running and still in a registry — it reports, and does not block a deployment |
 
 ## Features
 
@@ -21,18 +22,18 @@ Each layer does what only it can do:
 - **Admission Policy** — a CEL builder covering nine rule types (labels, annotations, images, replicas, resource limits, security context, host access, ConfigMap and Secret size), plus bindings
 - **Quarantine** — cut a suspect pod off from the network without killing it, so the evidence survives; one click from a Security Event, one to release
 - **Behavior Discovery** — learns what each workload actually executes, and turns it into a policy prefill
-- **Network Topology** — live connection graph from Hubble flows: policy denials in red with the denying policy named, exposure paths traced hop by hop, quarantined pods marked
-- **Vulnerabilities** — the known CVEs in the images of running workloads, read from Trivy Operator's reports, with workloads that are both critical and reachable from outside the cluster listed first
-- **Registry scanning** — the same check for images that are not running yet: point Sentinel at Harbor, a Docker Registry or quay.io, choose what to scan with filters such as `library/*`, and it scans on a schedule you set
+- **Network Topology** — live connection graph from Hubble flows: policy denials in red with the denying policy named, exposure paths traced hop by hop, quarantined pods and pods with critical vulnerabilities marked
+- **Workload vulnerabilities** — the known CVEs in the images of running workloads, read from Trivy Operator's reports, with workloads that are both critical and reachable from outside the cluster listed first. A workload nothing has scanned shows as not scanned, never as clean; filter by namespace, severity, exposure or fix available, expand for each CVE with its fixed version, export CSV
+- **Registry scanning** — the same check for images that are not running yet: point Sentinel at Harbor, a Docker Registry or quay.io, choose what to scan with filters such as `library/*` or `team/app:v1.*`, and it scans every 1 to 30 days as you set, or on demand. A scan that failed is listed as failed with the reason
 - **Security & Admission Events** — persisted, deduplicated, filterable, exportable; webhook alerts (Slack; Discord via its Slack-compatible endpoint) and syslog forwarding fire once per event, paced and retried so a burst does not trip provider rate limits
 - **Audit Log** — every administrative action recorded (who did what, when), filterable, with CSV export
-- **Event Sources** — live ingestion health per source, so a Tetragon agent that is Ready but whose gRPC stream is not actually delivering shows as down rather than falsely healthy
-- **Dashboard & Settings** — agent and ingestion health, event counts, quarantine status; local accounts with Admin / Viewer roles (forced first-login password change, per-IP login rate limiting), retention tuning
+- **Event Sources** — live ingestion health per source, so a Tetragon agent that is Ready but whose gRPC stream is not actually delivering shows as down rather than falsely healthy; Trivy Operator is listed too, and turns stale when it stops writing reports
+- **Dashboard & Settings** — agent and ingestion health, event counts, quarantine status, critical and high vulnerability totals with the workloads to fix first; local accounts with Admin / Viewer roles (forced first-login password change, per-IP login rate limiting), retention tuning
 - **Hardened by default** — same-origin Content-Security-Policy and security headers on every response; sessions can survive restarts without persistent storage by injecting `JWT_SECRET` from a Kubernetes Secret
 
 ## Quick start
 
-Requires **Kubernetes 1.32+**, **Cilium** (kube-proxy replacement + Hubble Relay), and **Tetragon** with its gRPC server on the pod network — setup details in [docs/install.md](docs/install.md).
+Requires **Kubernetes 1.32+**, **Cilium** (kube-proxy replacement + Hubble Relay), and **Tetragon** with its gRPC server on the pod network — setup details in [docs/install.md](docs/install.md). **Trivy Operator** supplies the workload vulnerability results; the installer below sets it up alongside Sentinel in `sentinel-system`, and Sentinel runs without it.
 
 ```bash
 git clone https://github.com/cooloo9871/K8s_Sentinel.git && cd K8s_Sentinel
@@ -54,7 +55,7 @@ In-repo references:
 
 | Doc | Covers |
 |---|---|
-| [docs/install.md](docs/install.md) | Cilium and Tetragon setup with the flags explained, install options, persistent storage, environment variables, resources, RBAC |
+| [docs/install.md](docs/install.md) | Cilium and Tetragon setup with the flags explained, install options, Trivy Operator and air-gapped vulnerability databases, persistent storage, environment variables, resources, RBAC |
 | [docs/audit-webhook.md](docs/audit-webhook.md) | Wiring the kube-apiserver audit log to Sentinel for full admission-event coverage |
 | [docs/features.md](docs/features.md) | Every feature in detail, and what to know before switching on enforcement |
 | [docs/architecture.md](docs/architecture.md) | How the pieces fit together — ingestion pipelines, topology decisions, known limitations |
