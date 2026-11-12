@@ -23,6 +23,7 @@ Each layer does what only it can do:
 - **Behavior Discovery** — learns what each workload actually executes, and turns it into a policy prefill
 - **Network Topology** — live connection graph from Hubble flows: policy denials in red with the denying policy named, exposure paths traced hop by hop, quarantined pods marked
 - **Vulnerabilities** — the known CVEs in the images of running workloads, read from Trivy Operator's reports, with workloads that are both critical and reachable from outside the cluster listed first
+- **Registry scanning** — the same check for images that are not running yet: point Sentinel at Harbor, a Docker Registry or quay.io, choose what to scan with filters such as `library/*`, and it scans on a schedule you set
 - **Security & Admission Events** — persisted, deduplicated, filterable, exportable; webhook alerts (Slack; Discord via its Slack-compatible endpoint) and syslog forwarding fire once per event, paced and retried so a burst does not trip provider rate limits
 - **Audit Log** — every administrative action recorded (who did what, when), filterable, with CSV export
 - **Event Sources** — live ingestion health per source, so a Tetragon agent that is Ready but whose gRPC stream is not actually delivering shows as down rather than falsely healthy

@@ -172,6 +172,14 @@ bash deploy/install.sh
 
 Existing reports stay where they are, in the namespaces of the workloads they describe.
 
+**Upgrading to a version with registry scanning (v0.62.0):** re-apply `deploy/sentinel.yaml`, which adds a Role in `sentinel-system` for the scan Jobs; without it every registry scan fails with a permission error. Then pass the current values to the operator, so it leaves those Jobs alone:
+
+```bash
+helm upgrade trivy-operator aqua/trivy-operator \
+  --namespace sentinel-system \
+  --values deploy/trivy-operator-values.yaml
+```
+
 **Upgrading Sentinel from a version before the Vulnerabilities page:** re-apply `deploy/sentinel.yaml`. The ClusterRole gained read-only rules for `vulnerabilityreports` and for `jobs`; without the first the page reports that Sentinel is not permitted to read reports.
 
 ### Air-gapped clusters
@@ -200,6 +208,8 @@ helm install trivy-operator aqua/trivy-operator \
   --values deploy/trivy-operator-values.yaml \
   --values trivy-values.yaml
 ```
+
+Registry scans are started by Sentinel, not by the operator, so they take the same locations from Sentinel's own environment: `TRIVY_IMAGE`, `TRIVY_DB_REPOSITORY` and `TRIVY_JAVA_DB_REPOSITORY` (see [Environment variables](#environment-variables)).
 
 The database is only as current as the copy in your registry, so refresh the mirror on a schedule. The operator's own image and the registries your workloads pull from need the same treatment; the [Trivy Operator documentation](https://aquasecurity.github.io/trivy-operator/) covers private registries and credentials.
 
@@ -235,6 +245,8 @@ The bundled manifests mount `/data/sentinel` as an `emptyDir`, which needs no St
 | `rsyslog.json` | Syslog forwarding settings |
 | `admission-events.json` | Admission events (default 500, 30-day TTL) |
 | `security-events.json` | Security events (default 800, 7-day TTL) |
+| `registries.json` | Registries to scan, including their credentials |
+| `registry-scans/` | Registry scan results, a directory per registry |
 
 ```yaml
 volumeMounts:
@@ -260,6 +272,8 @@ volumes:
 | `HUBBLE_RELAY_TLS` / `TETRAGON_GRPC_TLS` | *(unset)* | Set to `true` when the endpoint serves TLS; `*_CA` names a CA file when the certificate is not signed by a system root, and `*_SERVER_NAME` names the identity to verify against (required for the Tetragon agents, which are dialed by pod IP) |
 | `AUDIT_WEBHOOK_TOKEN` | *(unset)* | Token the [audit webhook](audit-webhook.md) requires when set, carried at the end of the webhook URL; unset leaves the endpoint open |
 | `JWT_SECRET` | *(unset)* | Session-token signing key, at least 32 characters. Inject it from a Kubernetes Secret and sessions survive Pod restarts without a PersistentVolume; unset, the key lives in `DATA_DIR/.jwt-secret` and on an `emptyDir` regenerates on every restart, logging everyone out |
+| `TRIVY_IMAGE` | `mirror.gcr.io/aquasec/trivy:0.76.1` | The Trivy image registry scans run |
+| `TRIVY_DB_REPOSITORY` / `TRIVY_JAVA_DB_REPOSITORY` | *(Trivy's defaults)* | Where registry scans download the vulnerability databases from; set both to your mirror in an air-gapped cluster |
 | `TRUST_PROXY_HEADERS` | *(unset)* | Set to `true` only behind a proxy or ingress that overwrites `X-Forwarded-For`; the login rate limiter and sign-in audit entries then use the forwarded client IP instead of the connection address. Never enable it when clients reach Sentinel directly, since the header is client-controlled |
 
 ---
@@ -302,3 +316,14 @@ label; everything else is read-only.
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 | `aquasecurity.github.io` | `vulnerabilityreports` | get, list |
 | `batch` | `jobs` | get, list |
+
+Registry scanning adds a **Role in `sentinel-system` only**, for the Trivy Jobs Sentinel starts there:
+
+| API Group | Resources | Verbs |
+|---|---|---|
+| `batch` | `jobs` | create, get, list, delete |
+| `""` (core) | `pods` | get, list |
+| `""` (core) | `pods/log` | get |
+| `""` (core) | `secrets` | create, get, update, delete |
+
+The Secret verbs carry a registry's credentials to its scan pod. They also let Sentinel read the other Secrets in its own namespace, which is the price of not writing a password into a Job.

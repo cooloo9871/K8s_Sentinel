@@ -199,6 +199,31 @@ The same results appear in three other places:
 - **Dashboard** has a Vulnerabilities card: critical and high totals, how many workloads are both critical and exposed, how many are not fully scanned, and the five workloads to fix first
 - **Event Sources** shows Trivy Operator as a source: **Reporting**, **Not detected**, **No reports yet**, **Not permitted** or **Error**, with the number of reports and the time of the newest. It turns **Stale** when no report has been written for 7 days, which with the operator's default daily rescan means it has stopped
 
+### Registry scanning
+
+The Workloads list covers what is running. **Vulnerabilities → Registries** covers what could be: the images sitting in a registry, scanned before anything deploys them.
+
+Trivy Operator only looks at workloads in the cluster, so here Sentinel starts the scans itself, one short-lived Trivy pod per image in `sentinel-system`.
+
+- **Registries**: Harbor, a self-hosted Docker Registry, and quay.io. Each has a URL, optional credentials, and an option to skip TLS verification for a self-signed certificate
+- **Filters choose what is scanned**, one per line, as `repository` or `repository:tag` with `*` as a wildcard:
+  - `library/*` is every image in the project `library`
+  - `team/app` is every tag of one repository
+  - `team/app:v1.*` is its v1 tags
+  - `library/*:latest` is `latest` wherever a repository has it
+
+  On Harbor and quay.io the project or organisation before the first slash has to be written out, since that is what those registries can list
+- **Test filters** lists the registry without scanning and says how many images match, with a sample, before you save
+- **Schedule**: each registry is scanned when it is added, again whenever it is edited, and then every 1 to 30 days as you set. **Scan now** starts one at once
+- **500 images a scan.** Every image is a pod that downloads the vulnerability database, so a scan stops at 500. When the filters match more, the page says how many were left out; narrow the filters or split them across entries
+- **Three scans run at a time**, across all registries, so a large registry takes a while. Results appear as each image finishes, and the previous results stay listed until then
+- **A failed scan is not a clean image.** An image whose scan failed shows **Scan failed** with dashes for counts and Trivy's reason when expanded, and is counted separately. A registry that could not be listed at all shows **Could not list** with the registry's answer
+- **Expand an image** for its findings, in the same layout as the workload list. Search, filter by severity, fix available or scan failed, and export CSV
+- **Credentials** are stored in Sentinel's data directory with the other settings and are never sent back to the browser. A scan pod reads them from a Secret that exists only for that pod; they are never written into a Job
+- **Results are kept in the data directory**, so they survive a restart when it is on persistent storage. On the default `emptyDir` a restart clears them and the registries, like every other setting
+- Viewers can read the results; adding, editing, deleting and starting scans are for Admins and recorded in the Audit Log
+- This does not block deployments, and does not yet mark which registry images are running in the cluster
+
 ## Notifications
 
 ### Security Events

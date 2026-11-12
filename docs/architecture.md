@@ -51,6 +51,7 @@ One Pod, two things: a Go backend, and a React SPA compiled into the same binary
 | `internal/auth` | Users, bcrypt, JWT issuance and revocation |
 | `internal/alert` | Webhook notifications |
 | `internal/rsyslog` | Syslog forwarding |
+| `internal/registry` | Registry scanning: listing registries, a Trivy Job per image, results and schedule |
 
 `internal/k8s.Store` is deliberately large: every read and write against the cluster
 goes through it, caching and broadcasting live inside it, and handlers only turn
@@ -423,6 +424,62 @@ and unscanned, but in a meshed cluster it makes "partial" the norm. Ephemeral
 containers are not listed.
 
 ---
+
+## 6.7 Registry scanning
+
+The one place Sentinel starts work rather than reading someone else's.
+Trivy Operator scans what runs in the cluster and has no notion of a registry,
+so `internal/registry` lists a registry, starts a Trivy Job per image, and
+keeps the results. Trivy is still the scanner.
+
+**Listing.** A filter is `repository[:tag]` with `*` matching any run of
+characters, slashes included. Tags come from `GET /v2/{repo}/tags/list`, which
+Harbor, Docker Registry and quay.io all serve, with the bearer-token challenge
+answered the way a container runtime does. Listing *repositories* is where they
+differ: `/v2/_catalog` on a Docker Registry; Harbor's
+`/api/v2.0/projects/{project}/repositories`, because its `_catalog` answers only
+to a system administrator; quay's `/api/v1/repository?namespace=`, plus
+`_catalog` when credentials are set, since a robot account can use that and not
+the API. A tag is checked against the registry whenever either side of the
+filter has a wildcard, or `library/*:v2` would name `v2` of every repository
+whether it exists or not. Any listing failure fails the whole resolution: a
+partial list would read as "that is all there is".
+
+**One Job per image, three at a time.** The pod runs as a non-root user on a
+read-only root filesystem with an `emptyDir` at `/tmp`, which is what the
+namespace's restricted Pod Security level admits. A run stops at 500 images and
+reports how many the filters matched, so the cap is never silent.
+
+**Results come back through the pod log.** Trivy's JSON report runs to megabytes
+an image, more than is safe to carry through a log the kubelet rotates, so the
+Job uses an output template: one JSON object per finding with seven fields, then
+a completion marker. `parseOutput` treats a log without the marker as a failed
+scan and Trivy's last message as the reason. Findings printed before a failure
+are discarded: a scan cut short is not a result.
+
+**Credentials.** The password lives in `registries.json` and is stripped from
+every API response. For a scan it goes into a Secret created for that Job, owned
+by it, and referenced by `secretKeyRef`; it is never in the Job spec.
+
+**Storage.** `registry-scans/{id}/index.json` holds the run and one summary per
+image and is all that is kept in memory; each image's findings are in a file of
+their own beside it, read when a row is expanded.
+
+**Scheduling.** A loop checks once a minute and starts a registry whose last run
+began more than its interval ago. A run interrupted by a restart has no finish
+time, which makes it due at once; its orphaned Jobs are deleted at startup. An
+edit cancels the running scan and starts another, since what is being scanned
+may have changed.
+
+**Keeping the two scanners apart.** The Jobs and their pods carry
+`sentinel.io/registry-scan`. The Workloads list skips pods with it, and
+`deploy/trivy-operator-values.yaml` sets `skipResourceByLabels` so the operator
+does not scan Trivy scanning.
+
+**Not verified on a cluster.** The listing code ran against quay.io, Docker Hub
+and a public Harbor, and the Trivy command line ran in a local container under
+the same user and filesystem restrictions. The Job itself, the Role, and reading
+the log back have only been tested against a fake API server.
 
 ## 7. Storage
 
