@@ -21,7 +21,7 @@ func TestLinkLocalIsNotExternal(t *testing.T) {
 		Verdict: "allowed", Count: 1, LastSeen: time.Now(),
 	}})
 
-	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, nil, false)
 
 	var src *TopologyNode
 	for i, n := range resp.Nodes {
@@ -55,7 +55,7 @@ func TestCloudMetadataIsNamed(t *testing.T) {
 		Verdict: "allowed", Count: 3, LastSeen: time.Now(),
 	}})
 
-	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, nil, false)
 
 	for _, n := range resp.Nodes {
 		if n.IP == "169.254.169.254" {
@@ -78,7 +78,7 @@ func TestARealExternalAddressIsStillExternal(t *testing.T) {
 		Port: "8080", Verdict: "allowed", Count: 1, LastSeen: time.Now(),
 	}})
 
-	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, nil, false)
 
 	for _, n := range resp.Nodes {
 		if n.IP == "203.0.113.9" {

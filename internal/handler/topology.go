@@ -24,6 +24,8 @@ type TopologyNode struct {
 	// Cut off from the network by Sentinel. Its edges are all denials, so without
 	// saying so the graph shows a pod nothing can reach and gives no reason.
 	Quarantined bool `json:"quarantined,omitempty"`
+	// Critical findings in the images this pod runs, per Trivy Operator.
+	CriticalVulns int `json:"criticalVulns,omitempty"`
 }
 
 // PortStat is one destination port's share of an aggregated edge.
@@ -137,13 +139,13 @@ func getNetworkTopology(k8sStore *k8s.Store) http.HandlerFunc {
 		exposures := k8sStore.CachedPodExposures(r.Context())
 		nodeIPMap := k8sStore.CachedNodeIPMap(r.Context())
 
-		writeJSON(w, http.StatusOK, buildCiliumTopology(r.Context(), k8sStore, ipMap, nodeIPMap, exposures, partialResolution))
+		writeJSON(w, http.StatusOK, buildCiliumTopology(r.Context(), k8sStore, ipMap, nodeIPMap, exposures, k8sStore.PodVulnCounts(), partialResolution))
 	}
 }
 
 // buildCiliumTopology constructs a topology response from Cilium/Hubble flow data.
 // It uses pod names directly from Hubble (no IP lookup needed for known pods).
-func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, partialResolution bool) TopologyResponse {
+func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[string]k8s.IPInfo, nodeIPMap k8s.NodeIPMap, exposures map[string][]k8s.Exposure, podVulns map[string]k8s.VulnCounts, partialResolution bool) TopologyResponse {
 	entries := k8sStore.ListCiliumTopoEntries()
 	nodeSet := make(map[string]TopologyNode)
 	now := time.Now()
@@ -373,6 +375,7 @@ func buildCiliumTopology(ctx context.Context, k8sStore *k8s.Store, ipMap map[str
 				n.Exposures = exp
 			}
 			n.Quarantined = k8sStore.IsQuarantined(ctx, n.Namespace, n.Pod)
+			n.CriticalVulns = podVulns[n.ID].Critical
 		}
 		nodes = append(nodes, n)
 	}

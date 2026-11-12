@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -101,6 +102,11 @@ type Store struct {
 	vulnRefresh sync.Mutex
 	vulnData    VulnOverview
 	vulnExpiry  time.Time
+	vulnPods    map[string]VulnCounts
+	vulnBg      atomic.Bool
+	// Read and written only under vulnRefresh.
+	vulnReports       []reportSummary
+	vulnReportsExpiry time.Time
 }
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the

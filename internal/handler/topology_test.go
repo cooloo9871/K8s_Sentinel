@@ -26,7 +26,7 @@ func build(t *testing.T, entries []k8s.CiliumTopoEntry) TopologyResponse {
 	t.Helper()
 	store := k8s.NewStore(nil, nil, nil, "")
 	store.SeedCiliumTopoForTest(entries)
-	return buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	return buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, nil, false)
 }
 
 func entry(key, verdict string, seen time.Time) k8s.CiliumTopoEntry {
@@ -179,13 +179,13 @@ func TestResponseOrderIsDeterministic(t *testing.T) {
 // response has to carry the difference.
 func TestResponseSaysWhetherAnyFlowWasEverSeen(t *testing.T) {
 	store := k8s.NewStore(nil, nil, nil, "")
-	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, nil, false)
 	if resp.FlowsEverSeen {
 		t.Error("a store that never received a flow reports otherwise")
 	}
 
 	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{entry("a", "allowed", time.Now())})
-	resp = buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, false)
+	resp = buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, nil, false)
 	if !resp.FlowsEverSeen {
 		t.Error("a store holding a flow reports that none was ever seen")
 	}
@@ -209,7 +209,7 @@ func TestInboundTrafficViaCiliumHostReachesTheGraph(t *testing.T) {
 	})
 	nodeIPs := k8s.NodeIPMap{IPToName: map[string]string{"10.0.1.1": "worker-1"}}
 
-	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, nil, false)
 	e := findEdge(resp, "node:10.0.1.1", "demo/nginx")
 	if e == nil {
 		t.Fatalf("inbound edge missing; got %d edges", len(resp.Edges))
@@ -234,7 +234,7 @@ func TestNodeToNodeIsNotDrawn(t *testing.T) {
 		"10.0.1.1": "worker-1", "10.0.2.1": "worker-2",
 	}}
 
-	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, nil, false)
 	if len(resp.Edges) != 0 {
 		t.Errorf("got %d edges, want node-to-node plumbing left undrawn", len(resp.Edges))
 	}
@@ -252,7 +252,7 @@ func TestAWorldSourceStaysExternalEvenWithANodeAddress(t *testing.T) {
 	}})
 	nodeIPs := k8s.NodeIPMap{IPToName: map[string]string{"10.0.0.181": "cilium-w0"}}
 
-	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, nil, false)
 	e := findEdge(resp, "ext:10.0.0.181", "default/nginx")
 	if e == nil {
 		t.Fatalf("external edge missing; got %d edges", len(resp.Edges))
@@ -282,7 +282,7 @@ func TestAKubeletProbeIsFlaggedRatherThanDropped(t *testing.T) {
 	})
 	nodeIPs := k8s.NodeIPMap{IPToName: map[string]string{"10.0.1.1": "worker-1"}}
 
-	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, false)
+	resp := buildCiliumTopology(context.Background(), store, nil, nodeIPs, nil, nil, false)
 	e := findEdge(resp, "node:10.0.1.1", "demo/nginx")
 	if e == nil {
 		t.Fatal("edge missing")
@@ -307,5 +307,29 @@ func TestMonitoringPortIsNotCollapsed(t *testing.T) {
 	// And an ordinary low server port is untouched.
 	if got := normalizePort("443"); got != "443" {
 		t.Errorf("normalizePort(443) = %q, want 443", got)
+	}
+}
+
+// A pod whose images carry critical findings is marked; one with only lesser
+// findings, or none recorded, is not.
+func TestPodsWithCriticalVulnerabilitiesAreMarked(t *testing.T) {
+	store := k8s.NewStore(nil, nil, nil, "")
+	store.SeedCiliumTopoForTest([]k8s.CiliumTopoEntry{entry("k", "FORWARDED", time.Now())})
+	vulns := map[string]k8s.VulnCounts{
+		"demo/server": {Critical: 3, High: 1},
+		"demo/client": {High: 5},
+	}
+
+	resp := buildCiliumTopology(context.Background(), store, nil, k8s.NodeIPMap{}, nil, vulns, false)
+
+	got := map[string]int{}
+	for _, n := range resp.Nodes {
+		got[n.ID] = n.CriticalVulns
+	}
+	if got["demo/server"] != 3 {
+		t.Errorf("server criticalVulns = %d, want 3", got["demo/server"])
+	}
+	if got["demo/client"] != 0 {
+		t.Errorf("client criticalVulns = %d, want 0", got["demo/client"])
 	}
 }
