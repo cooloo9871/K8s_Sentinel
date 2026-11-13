@@ -1,12 +1,15 @@
-// Package vulngate keeps images with too many known vulnerabilities from being
-// deployed.
+// Package vulngate supplies the admission policies that refuse images with too
+// many known vulnerabilities.
 //
 // A ValidatingAdmissionPolicy cannot ask anyone anything while it decides: it
 // sees the object being admitted and a parameter object already in the cluster.
-// So Sentinel does the knowing ahead of time. It works out which scanned images
-// are over the limit, writes them into an object of its own kind, a
-// VulnerabilityGate, and the policy refuses a workload whose image is listed
-// there.
+// So Sentinel does the knowing ahead of time. It writes how many critical and
+// high vulnerabilities each scanned image has into an object of its own kind, a
+// VulnerabilityGate, and a policy made on the Admission Policy page compares
+// those counts with the limit it was given.
+//
+// The policies and their bindings are the administrator's: Sentinel writes the
+// counts and nothing else.
 //
 // The kind is Sentinel's own for a reason. Whoever creates a policy has to be
 // allowed to read every object of the kind it takes as its parameter, across
@@ -14,108 +17,59 @@
 // there is; with this kind it is the one list.
 //
 // What Sentinel has not scanned is not listed, and is therefore admitted. The
-// gate acts on what is known, as NeuVector's does; it is not a guarantee that
-// everything running has been looked at.
+// policies act on what is known, as NeuVector's do; they are not a guarantee
+// that everything running has been looked at.
 package vulngate
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 )
 
-// Name is what the list, the policy and its binding are all called.
+// Name is what the list is called. The policies' bindings refer to it.
 const Name = "sentinel-vulnerability-gate"
 
 // An object may be about 1.5 MiB in etcd. Staying well under leaves room for
 // its own metadata and for an update not to be refused at the edge.
 const maxListBytes = 900 << 10
 
-// Settings is what the administrator chooses.
-type Settings struct {
-	Enabled bool `json:"enabled"`
-	// "warn" admits the workload and returns a warning; "deny" refuses it.
-	Mode string `json:"mode"`
-	// An image is over the limit with more criticals than CriticalLimit, or more
-	// highs than HighLimit. -1 means that severity is not counted.
-	CriticalLimit int `json:"criticalLimit"`
-	HighLimit     int `json:"highLimit"`
-	// Namespaces the gate leaves alone, on top of kube-system and Sentinel's own.
-	ExcludeNamespaces []string `json:"excludeNamespaces"`
-}
-
-// DefaultSettings is the gate switched off, set to the strictest useful rule
-// for when it is switched on.
-func DefaultSettings() Settings {
-	return Settings{Mode: "warn", CriticalLimit: 0, HighLimit: -1, ExcludeNamespaces: []string{}}
-}
-
-// Validate normalises s and reports what is wrong with it.
-func (s *Settings) Validate() error {
-	if s.Mode != "warn" && s.Mode != "deny" {
-		return fmt.Errorf("mode must be warn or deny")
-	}
-	if s.CriticalLimit < -1 || s.HighLimit < -1 {
-		return fmt.Errorf("a limit is a number from 0 up, or -1 for no limit")
-	}
-	if s.Enabled && s.CriticalLimit == -1 && s.HighLimit == -1 {
-		return fmt.Errorf("set a limit for critical or for high vulnerabilities")
-	}
-	seen := map[string]bool{}
-	out := []string{}
-	for _, ns := range s.ExcludeNamespaces {
-		ns = strings.TrimSpace(ns)
-		if ns == "" || seen[ns] {
-			continue
-		}
-		if len(ns) > 63 || strings.ContainsAny(ns, " /,*") {
-			return fmt.Errorf("%q is not a namespace name", ns)
-		}
-		seen[ns] = true
-		out = append(out, ns)
-	}
-	sort.Strings(out)
-	s.ExcludeNamespaces = out
-	return nil
-}
-
-// over reports whether the counts exceed the limits.
-func (s Settings) over(critical, high int) bool {
-	return (s.CriticalLimit >= 0 && critical > s.CriticalLimit) ||
-		(s.HighLimit >= 0 && high > s.HighLimit)
-}
+// What one entry costs beyond its key: {"critical":N,"high":N} and punctuation.
+const entryBytes = 40
 
 // ScannedImage is one image some scan has a result for.
 type ScannedImage struct {
 	// As a pod spec or a registry names it: "nginx:1.27", "quay.io/org/app:v2".
-	Ref      string `json:"image"`
-	Critical int    `json:"critical"`
-	High     int    `json:"high"`
-	// Where the result came from, for the page: a workload or a registry.
-	Source string `json:"source"`
+	Ref      string
+	Critical int
+	High     int
 }
 
-// List is the images over the limit, as the policy will read them.
+// Counts is what the list says about one image.
+type Counts struct {
+	Critical int
+	High     int
+}
+
+// List is the scanned images as the policies will read them.
 type List struct {
-	// An image reference, in every spelling a pod spec may use, to the reason
-	// it is refused.
-	Data map[string]string
-	// The images behind Data, worst first, one entry per image whatever number
-	// of spellings it is listed under.
-	Images []ScannedImage
-	// Images over the limit that did not fit in the list.
+	// An image reference, in every spelling a pod spec may use, to its counts.
+	Data map[string]Counts
+	// Images that did not fit in the list. They are the ones with the fewest
+	// vulnerabilities.
 	LeftOut int
 }
 
-// Build works out the list from every scan result there is.
-func Build(scanned []ScannedImage, s Settings) List {
+// Build works out the list from every scan result there is. An image with no
+// critical and no high vulnerability is over no limit a policy can set, so it
+// is not listed.
+func Build(scanned []ScannedImage) List {
 	// The same image may have been scanned as a workload and from a registry.
-	// The higher counts win: a result that says it is over the limit is not
+	// The higher counts win: a result that says it is over a limit is not
 	// outvoted by an older one that says it is not.
 	worst := map[string]ScannedImage{}
 	for _, img := range scanned {
 		ref := canonical(img.Ref)
-		if ref == "" {
+		if ref == "" || (img.Critical <= 0 && img.High <= 0) {
 			continue
 		}
 		if cur, ok := worst[ref]; ok {
@@ -126,26 +80,23 @@ func Build(scanned []ScannedImage, s Settings) List {
 		img.Ref = ref
 		worst[ref] = img
 	}
-	var over []ScannedImage
+	images := make([]ScannedImage, 0, len(worst))
 	for _, img := range worst {
-		if s.over(img.Critical, img.High) {
-			over = append(over, img)
-		}
+		images = append(images, img)
 	}
-	sort.Slice(over, func(i, j int) bool {
-		if over[i].Critical != over[j].Critical {
-			return over[i].Critical > over[j].Critical
+	sort.Slice(images, func(i, j int) bool {
+		if images[i].Critical != images[j].Critical {
+			return images[i].Critical > images[j].Critical
 		}
-		if over[i].High != over[j].High {
-			return over[i].High > over[j].High
+		if images[i].High != images[j].High {
+			return images[i].High > images[j].High
 		}
-		return over[i].Ref < over[j].Ref
+		return images[i].Ref < images[j].Ref
 	})
 
-	list := List{Data: map[string]string{}, Images: []ScannedImage{}}
+	list := List{Data: map[string]Counts{}}
 	size := 0
-	for _, img := range over {
-		reason := fmt.Sprintf("%d critical, %d high", img.Critical, img.High)
+	for _, img := range images {
 		keys := []string{}
 		add := 0
 		for _, k := range spellings(img.Ref) {
@@ -153,7 +104,7 @@ func Build(scanned []ScannedImage, s Settings) List {
 				continue
 			}
 			keys = append(keys, k)
-			add += len(k) + len(reason)
+			add += len(k) + entryBytes
 		}
 		if len(keys) == 0 {
 			continue
@@ -163,10 +114,9 @@ func Build(scanned []ScannedImage, s Settings) List {
 			continue
 		}
 		for _, k := range keys {
-			list.Data[k] = reason
+			list.Data[k] = Counts{Critical: img.Critical, High: img.High}
 		}
 		size += add
-		list.Images = append(list.Images, img)
 	}
 	return list
 }

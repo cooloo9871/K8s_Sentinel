@@ -87,10 +87,6 @@ function useBreadcrumbs() {
     return [{ label: 'Home', to: '/dashboard' }, { label: 'Vulnerabilities' }, { label: 'Registries' }]
   }
 
-  if (pathname === '/vulnerability-gate') {
-    return [{ label: 'Home', to: '/dashboard' }, { label: 'Vulnerabilities' }, { label: 'Deployment Gate' }]
-  }
-
   const segments = pathname.split('/').filter(Boolean)
   const crumbs: { label: string; to?: string }[] = [{ label: 'Home', to: '/dashboard' }]
   segments.forEach((seg) => {

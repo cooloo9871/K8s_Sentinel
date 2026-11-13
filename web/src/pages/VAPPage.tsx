@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
-  IconShieldLock, IconServer, IconRefresh, IconFileDescription, IconLock,
+  IconShieldLock, IconServer, IconRefresh, IconFileDescription, IconLock, IconBug,
 } from '@tabler/icons-react'
 import React from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -34,7 +34,7 @@ import { Input } from '@/components/ui/input'
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size' | 'secret-size'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size' | 'secret-size' | 'vulnerability'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
@@ -102,6 +102,26 @@ interface SizeLimitRule {
 
 const emptySizeLimitRule = (): SizeLimitRule => ({ totalKB: '', message: '' })
 
+// How many critical and high vulnerabilities an image may have. A blank field
+// leaves that severity out of the rule.
+interface VulnerabilityRule {
+  critical: string
+  high: string
+}
+
+const emptyVulnerabilityRule = (): VulnerabilityRule => ({ critical: '', high: '' })
+
+// "" is not counted; anything else has to be a whole number from 0 up.
+function vulnLimit(v: string): number | null {
+  const t = v.trim()
+  return /^\d+$/.test(t) ? Number(t) : null
+}
+
+function vulnerabilityRuleValid(rule: VulnerabilityRule): boolean {
+  const ok = (v: string) => v.trim() === '' || vulnLimit(v) !== null
+  return ok(rule.critical) && ok(rule.high) && (vulnLimit(rule.critical) !== null || vulnLimit(rule.high) !== null)
+}
+
 // The generated expressions work in whole bytes.
 function kbToBytes(kb: string): number {
   const n = Number(kb)
@@ -120,6 +140,7 @@ const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; label:
   { value: 'host-access',     icon: <IconServer size={14} />,      label: 'Host',       desc: 'Deny hostNetwork, hostPID, and/or hostIPC access',            readonlyLabel: 'Host Access' },
   { value: 'configmap-size',  icon: <IconFileDescription size={14} />, label: 'ConfigMap Size', desc: 'Limit the size of each ConfigMap key and the whole object', readonlyLabel: 'ConfigMap Size Limit' },
   { value: 'secret-size',     icon: <IconLock size={14} />,            label: 'Secret Size',    desc: 'Limit the size of each Secret key and the whole object',    readonlyLabel: 'Secret Size Limit' },
+  { value: 'vulnerability',   icon: <IconBug size={14} />,             label: 'Vulnerabilities', desc: 'Refuse images K8s Sentinel scanned and found over a vulnerability limit', readonlyLabel: 'Vulnerability Limit' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -515,6 +536,62 @@ function sizeRuleToYamlLines(kind: 'ConfigMap' | 'Secret', rule: SizeLimitRule):
   ]
 }
 
+// The vulnerability rule reads the counts K8s Sentinel keeps in the cluster for
+// every image it has scanned: the VulnerabilityGate object the binding passes
+// in as params. An image that is not in it has not been scanned and is
+// admitted. Only what a person or a pipeline submits is checked; pods a
+// controller makes from a workload already admitted are left alone, so an image
+// that goes over the limit tomorrow does not stop what runs today from coming
+// back up. failurePolicy is Ignore for the same reason: counts that cannot be
+// read must not be what stops a cluster from deploying.
+export const GATE_PARAM_KIND = 'VulnerabilityGate'
+export const GATE_PARAM_NAME = 'sentinel-vulnerability-gate'
+
+function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
+  const c = vulnLimit(rule.critical)
+  const h = vulnLimit(rule.high)
+  const tests = [
+    ...(c !== null ? [`params.spec.images[i].critical > ${c}`] : []),
+    ...(h !== null ? [`params.spec.images[i].high > ${h}`] : []),
+  ]
+  // An unfinished form still previews something that parses.
+  const test = tests.length ? tests.join(' || ') : 'false'
+  return [
+    '  matchConditions:',
+    '    - name: not-created-by-a-controller',
+    '      expression: >-',
+    '        !has(object.metadata.ownerReferences) ||',
+    '        size(object.metadata.ownerReferences) == 0',
+    '  variables:',
+    '    - name: podSpec',
+    '      expression: >-',
+    "        object.kind == 'Pod' ? object.spec :",
+    "        (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec)",
+    '    - name: images',
+    '      expression: >-',
+    '        (variables.podSpec.containers +',
+    '        (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])).map(c, c.image)',
+    '    - name: exempt',
+    '      expression: >-',
+    '        has(params.spec) && has(params.spec.exemptNamespaces) &&',
+    '        request.namespace in params.spec.exemptNamespaces',
+    '    - name: over',
+    '      expression: >-',
+    '        has(params.spec) && has(params.spec.images)',
+    `        ? variables.images.filter(i, i in params.spec.images && (${test}))`,
+    '        : []',
+  ]
+}
+
+const VULNERABILITY_VALIDATION = [
+  '    - expression: "variables.exempt || size(variables.over) == 0"',
+  '      messageExpression: >-',
+  "        'image ' + variables.over[0] + ' is over the vulnerability limit: ' +",
+  "        string(params.spec.images[variables.over[0]].critical) + ' critical, ' +",
+  "        string(params.spec.images[variables.over[0]].high) + ' high'",
+  '      reason: Forbidden',
+]
+
 export function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
   replicaRules: ReplicaRule[], applyTo: LabelApplyTo = 'all',
@@ -523,6 +600,7 @@ export function generatePolicyYaml(
   hostAccessRule: HostAccessRule = emptyHostAccessRule(),
   configMapSizeRule: SizeLimitRule = emptySizeLimitRule(),
   secretSizeRule: SizeLimitRule = emptySizeLimitRule(),
+  vulnerabilityRule: VulnerabilityRule = emptyVulnerabilityRule(),
 ): string {
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
@@ -545,6 +623,8 @@ export function generatePolicyYaml(
     validationLines = sizeRuleToYamlLines('ConfigMap', configMapSizeRule)
   } else if (ruleType === 'secret-size') {
     validationLines = sizeRuleToYamlLines('Secret', secretSizeRule)
+  } else if (ruleType === 'vulnerability') {
+    validationLines = VULNERABILITY_VALIDATION
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -569,6 +649,22 @@ export function generatePolicyYaml(
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
         `        resources: ["${ruleType === 'configmap-size' ? 'configmaps' : 'secrets'}"]`,
+      ]
+    : ruleType === 'vulnerability'
+    ? [
+        '    resourceRules:',
+        '      - apiGroups: [""]',
+        '        apiVersions: ["v1"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["pods"]',
+        '      - apiGroups: ["apps"]',
+        '        apiVersions: ["v1"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]',
+        '      - apiGroups: ["batch"]',
+        '        apiVersions: ["v1"]',
+        '        operations: [CREATE, UPDATE]',
+        '        resources: ["jobs", "cronjobs"]',
       ]
     : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context' || ruleType === 'host-access')
     ? [
@@ -612,11 +708,17 @@ export function generatePolicyYaml(
     '    sentinel.io/builder: "true"',
     ...applyToAnnotation,
     'spec:',
-    '  failurePolicy: Fail',
+    ...(ruleType === 'vulnerability' ? [
+      '  failurePolicy: Ignore',
+      '  paramKind:',
+      '    apiVersion: sentinel.io/v1',
+      `    kind: ${GATE_PARAM_KIND}`,
+    ] : ['  failurePolicy: Fail']),
     '  matchConstraints:',
     ...resourceRuleLines,
     ...(ruleType === 'configmap-size' ? configMapSizeSpecLines(configMapSizeRule) : []),
     ...(ruleType === 'secret-size' ? secretSizeSpecLines(secretSizeRule) : []),
+    ...(ruleType === 'vulnerability' ? vulnerabilitySpecLines(vulnerabilityRule) : []),
     '  validations:',
     ...validationLines,
   ].join('\n')
@@ -631,6 +733,10 @@ export type BindingNsMode = 'all' | 'include' | 'exclude'
 export function generateBindingYaml(
   name: string, policyName: string, nsMode: BindingNsMode, namespaces: string[],
   actions: ValidationAction[],
+  // The policy is a vulnerability rule: hand it the counts K8s Sentinel keeps.
+  // With the counts missing the policy admits, so that removing Sentinel does
+  // not leave a cluster unable to deploy.
+  gateParam = false,
 ): string {
   const safeName   = name.trim()       || 'my-binding'
   const safePolicy = policyName.trim() || 'my-policy'
@@ -647,6 +753,11 @@ export function generateBindingYaml(
     'spec:',
     `  policyName: "${escapeYaml(safePolicy)}"`,
     `  validationActions: [${actStr}]`,
+    ...(gateParam ? [
+      '  paramRef:',
+      `    name: ${GATE_PARAM_NAME}`,
+      '    parameterNotFoundAction: Allow',
+    ] : []),
   ]
   if (nsMode !== 'all' && nsList.length > 0) {
     if (nsMode === 'include' && nsList.length === 1) {
@@ -782,6 +893,28 @@ function parseSizeLimitSpec(spec: any): { ruleType: 'configmap-size' | 'secret-s
   return { ruleType, rule: { totalKB, message: isDefault ? '' : message } }
 }
 
+// policyTakesGate reports a policy made with the vulnerability rule, whose
+// binding has to pass it the counts.
+export function policyTakesGate(rawYaml: string): boolean {
+  try {
+    const doc = yaml.load(rawYaml) as { spec?: { paramKind?: { kind?: string } } } | undefined
+    return doc?.spec?.paramKind?.kind === GATE_PARAM_KIND
+  } catch { return false }
+}
+
+// parseVulnerabilitySpec reads the two limits back out of the `over` variable.
+// The rest of the spec is checked by the regenerate-and-compare guard.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseVulnerabilitySpec(spec: any): VulnerabilityRule | null {
+  if (spec?.paramKind?.kind !== GATE_PARAM_KIND) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const over = String((spec.variables ?? []).find((v: any) => v?.name === 'over')?.expression ?? '')
+  return {
+    critical: over.match(/\.critical > (\d+)/)?.[1] ?? '',
+    high: over.match(/\.high > (\d+)/)?.[1] ?? '',
+  }
+}
+
 // metadataBeyondBuilder reports metadata a form save would silently drop: any
 // labels, or annotations other than the builder's own and kubectl's bookkeeping
 // (which kubectl rewrites on its next apply anyway). Saving regenerates the
@@ -825,6 +958,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
   labelRules: LabelRule[]; imageRules: ImageRule[]; replicaRules: ReplicaRule[]
   resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
   hostAccessRule: HostAccessRule; configMapSizeRule: SizeLimitRule; secretSizeRule: SizeLimitRule
+  vulnerabilityRule: VulnerabilityRule
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -837,6 +971,25 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     // The size limits are whole-spec shapes (a fixed validation + variables +
     // matchConditions), not per-validation expressions, so they branch before
     // the loop. The regenerate-and-compare guard below still applies.
+    const vuln = parseVulnerabilitySpec(spec)
+    if (vuln) {
+      if (metadataBeyondBuilder(doc)) return null
+      const result = {
+        name: meta?.name ?? '', ruleType: 'vulnerability' as PolicyRuleType, applyTo: 'workloads' as LabelApplyTo,
+        labelRules: [], imageRules: [], replicaRules: [], resourceLimitRules: [],
+        securityContextRule: emptySecurityContextRule(), hostAccessRule: emptyHostAccessRule(),
+        configMapSizeRule: emptySizeLimitRule(), secretSizeRule: emptySizeLimitRule(),
+        vulnerabilityRule: vuln,
+      }
+      const regen = yaml.load(generatePolicyYaml(
+        result.name, result.ruleType, [], [], [], result.applyTo, [],
+        result.securityContextRule, result.hostAccessRule,
+        result.configMapSizeRule, result.secretSizeRule, vuln,
+      )) as Record<string, unknown> | undefined
+      if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) return null
+      return result
+    }
+
     const sized = parseSizeLimitSpec(spec)
     if (sized) {
       if (metadataBeyondBuilder(doc)) return null
@@ -846,6 +999,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
         securityContextRule: emptySecurityContextRule(), hostAccessRule: emptyHostAccessRule(),
         configMapSizeRule: sized.ruleType === 'configmap-size' ? sized.rule : emptySizeLimitRule(),
         secretSizeRule: sized.ruleType === 'secret-size' ? sized.rule : emptySizeLimitRule(),
+        vulnerabilityRule: emptyVulnerabilityRule(),
       }
       const regen = yaml.load(generatePolicyYaml(
         result.name, result.ruleType, [], [], [], result.applyTo, [],
@@ -901,7 +1055,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       : hostAccessParsed !== null ? 'host-access'
       : 'label'
     const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
-    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule: emptySizeLimitRule(), secretSizeRule: emptySizeLimitRule() }
+    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule: emptySizeLimitRule(), secretSizeRule: emptySizeLimitRule(), vulnerabilityRule: emptyVulnerabilityRule() }
 
     // The builder may only open a policy it can reproduce: saving regenerates
     // the whole manifest, so whatever these fields cannot show — a hand-tuned
@@ -923,7 +1077,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
 // Exported for its tests.
 export function tryParseBuilderBinding(rawYaml: string): {
   name: string; policyName: string; nsMode: BindingNsMode; namespaces: string[]
-  actions: ValidationAction[]
+  actions: ValidationAction[]; gateParam: boolean
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -935,6 +1089,7 @@ export function tryParseBuilderBinding(rawYaml: string): {
     const spec = doc.spec as {
       policyName?: string
       validationActions?: string[]
+      paramRef?: { name?: string }
       matchResources?: {
         namespaceSelector?: {
           matchLabels?: Record<string, string>
@@ -974,13 +1129,15 @@ export function tryParseBuilderBinding(rawYaml: string): {
       actions: (spec?.validationActions ?? ['Deny']) as ValidationAction[],
       nsMode,
       namespaces,
+      // Any other paramRef fails the regenerate-and-compare below.
+      gateParam: spec?.paramRef?.name === GATE_PARAM_NAME,
     }
     // Same bar as the policy: the form may only open a binding it can
     // reproduce, or a paramRef or objectSelector added by hand would be
     // silently deleted on the next save.
     if (metadataBeyondBuilder(doc)) return null
     const regen = yaml.load(generateBindingYaml(
-      result.name, result.policyName, result.nsMode, result.namespaces, result.actions,
+      result.name, result.policyName, result.nsMode, result.namespaces, result.actions, result.gateParam,
     )) as Record<string, unknown> | undefined
     if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
       return null
@@ -1037,6 +1194,7 @@ export function VAPPage() {
   const [hostAccessRule, setHostAccessRule] = useState<HostAccessRule>(emptyHostAccessRule())
   const [configMapSizeRule, setConfigMapSizeRule] = useState<SizeLimitRule>(emptySizeLimitRule())
   const [secretSizeRule, setSecretSizeRule] = useState<SizeLimitRule>(emptySizeLimitRule())
+  const [vulnerabilityRule, setVulnerabilityRule] = useState<VulnerabilityRule>(emptyVulnerabilityRule())
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -1070,6 +1228,7 @@ export function VAPPage() {
     setHostAccessRule(emptyHostAccessRule())
     setConfigMapSizeRule(emptySizeLimitRule())
     setSecretSizeRule(emptySizeLimitRule())
+    setVulnerabilityRule(emptyVulnerabilityRule())
   }
 
   // Binding builder state
@@ -1082,6 +1241,11 @@ export function VAPPage() {
   const [clusterNamespaces, setClusterNamespaces] = useState<string[]>([])
   const [bindingActions, setBindingActions] = useState<Set<ValidationAction>>(new Set(['Deny']))
   const [bindingBuilderSaving, setBindingBuilderSaving] = useState(false)
+  // A binding opened with the counts already passed in keeps them even when
+  // its policy can no longer be read to say so.
+  const [bindingHadGate, setBindingHadGate] = useState(false)
+  const bindingGateParam = bindingHadGate
+    || policyTakesGate(policies.find(p => p.name === bindingPolicy)?.rawYaml ?? '')
 
   const load = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
@@ -1122,6 +1286,7 @@ export function VAPPage() {
         setHostAccessRule(parsed.hostAccessRule)
         setConfigMapSizeRule(parsed.configMapSizeRule)
         setSecretSizeRule(parsed.secretSizeRule)
+        setVulnerabilityRule(parsed.vulnerabilityRule)
         setShowBuilder(true)
         return
       }
@@ -1135,6 +1300,7 @@ export function VAPPage() {
         setBindingNsMode(parsed.nsMode)
         setBindingNamespaces(parsed.namespaces)
         setBindingActions(new Set(parsed.actions))
+        setBindingHadGate(parsed.gateParam)
         setShowBindingBuilder(true)
         return
       }
@@ -1166,6 +1332,7 @@ export function VAPPage() {
         setBindingName(''); setBindingPolicy('')
         setBindingNsMode('all'); setBindingNamespaces([])
         setBindingActions(new Set(['Deny']))
+        setBindingHadGate(false)
         setShowBindingBuilder(true)
       }
       setActiveTab('bindings')
@@ -1240,11 +1407,13 @@ export function VAPPage() {
       ? true
       : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
       ? true
+      : builderRuleType === 'vulnerability'
+      ? vulnerabilityRuleValid(vulnerabilityRule)
       : replicaRules.some(r => r.maxReplicas > 0)
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule, vulnerabilityRule)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -1260,7 +1429,7 @@ export function VAPPage() {
     if (bindingNsMode !== 'all' && bindingNamespaces.length === 0) return
     setBindingBuilderSaving(true)
     try {
-      const y = generateBindingYaml(bindingName, bindingPolicy, bindingNsMode, bindingNamespaces, [...bindingActions])
+      const y = generateBindingYaml(bindingName, bindingPolicy, bindingNsMode, bindingNamespaces, [...bindingActions], bindingGateParam)
       if (bindingEditName) await vapApi.updateBinding(bindingEditName, y)
       else await vapApi.applyBinding(y)
       toast.success('Binding applied.')
@@ -1280,7 +1449,7 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule, vulnerabilityRule)
     const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
@@ -1293,6 +1462,8 @@ export function VAPPage() {
       ? kbToBytes(configMapSizeRule.totalKB) > 0
       : builderRuleType === 'secret-size'
       ? kbToBytes(secretSizeRule.totalKB) > 0
+      : builderRuleType === 'vulnerability'
+      ? vulnerabilityRuleValid(vulnerabilityRule)
       : replicaRules.some(r => r.maxReplicas > 0)
     const canApply = builderName.trim() !== '' && rulesOk
     return (
@@ -1719,6 +1890,33 @@ export function VAPPage() {
                   </div>
                 )
               })()}
+
+              {/* ── Vulnerability rule ── */}
+              {builderRuleType === 'vulnerability' && (
+                <div className="flex flex-col gap-3">
+                  <Label>Vulnerability Rule</Label>
+                  <div className="flex gap-4 rounded-lg border p-4">
+                    {(['critical', 'high'] as const).map(sev => (
+                      <div key={sev} className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          {sev === 'critical' ? 'Critical' : 'High'} allowed
+                        </span>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={vulnerabilityRule[sev]}
+                          onChange={e => setVulnerabilityRule(r => ({ ...r, [sev]: e.target.value }))}
+                          className="h-8 w-40 text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    An image with more than this is refused. A blank field is not counted.
+                    Only images K8s Sentinel has scanned are checked.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1742,7 +1940,7 @@ export function VAPPage() {
 
   // ── Binding builder view ───────────────────────────────────────────────────
   if (showBindingBuilder) {
-    const previewYaml = generateBindingYaml(bindingName, bindingPolicy, bindingNsMode, bindingNamespaces, [...bindingActions])
+    const previewYaml = generateBindingYaml(bindingName, bindingPolicy, bindingNsMode, bindingNamespaces, [...bindingActions], bindingGateParam)
     const canApply = bindingName.trim() !== '' && bindingPolicy.trim() !== '' && bindingActions.size > 0
       && (bindingNsMode === 'all' || bindingNamespaces.length > 0)
     return (

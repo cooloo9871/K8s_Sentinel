@@ -101,12 +101,12 @@ if served ciliumclusterwidenetworkpolicies; then
   fi
 fi
 
-# ── Deployment gate ───────────────────────────────────────────────────────────
-# Left behind, it would go on refusing images from a list nobody updates.
-echo "[deployment gate] removing"
-del validatingadmissionpolicybinding sentinel-vulnerability-gate
-del validatingadmissionpolicy sentinel-vulnerability-gate
+# ── Vulnerability counts ──────────────────────────────────────────────────────
+# Admission policies made with the Vulnerabilities rule read these. Left behind,
+# the policies would go on refusing images from counts nobody updates; without
+# them they admit everything.
 if served vulnerabilitygates.sentinel.io; then
+  echo "[vulnerability counts] removing"
   del vulnerabilitygates.sentinel.io sentinel-vulnerability-gate
 fi
 

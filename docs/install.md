@@ -199,7 +199,7 @@ kubectl delete clustersbomreports,clusterconfigauditreports,clusterrbacassessmen
 
 Leave these alone if you read them with another tool; Sentinel does not use them.
 
-**Upgrading to a version with the deployment gate (v0.65.0):** re-apply `deploy/sentinel.yaml`. It defines the `VulnerabilityGate` kind the gate keeps its list in and lets Sentinel write it; until then the Deployment Gate page says the kind is not installed, and nothing else is affected.
+**Upgrading to v0.66.0, from any version:** re-apply `deploy/sentinel.yaml`, then restart Sentinel. It defines the `VulnerabilityGate` kind Sentinel keeps its scan counts in, which admission policies made with the Vulnerabilities rule read; until then such a policy cannot be created, and nothing else is affected. v0.65.0 had this as a page of its own, Deployment Gate: the policy that page made is removed on upgrade, so make it again under Admission Policy.
 
 **Upgrading to a version with registry scanning (v0.62.0):** re-apply `deploy/sentinel.yaml`, which adds a Role in `sentinel-system` for the scan Jobs; without it every registry scan fails with a permission error. Then pass the current values to the operator, so it leaves those Jobs alone:
 

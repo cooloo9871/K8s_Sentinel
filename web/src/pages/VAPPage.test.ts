@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import yaml from 'js-yaml'
 import {
   tryParseBuilderPolicy, tryParseBuilderBinding,
-  generatePolicyYaml, generateBindingYaml,
+  generatePolicyYaml, generateBindingYaml, policyTakesGate,
 } from './VAPPage'
 
 // What the kube-apiserver does to a policy on persist: the builder's output
@@ -341,5 +341,46 @@ describe('tryParseBuilderBinding', () => {
     const otherOp = generateBindingYaml('b', 'p', 'exclude', ['kube-system'], ['Deny'])
       .replace('operator: NotIn', 'operator: Exists')
     expect(tryParseBuilderBinding(otherOp)).toBeNull()
+  })
+})
+
+describe('the vulnerability rule', () => {
+  const policy = (critical: string, high: string) => generatePolicyYaml(
+    'no-critical', 'vulnerability', [], [], [], 'workloads', [],
+    undefined, undefined, undefined, undefined, { critical, high })
+
+  it('reopens in the form with the limits it was saved with', () => {
+    for (const [critical, high] of [['0', ''], ['', '10'], ['2', '30']]) {
+      const raw = policy(critical, high)
+      for (const doc of [raw, withServerDefaults(raw)]) {
+        const parsed = tryParseBuilderPolicy(doc)
+        expect(parsed?.ruleType, doc).toBe('vulnerability')
+        expect(parsed?.vulnerabilityRule).toEqual({ critical, high })
+      }
+    }
+  })
+
+  it('counts only the severities given a limit, and never fails closed', () => {
+    const raw = policy('0', '')
+    expect(raw).toContain('params.spec.images[i].critical > 0')
+    expect(raw).not.toContain('.high >')
+    expect(raw).toContain('failurePolicy: Ignore')
+    expect(raw).toContain('kind: VulnerabilityGate')
+  })
+
+  it('stays in the YAML editor once its expressions were changed by hand', () => {
+    expect(tryParseBuilderPolicy(policy('0', '').replace('variables.exempt || ', ''))).toBeNull()
+  })
+
+  it('has its binding pass the counts, and admit when they are missing', () => {
+    expect(policyTakesGate(policy('0', ''))).toBe(true)
+    expect(policyTakesGate(labelPolicy())).toBe(false)
+    const binding = generateBindingYaml('b', 'no-critical', 'exclude', ['dev'], ['Deny'], true)
+    expect(binding).toContain('name: sentinel-vulnerability-gate')
+    expect(binding).toContain('parameterNotFoundAction: Allow')
+    expect(tryParseBuilderBinding(binding)?.gateParam).toBe(true)
+    expect(tryParseBuilderBinding(generateBindingYaml('b', 'p', 'all', [], ['Deny']))?.gateParam).toBe(false)
+    // Some other parameter is not something the form can keep.
+    expect(tryParseBuilderBinding(binding.replace('sentinel-vulnerability-gate', 'mine'))).toBeNull()
   })
 })

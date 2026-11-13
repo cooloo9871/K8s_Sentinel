@@ -28,9 +28,10 @@ metadata:
   name: sentinel
   namespace: sentinel-system
 ---
-# The kind the deployment gate keeps its list in: images some scan found over
-# the vulnerability limit, each with the reason. See the ClusterRole below for
-# why this is a kind of its own.
+# The kind Sentinel keeps its scan counts in: how many critical and high
+# vulnerabilities each scanned image has. Admission policies made with the
+# Vulnerabilities rule read it. See the ClusterRole below for why this is a kind
+# of its own.
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -54,11 +55,21 @@ spec:
             spec:
               type: object
               properties:
+                exemptNamespaces:
+                  description: Namespaces the policies never refuse anything in.
+                  type: array
+                  items:
+                    type: string
                 images:
-                  description: An image reference to why it is refused.
+                  description: An image reference to how many vulnerabilities a scan found in it.
                   type: object
                   additionalProperties:
-                    type: string
+                    type: object
+                    properties:
+                      critical:
+                        type: integer
+                      high:
+                        type: integer
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -92,8 +103,8 @@ rules:
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # The deployment gate's list of images over the vulnerability limit, which
-  # its ValidatingAdmissionPolicy takes as a parameter. A policy's author must
+  # The scan counts, which admission policies made with the Vulnerabilities
+  # rule take as a parameter. A policy's author must
   # be able to read every object of its parameter kind; with a kind of
   # Sentinel's own that is this one list, not every ConfigMap in the cluster.
   - apiGroups: ["sentinel.io"]
