@@ -13,10 +13,8 @@ export interface VolumeRule {
 export interface EnvRule {
   // Names every container has to set.
   required: string[]
-  // Names no container may set.
+  // Names no container may set, in any capitalisation.
   forbidden: string[]
-  // Refuse a variable named like a secret whose value is written in the manifest.
-  noPlainSecrets: boolean
 }
 
 export interface CveRule {
@@ -24,7 +22,7 @@ export interface CveRule {
 }
 
 export const emptyVolumeRule = (): VolumeRule => ({ mode: 'all', paths: [], message: '' })
-export const emptyEnvRule = (): EnvRule => ({ required: [], forbidden: [], noPlainSecrets: false })
+export const emptyEnvRule = (): EnvRule => ({ required: [], forbidden: [] })
 export const emptyCveRule = (): CveRule => ({ ids: [] })
 
 // Nothing in these may end a CEL string or a YAML one.
@@ -41,7 +39,7 @@ export function volumeRuleValid(r: VolumeRule): boolean {
 
 export function envRuleValid(r: EnvRule): boolean {
   return [...r.required, ...r.forbidden].every(n => ENV_NAME.test(n))
-    && (r.required.length > 0 || r.forbidden.length > 0 || r.noPlainSecrets)
+    && (r.required.length > 0 || r.forbidden.length > 0)
 }
 
 export function cveRuleValid(r: CveRule): boolean {
@@ -107,11 +105,6 @@ export function parseVolumeSpec(spec: unknown): VolumeRule | null {
 
 // ── Environment variables ────────────────────────────────────────────────────
 
-// Names that read as a credential, less the ones that only point at where one
-// is kept (DB_PASSWORD_FILE, TOKEN_PATH, SECRET_NAME).
-const SECRET_NAME = "(password|passwd|secret|token|api_?key|access_?key|private_?key|credential)"
-const NOT_A_SECRET = '(file|path|name|dir)$'
-
 // True when some container, of any of the three kinds, matches.
 function anyContainer(pred: string): string[] {
   return [
@@ -138,17 +131,9 @@ export function envSpecLines(r: EnvRule): string[] {
     validations.push(
       '    - expression: >-',
       '        !',
-      ...anyContainer('c.?env.orValue([]).exists(e, e.name in variables.forbiddenEnv)'),
+      // PASS and pass are two variables to a shell and one to whoever forbade it.
+      ...anyContainer('c.?env.orValue([]).exists(e, variables.forbiddenEnv.exists(n, n.lowerAscii() == e.name.lowerAscii()))'),
       `      message: "These environment variables are not allowed: ${forbidden.join(', ')}"`,
-      '      reason: Forbidden',
-    )
-  }
-  if (r.noPlainSecrets) {
-    validations.push(
-      '    - expression: >-',
-      '        !',
-      ...anyContainer(`c.?env.orValue([]).exists(e, has(e.value) && e.value != '' && e.name.lowerAscii().matches('${SECRET_NAME}') && !e.name.lowerAscii().matches('${NOT_A_SECRET}'))`),
-      '      message: "An environment variable named like a secret has its value written in the manifest. Take it from a Secret with valueFrom"',
       '      reason: Forbidden',
     )
   }
@@ -170,11 +155,7 @@ export function parseEnvSpec(spec: unknown): EnvRule | null {
   const required = readList(spec, 'requiredEnv')
   const forbidden = readList(spec, 'forbiddenEnv')
   if (required === null || forbidden === null) return null
-  const validations = (spec as { validations?: { expression?: string }[] }).validations ?? []
-  return {
-    required, forbidden,
-    noPlainSecrets: validations.some(v => String(v.expression ?? '').includes('lowerAscii().matches(')),
-  }
+  return { required, forbidden }
 }
 
 // ── Vulnerabilities refused by ID ────────────────────────────────────────────

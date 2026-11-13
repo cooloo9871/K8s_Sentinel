@@ -413,12 +413,15 @@ describe('the rule types added after NeuVector\'s criteria', () => {
     expect(roundTrip(raw).volumeRule).toEqual({ mode: 'paths', paths: ['/var/run', '/etc'], message: 'no' })
   })
 
-  it('environment variables: required, forbidden, and secrets in the manifest', () => {
-    const rule = { required: ['TZ'], forbidden: ['DEBUG', 'AWS_SECRET_ACCESS_KEY'], noPlainSecrets: true }
-    const parsed = roundTrip(gen('env', { envRule: rule }))
+  it('environment variables: required and forbidden', () => {
+    const rule = { required: ['TZ'], forbidden: ['DEBUG', 'pass'] }
+    const raw = gen('env', { envRule: rule })
+    const parsed = roundTrip(raw)
     expect(parsed.ruleType).toBe('env')
     expect(parsed.envRule).toEqual(rule)
-    const only = { required: [], forbidden: [], noPlainSecrets: true }
+    // A forbidden name is forbidden however it is capitalised.
+    expect(raw).toContain('n.lowerAscii() == e.name.lowerAscii()')
+    const only = { required: [], forbidden: ['pass'] }
     expect(roundTrip(gen('env', { envRule: only })).envRule).toEqual(only)
   })
 

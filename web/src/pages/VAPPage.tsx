@@ -169,7 +169,7 @@ const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; desc: 
   { value: 'vulnerability',   icon: <IconBug size={14} />,             desc: 'Refuse images K8s Sentinel scanned and found over a vulnerability limit', readonlyLabel: 'Vulnerability Limit' },
   { value: 'cve',             icon: <IconBugOff size={14} />,          desc: 'Refuse images K8s Sentinel scanned and found to have the vulnerabilities named', readonlyLabel: 'Blocked CVEs' },
   { value: 'volumes',         icon: <IconFolder size={14} />,          desc: 'Deny hostPath volumes, all of them or those under given paths', readonlyLabel: 'Host Path Volumes' },
-  { value: 'env',             icon: <IconVariable size={14} />,        desc: 'Require or forbid environment variables, and refuse secrets written in the manifest', readonlyLabel: 'Environment Variables' },
+  { value: 'env',             icon: <IconVariable size={14} />,        desc: 'Require environment variables in every container, or forbid them', readonlyLabel: 'Environment Variables' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -2114,20 +2114,9 @@ export function VAPPage() {
                       <span className="text-xs text-muted-foreground">Not allowed, separated by commas</span>
                       <CommaListInput value={envRule.forbidden} onChange={forbidden => setEnvRule(r => ({ ...r, forbidden }))} className="h-8 text-sm" />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="env-no-plain-secrets"
-                        checked={envRule.noPlainSecrets}
-                        onCheckedChange={v => setEnvRule(r => ({ ...r, noPlainSecrets: v === true }))}
-                      />
-                      <label htmlFor="env-no-plain-secrets" className="cursor-pointer text-sm">
-                        Deny secrets written in the manifest
-                      </label>
-                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    A secret is a variable whose name contains password, secret, token, key or credential and whose
-                    value is written out. One taken from a Secret with valueFrom passes.
+                    A name that is not allowed is matched whole, in any capitalisation. A required name has to be exact.
                   </p>
                 </div>
               )}
