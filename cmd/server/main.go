@@ -88,6 +88,7 @@ func main() {
 		TrivyImage:       envOr("TRIVY_IMAGE", "mirror.gcr.io/aquasec/trivy:0.76.1"),
 		DBRepository:     os.Getenv("TRIVY_DB_REPOSITORY"),
 		JavaDBRepository: os.Getenv("TRIVY_JAVA_DB_REPOSITORY"),
+		Insecure:         os.Getenv("TRIVY_INSECURE") == "true",
 	}
 	scanJobs.CleanupStale(ctx)
 	registryScans := registry.NewScanner(registries, data("registry-scans"), scanJobs.Scan)

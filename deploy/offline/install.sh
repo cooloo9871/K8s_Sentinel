@@ -4,6 +4,7 @@
 # Needs kubectl and nothing else.
 #
 #   bash install.sh --registry harbor.example.com/sentinel
+#   bash install.sh --registry harbor.example.com/sentinel --insecure-registry
 #   bash install.sh --registry harbor.example.com/sentinel --render-only out/
 #
 # --registry is where the images are: a registry host, with a project or path
@@ -14,21 +15,27 @@
 # --render-only writes the manifests it would apply into a directory and
 # applies nothing: to read them first, or to apply them your own way.
 #
-# The nodes have to be able to pull from the registry without credentials, and
-# to trust its certificate. So does Trivy, which downloads its vulnerability
-# databases from it.
+# --insecure-registry is for a registry whose certificate is signed by a CA
+# of your own, or that serves plain HTTP. Trivy, which downloads its
+# vulnerability databases from the registry, then verifies no certificate, of
+# this registry or of any it scans. It does nothing for the nodes: their
+# container runtime has to trust the registry by its own configuration.
+#
+# The nodes have to be able to pull from the registry without credentials.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REGISTRY=""
 RENDER_ONLY=""
+INSECURE=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --registry) REGISTRY="${2:-}"; shift 2 ;;
     --registry=*) REGISTRY="${1#*=}"; shift ;;
     --render-only) RENDER_ONLY="${2:-}"; shift 2 ;;
     --render-only=*) RENDER_ONLY="${1#*=}"; shift ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --insecure-registry) INSECURE=true; shift ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -61,6 +68,22 @@ for f in "$HERE"/manifests/*.yaml; do
   sed -f "$script" "$f" > "$WORK/$(basename "$f")"
 done
 rm -f "$script"
+
+if $INSECURE; then
+  # The operator's own download of the databases, the Trivy server's, and the
+  # scan pods reading images from this registry: three settings, one each.
+  host="${REGISTRY%%/*}"
+  sed -i \
+    -e 's#^\(  trivy\.dbRepositoryInsecure:\) .*#\1 "true"\n  trivy.insecureRegistry.mirror: "'"$host"'"#' \
+    -e 's#^\(  TRIVY_INSECURE:\) .*#\1 "true"#' \
+    "$WORK/trivy-operator.yaml"
+  # Sentinel's registry scans.
+  sed -i 's#^\( *\)- name: TRIVY_IMAGE$#\1- name: TRIVY_INSECURE\n\1  value: "true"\n&#' "$WORK/sentinel.yaml"
+  for want in 'trivy.dbRepositoryInsecure: "true"' 'trivy.insecureRegistry.mirror:' 'TRIVY_INSECURE: "true"'; do
+    grep -q "^  $want" "$WORK/trivy-operator.yaml" || { echo "--insecure-registry: could not set $want" >&2; exit 1; }
+  done
+  grep -q 'name: TRIVY_INSECURE' "$WORK/sentinel.yaml" || { echo "--insecure-registry: could not set TRIVY_INSECURE for Sentinel" >&2; exit 1; }
+fi
 
 if [ -n "$RENDER_ONLY" ]; then
   echo "Manifests written to $WORK; nothing was applied."

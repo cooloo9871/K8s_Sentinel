@@ -66,6 +66,10 @@ type JobRunner struct {
 	TrivyImage       string
 	DBRepository     string
 	JavaDBRepository string
+	// Trivy does not verify any certificate: for a database mirror whose
+	// certificate it has no way to trust. It covers the scanned registry too,
+	// since Trivy has one switch for both.
+	Insecure bool
 
 	poll time.Duration
 }
@@ -135,7 +139,7 @@ func (r *JobRunner) buildJob(name string, cfg Config, image, secret string) *bat
 		fromSecret("docker", secretKeyDocker, "/docker")
 	}
 	switch {
-	case cfg.SkipTLSVerify:
+	case cfg.SkipTLSVerify || r.Insecure:
 		env = append(env, corev1.EnvVar{Name: "TRIVY_INSECURE", Value: "true"})
 	case cfg.CACert != "":
 		// Trivy has no option for a CA, but it is a Go program, and Go reads

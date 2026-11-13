@@ -184,12 +184,15 @@ bash mirror-images.sh push harbor.example.com/sentinel
 bash install.sh --registry harbor.example.com/sentinel
 ```
 
+Add `--insecure-registry` when the registry's certificate is signed by a CA of your own, or it serves plain HTTP: Trivy then downloads its databases, and reads the images it scans, without verifying certificates.
+
 An image keeps its path under the registry: `quay.io/cilium/tetragon:v1.8.0` becomes `harbor.example.com/sentinel/cilium/tetragon:v1.8.0`. With Harbor, `sentinel` is a project you create first. `bash install.sh --registry ... --render-only out/` writes the manifests it would apply and applies nothing.
 
 What to know before you start:
 
 - **Tools.** `mirror-images.sh` uses `skopeo` when it is installed. Without it, `docker`, `podman` or `nerdctl` carry the images, but not Trivy's databases: those are OCI artifacts, not container images, and need `skopeo` or `oras`. Without the databases in the registry Sentinel installs and runs, and no image can be scanned
-- **The registry has to be pullable without credentials** by the nodes and by Trivy, and its certificate trusted by both. The bundle sets no image pull secret. `INSECURE=1 bash mirror-images.sh push ...` is for pushing to a registry on plain HTTP or with a certificate the pushing machine does not trust; it does not change what the cluster trusts
+- **The registry has to be pullable without credentials** by the nodes and by Trivy. The bundle sets no image pull secret
+- **Its certificate has to be trusted by the nodes.** That is the container runtime's configuration on every node (containerd's `certs.d`), which the bundle does not touch; if other workloads already pull from this registry, it is done. Trivy runs in pods and does not use that configuration: either its certificate comes from a public CA, or you install with `--insecure-registry`, which turns verification off for Trivy everywhere, the registries it scans included. `INSECURE=1 bash mirror-images.sh push ...` is for pushing to a registry on plain HTTP or with a certificate the pushing machine does not trust; it does not change what the cluster trusts
 - **CPU architecture.** Images are saved for the architecture of the machine that runs `save`. Run it on one that matches your nodes
 - **The vulnerability databases age.** A scan knows the vulnerabilities published up to the day the databases were saved. Run `save` and `push` again on a schedule to refresh them
 - **A Tetragon or a Trivy Operator already in the cluster is left as it is**, as with the online installers. For Tetragon, see [Requirements](#requirements) for the gRPC setting Sentinel needs
@@ -379,6 +382,7 @@ volumes:
 | `AUDIT_WEBHOOK_TOKEN` | *(unset)* | Token the [audit webhook](audit-webhook.md) requires when set, carried at the end of the webhook URL; unset leaves the endpoint open |
 | `JWT_SECRET` | *(unset)* | Session-token signing key, at least 32 characters. Inject it from a Kubernetes Secret and sessions survive Pod restarts without a PersistentVolume; unset, the key lives in `DATA_DIR/.jwt-secret` and on an `emptyDir` regenerates on every restart, logging everyone out |
 | `TRIVY_IMAGE` | `mirror.gcr.io/aquasec/trivy:0.76.1` | The Trivy image registry scans run |
+| `TRIVY_INSECURE` | *(unset)* | `true` has registry scans verify no certificate, neither the database mirror's nor the scanned registry's. For a mirror with a certificate Trivy cannot be made to trust |
 | `TRIVY_DB_REPOSITORY` / `TRIVY_JAVA_DB_REPOSITORY` | *(Trivy's defaults)* | Where registry scans download the vulnerability databases from; set both to your mirror in an air-gapped cluster |
 | `TRUST_PROXY_HEADERS` | *(unset)* | Set to `true` only behind a proxy or ingress that overwrites `X-Forwarded-For`; the login rate limiter and sign-in audit entries then use the forwarded client IP instead of the connection address. Never enable it when clients reach Sentinel directly, since the header is client-controlled |
 
