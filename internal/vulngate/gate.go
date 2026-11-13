@@ -80,6 +80,8 @@ func Build(scanned []ScannedImage) List {
 			continue
 		}
 		img.Ref = ref
+		// A report names a vulnerability once for every package that has it.
+		img.CVEs = union(img.CVEs, nil)
 		if cur, ok := worst[ref]; ok {
 			// Either scan finding a named vulnerability is enough to list it.
 			named := union(cur.CVEs, img.CVEs)

@@ -205,7 +205,7 @@ func TestImagesWithANamedVulnerabilityAreListedWithIt(t *testing.T) {
 	g := New(client, newDyn(), "sentinel-system", func(_ context.Context, named map[string]bool) []ScannedImage {
 		asked = named
 		return []ScannedImage{
-			{Ref: "quay.io/a/medium-only:1", CVEs: []string{"CVE-2024-3094"}},
+			{Ref: "quay.io/a/medium-only:1", CVEs: []string{"CVE-2024-3094", "CVE-2024-3094"}},
 			{Ref: "quay.io/a/clean:1"},
 			{Ref: "quay.io/a/twice:1", Counts: Counts{Critical: 1}},
 			{Ref: "quay.io/a/twice:1", CVEs: []string{"GHSA-aaaa-bbbb-cccc"}},
