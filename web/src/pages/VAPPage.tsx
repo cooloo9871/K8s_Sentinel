@@ -128,19 +128,19 @@ function kbToBytes(kb: string): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n * 1024) : 0
 }
 
-// Module-level constant — single source of truth for both the card grid and
+// Module-level constant — single source of truth for both the dropdown and
 // the readonly display. Avoids the two lists drifting when a new rule type is added.
-const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; label: string; desc: string; readonlyLabel: string }[] = [
-  { value: 'label',           icon: <IconTag size={14} />,         label: 'Label',      desc: 'Require or deny resources with specific label key=value',      readonlyLabel: 'Label Check' },
-  { value: 'annotation',      icon: <IconNotes size={14} />,       label: 'Annotation', desc: 'Require or deny resources with specific annotation key=value', readonlyLabel: 'Annotation Check' },
-  { value: 'image',           icon: <IconBrandDocker size={14} />, label: 'Image',      desc: 'Enforce image registry source and tag format',                readonlyLabel: 'Image Policy' },
-  { value: 'replica',         icon: <IconCopy size={14} />,        label: 'Replica',    desc: 'Limit maximum replica count for Deployments or StatefulSets', readonlyLabel: 'Replica Limit' },
-  { value: 'resource-limits', icon: <IconCpu size={14} />,         label: 'Resources',  desc: 'Require containers to set CPU and/or memory limits',          readonlyLabel: 'Resource Limits' },
-  { value: 'security-context',icon: <IconShieldLock size={14} />,  label: 'Security',   desc: 'Deny privileged containers or require runAsNonRoot',          readonlyLabel: 'Security Context' },
-  { value: 'host-access',     icon: <IconServer size={14} />,      label: 'Host',       desc: 'Deny hostNetwork, hostPID, and/or hostIPC access',            readonlyLabel: 'Host Access' },
-  { value: 'configmap-size',  icon: <IconFileDescription size={14} />, label: 'ConfigMap Size', desc: 'Limit the size of each ConfigMap key and the whole object', readonlyLabel: 'ConfigMap Size Limit' },
-  { value: 'secret-size',     icon: <IconLock size={14} />,            label: 'Secret Size',    desc: 'Limit the size of each Secret key and the whole object',    readonlyLabel: 'Secret Size Limit' },
-  { value: 'vulnerability',   icon: <IconBug size={14} />,             label: 'Vulnerabilities', desc: 'Refuse images K8s Sentinel scanned and found over a vulnerability limit', readonlyLabel: 'Vulnerability Limit' },
+const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; desc: string; readonlyLabel: string }[] = [
+  { value: 'label',           icon: <IconTag size={14} />,         desc: 'Require or deny resources with specific label key=value',      readonlyLabel: 'Label Check' },
+  { value: 'annotation',      icon: <IconNotes size={14} />,       desc: 'Require or deny resources with specific annotation key=value', readonlyLabel: 'Annotation Check' },
+  { value: 'image',           icon: <IconBrandDocker size={14} />, desc: 'Enforce image registry source and tag format',                readonlyLabel: 'Image Policy' },
+  { value: 'replica',         icon: <IconCopy size={14} />,        desc: 'Limit maximum replica count for Deployments or StatefulSets', readonlyLabel: 'Replica Limit' },
+  { value: 'resource-limits', icon: <IconCpu size={14} />,         desc: 'Require containers to set CPU and/or memory limits',          readonlyLabel: 'Resource Limits' },
+  { value: 'security-context',icon: <IconShieldLock size={14} />,  desc: 'Deny privileged containers or require runAsNonRoot',          readonlyLabel: 'Security Context' },
+  { value: 'host-access',     icon: <IconServer size={14} />,      desc: 'Deny hostNetwork, hostPID, and/or hostIPC access',            readonlyLabel: 'Host Access' },
+  { value: 'configmap-size',  icon: <IconFileDescription size={14} />, desc: 'Limit the size of each ConfigMap key and the whole object', readonlyLabel: 'ConfigMap Size Limit' },
+  { value: 'secret-size',     icon: <IconLock size={14} />,            desc: 'Limit the size of each Secret key and the whole object',    readonlyLabel: 'Secret Size Limit' },
+  { value: 'vulnerability',   icon: <IconBug size={14} />,             desc: 'Refuse images K8s Sentinel scanned and found over a vulnerability limit', readonlyLabel: 'Vulnerability Limit' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -1500,40 +1500,37 @@ export function VAPPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Rule Type">
-                      {RULE_TYPE_CARDS.map(t => {
-                        const selected = builderRuleType === t.value
-                        return (
-                          <button
-                            key={t.value}
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            aria-label={t.readonlyLabel}
-                            onClick={() => {
-                              setBuilderRuleType(t.value)
-                              setLabelRules([emptyRule()])
-                              setImageRules([emptyImageRule()])
-                              setReplicaRules([emptyReplicaRule()])
-                              setResourceLimitRules([emptyResourceLimitRule()])
-                              setSecurityContextRule(emptySecurityContextRule())
-                              setHostAccessRule(emptyHostAccessRule())
-                              setConfigMapSizeRule(emptySizeLimitRule())
-                              setSecretSizeRule(emptySizeLimitRule())
-                            }}
-                            className={[
-                              'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
-                              selected
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground',
-                            ].join(' ')}
-                          >
-                            <span className="shrink-0">{t.icon}</span>
-                            {t.label}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <Select
+                      value={builderRuleType}
+                      onValueChange={v => {
+                        setBuilderRuleType(v as PolicyRuleType)
+                        setLabelRules([emptyRule()])
+                        setImageRules([emptyImageRule()])
+                        setReplicaRules([emptyReplicaRule()])
+                        setResourceLimitRules([emptyResourceLimitRule()])
+                        setSecurityContextRule(emptySecurityContextRule())
+                        setHostAccessRule(emptyHostAccessRule())
+                        setConfigMapSizeRule(emptySizeLimitRule())
+                        setSecretSizeRule(emptySizeLimitRule())
+                        setVulnerabilityRule(emptyVulnerabilityRule())
+                      }}
+                    >
+                      <SelectTrigger aria-label="Rule Type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {RULE_TYPE_CARDS.map(t => (
+                            <SelectItem key={t.value} value={t.value}>
+                              <span className="flex items-center gap-2">
+                                <span className="shrink-0 text-muted-foreground">{t.icon}</span>
+                                {t.readonlyLabel}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
                       {RULE_TYPE_CARDS.find(t => t.value === builderRuleType)?.desc}
                     </p>
