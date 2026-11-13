@@ -31,10 +31,20 @@ helm template tetragon tetragon --repo https://helm.cilium.io --version "$TETRAG
   --namespace kube-system --include-crds \
   --set hostNetwork=false --set tetragon.grpc.address=0.0.0.0:54321 \
   > "$B/manifests/tetragon.yaml"
+# The operator's CRDs go in a file of their own: the chart also holds objects
+# of those kinds, and applied in one go with their definitions they are refused
+# as kinds the API server has not heard of yet.
+helm show crds trivy-operator --repo https://aquasecurity.github.io/helm-charts/ \
+  --version "$TRIVY_OPERATOR_CHART_VERSION" > "$B/manifests/trivy-operator-crds.yaml"
 helm template trivy-operator trivy-operator --repo https://aquasecurity.github.io/helm-charts/ \
-  --version "$TRIVY_OPERATOR_CHART_VERSION" --namespace sentinel-system --include-crds \
+  --version "$TRIVY_OPERATOR_CHART_VERSION" --namespace sentinel-system \
   --values "$DEPLOY/trivy-operator-values.yaml" \
   > "$B/manifests/trivy-operator.yaml"
+if ! grep -q '^kind: CustomResourceDefinition' "$B/manifests/trivy-operator-crds.yaml" \
+  || grep -q '^kind: CustomResourceDefinition' "$B/manifests/trivy-operator.yaml"; then
+  echo "build: the Trivy Operator chart's CRDs are not where this expects them" >&2
+  exit 1
+fi
 cp "$DEPLOY/tetragon-grpc-policy.yaml" "$B/manifests/"
 
 # A value of the operator's configuration, without its quotes.

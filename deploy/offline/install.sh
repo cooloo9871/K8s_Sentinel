@@ -114,6 +114,10 @@ if [ -n "$existing_operator" ]; then
 else
   echo "[trivy-operator] installing"
   # Server side: its CRDs are too large for the annotation a plain apply keeps.
+  # And first, by themselves, until the API server serves them: the rest holds
+  # objects of those kinds.
+  kubectl apply --server-side --force-conflicts -f "$WORK/trivy-operator-crds.yaml"
+  kubectl wait --for=condition=Established --timeout=120s -f "$WORK/trivy-operator-crds.yaml"
   kubectl apply --server-side --force-conflicts -f "$WORK/trivy-operator.yaml"
   kubectl rollout status deployment/trivy-operator -n sentinel-system --timeout=300s
 fi
