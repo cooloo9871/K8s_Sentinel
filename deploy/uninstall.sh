@@ -11,8 +11,13 @@
 # Without --purge the security policies stay: tracing policies, network
 # policies and admission policies made in Sentinel are yours and go on being
 # enforced (network and admission policies by Cilium and the API server;
-# tracing policies only while Tetragon runs). Vulnerability reports and the
-# CRDs stay too.
+# tracing policies only while Tetragon runs). The exception is the admission
+# policies that go by Sentinel's scan results, Vulnerability Limit and Blocked
+# CVEs: with the results gone they admit everything. Vulnerability reports and
+# the CRDs stay too.
+#
+# A Trivy Operator or a Tetragon that is not where Sentinel's installers put it
+# (sentinel-system, and kube-system or $TETRAGON_NAMESPACE) is left alone.
 set -euo pipefail
 
 DRY_RUN=false
@@ -25,7 +30,7 @@ for arg in "$@"; do
     --keep-tetragon) KEEP_TETRAGON=true ;;
     --purge) PURGE=true ;;
     --yes|-y) ASSUME_YES=true ;;
-    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -50,6 +55,9 @@ served() { kubectl get "$1" -A --ignore-not-found -o name >/dev/null 2>&1; }
 # Removes a Helm release. Without helm on this machine, or for a Tetragon that
 # an earlier install.sh applied as plain manifests, it removes the objects by
 # the instance label the chart puts on them, and the release records with them.
+# Returns 1, having removed nothing, when the release is not in that namespace:
+# the cluster-wide objects carry the same label wherever the release lives, and
+# deleting them would break one that somebody else installed elsewhere.
 remove_release() {
   local name="$1" ns="$2"
   if command -v helm >/dev/null 2>&1 && helm status "$name" -n "$ns" >/dev/null 2>&1; then
@@ -58,14 +66,22 @@ remove_release() {
     else
       helm uninstall "$name" -n "$ns" --wait
     fi
-    return
+    return 0
   fi
   local sel="app.kubernetes.io/instance=$name"
+  local here
+  here="$(kubectl get daemonset,deployment,statefulset -n "$ns" -l "$sel" -o name 2>/dev/null || true)"
+  here="$here$(kubectl get secret -n "$ns" -l "owner=helm,name=$name" -o name 2>/dev/null || true)"
+  if [ -z "$here" ]; then
+    echo "  no $name in $ns: nothing removed"
+    return 1
+  fi
   del daemonset,deployment,statefulset,service,configmap,secret,serviceaccount,role,rolebinding,podmonitor,servicemonitor \
     -n "$ns" -l "$sel" 2>/dev/null \
     || del daemonset,deployment,statefulset,service,configmap,secret,serviceaccount,role,rolebinding -n "$ns" -l "$sel"
   del clusterrole,clusterrolebinding -l "$sel"
   del secret -n "$ns" -l "owner=helm,name=$name"
+  return 0
 }
 
 echo "This removes from the cluster $(kubectl config current-context 2>/dev/null || echo '(current context)'):"
@@ -73,7 +89,7 @@ echo "  - K8s Sentinel and the namespace $SENTINEL_NS, with its settings, accoun
 echo "  - Trivy Operator and its Trivy server"
 $KEEP_TETRAGON || echo "  - Tetragon in $TETRAGON_NS"
 if $PURGE; then
-  echo "  - the policies made in Sentinel, every vulnerability report, and the Tetragon and Trivy CRDs"
+  echo "  - the policies made or edited in Sentinel, every vulnerability report, and the Tetragon and Trivy CRDs"
 else
   echo "Policies, vulnerability reports and CRDs are kept (--purge removes them)."
 fi
@@ -101,19 +117,10 @@ if served ciliumclusterwidenetworkpolicies; then
   fi
 fi
 
-# ── Vulnerability counts ──────────────────────────────────────────────────────
-# Admission policies made with the Vulnerabilities rule read these. Left behind,
-# the policies would go on refusing images from counts nobody updates; without
-# them they admit everything.
-if served vulnerabilitygates.sentinel.io; then
-  echo "[vulnerability counts] removing"
-  del vulnerabilitygates.sentinel.io sentinel-vulnerability-gate
-fi
-
 # ── Policies made in Sentinel (--purge) ───────────────────────────────────────
 # Before Tetragon and the CRDs go, while the objects can still be listed.
 if $PURGE; then
-  echo "[policies] removing the policies made in Sentinel"
+  echo "[policies] removing the policies made or edited in Sentinel"
   for kind in tracingpolicies tracingpoliciesnamespaced ciliumnetworkpolicies ciliumclusterwidenetworkpolicies \
               validatingadmissionpolicies validatingadmissionpolicybindings; do
     served "$kind" || continue
@@ -127,7 +134,8 @@ fi
 
 # ── Trivy Operator ────────────────────────────────────────────────────────────
 echo "[trivy-operator] removing"
-remove_release trivy-operator "$SENTINEL_NS"
+TRIVY_REMOVED=true
+remove_release trivy-operator "$SENTINEL_NS" || TRIVY_REMOVED=false
 # Scan Jobs the operator or a registry scan left running.
 del job -n "$SENTINEL_NS" --all
 
@@ -137,25 +145,43 @@ del clusterrolebinding sentinel
 del clusterrole sentinel
 del namespace "$SENTINEL_NS"
 
+# ── Vulnerability counts ──────────────────────────────────────────────────────
+# Admission policies made with the Vulnerability Limit and Blocked CVEs rules
+# read these. Left behind, the policies would go on refusing images from counts
+# nobody updates; without them they admit everything. Removed only now, with
+# Sentinel gone: while it runs it writes them straight back.
+if served vulnerabilitygates.sentinel.io; then
+  echo "[vulnerability counts] removing"
+  del vulnerabilitygates.sentinel.io sentinel-vulnerability-gate
+fi
+
 # What deploy/install-job.yaml leaves in kube-system.
 del job -n kube-system sentinel-installer
 del clusterrolebinding sentinel-installer
 del serviceaccount -n kube-system sentinel-installer
 
 # ── Tetragon ──────────────────────────────────────────────────────────────────
+# The NetworkPolicy is Sentinel's and lets only Sentinel in: left on a Tetragon
+# that stays, it would shut everyone out of its gRPC API for good.
+del networkpolicy -n "$TETRAGON_NS" tetragon-grpc
+TETRAGON_REMOVED=false
 if $KEEP_TETRAGON; then
-  echo "[tetragon] kept"
+  echo "[tetragon] kept. Its gRPC API is no longer limited to Sentinel; it has no authentication of its own"
 else
   echo "[tetragon] removing"
-  del networkpolicy -n "$TETRAGON_NS" tetragon-grpc
-  remove_release tetragon "$TETRAGON_NS"
+  if remove_release tetragon "$TETRAGON_NS"; then TETRAGON_REMOVED=true; fi
 fi
 
 # ── Reports and CRDs (--purge) ────────────────────────────────────────────────
 if $PURGE; then
   echo "[crds] removing reports and CRDs"
-  crds="$(kubectl get crd -o name 2>/dev/null | grep -E '(\.aquasecurity\.github\.io|/vulnerabilitygates\.sentinel\.io)$' || true)"
-  if ! $KEEP_TETRAGON; then
+  crds="$(kubectl get crd -o name 2>/dev/null | grep -E '/vulnerabilitygates\.sentinel\.io$' || true)"
+  # Only of what was removed above: the reports and policies of a Trivy
+  # Operator or a Tetragon that is still running are not Sentinel's to delete.
+  if $TRIVY_REMOVED; then
+    crds="$crds $(kubectl get crd -o name 2>/dev/null | grep -E '\.aquasecurity\.github\.io$' || true)"
+  fi
+  if $TETRAGON_REMOVED; then
     crds="$crds $(kubectl get crd -o name 2>/dev/null | grep -E '/(tracingpolicies|tracingpoliciesnamespaced|podinfo)\.cilium\.io$' || true)"
   fi
   # shellcheck disable=SC2086

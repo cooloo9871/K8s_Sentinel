@@ -46,7 +46,9 @@ spec:
 
               # ── Tetragon ────────────────────────────────────────────
               echo "[1/3] Tetragon"
-              if kubectl get daemonset tetragon -n kube-system > /dev/null 2>&1; then
+              # In any namespace: one outside kube-system has cluster-wide
+              # objects a second install collides with.
+              if kubectl get daemonset -A -l app.kubernetes.io/name=tetragon -o name | grep -q .; then
                 echo "  already installed, skipping"
               else
                 echo "  installing via Helm..."

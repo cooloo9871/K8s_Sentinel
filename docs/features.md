@@ -232,7 +232,7 @@ Trivy Operator only looks at workloads in the cluster, so here Sentinel starts t
 
 ### Refusing vulnerable images
 
-The **Vulnerabilities** rule on the [Admission Policy](#admission-policy-validatingadmissionpolicy) page keeps an image with too many known vulnerabilities from being deployed. It is made, bound and removed like any other admission policy.
+The **Vulnerability Limit** rule on the [Admission Policy](#admission-policy-validatingadmissionpolicy) page keeps an image with too many known vulnerabilities from being deployed. It is made, bound and removed like any other admission policy.
 
 - **The limit** is how many critical vulnerabilities an image may have, how many high ones, or both. An image with more is refused. Several policies may set different limits for different namespaces
 - **Count only vulnerabilities with a fix available** leaves out the ones no newer version of the package fixes yet, which whoever built the image can do nothing about. With it on, an image that is refused is one an upgrade would let through

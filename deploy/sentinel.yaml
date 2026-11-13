@@ -30,7 +30,7 @@ metadata:
 ---
 # The kind Sentinel keeps its scan counts in: how many critical and high
 # vulnerabilities each scanned image has. Admission policies made with the
-# Vulnerabilities rule read it. See the ClusterRole below for why this is a kind
+# Vulnerability Limit and Blocked CVEs rules read it. See the ClusterRole below for why this is a kind
 # of its own.
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -113,13 +113,13 @@ rules:
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # The scan counts, which admission policies made with the Vulnerabilities
-  # rule take as a parameter. A policy's author must
+  # The scan counts, which admission policies made with the Vulnerability Limit
+  # and Blocked CVEs rules take as a parameter. A policy's author must
   # be able to read every object of its parameter kind; with a kind of
   # Sentinel's own that is this one list, not every ConfigMap in the cluster.
   - apiGroups: ["sentinel.io"]
     resources: ["vulnerabilitygates"]
-    verbs: ["get", "list", "create", "update", "delete"]
+    verbs: ["get", "create", "update"]
 
   - apiGroups: [""]
     resources: ["nodes"]

@@ -82,8 +82,8 @@ helm install tetragon cilium/tetragon -n kube-system \
 kubectl apply -f deploy/tetragon-grpc-policy.yaml
 ```
 
-- **`tetragon.grpc.address=0.0.0.0:54321`** is required. Sentinel collects runtime events over the Tetragon gRPC API, and the agent's default bind is `localhost:54321`, reachable only from inside the pod
-- **`hostNetwork=false` and the NetworkPolicy** are what keep that API to Sentinel. Tetragon's gRPC server has no authentication and no TLS: whoever can connect reads every process started on the node, command line included, and can list, disable or delete tracing policies. On the host network, which is the chart's default, the port is open on every node's address to every pod in the cluster, and a NetworkPolicy does not apply to it. Off the host network it is an ordinary pod port, and `deploy/tetragon-grpc-policy.yaml` admits only the Sentinel pod. Edit the namespaces in that file if Tetragon or Sentinel is installed elsewhere
+- **`tetragon.grpc.address=0.0.0.0:54321`** is required. Sentinel collects runtime events over the Tetragon gRPC API, and by default the agent does not listen anywhere Sentinel can reach from another pod
+- **`hostNetwork=false` and the NetworkPolicy** are what keep that API to Sentinel. Tetragon's gRPC server has no authentication and no TLS: whoever can connect reads every process started on the node, command line included, and can list, disable or delete tracing policies. On the host network, which is the chart's default, the port is open on every node's address to every pod in the cluster, and a NetworkPolicy does not apply to it. Off the host network it is an ordinary pod port, and `deploy/tetragon-grpc-policy.yaml` admits only the Sentinel pod. Edit the namespaces in that file if Tetragon or Sentinel is installed elsewhere A NetworkPolicy governs traffic between pods: a process on the node itself, or a pod on the host network of that node, can still reach the port
 
 `deploy/install-job.yaml` and `deploy/install.sh` do all of this for you.
 
@@ -92,7 +92,7 @@ Off the host network Tetragon starts once the node's CNI is up, so the first sec
 > **Moving an existing Tetragon off the host network.** The installers skip Tetragon when its DaemonSet is already present, so one installed earlier is still on the host network with its gRPC port open to the cluster. Installed as a Helm release (`helm list -n kube-system` shows `tetragon`):
 >
 > ```bash
-> helm upgrade tetragon cilium/tetragon -n kube-system --reuse-values \
+> helm upgrade tetragon cilium/tetragon -n kube-system --reset-then-reuse-values \
 >   --set hostNetwork=false \
 >   --set tetragon.grpc.address=0.0.0.0:54321
 > kubectl apply -f deploy/tetragon-grpc-policy.yaml
@@ -138,7 +138,7 @@ kubectl wait --for=condition=ready pod -l job-name=sentinel-installer -n kube-sy
 kubectl logs -n kube-system job/sentinel-installer -f
 ```
 
-The Job always installs what is on the `main` branch: it fetches `deploy/sentinel.yaml` and `deploy/trivy-operator-values.yaml` from GitHub and does not read your clone. To install a pinned version or edited manifests, use Option B or C. The Job runs as cluster-admin and removes that binding itself as its last step; the Job is deleted ten minutes after it finishes.
+The Job always installs what is on the `main` branch: it fetches `deploy/sentinel.yaml`, `deploy/tetragon-grpc-policy.yaml` and `deploy/trivy-operator-values.yaml` from GitHub and does not read your clone. To install a pinned version or edited manifests, use Option B or C. The Job runs as cluster-admin and removes that binding itself as its last step, once everything is installed; the Job is deleted ten minutes after it finishes. A Job that failed keeps the binding so that it can retry: remove it with `kubectl delete -f deploy/install-job.yaml`.
 
 **Option B — local script** — the same three steps, run from your machine.
 
@@ -199,11 +199,13 @@ kubectl delete clustersbomreports,clusterconfigauditreports,clusterrbacassessmen
 
 Leave these alone if you read them with another tool; Sentinel does not use them.
 
+**Re-applying `deploy/sentinel.yaml` puts back what the file says.** If you changed the Deployment or the Service by editing the file (a PersistentVolumeClaim in place of the `emptyDir`, `AUDIT_WEBHOOK_TOKEN`, a pinned image tag, a `NodePort`), carry those edits into the new file before applying it, or apply your own copy. Applied as it comes, the data volume goes back to `emptyDir`, which is an empty Sentinel with the `admin` / `admin` account, and an audit webhook token set in the file is dropped. Changes made with `kubectl set env` or `kubectl patch`, and a `clusterIP` you chose, are kept.
+
 **Upgrading to v0.68.0, from any version:** re-apply `deploy/sentinel.yaml`, then restart Sentinel. The `VulnerabilityGate` kind gains the list of named vulnerabilities each image has; without it a Blocked CVEs policy admits everything, and Sentinel's log says the kind is older than it.
 
 **Upgrading to v0.67.0, from any version:** re-apply `deploy/sentinel.yaml`, then restart Sentinel. The `VulnerabilityGate` kind gains the counts of vulnerabilities with a fix available; without them a Vulnerabilities policy set to count only those admits everything, and Sentinel's log says the kind is older than it. Registries scanned before the upgrade have no such counts until their next scan.
 
-**Upgrading to v0.66.0, from any version:** re-apply `deploy/sentinel.yaml`, then restart Sentinel. It defines the `VulnerabilityGate` kind Sentinel keeps its scan counts in, which admission policies made with the Vulnerabilities rule read; until then such a policy cannot be created, and nothing else is affected. v0.65.0 had this as a page of its own, Deployment Gate: the policy that page made is removed on upgrade, so make it again under Admission Policy.
+**Upgrading to v0.66.0, from any version:** re-apply `deploy/sentinel.yaml`, then restart Sentinel. It defines the `VulnerabilityGate` kind Sentinel keeps its scan counts in, which admission policies made with the Vulnerability Limit rule read; until then such a policy cannot be created, and nothing else is affected. v0.65.0 had this as a page of its own, Deployment Gate: the policy that page made is removed on upgrade, so make it again under Admission Policy.
 
 **Upgrading to a version with registry scanning (v0.62.0):** re-apply `deploy/sentinel.yaml`, which adds a Role in `sentinel-system` for the scan Jobs; without it every registry scan fails with a permission error. Then pass the current values to the operator, so it leaves those Jobs alone:
 
@@ -264,11 +266,11 @@ It removes K8s Sentinel with the `sentinel-system` namespace (settings, accounts
 | Option | Effect |
 |---|---|
 | `--dry-run` | Lists what would be deleted and deletes nothing |
-| `--keep-tetragon` | Leaves Tetragon alone, for a cluster where it was installed before Sentinel |
-| `--purge` | Also deletes the tracing, network and admission policies made in Sentinel, every vulnerability report, and the Tetragon and Trivy CRDs |
+| `--keep-tetragon` | Leaves Tetragon alone, for a cluster where it was installed before Sentinel. The NetworkPolicy that limited its gRPC API to Sentinel is still removed, since it would let nobody in |
+| `--purge` | Also deletes the tracing, network and admission policies made or edited in Sentinel, every vulnerability report, and the Tetragon and Trivy CRDs |
 | `--yes` | Does not ask |
 
-Without `--purge` the policies stay and go on being enforced: network policies by Cilium, admission policies by the API server. Tracing policies are kept as objects but do nothing once Tetragon is gone. Set `TETRAGON_NAMESPACE` if Tetragon is not in `kube-system`. A persistent volume you added for Sentinel's data is deleted with the namespace's claim, subject to its reclaim policy.
+Without `--purge` the policies stay and go on being enforced: network policies by Cilium, admission policies by the API server. The exception is admission policies made with the Vulnerability Limit and Blocked CVEs rules: they go by Sentinel's scan results, which are removed, and admit everything from then on. Tracing policies are kept as objects but do nothing once Tetragon is gone. Set `TETRAGON_NAMESPACE` if Tetragon is not in `kube-system`. A Trivy Operator outside `sentinel-system`, or a Tetragon outside `kube-system` (or `TETRAGON_NAMESPACE`), was not installed by Sentinel and is left alone, with its reports and CRDs. A persistent volume you added for Sentinel's data is deleted with the namespace's claim, subject to its reclaim policy.
 
 ## Container image
 
@@ -359,7 +361,7 @@ label; everything else is read-only.
 | `cilium.io` | `ciliumnetworkpolicies`, `ciliumclusterwidenetworkpolicies` | CRUD |
 | `cilium.io` | `ciliumnodes` | get, list |
 | `admissionregistration.k8s.io` | `validatingadmissionpolicies`, `validatingadmissionpolicybindings` | CRUD |
-| `sentinel.io` | `vulnerabilitygates` | get, list, create, update, delete |
+| `sentinel.io` | `vulnerabilitygates` | get, create, update |
 | `""` (core) | `namespaces` | get, list |
 | `""` (core) | `pods` | get, list, watch, **patch** |
 | `""` (core) | `events` | get, list, watch |

@@ -43,7 +43,11 @@ ensure_helm() {
 
 # ── Tetragon ──────────────────────────────────────────────────────────────────
 
-if kubectl get daemonset tetragon -n kube-system &>/dev/null; then
+# Looked for in every namespace, and asked on its own line: a Tetragon that
+# lives outside kube-system has cluster-wide objects a second install collides
+# with, and a kubectl that failed must not read as "not installed".
+existing_tetragon="$(kubectl get daemonset -A -l app.kubernetes.io/name=tetragon -o name)"
+if [ -n "$existing_tetragon" ]; then
   echo "[tetragon] already installed, skipping"
 else
   echo "[tetragon] not found, installing latest version..."
@@ -52,8 +56,8 @@ else
 
   "${HELM}" repo add cilium https://helm.cilium.io --force-update
   "${HELM}" repo update cilium
-  # Sentinel collects events over the Tetragon gRPC API, which the agent binds
-  # to localhost by default. That API has no authentication, so it is put on
+  # Sentinel collects events over the Tetragon gRPC API, which by default the
+  # agent does not serve to other pods. That API has no authentication, so it is put on
   # the pod network rather than the node's (hostNetwork=false), where the
   # NetworkPolicy applied below can limit it to Sentinel.
   #
