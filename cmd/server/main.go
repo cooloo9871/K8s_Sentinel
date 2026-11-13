@@ -100,7 +100,7 @@ func main() {
 	// rather than every time the list is worked out.
 	registryIDs := map[string][]string{}
 	vulnGate := vulngate.New(typedClient, dynClient, ownNamespace(),
-		func(ctx context.Context, named map[string]bool) []vulngate.ScannedImage {
+		func(ctx context.Context, named map[string]bool) ([]vulngate.ScannedImage, bool) {
 			has := func(ids []string) []string {
 				var out []string
 				for _, id := range ids {
@@ -111,7 +111,12 @@ func main() {
 				return out
 			}
 			var out []vulngate.ScannedImage
-			for _, w := range store.VulnerabilityOverview(ctx, false).Workloads {
+			overview := store.VulnerabilityOverview(ctx, false)
+			if overview.Status == "error" || overview.Status == "forbidden" {
+				// Not "no workload has a vulnerability": nothing was read.
+				return nil, false
+			}
+			for _, w := range overview.Workloads {
 				for _, img := range w.Images {
 					if img.Scanned {
 						out = append(out, vulngate.ScannedImage{Ref: img.Image, CVEs: has(img.IDs), Counts: vulngate.Counts{
@@ -147,7 +152,7 @@ func main() {
 				}
 			}
 			registryIDs = seen
-			return out
+			return out, true
 		})
 	// v0.65.0 kept the gate's settings here; the policies hold them now.
 	_ = os.Remove(data("vulnerability-gate.json"))

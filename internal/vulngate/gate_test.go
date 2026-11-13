@@ -85,6 +85,65 @@ func TestTheWorseOfTwoResultsForOneImageWins(t *testing.T) {
 	}
 }
 
+// One scan knows of the criticals, the other of the highs and of what can be
+// fixed: a policy on any of the four counts has to see the higher figure.
+func TestEachCountIsTheHigherOfTheTwoResults(t *testing.T) {
+	list := Build([]ScannedImage{
+		{Ref: "quay.io/a/b:1", Counts: Counts{Critical: 5, High: 3}},
+		{Ref: "quay.io/a/b:1", Counts: Counts{Critical: 1, High: 50, FixableCritical: 1, FixableHigh: 50}},
+	})
+	if got, want := list.Data["quay.io/a/b:1"], (Counts{Critical: 5, High: 50, FixableCritical: 1, FixableHigh: 50}); got != want {
+		t.Errorf("counts = %+v, want %+v", got, want)
+	}
+}
+
+// Charts and Renovate pin "repo:tag@sha256:...". The policy compares the string
+// the pod spec has, so that spelling has to be listed, and the bare digest too.
+func TestATagWithADigestIsListedBothWays(t *testing.T) {
+	list := Build([]ScannedImage{{Ref: "nginx:1.27@sha256:abc", Counts: Counts{Critical: 1}}})
+	for _, written := range []string{"nginx:1.27@sha256:abc", "nginx@sha256:abc", "docker.io/library/nginx:1.27@sha256:abc"} {
+		if _, ok := list.Data[written]; !ok {
+			t.Errorf("%q is not stopped", written)
+		}
+	}
+	// The tag alone may have moved on to another image.
+	if _, ok := list.Data["nginx:1.27"]; ok {
+		t.Error("the tag without its digest was listed")
+	}
+}
+
+func TestHostsAreNotCaseSensitiveAndDockerHubHasManyNames(t *testing.T) {
+	list := Build([]ScannedImage{
+		{Ref: "QUAY.IO/org/app:v2", Counts: Counts{Critical: 1}},
+		{Ref: "nginx:1.27", Counts: Counts{Critical: 1}},
+	})
+	for _, written := range []string{
+		"quay.io/org/app:v2",
+		"registry-1.docker.io/library/nginx:1.27", "registry.hub.docker.com/library/nginx:1.27", "index.docker.io/nginx:1.27",
+	} {
+		if _, ok := list.Data[written]; !ok {
+			t.Errorf("%q is not stopped", written)
+		}
+	}
+}
+
+// With the list full, what a policy refuses by name is the last to go.
+func TestNamedVulnerabilitiesAreListedAheadOfCounts(t *testing.T) {
+	var scanned []ScannedImage
+	long := strings.Repeat("x", 200)
+	for i := 0; i < 6000; i++ {
+		scanned = append(scanned, ScannedImage{Ref: "quay.io/" + long + "/img:" + strconv.Itoa(i), Counts: Counts{Critical: 9}})
+	}
+	scanned = append(scanned, ScannedImage{Ref: "quay.io/a/named:1", CVEs: []string{"CVE-2024-3094"}})
+	list := Build(scanned)
+	if list.LeftOut == 0 {
+		t.Fatal("the list was not full")
+	}
+	if len(list.CVEs["quay.io/a/named:1"]) != 1 {
+		t.Error("an image refused by name was left out of a full list")
+	}
+}
+
 // What does not fit is counted, and it is the least vulnerable that go.
 func TestAListThatIsFullSaysWhatItLeftOut(t *testing.T) {
 	var scanned []ScannedImage
@@ -101,7 +160,7 @@ func TestAListThatIsFullSaysWhatItLeftOut(t *testing.T) {
 	}
 	size, threes := 0, 0
 	for k, c := range list.Data {
-		size += len(k) + entryBytes
+		size += keyBytes*len(k) + entryBytes
 		if c.Critical == 3 {
 			threes++
 		}
@@ -109,8 +168,8 @@ func TestAListThatIsFullSaysWhatItLeftOut(t *testing.T) {
 	if size > maxListBytes {
 		t.Errorf("list is %d bytes", size)
 	}
-	if threes != 2000 {
-		t.Errorf("%d of the 2000 worst images are listed", threes)
+	if want := min(len(list.Data), 2000); threes != want {
+		t.Errorf("%d of the %d listed are among the 2000 worst", threes, want)
 	}
 }
 
@@ -132,7 +191,7 @@ func spec(t *testing.T, g *Gate) map[string]any {
 func TestTheListIsWrittenAndKeptInStep(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	scanned := []ScannedImage{{Ref: "nginx:1.25", Counts: Counts{Critical: 7, High: 50, FixableCritical: 3}}}
-	g := New(client, newDyn(), "sentinel-system", func(context.Context, map[string]bool) []ScannedImage { return scanned })
+	g := New(client, newDyn(), "sentinel-system", func(context.Context, map[string]bool) ([]ScannedImage, bool) { return scanned, true })
 	ctx := context.Background()
 	g.reconcile(ctx)
 
@@ -170,7 +229,7 @@ func TestWhatV0650MadeIsRemovedAndNothingElse(t *testing.T) {
 			&admissionv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: Name, Labels: labels}},
 			&admissionv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: Name, Labels: labels}},
 		)
-		g := New(client, newDyn(), "sentinel-system", func(context.Context, map[string]bool) []ScannedImage { return nil })
+		g := New(client, newDyn(), "sentinel-system", func(context.Context, map[string]bool) ([]ScannedImage, bool) { return nil, true })
 		g.reconcile(ctx)
 		_, perr := client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Get(ctx, Name, metav1.GetOptions{})
 		_, berr := client.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Get(ctx, Name, metav1.GetOptions{})
@@ -202,14 +261,14 @@ func TestImagesWithANamedVulnerabilityAreListedWithIt(t *testing.T) {
 		},
 	)
 	var asked map[string]bool
-	g := New(client, newDyn(), "sentinel-system", func(_ context.Context, named map[string]bool) []ScannedImage {
+	g := New(client, newDyn(), "sentinel-system", func(_ context.Context, named map[string]bool) ([]ScannedImage, bool) {
 		asked = named
 		return []ScannedImage{
 			{Ref: "quay.io/a/medium-only:1", CVEs: []string{"CVE-2024-3094", "CVE-2024-3094"}},
 			{Ref: "quay.io/a/clean:1"},
 			{Ref: "quay.io/a/twice:1", Counts: Counts{Critical: 1}},
 			{Ref: "quay.io/a/twice:1", CVEs: []string{"GHSA-aaaa-bbbb-cccc"}},
-		}
+		}, true
 	})
 	g.reconcile(ctx)
 	if len(asked) != 2 || !asked["CVE-2024-3094"] || !asked["GHSA-aaaa-bbbb-cccc"] {
@@ -227,5 +286,24 @@ func TestImagesWithANamedVulnerabilityAreListedWithIt(t *testing.T) {
 	c, _, _ := unstructured.NestedInt64(s, "images", "quay.io/a/twice:1", "critical")
 	if len(ids) != 1 || c != 1 {
 		t.Errorf("twice = cves %v critical %d", ids, c)
+	}
+}
+
+// A read that failed is not a cluster with nothing vulnerable in it: the list
+// stays, or every policy would admit what it refused a minute ago.
+func TestResultsThatCouldNotBeReadLeaveTheListAlone(t *testing.T) {
+	ctx := context.Background()
+	ok := true
+	g := New(fake.NewSimpleClientset(), newDyn(), "sentinel-system", func(context.Context, map[string]bool) ([]ScannedImage, bool) {
+		if !ok {
+			return nil, false
+		}
+		return []ScannedImage{{Ref: "nginx:1.25", Counts: Counts{Critical: 7}}}, true
+	})
+	g.reconcile(ctx)
+	ok = false
+	g.reconcile(ctx)
+	if c, _, _ := unstructured.NestedInt64(spec(t, g), "images", "nginx:1.25", "critical"); c != 7 {
+		t.Errorf("the list was emptied: %v", spec(t, g))
 	}
 }

@@ -27,8 +27,9 @@ type Gate struct {
 	namespace string
 	// Every image a scan has a result for, from wherever results are kept.
 	// named is the vulnerabilities some policy refuses by ID; each image comes
-	// back with the ones among them it has.
-	scanned func(ctx context.Context, named map[string]bool) []ScannedImage
+	// back with the ones among them it has. ok is false when the results could
+	// not be read, which is not the same as there being none.
+	scanned func(ctx context.Context, named map[string]bool) (images []ScannedImage, ok bool)
 	wake    chan struct{}
 
 	legacyGone bool
@@ -37,7 +38,7 @@ type Gate struct {
 
 // New makes the gate. namespace is Sentinel's own, which the policies never
 // apply to.
-func New(client kubernetes.Interface, dyn dynamic.Interface, namespace string, scanned func(ctx context.Context, named map[string]bool) []ScannedImage) *Gate {
+func New(client kubernetes.Interface, dyn dynamic.Interface, namespace string, scanned func(ctx context.Context, named map[string]bool) ([]ScannedImage, bool)) *Gate {
 	return &Gate{client: client, dyn: dyn, namespace: namespace, scanned: scanned, wake: make(chan struct{}, 1)}
 }
 
@@ -98,11 +99,11 @@ func (g *Gate) Run(ctx context.Context) {
 	}
 }
 
-func (g *Gate) reconcile(ctx context.Context) {
+func (g *Gate) reconcile(parent context.Context) {
 	if g.client == nil || g.dyn == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(parent, time.Minute)
 	defer cancel()
 
 	if !g.legacyGone {
@@ -115,11 +116,22 @@ func (g *Gate) reconcile(ctx context.Context) {
 	named, err := g.named(ctx)
 	var list List
 	if err == nil {
-		list = Build(g.scanned(ctx, named))
-		err = g.write(ctx, list)
+		// Reading the results has its own time limit, so the write gets a
+		// fresh one rather than what the read left of this one.
+		images, ok := g.scanned(ctx, named)
+		if !ok {
+			// The list in the cluster stays as it is: emptying it because the
+			// results could not be read would admit everything it refuses.
+			err = fmt.Errorf("the scan results could not be read; the list is left as it was")
+		} else {
+			list = Build(images)
+			wctx, wcancel := context.WithTimeout(parent, time.Minute)
+			err = g.write(wctx, list)
+			wcancel()
+		}
 	}
-	if ctx.Err() != nil {
-		return
+	if parent.Err() != nil {
+		return // shutting down
 	}
 	// Said once per change, not every two minutes.
 	msg := ""

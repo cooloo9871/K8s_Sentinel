@@ -112,6 +112,15 @@ func NewScanner(store *Store, dir string, scan scanFunc) *Scanner {
 			// A run cut short by a restart: its Jobs are gone. With no finish
 			// time it is due again at once.
 			r.Run.Running = false
+			// Results from before the fixable counts were kept by severity
+			// have none; an admission policy that counts only those would
+			// take the image for one with nothing to fix.
+			for i := range r.Images {
+				if img := &r.Images[i]; img.Scanned && img.Fixable > 0 && img.FixableCritical == 0 && img.FixableHigh == 0 {
+					findings, _ := s.Findings(c.ID, img.Image)
+					img.FixableCritical, img.FixableHigh = fixableBySeverity(findings)
+				}
+			}
 			s.reports[c.ID] = &r
 		}
 	}
@@ -366,13 +375,7 @@ func (s *Scanner) run(ctx context.Context, cancel context.CancelFunc, cfg Config
 			} else {
 				res.Scanned = true
 				res.Counts, res.Fixable = summarize(findings)
-				for _, f := range findings {
-					if f.FixedVersion != "" && f.Severity == "CRITICAL" {
-						res.FixableCritical++
-					} else if f.FixedVersion != "" && f.Severity == "HIGH" {
-						res.FixableHigh++
-					}
-				}
+				res.FixableCritical, res.FixableHigh = fixableBySeverity(findings)
 				sortFindings(findings)
 			}
 			update(func(r *Report) {
@@ -446,6 +449,19 @@ func sortFindings(findings []Finding) {
 		}
 		return a.ID < b.ID
 	})
+}
+
+// fixableBySeverity counts the critical and the high findings that name a
+// fixed version.
+func fixableBySeverity(findings []Finding) (critical, high int) {
+	for _, f := range findings {
+		if f.FixedVersion != "" && f.Severity == "CRITICAL" {
+			critical++
+		} else if f.FixedVersion != "" && f.Severity == "HIGH" {
+			high++
+		}
+	}
+	return critical, high
 }
 
 func summarize(findings []Finding) (Counts, int) {

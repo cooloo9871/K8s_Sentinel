@@ -33,8 +33,13 @@ const Name = "sentinel-vulnerability-gate"
 // its own metadata and for an update not to be refused at the edge.
 const maxListBytes = 900 << 10
 
-// What one entry costs beyond its key: its four counts and punctuation.
-const entryBytes = 90
+// What one entry costs beyond its key: its four counts and punctuation, and
+// the record the API server keeps of who set each of those fields, which names
+// the key a second time. keyBytes says how often the key is counted.
+const (
+	entryBytes = 170
+	keyBytes   = 2
+)
 
 // ScannedImage is one image some scan has a result for.
 type ScannedImage struct {
@@ -71,8 +76,9 @@ type List struct {
 // policy can refuse, so it is not listed.
 func Build(scanned []ScannedImage) List {
 	// The same image may have been scanned as a workload and from a registry.
-	// The higher counts win: a result that says it is over a limit is not
-	// outvoted by an older one that says it is not.
+	// Each count is the higher of the two: a result that says it is over a
+	// limit is not outvoted by another that says it is not, whichever limit a
+	// policy sets.
 	worst := map[string]ScannedImage{}
 	for _, img := range scanned {
 		ref := canonical(img.Ref)
@@ -84,11 +90,11 @@ func Build(scanned []ScannedImage) List {
 		img.CVEs = union(img.CVEs, nil)
 		if cur, ok := worst[ref]; ok {
 			// Either scan finding a named vulnerability is enough to list it.
-			named := union(cur.CVEs, img.CVEs)
-			if img.Critical < cur.Critical || (img.Critical == cur.Critical && img.High <= cur.High) {
-				img = cur
-			}
-			img.CVEs = named
+			img.CVEs = union(cur.CVEs, img.CVEs)
+			img.Critical = max(img.Critical, cur.Critical)
+			img.High = max(img.High, cur.High)
+			img.FixableCritical = max(img.FixableCritical, cur.FixableCritical)
+			img.FixableHigh = max(img.FixableHigh, cur.FixableHigh)
 		}
 		worst[ref] = img
 	}
@@ -97,6 +103,11 @@ func Build(scanned []ScannedImage) List {
 		images = append(images, img)
 	}
 	sort.Slice(images, func(i, j int) bool {
+		// What a policy refuses by name comes first: with the list full, it is
+		// the last thing to be left out.
+		if a, b := len(images[i].CVEs) > 0, len(images[j].CVEs) > 0; a != b {
+			return a
+		}
 		if images[i].Critical != images[j].Critical {
 			return images[i].Critical > images[j].Critical
 		}
@@ -116,7 +127,7 @@ func Build(scanned []ScannedImage) List {
 				continue
 			}
 			keys = append(keys, k)
-			add += len(k) + entryBytes
+			add += keyBytes*len(k) + entryBytes
 			for _, id := range img.CVEs {
 				add += len(id) + 3
 			}
@@ -158,24 +169,22 @@ var dockerHubHosts = map[string]bool{
 }
 
 // split takes a reference apart: its registry host ("" when it names none), its
-// repository, and its tag or digest with the separator.
-func split(ref string) (host, repo, suffix string) {
+// repository, and its tag and digest with their separators. A host is not
+// case sensitive and is returned in lower case.
+func split(ref string) (host, repo, tag, digest string) {
 	ref = strings.TrimSpace(ref)
 	if i := strings.Index(ref, "@"); i >= 0 {
-		ref, suffix = ref[:i], ref[i:]
+		ref, digest = ref[:i], ref[i:]
 	}
 	// A colon after the last slash is a tag; before it, a registry port.
 	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
-		if suffix == "" {
-			suffix = ref[i:]
-		}
-		ref = ref[:i]
+		ref, tag = ref[:i], ref[i:]
 	}
 	if first, rest, ok := strings.Cut(ref, "/"); ok &&
-		(strings.ContainsAny(first, ".:") || first == "localhost") {
-		return first, rest, suffix
+		(strings.ContainsAny(first, ".:") || strings.EqualFold(first, "localhost")) {
+		return strings.ToLower(first), rest, tag, digest
 	}
-	return "", ref, suffix
+	return "", ref, tag, digest
 }
 
 // canonical is the one spelling an image is known by here, so that the same
@@ -183,10 +192,11 @@ func split(ref string) (host, repo, suffix string) {
 // host and "library/", and a reference with neither tag nor digest gains
 // ":latest", which is what it means.
 func canonical(ref string) string {
-	host, repo, suffix := split(ref)
+	host, repo, tag, digest := split(ref)
 	if repo == "" {
 		return ""
 	}
+	suffix := tag + digest
 	if suffix == "" {
 		suffix = ":latest"
 	}
@@ -201,10 +211,15 @@ func canonical(ref string) string {
 // "docker.io/library/nginx:latest" are one image to a container runtime and
 // three to CEL.
 func spellings(ref string) []string {
-	host, repo, suffix := split(ref)
-	suffixes := []string{suffix}
-	if suffix == ":latest" {
+	host, repo, tag, digest := split(ref)
+	suffixes := []string{tag + digest}
+	switch {
+	case tag == ":latest" && digest == "":
 		suffixes = append(suffixes, "")
+	case tag != "" && digest != "":
+		// "app:v1@sha256:..." is pulled by the digest; the tag is decoration,
+		// and the same image may be written without it.
+		suffixes = append(suffixes, digest)
 	}
 	var names []string
 	if host != "" {
@@ -215,9 +230,13 @@ func spellings(ref string) []string {
 			full = "library/" + repo
 			names = append(names, repo)
 		}
-		names = append(names, full, "docker.io/"+full, "index.docker.io/"+full)
+		names = append(names, full)
+		for _, h := range []string{"docker.io", "index.docker.io", "registry-1.docker.io", "registry.hub.docker.com"} {
+			names = append(names, h+"/"+full)
+		}
 		if full != repo {
-			names = append(names, "docker.io/"+repo)
+			// Only these two names have a runtime add "library/" by itself.
+			names = append(names, "docker.io/"+repo, "index.docker.io/"+repo)
 		}
 	}
 	out := make([]string, 0, len(names)*len(suffixes))
