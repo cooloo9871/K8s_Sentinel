@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
     --render-only) RENDER_ONLY="${2:-}"; shift 2 ;;
     --render-only=*) RENDER_ONLY="${1#*=}"; shift ;;
     --insecure-registry) INSECURE=true; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
