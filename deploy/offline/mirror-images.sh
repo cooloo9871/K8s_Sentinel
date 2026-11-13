@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
-# Carries the images in images.txt from the internet into a private registry.
+# Carries the images in images.txt from the internet into a private registry,
+# with docker or podman, whichever this machine has.
 #
 # On a machine with internet access:
 #   bash mirror-images.sh save                  # downloads into ./images
 #
 # Take this directory to the offline side, then, on a machine that reaches the
-# registry:
+# registry and is logged in to it (docker login, podman login):
 #   bash mirror-images.sh push harbor.example.com/sentinel
 #
 # A machine that reaches both can do it in one go:
 #   bash mirror-images.sh save && bash mirror-images.sh push harbor.example.com/sentinel
 #
-# Uses skopeo when it is installed. Without it, docker, podman or nerdctl carry
-# the images, and oras the two Trivy databases, which are not container images
-# and which those three cannot pull. CONTAINER_CLI names another command to use
-# in their place ("sudo podman", say).
-#
 # --insecure-registry, after "push", is for a registry on plain HTTP or with a
 # certificate this machine does not trust:
 #   bash mirror-images.sh push harbor.example.com/sentinel --insecure-registry
-# docker has no such switch: the registry has to be listed under
-# insecure-registries in its daemon's configuration.
+# docker has no such switch for images: the registry has to be listed under
+# insecure-registries in its daemon's configuration as well.
+#
+# docker is used when both are installed. CONTAINER_CLI names the command to
+# use instead ("podman", "sudo podman").
 #
 # Images are saved for this machine's CPU architecture. Run "save" on a machine
 # of the architecture your nodes have.
@@ -29,7 +28,13 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIST="$HERE/images.txt"
 DIR="${IMAGES_DIR:-$HERE/images}"
-usage() { sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+# Trivy's databases are OCI artifacts, which neither docker nor podman can pull
+# or push as they do images. skopeo can, and is run from this image, which
+# "save" takes along with the rest so that "push" has it offline.
+SKOPEO_IMAGE="quay.io/skopeo/stable:v1.18"
+
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 # INSECURE=1 in the environment does the same as the option.
 INSECURE="${INSECURE:-}"
@@ -60,29 +65,51 @@ esac
 
 CLI="${CONTAINER_CLI:-}"
 if [ -z "$CLI" ]; then
-  for c in docker podman nerdctl; do
+  for c in docker podman; do
     if command -v "$c" >/dev/null 2>&1; then CLI="$c"; break; fi
   done
 fi
-have() { command -v "$1" >/dev/null 2>&1; }
+if [ -z "$CLI" ]; then
+  echo "neither docker nor podman is installed on this machine" >&2
+  exit 1
+fi
+case "$CLI" in *podman*) PODMAN=1 ;; *) PODMAN="" ;; esac
+echo "using $CLI"
 
 # An image where the registry keeps it: the same path, under the registry.
 target() { echo "$REGISTRY/${1#*/}"; }
 # A file name for a reference.
 file() { echo "$1" | tr '/:@' '___'; }
 
+# Where the login to the registry is kept, for skopeo to push with it.
+authfile() {
+  if [ -n "${REGISTRY_AUTH_FILE:-}" ]; then
+    echo "$REGISTRY_AUTH_FILE"
+  elif [ -n "$PODMAN" ]; then
+    echo "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/auth.json"
+  else
+    echo "${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+  fi
+}
+
+# skopeo, from its image, with the images directory at /work.
 # shellcheck disable=SC2086  # CLI may be two words
+skopeo() {
+  local auth mount=()
+  auth="$(authfile)"
+  if [ "$1" = copy ] && [ "$MODE" = push ] && [ -f "$auth" ]; then
+    mount=(-v "$auth:/auth.json:ro,z")
+    set -- copy --authfile /auth.json "${@:2}"
+  fi
+  $CLI run --rm --network host -v "$DIR:/work:z" "${mount[@]}" "$SKOPEO_IMAGE" "$@"
+}
+
+# shellcheck disable=SC2086
 save_image() {
   local ref="$1" out="$DIR/$(file "$1").tar"
   rm -f "$out"
-  if have skopeo; then
-    skopeo copy --quiet "docker://$ref" "docker-archive:$out:$ref"
-  elif [ -n "$CLI" ]; then
-    $CLI pull -q "$ref" >/dev/null
-    $CLI save -o "$out" "$ref"
-  else
-    echo "no skopeo, docker, podman or nerdctl on this machine" >&2; exit 1
-  fi
+  $CLI pull -q "$ref" >/dev/null
+  $CLI save -o "$out" "$ref"
 }
 
 # shellcheck disable=SC2086
@@ -90,54 +117,39 @@ push_image() {
   local ref="$1" in="$DIR/$(file "$1").tar" to
   to="$(target "$1")"
   [ -f "$in" ] || { echo "$in is missing: run \"save\" first" >&2; exit 1; }
-  if have skopeo; then
-    skopeo copy --quiet ${INSECURE:+--dest-tls-verify=false} "docker-archive:$in" "docker://$to"
-  elif [ -n "$CLI" ]; then
-    $CLI load -q -i "$in" >/dev/null
-    $CLI tag "$ref" "$to"
-    case "$CLI" in
-      *podman*) $CLI push -q ${INSECURE:+--tls-verify=false} "$to" ;;
-      *nerdctl*) $CLI push -q ${INSECURE:+--insecure-registry} "$to" ;;
-      *) $CLI push -q "$to" ;;
-    esac
+  $CLI load -q -i "$in" >/dev/null
+  $CLI tag "$ref" "$to"
+  if [ -n "$PODMAN" ]; then
+    $CLI push -q ${INSECURE:+--tls-verify=false} "$to"
   else
-    echo "no skopeo, docker, podman or nerdctl on this machine" >&2; exit 1
+    $CLI push -q "$to"
   fi
-}
-
-# The databases are kept as OCI layouts, which skopeo and oras both read.
-no_artifact_tool() {
-  echo "  no skopeo or oras on this machine: $1 was not $2." >&2
-  echo "  Without the databases in the registry no image can be scanned." >&2
-  MISSED=1
 }
 
 save_artifact() {
-  local ref="$1" out="$DIR/$(file "$1")"
-  rm -rf "$out"
-  if have skopeo; then
-    skopeo copy --quiet "docker://$ref" "oci:$out:db"
-  elif have oras; then
-    oras copy "$ref" --to-oci-layout "$out:db" >/dev/null
-  else
-    no_artifact_tool "$ref" saved
-  fi
+  local name
+  name="$(file "$1")"
+  rm -rf "${DIR:?}/$name"
+  skopeo copy --quiet "docker://$1" "oci:/work/$name:db"
 }
 
 push_artifact() {
-  local in="$DIR/$(file "$1")" to
-  to="$(target "$1")"
-  if ! have skopeo && ! have oras; then no_artifact_tool "$1" pushed; return; fi
-  [ -d "$in" ] || { echo "$in is missing: run \"save\" with skopeo or oras installed" >&2; exit 1; }
-  if have skopeo; then
-    skopeo copy --quiet ${INSECURE:+--dest-tls-verify=false} "oci:$in:db" "docker://$to"
-  else
-    oras copy ${INSECURE:+--to-plain-http} --from-oci-layout "$in:db" "$to" >/dev/null
-  fi
+  local name
+  name="$(file "$1")"
+  [ -d "$DIR/$name" ] || { echo "$DIR/$name is missing: run \"save\" first" >&2; exit 1; }
+  skopeo copy --quiet ${INSECURE:+--dest-tls-verify=false} "oci:/work/$name:db" "docker://$(target "$1")"
 }
 
 mkdir -p "$DIR"
-MISSED=""
+# shellcheck disable=SC2086
+if [ "$MODE" = save ]; then
+  echo "saving $SKOPEO_IMAGE (the tool that carries the databases)"
+  save_image "$SKOPEO_IMAGE"
+else
+  [ -f "$DIR/$(file "$SKOPEO_IMAGE").tar" ] || { echo "$DIR holds no saved images: run \"save\" first" >&2; exit 1; }
+  $CLI load -q -i "$DIR/$(file "$SKOPEO_IMAGE").tar" >/dev/null
+fi
+
 kind=image
 while read -r ref; do
   case "$ref" in
@@ -152,9 +164,6 @@ while read -r ref; do
   "${MODE}_${kind}" "$ref" </dev/null
 done < "$LIST"
 
-if [ -n "$MISSED" ]; then
-  exit 1
-fi
 if [ "$MODE" = save ]; then
   echo "Saved to $DIR."
 else

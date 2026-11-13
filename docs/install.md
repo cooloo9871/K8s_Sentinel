@@ -178,7 +178,7 @@ bash mirror-images.sh save        # about 2 GB, into ./images
 bash mirror-images.sh push harbor.example.com/sentinel
 ```
 
-Add `--insecure-registry` to that command when the registry's certificate is one this machine does not trust (`x509: certificate signed by unknown authority`), or it serves plain HTTP.
+Add `--insecure-registry` to that command when the registry's certificate is one this machine does not trust (`x509: certificate signed by unknown authority`), or it serves plain HTTP. With docker the registry also has to be listed under `insecure-registries` in the daemon's configuration: docker has no per-command switch for pushing images.
 
 **3. Install**, on a machine with `kubectl` access to the cluster:
 
@@ -192,7 +192,7 @@ An image keeps its path under the registry: `quay.io/cilium/tetragon:v1.8.0` bec
 
 What to know before you start:
 
-- **Tools.** `mirror-images.sh` uses `skopeo` when it is installed. Without it, `docker`, `podman` or `nerdctl` carry the images, but not Trivy's databases: those are OCI artifacts, not container images, and need `skopeo` or `oras`. Without the databases in the registry Sentinel installs and runs, and no image can be scanned
+- **Tools.** `mirror-images.sh` needs `docker` or `podman`, on both sides, and uses docker when a machine has both (`CONTAINER_CLI=podman` chooses otherwise). Trivy's databases are OCI artifacts, which neither can pull or push as an image; the script runs `skopeo` from a container image for those, and `save` takes that image along so `push` has it offline. Log in to the registry first (`docker login`, `podman login`)
 - **The registry has to be pullable without credentials** by the nodes and by Trivy. The bundle sets no image pull secret
 - **Its certificate has to be trusted by the nodes.** That is the container runtime's configuration on every node (containerd's `certs.d`), which the bundle does not touch; if other workloads already pull from this registry, it is done. Trivy runs in pods and does not use that configuration: either its certificate comes from a public CA, or you install with `--insecure-registry`, which turns verification off for Trivy everywhere, the registries it scans included. `bash mirror-images.sh push ... --insecure-registry` is for pushing to a registry on plain HTTP or with a certificate the pushing machine does not trust; it does not change what the cluster trusts
 - **CPU architecture.** Images are saved for the architecture of the machine that runs `save`. Run it on one that matches your nodes
