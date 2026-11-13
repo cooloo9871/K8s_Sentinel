@@ -22,7 +22,7 @@ func TestImagesWithCriticalOrHighAreListedWithTheirCounts(t *testing.T) {
 		{Ref: "quay.io/org/bad:1", Counts: Counts{Critical: 1}},
 		{Ref: "quay.io/org/clean:1"},
 		{Ref: "quay.io/org/highs:1", Counts: Counts{High: 11}},
-	})
+	}, false)
 	if got := list.Data["quay.io/org/bad:1"]; got != (Counts{Critical: 1}) {
 		t.Errorf("bad = %+v", got)
 	}
@@ -40,7 +40,7 @@ func TestEverySpellingOfADockerHubImageIsListed(t *testing.T) {
 	for _, scannedAs := range []string{
 		"nginx", "nginx:latest", "docker.io/library/nginx:latest", "registry.hub.docker.com/library/nginx",
 	} {
-		list := Build([]ScannedImage{{Ref: scannedAs, Counts: Counts{Critical: 3}}})
+		list := Build([]ScannedImage{{Ref: scannedAs, Counts: Counts{Critical: 3}}}, false)
 		for _, written := range []string{
 			"nginx", "nginx:latest", "library/nginx", "docker.io/nginx", "docker.io/library/nginx:latest",
 			"index.docker.io/library/nginx",
@@ -60,7 +60,7 @@ func TestOrganisationAndPrivateRegistryImages(t *testing.T) {
 		{Ref: "bitnami/redis:7", Counts: Counts{Critical: 1}},
 		{Ref: "harbor.internal:8443/team/app:v1", Counts: Counts{Critical: 1}},
 		{Ref: "quay.io/org/app@sha256:abc", Counts: Counts{Critical: 1}},
-	})
+	}, false)
 	for _, written := range []string{
 		"bitnami/redis:7", "docker.io/bitnami/redis:7",
 		"harbor.internal:8443/team/app:v1", "quay.io/org/app@sha256:abc",
@@ -79,7 +79,7 @@ func TestTheWorseOfTwoResultsForOneImageWins(t *testing.T) {
 	list := Build([]ScannedImage{
 		{Ref: "nginx:1.25", Counts: Counts{Critical: 0, High: 2}},
 		{Ref: "docker.io/library/nginx:1.25", Counts: Counts{Critical: 4}},
-	})
+	}, false)
 	if got := list.Data["nginx:1.25"]; got.Critical != 4 {
 		t.Fatalf("counts = %+v", got)
 	}
@@ -91,7 +91,7 @@ func TestEachCountIsTheHigherOfTheTwoResults(t *testing.T) {
 	list := Build([]ScannedImage{
 		{Ref: "quay.io/a/b:1", Counts: Counts{Critical: 5, High: 3}},
 		{Ref: "quay.io/a/b:1", Counts: Counts{Critical: 1, High: 50, FixableCritical: 1, FixableHigh: 50}},
-	})
+	}, false)
 	if got, want := list.Data["quay.io/a/b:1"], (Counts{Critical: 5, High: 50, FixableCritical: 1, FixableHigh: 50}); got != want {
 		t.Errorf("counts = %+v, want %+v", got, want)
 	}
@@ -100,7 +100,7 @@ func TestEachCountIsTheHigherOfTheTwoResults(t *testing.T) {
 // Charts and Renovate pin "repo:tag@sha256:...". The policy compares the string
 // the pod spec has, so that spelling has to be listed, and the bare digest too.
 func TestATagWithADigestIsListedBothWays(t *testing.T) {
-	list := Build([]ScannedImage{{Ref: "nginx:1.27@sha256:abc", Counts: Counts{Critical: 1}}})
+	list := Build([]ScannedImage{{Ref: "nginx:1.27@sha256:abc", Counts: Counts{Critical: 1}}}, false)
 	for _, written := range []string{"nginx:1.27@sha256:abc", "nginx@sha256:abc", "docker.io/library/nginx:1.27@sha256:abc"} {
 		if _, ok := list.Data[written]; !ok {
 			t.Errorf("%q is not stopped", written)
@@ -116,7 +116,7 @@ func TestHostsAreNotCaseSensitiveAndDockerHubHasManyNames(t *testing.T) {
 	list := Build([]ScannedImage{
 		{Ref: "QUAY.IO/org/app:v2", Counts: Counts{Critical: 1}},
 		{Ref: "nginx:1.27", Counts: Counts{Critical: 1}},
-	})
+	}, false)
 	for _, written := range []string{
 		"quay.io/org/app:v2",
 		"registry-1.docker.io/library/nginx:1.27", "registry.hub.docker.com/library/nginx:1.27", "index.docker.io/nginx:1.27",
@@ -135,7 +135,7 @@ func TestNamedVulnerabilitiesAreListedAheadOfCounts(t *testing.T) {
 		scanned = append(scanned, ScannedImage{Ref: "quay.io/" + long + "/img:" + strconv.Itoa(i), Counts: Counts{Critical: 9}})
 	}
 	scanned = append(scanned, ScannedImage{Ref: "quay.io/a/named:1", CVEs: []string{"CVE-2024-3094"}})
-	list := Build(scanned)
+	list := Build(scanned, false)
 	if list.LeftOut == 0 {
 		t.Fatal("the list was not full")
 	}
@@ -151,7 +151,7 @@ func TestAListThatIsFullSaysWhatItLeftOut(t *testing.T) {
 	for i := 0; i < 6000; i++ {
 		scanned = append(scanned, ScannedImage{Ref: "quay.io/" + long + "/img:" + strconv.Itoa(i), Counts: Counts{Critical: 1 + i%3}})
 	}
-	list := Build(scanned)
+	list := Build(scanned, false)
 	if list.LeftOut == 0 {
 		t.Fatal("6000 long names fit in one object?")
 	}
@@ -264,10 +264,10 @@ func TestImagesWithANamedVulnerabilityAreListedWithIt(t *testing.T) {
 	g := New(client, newDyn(), "sentinel-system", func(_ context.Context, named map[string]bool) ([]ScannedImage, bool) {
 		asked = named
 		return []ScannedImage{
-			{Ref: "quay.io/a/medium-only:1", CVEs: []string{"CVE-2024-3094", "CVE-2024-3094"}},
+			{Ref: "quay.io/a/medium-only:1", Found: map[string]Counts{"CVE-2024-3094": {}}},
 			{Ref: "quay.io/a/clean:1"},
 			{Ref: "quay.io/a/twice:1", Counts: Counts{Critical: 1}},
-			{Ref: "quay.io/a/twice:1", CVEs: []string{"GHSA-aaaa-bbbb-cccc"}},
+			{Ref: "quay.io/a/twice:1", Found: map[string]Counts{"GHSA-aaaa-bbbb-cccc": {}}},
 		}, true
 	})
 	g.reconcile(ctx)
@@ -305,5 +305,89 @@ func TestResultsThatCouldNotBeReadLeaveTheListAlone(t *testing.T) {
 	g.reconcile(ctx)
 	if c, _, _ := unstructured.NestedInt64(spec(t, g), "images", "nginx:1.25", "critical"); c != 7 {
 		t.Errorf("the list was emptied: %v", spec(t, g))
+	}
+}
+
+func gatePolicy(name string, vars ...admissionv1.Variable) *admissionv1.ValidatingAdmissionPolicy {
+	return &admissionv1.ValidatingAdmissionPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: admissionv1.ValidatingAdmissionPolicySpec{
+			ParamKind: &admissionv1.ParamKind{APIVersion: "sentinel.io/v1", Kind: "VulnerabilityGate"},
+			Variables: vars,
+		},
+	}
+}
+
+// A limit that leaves a vulnerability out of its count has to be told how much
+// of each image's count that vulnerability is.
+func TestExceptedVulnerabilitiesAreListedWithWhatTheyAddToTheCounts(t *testing.T) {
+	ctx := context.Background()
+	client := fake.NewSimpleClientset(gatePolicy("limit",
+		admissionv1.Variable{Name: ExceptedVariable, Expression: "['CVE-2024-1', 'CVE-2024-2']"}))
+	var asked map[string]bool
+	g := New(client, newDyn(), "sentinel-system", func(_ context.Context, named map[string]bool) ([]ScannedImage, bool) {
+		asked = named
+		return []ScannedImage{
+			{Ref: "quay.io/a/app:1", Counts: Counts{Critical: 3, High: 1, FixableCritical: 2}, Found: map[string]Counts{
+				"CVE-2024-1": {Critical: 2, FixableCritical: 1},
+				"CVE-2024-2": {}, // a medium: nothing to take off
+			}},
+			{Ref: "quay.io/a/app:1", Counts: Counts{Critical: 3}, Found: map[string]Counts{"CVE-2024-1": {Critical: 1}}},
+		}, true
+	})
+	g.reconcile(ctx)
+	if !asked["CVE-2024-1"] || !asked["CVE-2024-2"] {
+		t.Fatalf("asked for %v", asked)
+	}
+	s := spec(t, g)
+	ex, _, _ := unstructured.NestedMap(s, "images", "quay.io/a/app:1", "excepted")
+	if len(ex) != 1 {
+		t.Fatalf("excepted = %v", ex)
+	}
+	c, _, _ := unstructured.NestedInt64(ex, "CVE-2024-1", "critical")
+	f, _, _ := unstructured.NestedInt64(ex, "CVE-2024-1", "fixableCritical")
+	if c != 2 || f != 1 {
+		t.Errorf("CVE-2024-1 = %v", ex["CVE-2024-1"])
+	}
+	if _, ok, _ := unstructured.NestedStringSlice(s, "images", "quay.io/a/app:1", "cves"); ok {
+		t.Error("an excepted vulnerability was listed as one to refuse")
+	}
+	if all, _, _ := unstructured.NestedBool(s, "allScanned"); all {
+		t.Error("allScanned without a policy that asks for it")
+	}
+}
+
+// "Not in the list" may only mean "not scanned" when every scanned image is in
+// it, the clean ones too.
+func TestAPolicyThatRefusesUnscannedImagesGetsEveryScannedImage(t *testing.T) {
+	ctx := context.Background()
+	client := fake.NewSimpleClientset(gatePolicy("scanned",
+		admissionv1.Variable{Name: UnscannedVariable, Expression: "[]"}))
+	g := New(client, newDyn(), "sentinel-system", func(context.Context, map[string]bool) ([]ScannedImage, bool) {
+		return []ScannedImage{{Ref: "quay.io/a/clean:1"}, {Ref: "quay.io/a/bad:1", Counts: Counts{High: 2}}}, true
+	})
+	g.reconcile(ctx)
+	s := spec(t, g)
+	if _, ok, _ := unstructured.NestedMap(s, "images", "quay.io/a/clean:1"); !ok {
+		t.Error("the clean image is not listed")
+	}
+	if all, _, _ := unstructured.NestedBool(s, "allScanned"); !all {
+		t.Error("allScanned is not set")
+	}
+}
+
+// With images left out for want of room, the list must not claim to be whole:
+// the policy would refuse images that were scanned.
+func TestAFullListDoesNotClaimToHoldEveryImage(t *testing.T) {
+	var scanned []ScannedImage
+	for i := 0; i < 6000; i++ {
+		scanned = append(scanned, ScannedImage{Ref: "registry.example.com/a-rather-long-organisation-name/an-image-with-a-long-name-" + strconv.Itoa(i) + ":1"})
+	}
+	list := Build(scanned, true)
+	if list.LeftOut == 0 {
+		t.Fatal("the test needs more images than fit")
+	}
+	if list.All {
+		t.Error("All with images left out")
 	}
 }

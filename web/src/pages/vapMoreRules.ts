@@ -217,3 +217,53 @@ export function parseCveSpec(spec: unknown): CveRule | null {
   const ids = readList(spec, NAMED_VARIABLE)
   return ids === null ? null : { ids }
 }
+
+// ── Vulnerabilities a limit does not count ───────────────────────────────────
+
+// internal/vulngate reads this one too: for every image it then lists how much
+// of each count these vulnerabilities are.
+const EXCEPTED_VARIABLE = 'exceptedCVEs'
+
+export const validVulnIds = (ids: string[]) => ids.every(id => VULN_ID.test(id))
+
+export function exceptedVariableLines(ids: string[]): string[] {
+  return listVariable(EXCEPTED_VARIABLE, ids.filter(id => VULN_ID.test(id)).map(normalizeVulnId))
+}
+
+// One of an image's counts with the excepted vulnerabilities taken off. ref is
+// the CEL for the image's name.
+export function countWithoutExcepted(ref: string, field: string): string {
+  const image = `params.spec.images[${ref}]`
+  return `(${image}.${field} - (has(${image}.excepted) ? `
+    + `variables.${EXCEPTED_VARIABLE}.filter(c, c in ${image}.excepted).map(c, ${image}.excepted[c].${field}).sum() : 0))`
+}
+
+export function parseExcepted(spec: unknown): string[] {
+  return readList(spec, EXCEPTED_VARIABLE) ?? []
+}
+
+// ── Images that have not been scanned ────────────────────────────────────────
+
+// internal/vulngate looks for a variable of this name: with one in the cluster
+// it lists every scanned image, the clean ones too, and says so in allScanned.
+// Until it has, nothing is refused: a list of only the images with something
+// wrong would have every clean one taken for unscanned.
+export const SCANNED_VARIABLE_LINES = [
+  '    - name: unscanned',
+  '      expression: >-',
+  '        has(params.spec) && has(params.spec.allScanned) && params.spec.allScanned',
+  '        ? variables.images.filter(i, !has(params.spec.images) || !(i in params.spec.images))',
+  '        : []',
+]
+
+export const SCANNED_VALIDATION = [
+  '    - expression: "variables.exempt || size(variables.unscanned) == 0"',
+  '      messageExpression: >-',
+  "        'image ' + variables.unscanned[0] + ' has not been scanned'",
+  '      reason: Forbidden',
+]
+
+export function parseScannedSpec(spec: unknown): boolean {
+  const vars = (spec as { variables?: { name?: string }[] })?.variables ?? []
+  return vars.some(v => v?.name === 'unscanned')
+}

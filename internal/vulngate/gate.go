@@ -46,8 +46,57 @@ type ScannedImage struct {
 	// As a pod spec or a registry names it: "nginx:1.27", "quay.io/org/app:v2".
 	Ref string
 	Counts
-	// The vulnerabilities in it that some policy names, by ID.
-	CVEs []string
+	// The vulnerabilities in it that some policy names, by ID, each with how
+	// often the scan counted it. Whoever reads the results fills this in.
+	Found map[string]Counts
+	// Found, told apart by what the policies want of them: the ones refused by
+	// ID, and the ones a limit leaves out of its count.
+	CVEs     []string
+	Excepted map[string]Counts
+}
+
+// Wanted is what the policies in the cluster ask of the list.
+type Wanted struct {
+	// Vulnerabilities some policy refuses by ID.
+	Blocked map[string]bool
+	// Vulnerabilities some limit does not count.
+	Excepted map[string]bool
+	// Some policy refuses what has not been scanned, so every scanned image
+	// has to be listed, not only the ones with something wrong.
+	All bool
+}
+
+// IDs is every vulnerability a policy names, for either purpose.
+func (w Wanted) IDs() map[string]bool {
+	out := make(map[string]bool, len(w.Blocked)+len(w.Excepted))
+	for id := range w.Blocked {
+		out[id] = true
+	}
+	for id := range w.Excepted {
+		out[id] = true
+	}
+	return out
+}
+
+// sorted is the images with what was found in each told apart.
+func (w Wanted) sorted(images []ScannedImage) []ScannedImage {
+	out := make([]ScannedImage, len(images))
+	for i, img := range images {
+		for id, c := range img.Found {
+			if w.Blocked[id] {
+				img.CVEs = append(img.CVEs, id)
+			}
+			// One that is neither critical nor high takes nothing off a count.
+			if w.Excepted[id] && (c.Critical > 0 || c.High > 0) {
+				if img.Excepted == nil {
+					img.Excepted = map[string]Counts{}
+				}
+				img.Excepted[id] = c
+			}
+		}
+		out[i] = img
+	}
+	return out
 }
 
 // Counts is what the list says about one image.
@@ -59,6 +108,29 @@ type Counts struct {
 	FixableHigh     int
 }
 
+// Add counts one finding of a scan, by the severity the scanner gave it.
+func (c *Counts) Add(severity string, fixable bool) {
+	switch severity {
+	case "CRITICAL":
+		c.Critical++
+		if fixable {
+			c.FixableCritical++
+		}
+	case "HIGH":
+		c.High++
+		if fixable {
+			c.FixableHigh++
+		}
+	}
+}
+
+func (c Counts) atLeast(o Counts) Counts {
+	return Counts{
+		Critical: max(c.Critical, o.Critical), High: max(c.High, o.High),
+		FixableCritical: max(c.FixableCritical, o.FixableCritical), FixableHigh: max(c.FixableHigh, o.FixableHigh),
+	}
+}
+
 // List is the scanned images as the policies will read them.
 type List struct {
 	// An image reference, in every spelling a pod spec may use, to its counts.
@@ -66,6 +138,12 @@ type List struct {
 	// The same references to the vulnerabilities some policy names that the
 	// image has. Images with none have no entry.
 	CVEs map[string][]string
+	// The same references to the vulnerabilities some limit does not count
+	// that the image has, with how much each added to its counts.
+	Excepted map[string]map[string]Counts
+	// Every scanned image is in the list, so one that is not in it has not
+	// been scanned. False when that was not asked for, or did not fit.
+	All bool
 	// Images that did not fit in the list. They are the ones with the fewest
 	// vulnerabilities.
 	LeftOut int
@@ -73,8 +151,9 @@ type List struct {
 
 // Build works out the list from every scan result there is. An image with no
 // critical and no high vulnerability, and none that a policy names, is one no
-// policy can refuse, so it is not listed.
-func Build(scanned []ScannedImage) List {
+// policy can refuse, so it is not listed, unless all says a policy refuses what
+// has not been scanned.
+func Build(scanned []ScannedImage, all bool) List {
 	// The same image may have been scanned as a workload and from a registry.
 	// Each count is the higher of the two: a result that says it is over a
 	// limit is not outvoted by another that says it is not, whichever limit a
@@ -82,7 +161,7 @@ func Build(scanned []ScannedImage) List {
 	worst := map[string]ScannedImage{}
 	for _, img := range scanned {
 		ref := canonical(img.Ref)
-		if ref == "" || (img.Critical <= 0 && img.High <= 0 && len(img.CVEs) == 0) {
+		if ref == "" || (!all && img.Critical <= 0 && img.High <= 0 && len(img.CVEs) == 0) {
 			continue
 		}
 		img.Ref = ref
@@ -91,10 +170,15 @@ func Build(scanned []ScannedImage) List {
 		if cur, ok := worst[ref]; ok {
 			// Either scan finding a named vulnerability is enough to list it.
 			img.CVEs = union(cur.CVEs, img.CVEs)
-			img.Critical = max(img.Critical, cur.Critical)
-			img.High = max(img.High, cur.High)
-			img.FixableCritical = max(img.FixableCritical, cur.FixableCritical)
-			img.FixableHigh = max(img.FixableHigh, cur.FixableHigh)
+			img.Counts = img.Counts.atLeast(cur.Counts)
+			merged := map[string]Counts{}
+			for id, c := range cur.Excepted {
+				merged[id] = c
+			}
+			for id, c := range img.Excepted {
+				merged[id] = c.atLeast(merged[id])
+			}
+			img.Excepted = merged
 		}
 		worst[ref] = img
 	}
@@ -117,7 +201,7 @@ func Build(scanned []ScannedImage) List {
 		return images[i].Ref < images[j].Ref
 	})
 
-	list := List{Data: map[string]Counts{}, CVEs: map[string][]string{}}
+	list := List{Data: map[string]Counts{}, CVEs: map[string][]string{}, Excepted: map[string]map[string]Counts{}}
 	size := 0
 	for _, img := range images {
 		keys := []string{}
@@ -130,6 +214,9 @@ func Build(scanned []ScannedImage) List {
 			add += keyBytes*len(k) + entryBytes
 			for _, id := range img.CVEs {
 				add += len(id) + 3
+			}
+			for id := range img.Excepted {
+				add += keyBytes*len(id) + entryBytes
 			}
 		}
 		if len(keys) == 0 {
@@ -144,9 +231,14 @@ func Build(scanned []ScannedImage) List {
 			if len(img.CVEs) > 0 {
 				list.CVEs[k] = img.CVEs
 			}
+			if len(img.Excepted) > 0 {
+				list.Excepted[k] = img.Excepted
+			}
 		}
 		size += add
 	}
+	// With images left out, "not in the list" no longer means "not scanned".
+	list.All = all && list.LeftOut == 0
 	return list
 }
 

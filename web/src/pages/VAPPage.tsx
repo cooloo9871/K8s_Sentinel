@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
-  IconShieldLock, IconServer, IconRefresh, IconFileDescription, IconLock, IconBug, IconBugOff, IconFolder, IconVariable,
+  IconShieldLock, IconServer, IconRefresh, IconFileDescription, IconLock, IconBug, IconBugOff, IconFolder, IconVariable, IconScan,
 } from '@tabler/icons-react'
 import React from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -34,7 +34,9 @@ import { CommaListInput } from '../components/CommaListInput'
 import {
   type VolumeRule, type EnvRule, type CveRule,
   emptyVolumeRule, emptyEnvRule, emptyCveRule,
-  volumeRuleValid, envRuleValid, cveRuleValid,
+  volumeRuleValid, envRuleValid, cveRuleValid, validVulnIds,
+  exceptedVariableLines, countWithoutExcepted, parseExcepted,
+  SCANNED_VARIABLE_LINES, SCANNED_VALIDATION, parseScannedSpec,
   autoVolumeMessage, volumeSpecLines, parseVolumeSpec,
   envSpecLines, parseEnvSpec,
   cveVariableLines, CVE_VALIDATION, parseCveSpec, POD_SPEC_VARIABLE, SPEC_CHANGE_CONDITION,
@@ -43,7 +45,7 @@ import {
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size' | 'secret-size' | 'vulnerability' | 'cve' | 'volumes' | 'env'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size' | 'secret-size' | 'vulnerability' | 'cve' | 'scanned' | 'volumes' | 'env'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
@@ -133,9 +135,11 @@ interface VulnerabilityRule {
   // Count only the vulnerabilities a newer version of the package fixes: the
   // ones whoever built the image can do something about.
   fixableOnly: boolean
+  // Vulnerability IDs the limit does not count.
+  exceptions: string[]
 }
 
-const emptyVulnerabilityRule = (): VulnerabilityRule => ({ critical: '', high: '', fixableOnly: false })
+const emptyVulnerabilityRule = (): VulnerabilityRule => ({ critical: '', high: '', fixableOnly: false, exceptions: [] })
 
 // "" is not counted; anything else has to be a whole number from 0 up, and
 // short enough to be written out as one.
@@ -147,6 +151,7 @@ function vulnLimit(v: string): number | null {
 function vulnerabilityRuleValid(rule: VulnerabilityRule): boolean {
   const ok = (v: string) => v.trim() === '' || vulnLimit(v) !== null
   return ok(rule.critical) && ok(rule.high) && (vulnLimit(rule.critical) !== null || vulnLimit(rule.high) !== null)
+    && validVulnIds(rule.exceptions)
 }
 
 // The generated expressions work in whole bytes.
@@ -169,6 +174,7 @@ const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; desc: 
   { value: 'secret-size',     icon: <IconLock size={14} />,            desc: 'Limit the size of each Secret key and the whole object',    readonlyLabel: 'Secret Size Limit' },
   { value: 'vulnerability',   icon: <IconBug size={14} />,             desc: 'Refuse images K8s Sentinel scanned and found over a vulnerability limit', readonlyLabel: 'Vulnerability Limit' },
   { value: 'cve',             icon: <IconBugOff size={14} />,          desc: 'Refuse images K8s Sentinel scanned and found to have the vulnerabilities named', readonlyLabel: 'Blocked CVEs' },
+  { value: 'scanned',         icon: <IconScan size={14} />,            desc: 'Refuse images K8s Sentinel has no scan result for', readonlyLabel: 'Scanned Images' },
   { value: 'volumes',         icon: <IconFolder size={14} />,          desc: 'Deny hostPath volumes, all of them or those under given paths', readonlyLabel: 'Host Path Volumes' },
   { value: 'env',             icon: <IconVariable size={14} />,        desc: 'Require environment variables in every container, or forbid them', readonlyLabel: 'Environment Variables' },
 ]
@@ -654,7 +660,12 @@ function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
   const c = vulnLimit(rule.critical)
   const h = vulnLimit(rule.high)
   const [critical, high] = vulnerabilityFields(rule.fixableOnly)
-  const tests = [
+  // With exceptions the limit is written first, so that reading the policy
+  // back does not have to find it behind the subtraction.
+  const tests = rule.exceptions.length ? [
+    ...(c !== null ? [`${c} < ${countWithoutExcepted('i', critical)}`] : []),
+    ...(h !== null ? [`${h} < ${countWithoutExcepted('i', high)}`] : []),
+  ] : [
     ...(c !== null ? [`params.spec.images[i].${critical} > ${c}`] : []),
     ...(h !== null ? [`params.spec.images[i].${high} > ${h}`] : []),
   ]
@@ -662,6 +673,7 @@ function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
   const test = tests.length ? tests.join(' || ') : 'false'
   return [
     ...GATE_BASE_LINES,
+    ...(rule.exceptions.length ? exceptedVariableLines(rule.exceptions) : []),
     '    - name: over',
     '      expression: >-',
     '        has(params.spec) && has(params.spec.images)',
@@ -672,6 +684,16 @@ function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
 
 function vulnerabilityValidationLines(rule: VulnerabilityRule): string[] {
   const [critical, high] = vulnerabilityFields(rule.fixableOnly)
+  if (rule.exceptions.length) {
+    return [
+      '    - expression: "variables.exempt || size(variables.over) == 0"',
+      '      messageExpression: >-',
+      "        'image ' + variables.over[0] + ' is over the vulnerability limit: ' +",
+      `        string(${countWithoutExcepted('variables.over[0]', critical)}) + ' critical, ' +`,
+      `        string(${countWithoutExcepted('variables.over[0]', high)}) + '${rule.fixableOnly ? ' high with a fix available' : ' high'}, exceptions left out'`,
+      '      reason: Forbidden',
+    ]
+  }
   return [
     '    - expression: "variables.exempt || size(variables.over) == 0"',
     '      messageExpression: >-',
@@ -696,7 +718,7 @@ export function generatePolicyYaml(
   const volumeRule = more.volumeRule ?? emptyVolumeRule()
   const envRule = more.envRule ?? emptyEnvRule()
   const cveRule = more.cveRule ?? emptyCveRule()
-  const usesGate = ruleType === 'vulnerability' || ruleType === 'cve'
+  const usesGate = ruleType === 'vulnerability' || ruleType === 'cve' || ruleType === 'scanned'
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
   if (ruleType === 'label') {
@@ -722,6 +744,8 @@ export function generatePolicyYaml(
     validationLines = vulnerabilityValidationLines(vulnerabilityRule)
   } else if (ruleType === 'cve') {
     validationLines = CVE_VALIDATION
+  } else if (ruleType === 'scanned') {
+    validationLines = SCANNED_VALIDATION
   } else if (ruleType === 'volumes' || ruleType === 'env') {
     validationLines = [] // these write their own validations block below
   } else {
@@ -824,6 +848,7 @@ export function generatePolicyYaml(
     ...(ruleType === 'secret-size' ? secretSizeSpecLines(secretSizeRule) : []),
     ...(ruleType === 'vulnerability' ? vulnerabilitySpecLines(vulnerabilityRule) : []),
     ...(ruleType === 'cve' ? [...GATE_BASE_LINES, ...cveVariableLines(cveRule)] : []),
+    ...(ruleType === 'scanned' ? [...GATE_BASE_LINES, ...SCANNED_VARIABLE_LINES] : []),
     ...(ruleType === 'volumes'
       ? volumeSpecLines(volumeRule, escapeYaml(volumeRule.message.trim() || autoVolumeMessage(volumeRule)))
       : ruleType === 'env'
@@ -1025,9 +1050,12 @@ function parseVulnerabilitySpec(spec: any): VulnerabilityRule | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const over = String((spec.variables ?? []).find((v: any) => v?.name === 'over')?.expression ?? '')
   return {
-    critical: over.match(/\.(?:fixableCritical|critical) > (\d+)/)?.[1] ?? '',
-    high: over.match(/\.(?:fixableHigh|high) > (\d+)/)?.[1] ?? '',
+    critical: over.match(/\.(?:fixableCritical|critical) > (\d+)/)?.[1]
+      ?? over.match(/(\d+) < \(params\.spec\.images\[i\]\.(?:fixableCritical|critical) -/)?.[1] ?? '',
+    high: over.match(/\.(?:fixableHigh|high) > (\d+)/)?.[1]
+      ?? over.match(/(\d+) < \(params\.spec\.images\[i\]\.(?:fixableHigh|high) -/)?.[1] ?? '',
     fixableOnly: over.includes('.fixable'),
+    exceptions: parseExcepted(spec),
   }
 }
 
@@ -1091,10 +1119,11 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     // Rule types whose spec is one fixed shape are recognised by what they
     // keep in it, then checked like the rest: regenerate and compare.
     const cve = parseCveSpec(spec)
-    const vuln = cve ? null : parseVulnerabilitySpec(spec)
+    const scanned = !cve && parseScannedSpec(spec)
+    const vuln = cve || scanned ? null : parseVulnerabilitySpec(spec)
     const volume = parseVolumeSpec(spec)
     const env = parseEnvSpec(spec)
-    const whole: PolicyRuleType | null = cve ? 'cve' : vuln ? 'vulnerability' : volume ? 'volumes' : env ? 'env' : null
+    const whole: PolicyRuleType | null = cve ? 'cve' : scanned ? 'scanned' : vuln ? 'vulnerability' : volume ? 'volumes' : env ? 'env' : null
     if (whole) {
       if (metadataBeyondBuilder(doc)) return null
       const result = {
@@ -1561,7 +1590,7 @@ export function VAPPage() {
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
       ? quantityOk(resourceLimitRules[0].maxCpu) && quantityOk(resourceLimitRules[0].maxMemory)
-      : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
+      : (builderRuleType === 'security-context' || builderRuleType === 'host-access' || builderRuleType === 'scanned')
       ? true
       : builderRuleType === 'vulnerability'
       ? vulnerabilityRuleValid(vulnerabilityRule)
@@ -1615,7 +1644,7 @@ export function VAPPage() {
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
       ? quantityOk(resourceLimitRules[0].maxCpu) && quantityOk(resourceLimitRules[0].maxMemory)
-      : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
+      : (builderRuleType === 'security-context' || builderRuleType === 'host-access' || builderRuleType === 'scanned')
       ? true
       : builderRuleType === 'cve' ? cveRuleValid(cveRule)
       : builderRuleType === 'volumes' ? volumeRuleValid(volumeRule)
@@ -2069,6 +2098,16 @@ export function VAPPage() {
                 )
               })()}
 
+              {/* ── Scanned images ── */}
+              {builderRuleType === 'scanned' && (
+                <div className="flex flex-col gap-3">
+                  <Label>Scanned Images</Label>
+                  <p className="text-xs text-muted-foreground">
+                    An image K8s Sentinel has no scan result for is refused. Scan an image from Vulnerabilities, Registries before it is first deployed.
+                  </p>
+                </div>
+              )}
+
               {/* ── Blocked CVEs ── */}
               {builderRuleType === 'cve' && (
                 <div className="flex flex-col gap-3">
@@ -2162,6 +2201,15 @@ export function VAPPage() {
                         />
                       </div>
                     ))}
+                  </div>
+                  <div className="flex flex-col gap-1 rounded-lg border p-4">
+                    <span className="text-xs text-muted-foreground">Not counted: vulnerability IDs, separated by commas</span>
+                    <CommaListInput
+                      key={builderEditName ?? 'new'}
+                      value={vulnerabilityRule.exceptions}
+                      onChange={exceptions => setVulnerabilityRule(r => ({ ...r, exceptions }))}
+                      className="h-8 text-sm"
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <Checkbox

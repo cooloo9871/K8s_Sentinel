@@ -344,10 +344,48 @@ describe('tryParseBuilderBinding', () => {
   })
 })
 
+describe('the scanned images rule', () => {
+  const raw = generatePolicyYaml('only-scanned', 'scanned', [], [], [], 'workloads')
+
+  it('reopens in the form', () => {
+    expect(tryParseBuilderPolicy(raw)?.ruleType).toBe('scanned')
+    expect(tryParseBuilderPolicy(withServerDefaults(raw))?.ruleType).toBe('scanned')
+  })
+
+  it('refuses nothing until the list says it holds every scanned image', () => {
+    expect(raw).toContain('has(params.spec.allScanned) && params.spec.allScanned')
+    expect(raw).toContain('- name: unscanned')
+    expect(raw).toContain('kind: VulnerabilityGate')
+    expect(raw).toContain('failurePolicy: Ignore')
+    expect(policyTakesGate(raw)).toBe(true)
+  })
+})
+
 describe('the vulnerability rule', () => {
-  const policy = (critical: string, high: string, fixableOnly = false) => generatePolicyYaml(
+  const policy = (critical: string, high: string, fixableOnly = false, exceptions: string[] = []) => generatePolicyYaml(
     'no-critical', 'vulnerability', [], [], [], 'workloads', [],
-    undefined, undefined, undefined, undefined, { critical, high, fixableOnly })
+    undefined, undefined, undefined, undefined, { critical, high, fixableOnly, exceptions })
+
+  it('reopens with the vulnerabilities it does not count', () => {
+    for (const fixableOnly of [false, true]) {
+      const raw = policy('1', '20', fixableOnly, ['cve-2024-3094', 'GHSA-aaaa-bbbb-cccc'])
+      const rule = tryParseBuilderPolicy(raw)?.vulnerabilityRule
+      expect(rule).toEqual({ critical: '1', high: '20', fixableOnly, exceptions: ['CVE-2024-3094', 'GHSA-aaaa-bbbb-cccc'] })
+      expect(tryParseBuilderPolicy(withServerDefaults(raw))?.ruleType).toBe('vulnerability')
+      // K8s Sentinel finds the IDs by this name.
+      expect(raw).toContain("- name: exceptedCVEs")
+      expect(raw).toContain(`.excepted[c].${fixableOnly ? 'fixableCritical' : 'critical'}).sum()`)
+    }
+    const one = tryParseBuilderPolicy(policy('', '5', false, ['CVE-2024-1']))?.vulnerabilityRule
+    expect(one).toEqual({ critical: '', high: '5', fixableOnly: false, exceptions: ['CVE-2024-1'] })
+  })
+
+  it('a limit with no exceptions is written as it always was', () => {
+    const raw = policy('0', '')
+    expect(raw).not.toContain('excepted')
+    expect(raw).toContain('.critical > 0')
+    expect(tryParseBuilderPolicy(raw)?.vulnerabilityRule.exceptions).toEqual([])
+  })
 
   it('reopens in the form with the limits it was saved with', () => {
     for (const fixableOnly of [false, true]) {
@@ -356,7 +394,7 @@ describe('the vulnerability rule', () => {
         for (const doc of [raw, withServerDefaults(raw)]) {
           const parsed = tryParseBuilderPolicy(doc)
           expect(parsed?.ruleType, doc).toBe('vulnerability')
-          expect(parsed?.vulnerabilityRule).toEqual({ critical, high, fixableOnly })
+          expect(parsed?.vulnerabilityRule).toEqual({ critical, high, fixableOnly, exceptions: [] })
         }
       }
     }
@@ -456,7 +494,7 @@ describe('the rule types added after NeuVector\'s criteria', () => {
 
   it('a controller is told by who asks, not by an ownerReference anyone can write', () => {
     for (const raw of [gen('cve', { cveRule: { ids: ['CVE-1-1'] } }),
-      generatePolicyYaml('v', 'vulnerability', [], [], [], 'workloads', [], undefined, undefined, undefined, undefined, { critical: '0', high: '', fixableOnly: false })]) {
+      generatePolicyYaml('v', 'vulnerability', [], [], [], 'workloads', [], undefined, undefined, undefined, undefined, { critical: '0', high: '', fixableOnly: false, exceptions: [] })]) {
       expect(raw).not.toContain('ownerReferences')
       expect(raw).toContain("request.userInfo.username.startsWith('system:serviceaccount:kube-system:')")
       expect(raw).toContain('replicationcontrollers')
@@ -493,7 +531,7 @@ describe('the rule types added after NeuVector\'s criteria', () => {
 
   it('a vulnerability limit too long to be a number is not one', () => {
     const raw = generatePolicyYaml('v', 'vulnerability', [], [], [], 'workloads', [], undefined, undefined, undefined, undefined,
-      { critical: '9999999999999999999999', high: '3', fixableOnly: false })
+      { critical: '9999999999999999999999', high: '3', fixableOnly: false, exceptions: [] })
     expect(raw).not.toContain('e+')
     expect(raw).toContain('.high > 3')
   })

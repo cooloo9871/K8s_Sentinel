@@ -54,7 +54,13 @@ spec:
           properties:
             spec:
               type: object
+              # What a later K8s Sentinel adds is kept without this file having
+              # to be applied again first.
+              x-kubernetes-preserve-unknown-fields: true
               properties:
+                allScanned:
+                  description: Every scanned image is listed, so one that is not listed has not been scanned.
+                  type: boolean
                 exemptNamespaces:
                   description: Namespaces the policies never refuse anything in.
                   type: array
@@ -65,7 +71,22 @@ spec:
                   type: object
                   additionalProperties:
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
                     properties:
+                      excepted:
+                        description: The vulnerabilities in it that some limit does not count, with what each adds to the counts.
+                        type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            critical:
+                              type: integer
+                            high:
+                              type: integer
+                            fixableCritical:
+                              type: integer
+                            fixableHigh:
+                              type: integer
                       critical:
                         type: integer
                       high:

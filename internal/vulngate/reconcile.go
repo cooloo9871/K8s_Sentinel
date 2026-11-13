@@ -26,9 +26,9 @@ type Gate struct {
 	dyn       dynamic.Interface
 	namespace string
 	// Every image a scan has a result for, from wherever results are kept.
-	// named is the vulnerabilities some policy refuses by ID; each image comes
-	// back with the ones among them it has. ok is false when the results could
-	// not be read, which is not the same as there being none.
+	// named is the vulnerabilities some policy names; each image comes back
+	// with the ones among them it has, in Found. ok is false when the results
+	// could not be read, which is not the same as there being none.
 	scanned func(ctx context.Context, named map[string]bool) (images []ScannedImage, ok bool)
 	wake    chan struct{}
 
@@ -54,35 +54,50 @@ func (g *Gate) Refresh() {
 	}
 }
 
-// NamedVariable is the policy variable that lists the vulnerabilities a policy
-// refuses by ID, as a CEL list of quoted strings. The Admission Policy page
-// writes it; this reads it back to know what to look for in the scan results.
-const NamedVariable = "blockedCVEs"
+// The policy variables this reads to know what the policies need of the list.
+// The Admission Policy page writes them. The first two are CEL lists of quoted
+// strings: the vulnerabilities a policy refuses by ID, and the ones a limit
+// does not count. The third is there at all in a policy that refuses images
+// that have not been scanned.
+const (
+	NamedVariable     = "blockedCVEs"
+	ExceptedVariable  = "exceptedCVEs"
+	UnscannedVariable = "unscanned"
+)
 
 var quoted = regexp.MustCompile(`'([^']+)'`)
 
-// named is every vulnerability ID some policy in the cluster refuses.
-func (g *Gate) named(ctx context.Context) (map[string]bool, error) {
+// wanted is what the policies in the cluster need the list to hold.
+func (g *Gate) wanted(ctx context.Context) (Wanted, error) {
 	policies, err := g.client.AdmissionregistrationV1().ValidatingAdmissionPolicies().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("read the admission policies: %w", err)
+		return Wanted{}, fmt.Errorf("read the admission policies: %w", err)
 	}
-	out := map[string]bool{}
+	out := Wanted{Blocked: map[string]bool{}, Excepted: map[string]bool{}}
 	for _, p := range policies.Items {
 		if p.Spec.ParamKind == nil || p.Spec.ParamKind.Kind != "VulnerabilityGate" {
 			continue
 		}
 		for _, v := range p.Spec.Variables {
-			if v.Name != NamedVariable {
-				continue
-			}
-			for _, m := range quoted.FindAllStringSubmatch(v.Expression, -1) {
-				out[m[1]] = true
+			switch v.Name {
+			case NamedVariable:
+				for _, m := range quoted.FindAllStringSubmatch(v.Expression, -1) {
+					out.Blocked[m[1]] = true
+				}
+			case ExceptedVariable:
+				for _, m := range quoted.FindAllStringSubmatch(v.Expression, -1) {
+					out.Excepted[m[1]] = true
+				}
+			case UnscannedVariable:
+				out.All = true
 			}
 		}
 	}
 	return out, nil
 }
+
+// How long a Refresh waits for more of them before the list is worked out.
+var wakeDelay = 3 * time.Second
 
 // Run keeps the list in step with the scan results until ctx ends.
 func (g *Gate) Run(ctx context.Context) {
@@ -95,6 +110,17 @@ func (g *Gate) Run(ctx context.Context) {
 			return
 		case <-tick.C:
 		case <-g.wake:
+			// A registry scan reports one image after another, and a policy
+			// and its binding are made seconds apart: one pass for the lot.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(wakeDelay):
+			}
+			select {
+			case <-g.wake:
+			default:
+			}
 		}
 	}
 }
@@ -113,18 +139,18 @@ func (g *Gate) reconcile(parent context.Context) {
 			g.legacyGone = true
 		}
 	}
-	named, err := g.named(ctx)
+	want, err := g.wanted(ctx)
 	var list List
 	if err == nil {
 		// Reading the results has its own time limit, so the write gets a
 		// fresh one rather than what the read left of this one.
-		images, ok := g.scanned(ctx, named)
+		images, ok := g.scanned(ctx, want.IDs())
 		if !ok {
 			// The list in the cluster stays as it is: emptying it because the
 			// results could not be read would admit everything it refuses.
 			err = fmt.Errorf("the scan results could not be read; the list is left as it was")
 		} else {
-			list = Build(images)
+			list = Build(want.sorted(images), want.All)
 			wctx, wcancel := context.WithTimeout(parent, time.Minute)
 			err = g.write(wctx, list)
 			wcancel()
@@ -139,6 +165,9 @@ func (g *Gate) reconcile(parent context.Context) {
 		msg = err.Error()
 	} else if list.LeftOut > 0 {
 		msg = fmt.Sprintf("the list is full: %d scanned images with the fewest vulnerabilities are not in it and are admitted", list.LeftOut)
+		if want.All {
+			msg += "; a policy that refuses images that have not been scanned admits everything until they fit"
+		}
 	}
 	if msg != g.lastErr {
 		if msg != "" {
@@ -188,6 +217,16 @@ func (g *Gate) spec(list List) map[string]any {
 			}
 			images[k].(map[string]any)["cves"] = cves
 		}
+		if ex := list.Excepted[k]; len(ex) > 0 {
+			excepted := make(map[string]any, len(ex))
+			for id, c := range ex {
+				excepted[id] = map[string]any{
+					"critical": int64(c.Critical), "high": int64(c.High),
+					"fixableCritical": int64(c.FixableCritical), "fixableHigh": int64(c.FixableHigh),
+				}
+			}
+			images[k].(map[string]any)["excepted"] = excepted
+		}
 	}
 	// The cluster's own components and Sentinel's are never held back: a policy
 	// that refused the scanner its next Job would leave the list stale for good.
@@ -195,7 +234,13 @@ func (g *Gate) spec(list List) map[string]any {
 	if g.namespace != "" && g.namespace != "kube-system" {
 		exempt = append(exempt, g.namespace)
 	}
-	return map[string]any{"exemptNamespaces": exempt, "images": images}
+	spec := map[string]any{"exemptNamespaces": exempt, "images": images}
+	// Only when it is so: a definition of the kind from before this field
+	// drops it, and that is then worth saying only to who asked for it.
+	if list.All {
+		spec["allScanned"] = true
+	}
+	return spec
 }
 
 func (g *Gate) write(ctx context.Context, list List) error {

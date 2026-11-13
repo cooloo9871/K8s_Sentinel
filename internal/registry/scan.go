@@ -92,6 +92,10 @@ type Scanner struct {
 	cancels map[string]context.CancelFunc
 	// The scheduler's context, so a run started from a request outlives it.
 	base context.Context
+
+	// Called, if set, whenever an image's result or a registry's results
+	// change. Set before Run.
+	OnResult func()
 }
 
 func NewScanner(store *Store, dir string, scan scanFunc) *Scanner {
@@ -300,6 +304,9 @@ func (s *Scanner) run(ctx context.Context, cancel context.CancelFunc, cfg Config
 		if r := s.reports[id]; r != nil {
 			f(r)
 			s.save(id)
+			if s.OnResult != nil {
+				s.OnResult()
+			}
 		}
 	}
 	// finish is the run's last word. The report stops saying "running" and the

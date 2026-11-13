@@ -91,21 +91,26 @@ func main() {
 	}
 	scanJobs.CleanupStale(ctx)
 	registryScans := registry.NewScanner(registries, data("registry-scans"), scanJobs.Scan)
-	go registryScans.Run(ctx)
 
 	// The counts the vulnerability policies made on the Admission Policy page
 	// compare with their limits, from the workload reports and the registry
 	// scans alike.
-	// Finding IDs of registry images, read from disk once per scan of an image
+	// Findings of registry images, read from disk once per scan of an image
 	// rather than every time the list is worked out.
-	registryIDs := map[string][]string{}
+	registryIDs := map[string][]k8sclient.VulnRef{}
 	vulnGate := vulngate.New(typedClient, dynClient, ownNamespace(),
 		func(ctx context.Context, named map[string]bool) ([]vulngate.ScannedImage, bool) {
-			has := func(ids []string) []string {
-				var out []string
-				for _, id := range ids {
-					if named[id] {
-						out = append(out, id)
+			// How often each named vulnerability was counted in one image.
+			has := func(findings []k8sclient.VulnRef) map[string]vulngate.Counts {
+				var out map[string]vulngate.Counts
+				for _, f := range findings {
+					if named[f.ID] {
+						if out == nil {
+							out = map[string]vulngate.Counts{}
+						}
+						c := out[f.ID]
+						c.Add(f.Severity, f.Fixable)
+						out[f.ID] = c
 					}
 				}
 				return out
@@ -119,33 +124,33 @@ func main() {
 			for _, w := range overview.Workloads {
 				for _, img := range w.Images {
 					if img.Scanned {
-						out = append(out, vulngate.ScannedImage{Ref: img.Image, CVEs: has(img.IDs), Counts: vulngate.Counts{
+						out = append(out, vulngate.ScannedImage{Ref: img.Image, Found: has(img.Findings), Counts: vulngate.Counts{
 							Critical: img.Counts.Critical, High: img.Counts.High,
 							FixableCritical: img.FixableCritical, FixableHigh: img.FixableHigh,
 						}})
 					}
 				}
 			}
-			seen := map[string][]string{}
+			seen := map[string][]k8sclient.VulnRef{}
 			for _, c := range registries.List() {
 				for _, img := range registryScans.Report(c.ID).Images {
 					if !img.Scanned {
 						continue
 					}
-					var ids []string
+					var ids map[string]vulngate.Counts
 					if len(named) > 0 {
 						key := c.ID + "|" + img.Image + "|" + img.ScannedAt
 						cached, ok := registryIDs[key]
 						if !ok {
 							findings, _ := registryScans.Findings(c.ID, img.Image)
 							for _, f := range findings {
-								cached = append(cached, f.ID)
+								cached = append(cached, k8sclient.VulnRef{ID: f.ID, Severity: f.Severity, Fixable: f.FixedVersion != ""})
 							}
 						}
 						seen[key] = cached
 						ids = has(cached)
 					}
-					out = append(out, vulngate.ScannedImage{Ref: img.Image, CVEs: ids, Counts: vulngate.Counts{
+					out = append(out, vulngate.ScannedImage{Ref: img.Image, Found: ids, Counts: vulngate.Counts{
 						Critical: img.Counts.Critical, High: img.Counts.High,
 						FixableCritical: img.FixableCritical, FixableHigh: img.FixableHigh,
 					}})
@@ -156,6 +161,9 @@ func main() {
 		})
 	// v0.65.0 kept the gate's settings here; the policies hold them now.
 	_ = os.Remove(data("vulnerability-gate.json"))
+	// A scan that just finished is in the list at once, not at the next pass.
+	registryScans.OnResult = vulnGate.Refresh
+	go registryScans.Run(ctx)
 	go vulnGate.Run(ctx)
 
 	cfg := handler.Config{
