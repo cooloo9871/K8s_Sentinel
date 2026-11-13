@@ -16,9 +16,11 @@
 # and which those three cannot pull. CONTAINER_CLI names another command to use
 # in their place ("sudo podman", say).
 #
-# INSECURE=1 is for a registry on plain HTTP or with a certificate this machine
-# does not trust. docker has no such switch: the registry has to be listed
-# under insecure-registries in its daemon's configuration.
+# --insecure-registry, after "push", is for a registry on plain HTTP or with a
+# certificate this machine does not trust:
+#   bash mirror-images.sh push harbor.example.com/sentinel --insecure-registry
+# docker has no such switch: the registry has to be listed under
+# insecure-registries in its daemon's configuration.
 #
 # Images are saved for this machine's CPU architecture. Run "save" on a machine
 # of the architecture your nodes have.
@@ -27,12 +29,25 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIST="$HERE/images.txt"
 DIR="${IMAGES_DIR:-$HERE/images}"
-MODE="${1:-}"
-REGISTRY="${2:-}"
-REGISTRY="${REGISTRY%/}"
-INSECURE="${INSECURE:-}"
+usage() { sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
-usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+# INSECURE=1 in the environment does the same as the option.
+INSECURE="${INSECURE:-}"
+MODE=""
+REGISTRY=""
+for arg in "$@"; do
+  case "$arg" in
+    --insecure-registry) INSECURE=1 ;;
+    -h|--help) usage ;;
+    -*) echo "unknown option: $arg" >&2; exit 2 ;;
+    *)
+      if [ -z "$MODE" ]; then MODE="$arg"
+      elif [ -z "$REGISTRY" ]; then REGISTRY="$arg"
+      else echo "unexpected argument: $arg" >&2; exit 2
+      fi ;;
+  esac
+done
+REGISTRY="${REGISTRY%/}"
 case "$MODE" in
   save) ;;
   push)
@@ -40,7 +55,6 @@ case "$MODE" in
       "") echo "push needs the registry to push to" >&2; exit 2 ;;
       *://*) echo "the registry is a host and path, without http:// or https://" >&2; exit 2 ;;
     esac ;;
-  -h|--help) usage ;;
   *) usage 2 ;;
 esac
 
