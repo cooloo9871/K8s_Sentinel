@@ -153,6 +153,49 @@ no kustomize. This does not install Trivy Operator; see the next section.
 kubectl apply -f deploy/sentinel.yaml
 ```
 
+## Offline install
+
+For a cluster with no internet access. Every [release](https://github.com/cooloo9871/K8s_Sentinel/releases) from v0.71.0 on carries two assets:
+
+| Asset | What it is |
+|---|---|
+| `sentinel-images-<version>.txt` | Every image that release needs: Sentinel, Tetragon, Trivy Operator, Trivy, and Trivy's two vulnerability databases |
+| `sentinel-offline-<version>.tar.gz` | The manifests and scripts. It holds no images, so it is small |
+
+The bundle installs the versions the image list names and no others: Tetragon and Trivy Operator are rendered from their charts when the release is built, so the cluster side needs `kubectl` only, not Helm.
+
+**1. On a machine with internet access**, download the bundle and save the images:
+
+```bash
+tar xzf sentinel-offline-v0.71.0.tar.gz
+cd sentinel-offline-v0.71.0
+bash mirror-images.sh save        # about 2 GB, into ./images
+```
+
+**2. Carry the directory to the offline side** and push the images to a registry the cluster's nodes pull from:
+
+```bash
+bash mirror-images.sh push harbor.example.com/sentinel
+```
+
+**3. Install**, on a machine with `kubectl` access to the cluster:
+
+```bash
+bash install.sh --registry harbor.example.com/sentinel
+```
+
+An image keeps its path under the registry: `quay.io/cilium/tetragon:v1.8.0` becomes `harbor.example.com/sentinel/cilium/tetragon:v1.8.0`. With Harbor, `sentinel` is a project you create first. `bash install.sh --registry ... --render-only out/` writes the manifests it would apply and applies nothing.
+
+What to know before you start:
+
+- **Tools.** `mirror-images.sh` uses `skopeo` when it is installed. Without it, `docker`, `podman` or `nerdctl` carry the images, but not Trivy's databases: those are OCI artifacts, not container images, and need `skopeo` or `oras`. Without the databases in the registry Sentinel installs and runs, and no image can be scanned
+- **The registry has to be pullable without credentials** by the nodes and by Trivy, and its certificate trusted by both. The bundle sets no image pull secret. `INSECURE=1 bash mirror-images.sh push ...` is for pushing to a registry on plain HTTP or with a certificate the pushing machine does not trust; it does not change what the cluster trusts
+- **CPU architecture.** Images are saved for the architecture of the machine that runs `save`. Run it on one that matches your nodes
+- **The vulnerability databases age.** A scan knows the vulnerabilities published up to the day the databases were saved. Run `save` and `push` again on a schedule to refresh them
+- **A Tetragon or a Trivy Operator already in the cluster is left as it is**, as with the online installers. For Tetragon, see [Requirements](#requirements) for the gRPC setting Sentinel needs
+- **Upgrading** is the same three steps with the new release's bundle. `install.sh` re-applies Sentinel's manifest, so the note under [Vulnerability scanning](#vulnerability-scanning) about re-applying it holds here too
+- **Uninstalling** uses the `uninstall.sh` in the bundle; see [Uninstall](#uninstall)
+
 ## Vulnerability scanning
 
 The Vulnerabilities page shows what [Trivy Operator](https://github.com/aquasecurity/trivy-operator) finds. Sentinel does not scan images itself, so without the operator the page says scanning is not enabled and everything else works as before.

@@ -6,3 +6,6 @@ web/dist/
 
 # Local build output — the release binary is built inside the image
 /server
+
+# Offline bundles built by deploy/offline/build.sh
+/dist/

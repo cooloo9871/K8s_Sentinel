@@ -46,6 +46,8 @@ kubectl port-forward -n sentinel-system svc/sentinel 8080:80
 # open http://localhost:8080 — admin / admin, change it on first login
 ```
 
+No internet access in the cluster? Each release carries an offline bundle and the list of every image it needs: see [Offline install](docs/install.md#offline-install).
+
 Image: `ghcr.io/cooloo9871/sentinel` — pin a [release tag](https://github.com/cooloo9871/K8s_Sentinel/releases) in production.
 
 ## Documentation
