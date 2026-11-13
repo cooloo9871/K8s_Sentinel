@@ -33,21 +33,23 @@ const Name = "sentinel-vulnerability-gate"
 // its own metadata and for an update not to be refused at the edge.
 const maxListBytes = 900 << 10
 
-// What one entry costs beyond its key: {"critical":N,"high":N} and punctuation.
-const entryBytes = 40
+// What one entry costs beyond its key: its four counts and punctuation.
+const entryBytes = 90
 
 // ScannedImage is one image some scan has a result for.
 type ScannedImage struct {
 	// As a pod spec or a registry names it: "nginx:1.27", "quay.io/org/app:v2".
-	Ref      string
-	Critical int
-	High     int
+	Ref string
+	Counts
 }
 
 // Counts is what the list says about one image.
 type Counts struct {
 	Critical int
 	High     int
+	// The ones among them a newer version of the package fixes.
+	FixableCritical int
+	FixableHigh     int
 }
 
 // List is the scanned images as the policies will read them.
@@ -114,7 +116,7 @@ func Build(scanned []ScannedImage) List {
 			continue
 		}
 		for _, k := range keys {
-			list.Data[k] = Counts{Critical: img.Critical, High: img.High}
+			list.Data[k] = img.Counts
 		}
 		size += add
 	}

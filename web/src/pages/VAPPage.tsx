@@ -107,9 +107,12 @@ const emptySizeLimitRule = (): SizeLimitRule => ({ totalKB: '', message: '' })
 interface VulnerabilityRule {
   critical: string
   high: string
+  // Count only the vulnerabilities a newer version of the package fixes: the
+  // ones whoever built the image can do something about.
+  fixableOnly: boolean
 }
 
-const emptyVulnerabilityRule = (): VulnerabilityRule => ({ critical: '', high: '' })
+const emptyVulnerabilityRule = (): VulnerabilityRule => ({ critical: '', high: '', fixableOnly: false })
 
 // "" is not counted; anything else has to be a whole number from 0 up.
 function vulnLimit(v: string): number | null {
@@ -547,12 +550,18 @@ function sizeRuleToYamlLines(kind: 'ConfigMap' | 'Secret', rule: SizeLimitRule):
 export const GATE_PARAM_KIND = 'VulnerabilityGate'
 export const GATE_PARAM_NAME = 'sentinel-vulnerability-gate'
 
+// The counts a rule compares: all of them, or the ones with a fix.
+function vulnerabilityFields(fixableOnly: boolean): [string, string] {
+  return fixableOnly ? ['fixableCritical', 'fixableHigh'] : ['critical', 'high']
+}
+
 function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
   const c = vulnLimit(rule.critical)
   const h = vulnLimit(rule.high)
+  const [critical, high] = vulnerabilityFields(rule.fixableOnly)
   const tests = [
-    ...(c !== null ? [`params.spec.images[i].critical > ${c}`] : []),
-    ...(h !== null ? [`params.spec.images[i].high > ${h}`] : []),
+    ...(c !== null ? [`params.spec.images[i].${critical} > ${c}`] : []),
+    ...(h !== null ? [`params.spec.images[i].${high} > ${h}`] : []),
   ]
   // An unfinished form still previews something that parses.
   const test = tests.length ? tests.join(' || ') : 'false'
@@ -583,14 +592,17 @@ function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
   ]
 }
 
-const VULNERABILITY_VALIDATION = [
-  '    - expression: "variables.exempt || size(variables.over) == 0"',
-  '      messageExpression: >-',
-  "        'image ' + variables.over[0] + ' is over the vulnerability limit: ' +",
-  "        string(params.spec.images[variables.over[0]].critical) + ' critical, ' +",
-  "        string(params.spec.images[variables.over[0]].high) + ' high'",
-  '      reason: Forbidden',
-]
+function vulnerabilityValidationLines(rule: VulnerabilityRule): string[] {
+  const [critical, high] = vulnerabilityFields(rule.fixableOnly)
+  return [
+    '    - expression: "variables.exempt || size(variables.over) == 0"',
+    '      messageExpression: >-',
+    "        'image ' + variables.over[0] + ' is over the vulnerability limit: ' +",
+    `        string(params.spec.images[variables.over[0]].${critical}) + ' critical, ' +`,
+    `        string(params.spec.images[variables.over[0]].${high}) + '${rule.fixableOnly ? ' high with a fix available' : ' high'}'`,
+    '      reason: Forbidden',
+  ]
+}
 
 export function generatePolicyYaml(
   name: string, ruleType: PolicyRuleType, labelRules: LabelRule[], imageRules: ImageRule[],
@@ -624,7 +636,7 @@ export function generatePolicyYaml(
   } else if (ruleType === 'secret-size') {
     validationLines = sizeRuleToYamlLines('Secret', secretSizeRule)
   } else if (ruleType === 'vulnerability') {
-    validationLines = VULNERABILITY_VALIDATION
+    validationLines = vulnerabilityValidationLines(vulnerabilityRule)
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -910,8 +922,9 @@ function parseVulnerabilitySpec(spec: any): VulnerabilityRule | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const over = String((spec.variables ?? []).find((v: any) => v?.name === 'over')?.expression ?? '')
   return {
-    critical: over.match(/\.critical > (\d+)/)?.[1] ?? '',
-    high: over.match(/\.high > (\d+)/)?.[1] ?? '',
+    critical: over.match(/\.(?:fixableCritical|critical) > (\d+)/)?.[1] ?? '',
+    high: over.match(/\.(?:fixableHigh|high) > (\d+)/)?.[1] ?? '',
+    fixableOnly: over.includes('.fixable'),
   }
 }
 
@@ -1907,6 +1920,16 @@ export function VAPPage() {
                         />
                       </div>
                     ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="vuln-fixable-only"
+                      checked={vulnerabilityRule.fixableOnly}
+                      onCheckedChange={v => setVulnerabilityRule(r => ({ ...r, fixableOnly: v === true }))}
+                    />
+                    <label htmlFor="vuln-fixable-only" className="cursor-pointer text-sm">
+                      Count only vulnerabilities with a fix available
+                    </label>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     An image with more than this is refused. A blank field is not counted.

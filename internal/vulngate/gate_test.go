@@ -19,9 +19,9 @@ import (
 // An image no limit could refuse is not worth a place in the list.
 func TestImagesWithCriticalOrHighAreListedWithTheirCounts(t *testing.T) {
 	list := Build([]ScannedImage{
-		{Ref: "quay.io/org/bad:1", Critical: 1},
+		{Ref: "quay.io/org/bad:1", Counts: Counts{Critical: 1}},
 		{Ref: "quay.io/org/clean:1"},
-		{Ref: "quay.io/org/highs:1", High: 11},
+		{Ref: "quay.io/org/highs:1", Counts: Counts{High: 11}},
 	})
 	if got := list.Data["quay.io/org/bad:1"]; got != (Counts{Critical: 1}) {
 		t.Errorf("bad = %+v", got)
@@ -40,7 +40,7 @@ func TestEverySpellingOfADockerHubImageIsListed(t *testing.T) {
 	for _, scannedAs := range []string{
 		"nginx", "nginx:latest", "docker.io/library/nginx:latest", "registry.hub.docker.com/library/nginx",
 	} {
-		list := Build([]ScannedImage{{Ref: scannedAs, Critical: 3}})
+		list := Build([]ScannedImage{{Ref: scannedAs, Counts: Counts{Critical: 3}}})
 		for _, written := range []string{
 			"nginx", "nginx:latest", "library/nginx", "docker.io/nginx", "docker.io/library/nginx:latest",
 			"index.docker.io/library/nginx",
@@ -57,9 +57,9 @@ func TestEverySpellingOfADockerHubImageIsListed(t *testing.T) {
 
 func TestOrganisationAndPrivateRegistryImages(t *testing.T) {
 	list := Build([]ScannedImage{
-		{Ref: "bitnami/redis:7", Critical: 1},
-		{Ref: "harbor.internal:8443/team/app:v1", Critical: 1},
-		{Ref: "quay.io/org/app@sha256:abc", Critical: 1},
+		{Ref: "bitnami/redis:7", Counts: Counts{Critical: 1}},
+		{Ref: "harbor.internal:8443/team/app:v1", Counts: Counts{Critical: 1}},
+		{Ref: "quay.io/org/app@sha256:abc", Counts: Counts{Critical: 1}},
 	})
 	for _, written := range []string{
 		"bitnami/redis:7", "docker.io/bitnami/redis:7",
@@ -77,8 +77,8 @@ func TestOrganisationAndPrivateRegistryImages(t *testing.T) {
 // The same image scanned twice: the worse result stands.
 func TestTheWorseOfTwoResultsForOneImageWins(t *testing.T) {
 	list := Build([]ScannedImage{
-		{Ref: "nginx:1.25", Critical: 0, High: 2},
-		{Ref: "docker.io/library/nginx:1.25", Critical: 4},
+		{Ref: "nginx:1.25", Counts: Counts{Critical: 0, High: 2}},
+		{Ref: "docker.io/library/nginx:1.25", Counts: Counts{Critical: 4}},
 	})
 	if got := list.Data["nginx:1.25"]; got.Critical != 4 {
 		t.Fatalf("counts = %+v", got)
@@ -90,7 +90,7 @@ func TestAListThatIsFullSaysWhatItLeftOut(t *testing.T) {
 	var scanned []ScannedImage
 	long := strings.Repeat("x", 200)
 	for i := 0; i < 6000; i++ {
-		scanned = append(scanned, ScannedImage{Ref: "quay.io/" + long + "/img:" + strconv.Itoa(i), Critical: 1 + i%3})
+		scanned = append(scanned, ScannedImage{Ref: "quay.io/" + long + "/img:" + strconv.Itoa(i), Counts: Counts{Critical: 1 + i%3}})
 	}
 	list := Build(scanned)
 	if list.LeftOut == 0 {
@@ -131,13 +131,16 @@ func spec(t *testing.T, g *Gate) map[string]any {
 
 func TestTheListIsWrittenAndKeptInStep(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	scanned := []ScannedImage{{Ref: "nginx:1.25", Critical: 7, High: 50}}
+	scanned := []ScannedImage{{Ref: "nginx:1.25", Counts: Counts{Critical: 7, High: 50, FixableCritical: 3}}}
 	g := New(client, newDyn(), "sentinel-system", func(context.Context) []ScannedImage { return scanned })
 	ctx := context.Background()
 	g.reconcile(ctx)
 
 	s := spec(t, g)
 	if c, _, _ := unstructured.NestedInt64(s, "images", "nginx:1.25", "critical"); c != 7 {
+		t.Errorf("spec = %v", s)
+	}
+	if f, _, _ := unstructured.NestedInt64(s, "images", "nginx:1.25", "fixableCritical"); f != 3 {
 		t.Errorf("spec = %v", s)
 	}
 	if h, _, _ := unstructured.NestedInt64(s, "images", "nginx:1.25", "high"); h != 50 {

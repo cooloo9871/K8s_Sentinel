@@ -42,11 +42,14 @@ type ImageResult struct {
 	Image string `json:"image"`
 	// False with Error set when the scan failed. A failed scan must never read
 	// as an image with nothing wrong.
-	Scanned   bool   `json:"scanned"`
-	Counts    Counts `json:"counts"`
-	Fixable   int    `json:"fixable"`
-	ScannedAt string `json:"scannedAt,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Scanned bool   `json:"scanned"`
+	Counts  Counts `json:"counts"`
+	Fixable int    `json:"fixable"`
+	// The critical and high findings among the fixable ones.
+	FixableCritical int    `json:"fixableCritical"`
+	FixableHigh     int    `json:"fixableHigh"`
+	ScannedAt       string `json:"scannedAt,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // Run is the latest scan of a registry, in progress or finished.
@@ -363,6 +366,13 @@ func (s *Scanner) run(ctx context.Context, cancel context.CancelFunc, cfg Config
 			} else {
 				res.Scanned = true
 				res.Counts, res.Fixable = summarize(findings)
+				for _, f := range findings {
+					if f.FixedVersion != "" && f.Severity == "CRITICAL" {
+						res.FixableCritical++
+					} else if f.FixedVersion != "" && f.Severity == "HIGH" {
+						res.FixableHigh++
+					}
+				}
 				sortFindings(findings)
 			}
 			update(func(r *Report) {

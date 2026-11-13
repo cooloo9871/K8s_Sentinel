@@ -102,14 +102,20 @@ func main() {
 			for _, w := range store.VulnerabilityOverview(ctx, false).Workloads {
 				for _, img := range w.Images {
 					if img.Scanned {
-						out = append(out, vulngate.ScannedImage{Ref: img.Image, Critical: img.Counts.Critical, High: img.Counts.High})
+						out = append(out, vulngate.ScannedImage{Ref: img.Image, Counts: vulngate.Counts{
+							Critical: img.Counts.Critical, High: img.Counts.High,
+							FixableCritical: img.FixableCritical, FixableHigh: img.FixableHigh,
+						}})
 					}
 				}
 			}
 			for _, c := range registries.List() {
 				for _, img := range registryScans.Report(c.ID).Images {
 					if img.Scanned {
-						out = append(out, vulngate.ScannedImage{Ref: img.Image, Critical: img.Counts.Critical, High: img.Counts.High})
+						out = append(out, vulngate.ScannedImage{Ref: img.Image, Counts: vulngate.Counts{
+							Critical: img.Counts.Critical, High: img.Counts.High,
+							FixableCritical: img.FixableCritical, FixableHigh: img.FixableHigh,
+						}})
 					}
 				}
 			}

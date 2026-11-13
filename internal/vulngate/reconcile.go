@@ -114,7 +114,10 @@ func (g *Gate) removeLegacy(ctx context.Context) error {
 func (g *Gate) spec(list List) map[string]any {
 	images := make(map[string]any, len(list.Data))
 	for k, c := range list.Data {
-		images[k] = map[string]any{"critical": int64(c.Critical), "high": int64(c.High)}
+		images[k] = map[string]any{
+			"critical": int64(c.Critical), "high": int64(c.High),
+			"fixableCritical": int64(c.FixableCritical), "fixableHigh": int64(c.FixableHigh),
+		}
 	}
 	// The cluster's own components and Sentinel's are never held back: a policy
 	// that refused the scanner its next Job would leave the list stale for good.
@@ -149,8 +152,14 @@ func (g *Gate) write(ctx context.Context, list List) error {
 			return nil
 		}
 		cur.Object["spec"] = want
-		if _, err := lists.Update(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		got, err := lists.Update(ctx, cur, metav1.UpdateOptions{})
+		if err != nil {
 			return fmt.Errorf("write the list (if the kind is from v0.65.0, apply deploy/sentinel.yaml again): %w", err)
+		}
+		// An older definition of the kind drops the fields it does not know,
+		// and a policy that reads them then admits everything.
+		if !reflect.DeepEqual(got.Object["spec"], want) {
+			return fmt.Errorf("the VulnerabilityGate kind is older than this Sentinel and did not keep every count: apply deploy/sentinel.yaml again")
 		}
 	}
 	return nil

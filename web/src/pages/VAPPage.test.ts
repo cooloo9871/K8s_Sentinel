@@ -345,19 +345,29 @@ describe('tryParseBuilderBinding', () => {
 })
 
 describe('the vulnerability rule', () => {
-  const policy = (critical: string, high: string) => generatePolicyYaml(
+  const policy = (critical: string, high: string, fixableOnly = false) => generatePolicyYaml(
     'no-critical', 'vulnerability', [], [], [], 'workloads', [],
-    undefined, undefined, undefined, undefined, { critical, high })
+    undefined, undefined, undefined, undefined, { critical, high, fixableOnly })
 
   it('reopens in the form with the limits it was saved with', () => {
-    for (const [critical, high] of [['0', ''], ['', '10'], ['2', '30']]) {
-      const raw = policy(critical, high)
-      for (const doc of [raw, withServerDefaults(raw)]) {
-        const parsed = tryParseBuilderPolicy(doc)
-        expect(parsed?.ruleType, doc).toBe('vulnerability')
-        expect(parsed?.vulnerabilityRule).toEqual({ critical, high })
+    for (const fixableOnly of [false, true]) {
+      for (const [critical, high] of [['0', ''], ['', '10'], ['2', '30']]) {
+        const raw = policy(critical, high, fixableOnly)
+        for (const doc of [raw, withServerDefaults(raw)]) {
+          const parsed = tryParseBuilderPolicy(doc)
+          expect(parsed?.ruleType, doc).toBe('vulnerability')
+          expect(parsed?.vulnerabilityRule).toEqual({ critical, high, fixableOnly })
+        }
       }
     }
+  })
+
+  it('compares the counts with a fix when told to count only those', () => {
+    const raw = policy('0', '5', true)
+    expect(raw).toContain('params.spec.images[i].fixableCritical > 0')
+    expect(raw).toContain('params.spec.images[i].fixableHigh > 5')
+    expect(raw).not.toContain('.critical')
+    expect(raw).toContain('with a fix available')
   })
 
   it('counts only the severities given a limit, and never fails closed', () => {
