@@ -75,6 +75,11 @@ spec:
                         type: integer
                       fixableHigh:
                         type: integer
+                      cves:
+                        description: The vulnerabilities in it that some policy refuses by ID.
+                        type: array
+                        items:
+                          type: string
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

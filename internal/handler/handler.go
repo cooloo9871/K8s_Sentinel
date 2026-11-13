@@ -19,6 +19,7 @@ import (
 	"github.com/cooloo9871/K8s_Sentinel/internal/registry"
 	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
 	"github.com/cooloo9871/K8s_Sentinel/internal/security"
+	"github.com/cooloo9871/K8s_Sentinel/internal/vulngate"
 )
 
 // Config holds dependencies for all handlers.
@@ -35,6 +36,7 @@ type Config struct {
 	Audit           *audit.Store
 	Registries      *registry.Store
 	RegistryScans   *registry.Scanner
+	VulnGate        *vulngate.Gate
 	// Shared secret for the kube-apiserver audit webhook. When set, the webhook
 	// requires it as a bearer token; when empty, the endpoint stays open — the
 	// route predates the token and existing apiserver configs carry none.
@@ -145,8 +147,8 @@ func New(cfg Config) http.Handler {
 			r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
 			r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
 			r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
-			r.Post("/api/vap", applyVAP(cfg.Store))
-			r.Put("/api/vap/{name}", applyVAP(cfg.Store))
+			r.Post("/api/vap", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
+			r.Put("/api/vap/{name}", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
 			r.Delete("/api/vap/{name}", deleteVAP(cfg.Store))
 			r.Post("/api/vap-bindings", applyVAPBinding(cfg.Store))
 			r.Put("/api/vap-bindings/{name}", applyVAPBinding(cfg.Store))

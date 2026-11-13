@@ -96,29 +96,57 @@ func main() {
 	// The counts the vulnerability policies made on the Admission Policy page
 	// compare with their limits, from the workload reports and the registry
 	// scans alike.
+	// Finding IDs of registry images, read from disk once per scan of an image
+	// rather than every time the list is worked out.
+	registryIDs := map[string][]string{}
 	vulnGate := vulngate.New(typedClient, dynClient, ownNamespace(),
-		func(ctx context.Context) []vulngate.ScannedImage {
+		func(ctx context.Context, named map[string]bool) []vulngate.ScannedImage {
+			has := func(ids []string) []string {
+				var out []string
+				for _, id := range ids {
+					if named[id] {
+						out = append(out, id)
+					}
+				}
+				return out
+			}
 			var out []vulngate.ScannedImage
 			for _, w := range store.VulnerabilityOverview(ctx, false).Workloads {
 				for _, img := range w.Images {
 					if img.Scanned {
-						out = append(out, vulngate.ScannedImage{Ref: img.Image, Counts: vulngate.Counts{
+						out = append(out, vulngate.ScannedImage{Ref: img.Image, CVEs: has(img.IDs), Counts: vulngate.Counts{
 							Critical: img.Counts.Critical, High: img.Counts.High,
 							FixableCritical: img.FixableCritical, FixableHigh: img.FixableHigh,
 						}})
 					}
 				}
 			}
+			seen := map[string][]string{}
 			for _, c := range registries.List() {
 				for _, img := range registryScans.Report(c.ID).Images {
-					if img.Scanned {
-						out = append(out, vulngate.ScannedImage{Ref: img.Image, Counts: vulngate.Counts{
-							Critical: img.Counts.Critical, High: img.Counts.High,
-							FixableCritical: img.FixableCritical, FixableHigh: img.FixableHigh,
-						}})
+					if !img.Scanned {
+						continue
 					}
+					var ids []string
+					if len(named) > 0 {
+						key := c.ID + "|" + img.Image + "|" + img.ScannedAt
+						cached, ok := registryIDs[key]
+						if !ok {
+							findings, _ := registryScans.Findings(c.ID, img.Image)
+							for _, f := range findings {
+								cached = append(cached, f.ID)
+							}
+						}
+						seen[key] = cached
+						ids = has(cached)
+					}
+					out = append(out, vulngate.ScannedImage{Ref: img.Image, CVEs: ids, Counts: vulngate.Counts{
+						Critical: img.Counts.Critical, High: img.Counts.High,
+						FixableCritical: img.FixableCritical, FixableHigh: img.FixableHigh,
+					}})
 				}
 			}
+			registryIDs = seen
 			return out
 		})
 	// v0.65.0 kept the gate's settings here; the policies hold them now.
@@ -138,6 +166,7 @@ func main() {
 		Audit:           auditStore,
 		Registries:      registries,
 		RegistryScans:   registryScans,
+		VulnGate:        vulnGate,
 		// Optional shared secret for the audit webhook. Unset keeps the endpoint
 		// open, matching apiserver configs written before the token existed.
 		AuditWebhookToken: os.Getenv("AUDIT_WEBHOOK_TOKEN"),

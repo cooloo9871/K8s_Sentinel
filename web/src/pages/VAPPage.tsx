@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   IconTag, IconNotes, IconBrandDocker, IconCopy, IconCpu,
-  IconShieldLock, IconServer, IconRefresh, IconFileDescription, IconLock, IconBug,
+  IconShieldLock, IconServer, IconRefresh, IconFileDescription, IconLock, IconBug, IconBugOff, IconFolder, IconVariable,
 } from '@tabler/icons-react'
 import React from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -30,11 +30,20 @@ import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 import { formatTWTime } from '../utils/time'
 import { Input } from '@/components/ui/input'
+import { CommaListInput } from '../components/CommaListInput'
+import {
+  type VolumeRule, type EnvRule, type CveRule,
+  emptyVolumeRule, emptyEnvRule, emptyCveRule,
+  volumeRuleValid, envRuleValid, cveRuleValid,
+  autoVolumeMessage, volumeSpecLines, parseVolumeSpec,
+  envSpecLines, parseEnvSpec,
+  cveVariableLines, CVE_VALIDATION, parseCveSpec, POD_SPEC_VARIABLE,
+} from './vapMoreRules'
 
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
 type LabelCondition = '==' | '!='
 type ValidationAction = 'Deny' | 'Audit' | 'Warn'
-type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size' | 'secret-size' | 'vulnerability'
+type PolicyRuleType = 'label' | 'annotation' | 'image' | 'replica' | 'resource-limits' | 'security-context' | 'host-access' | 'configmap-size' | 'secret-size' | 'vulnerability' | 'cve' | 'volumes' | 'env'
 type ImagePolicyType = 'no-latest' | 'required-registry'
 type ResourceLimitType = 'cpu' | 'memory' | 'both'
 type LabelApplyTo =
@@ -68,9 +77,23 @@ interface ReplicaRule {
 interface ResourceLimitRule {
   limitType: ResourceLimitType
   message: string
+  // The most a container may ask for, as Kubernetes writes quantities ("2",
+  // "500m", "4Gi"). Blank sets no ceiling.
+  maxCpu: string
+  maxMemory: string
 }
 
-type SecurityContextCheckType = 'no-privileged' | 'run-as-non-root' | 'both'
+// The other rule types' settings, passed to the generator as one object.
+export interface MoreRules {
+  volumeRule?: VolumeRule
+  envRule?: EnvRule
+  cveRule?: CveRule
+}
+
+const QUANTITY = /^\d+(\.\d+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$/
+const quantityOk = (v: string) => v.trim() === '' || QUANTITY.test(v.trim())
+
+type SecurityContextCheckType = 'no-privileged' | 'run-as-non-root' | 'both' | 'no-privilege-escalation' | 'all'
 
 interface SecurityContextRule {
   checkType: SecurityContextCheckType
@@ -80,7 +103,7 @@ interface SecurityContextRule {
 const emptyRule = (): LabelRule => ({ key: '', condition: '==', value: '', message: '' })
 const emptyImageRule = (): ImageRule => ({ type: 'no-latest', registry: '', message: '' })
 const emptyReplicaRule = (): ReplicaRule => ({ maxReplicas: 5, resourceType: 'deployments', message: '' })
-const emptyResourceLimitRule = (): ResourceLimitRule => ({ limitType: 'both', message: '' })
+const emptyResourceLimitRule = (): ResourceLimitRule => ({ limitType: 'both', message: '', maxCpu: '', maxMemory: '' })
 const emptySecurityContextRule = (): SecurityContextRule => ({ checkType: 'no-privileged', message: '' })
 
 type HostAccessCheckType = 'no-host-network' | 'no-host-pid' | 'no-host-ipc' | 'all'
@@ -144,6 +167,9 @@ const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; desc: 
   { value: 'configmap-size',  icon: <IconFileDescription size={14} />, desc: 'Limit the size of each ConfigMap key and the whole object', readonlyLabel: 'ConfigMap Size Limit' },
   { value: 'secret-size',     icon: <IconLock size={14} />,            desc: 'Limit the size of each Secret key and the whole object',    readonlyLabel: 'Secret Size Limit' },
   { value: 'vulnerability',   icon: <IconBug size={14} />,             desc: 'Refuse images K8s Sentinel scanned and found over a vulnerability limit', readonlyLabel: 'Vulnerability Limit' },
+  { value: 'cve',             icon: <IconBugOff size={14} />,          desc: 'Refuse images K8s Sentinel scanned and found to have the vulnerabilities named', readonlyLabel: 'Blocked CVEs' },
+  { value: 'volumes',         icon: <IconFolder size={14} />,          desc: 'Deny hostPath volumes, all of them or those under given paths', readonlyLabel: 'Host Path Volumes' },
+  { value: 'env',             icon: <IconVariable size={14} />,        desc: 'Require or forbid environment variables, and refuse secrets written in the manifest', readonlyLabel: 'Environment Variables' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -335,14 +361,17 @@ function hostAccessRuleToYamlLines(rule: HostAccessRule): string[] {
 function autoSecurityContextMessage(rule: SecurityContextRule): string {
   if (rule.checkType === 'no-privileged') return 'Privileged containers are not allowed'
   if (rule.checkType === 'run-as-non-root') return 'Workloads must set runAsNonRoot: true in pod securityContext'
+  if (rule.checkType === 'no-privilege-escalation') return 'Containers must set allowPrivilegeEscalation: false'
+  if (rule.checkType === 'all') return 'Containers must not be privileged, must run as non-root, and must set allowPrivilegeEscalation: false'
   return 'Containers must not be privileged and must run as non-root'
 }
 
 function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
   const lines: string[] = []
   const m = escapeYaml(rule.message.trim() || autoSecurityContextMessage(rule))
-  const noPriv = rule.checkType === 'no-privileged' || rule.checkType === 'both'
-  const nonRoot = rule.checkType === 'run-as-non-root' || rule.checkType === 'both'
+  const noPriv = rule.checkType === 'no-privileged' || rule.checkType === 'both' || rule.checkType === 'all'
+  const nonRoot = rule.checkType === 'run-as-non-root' || rule.checkType === 'both' || rule.checkType === 'all'
+  const noEscalation = rule.checkType === 'no-privilege-escalation' || rule.checkType === 'all'
   if (noPriv) {
     const check = `all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || c.securityContext.privileged == false)`
     // ephemeralContainers only exist on Pods, injected by kubectl debug through
@@ -381,6 +410,22 @@ function securityContextRuleToYamlLines(rule: SecurityContextRule): string[] {
       '      reason: Forbidden',
     )
   }
+  if (noEscalation) {
+    // Unset means allowed, so only an explicit false passes.
+    const check = `all(c, c.?securityContext.?allowPrivilegeEscalation.orValue(true) == false)`
+    lines.push(
+      '    - expression: >-',
+      `        object.spec.?containers.orValue([]).${check} &&`,
+      `        object.spec.?initContainers.orValue([]).${check} &&`,
+      `        object.spec.?ephemeralContainers.orValue([]).${check} &&`,
+      `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
+      `        object.spec.?template.?spec.?initContainers.orValue([]).${check} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
+      `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${check}`,
+      `      message: "${m}"`,
+      '      reason: Forbidden',
+    )
+  }
   return lines
 }
 
@@ -408,6 +453,26 @@ function resourceLimitRuleToYamlLines(rule: ResourceLimitRule): string[] {
     `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
     `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${check}`,
     `      message: "${m}"`,
+    '      reason: Forbidden',
+    ...resourceMaxLines('cpu', rule.maxCpu),
+    ...resourceMaxLines('memory', rule.maxMemory),
+  ]
+}
+
+// A ceiling on a limit that is set; whether it has to be set is the rule above.
+function resourceMaxLines(resource: 'cpu' | 'memory', max: string): string[] {
+  const q = max.trim()
+  if (!q || !QUANTITY.test(q)) return []
+  const check = `all(c, !has(c.resources) || !has(c.resources.limits) || !has(c.resources.limits.${resource}) || quantity(c.resources.limits.${resource}).compareTo(quantity('${q}')) <= 0)`
+  return [
+    '    - expression: >-',
+    `        object.spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?initContainers.orValue([]).${check} &&`,
+    `        object.spec.?template.?spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?template.?spec.?initContainers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
+    `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${check}`,
+    `      message: "${resource === 'cpu' ? 'CPU' : 'Memory'} limit must not exceed ${q}"`,
     '      reason: Forbidden',
   ]
 }
@@ -555,6 +620,26 @@ function vulnerabilityFields(fixableOnly: boolean): [string, string] {
   return fixableOnly ? ['fixableCritical', 'fixableHigh'] : ['critical', 'high']
 }
 
+// What every rule that reads the scan counts shares: skip what a controller
+// made, find the images, and leave the exempt namespaces alone.
+const GATE_BASE_LINES = [
+  '  matchConditions:',
+  '    - name: not-created-by-a-controller',
+  '      expression: >-',
+  '        !has(object.metadata.ownerReferences) ||',
+  '        size(object.metadata.ownerReferences) == 0',
+  '  variables:',
+  ...POD_SPEC_VARIABLE,
+  '    - name: images',
+  '      expression: >-',
+  '        (variables.podSpec.containers +',
+  '        (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])).map(c, c.image)',
+  '    - name: exempt',
+  '      expression: >-',
+  '        has(params.spec) && has(params.spec.exemptNamespaces) &&',
+  '        request.namespace in params.spec.exemptNamespaces',
+]
+
 function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
   const c = vulnLimit(rule.critical)
   const h = vulnLimit(rule.high)
@@ -566,24 +651,7 @@ function vulnerabilitySpecLines(rule: VulnerabilityRule): string[] {
   // An unfinished form still previews something that parses.
   const test = tests.length ? tests.join(' || ') : 'false'
   return [
-    '  matchConditions:',
-    '    - name: not-created-by-a-controller',
-    '      expression: >-',
-    '        !has(object.metadata.ownerReferences) ||',
-    '        size(object.metadata.ownerReferences) == 0',
-    '  variables:',
-    '    - name: podSpec',
-    '      expression: >-',
-    "        object.kind == 'Pod' ? object.spec :",
-    "        (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec)",
-    '    - name: images',
-    '      expression: >-',
-    '        (variables.podSpec.containers +',
-    '        (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])).map(c, c.image)',
-    '    - name: exempt',
-    '      expression: >-',
-    '        has(params.spec) && has(params.spec.exemptNamespaces) &&',
-    '        request.namespace in params.spec.exemptNamespaces',
+    ...GATE_BASE_LINES,
     '    - name: over',
     '      expression: >-',
     '        has(params.spec) && has(params.spec.images)',
@@ -613,7 +681,12 @@ export function generatePolicyYaml(
   configMapSizeRule: SizeLimitRule = emptySizeLimitRule(),
   secretSizeRule: SizeLimitRule = emptySizeLimitRule(),
   vulnerabilityRule: VulnerabilityRule = emptyVulnerabilityRule(),
+  more: MoreRules = {},
 ): string {
+  const volumeRule = more.volumeRule ?? emptyVolumeRule()
+  const envRule = more.envRule ?? emptyEnvRule()
+  const cveRule = more.cveRule ?? emptyCveRule()
+  const usesGate = ruleType === 'vulnerability' || ruleType === 'cve'
   const safeName = name.trim() || 'my-policy'
   let validationLines: string[]
   if (ruleType === 'label') {
@@ -637,6 +710,10 @@ export function generatePolicyYaml(
     validationLines = sizeRuleToYamlLines('Secret', secretSizeRule)
   } else if (ruleType === 'vulnerability') {
     validationLines = vulnerabilityValidationLines(vulnerabilityRule)
+  } else if (ruleType === 'cve') {
+    validationLines = CVE_VALIDATION
+  } else if (ruleType === 'volumes' || ruleType === 'env') {
+    validationLines = [] // these write their own validations block below
   } else {
     const active = replicaRules.filter(r => r.maxReplicas > 0)
     validationLines = active.length ? active.flatMap(replicaRuleToYamlLines) : replicaRuleToYamlLines(emptyReplicaRule())
@@ -662,7 +739,7 @@ export function generatePolicyYaml(
         '        operations: [CREATE, UPDATE]',
         `        resources: ["${ruleType === 'configmap-size' ? 'configmaps' : 'secrets'}"]`,
       ]
-    : ruleType === 'vulnerability'
+    : usesGate
     ? [
         '    resourceRules:',
         '      - apiGroups: [""]',
@@ -678,7 +755,7 @@ export function generatePolicyYaml(
         '        operations: [CREATE, UPDATE]',
         '        resources: ["jobs", "cronjobs"]',
       ]
-    : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context' || ruleType === 'host-access')
+    : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context' || ruleType === 'host-access' || ruleType === 'volumes' || ruleType === 'env')
     ? [
         '    resourceRules:',
         '      - apiGroups: [""]',
@@ -698,7 +775,7 @@ export function generatePolicyYaml(
         '        resources: ["jobs", "cronjobs"]',
         // kubectl debug injects containers through this subresource; without it
         // an ephemeral container never reaches the image and privilege checks.
-        ...(ruleType === 'image' || ruleType === 'security-context' ? [
+        ...(ruleType === 'image' || ruleType === 'security-context' || ruleType === 'env' ? [
           '      - apiGroups: [""]',
           '        apiVersions: ["v1"]',
           '        operations: [UPDATE]',
@@ -720,7 +797,7 @@ export function generatePolicyYaml(
     '    sentinel.io/builder: "true"',
     ...applyToAnnotation,
     'spec:',
-    ...(ruleType === 'vulnerability' ? [
+    ...(usesGate ? [
       '  failurePolicy: Ignore',
       '  paramKind:',
       '    apiVersion: sentinel.io/v1',
@@ -731,8 +808,12 @@ export function generatePolicyYaml(
     ...(ruleType === 'configmap-size' ? configMapSizeSpecLines(configMapSizeRule) : []),
     ...(ruleType === 'secret-size' ? secretSizeSpecLines(secretSizeRule) : []),
     ...(ruleType === 'vulnerability' ? vulnerabilitySpecLines(vulnerabilityRule) : []),
-    '  validations:',
-    ...validationLines,
+    ...(ruleType === 'cve' ? [...GATE_BASE_LINES, ...cveVariableLines(cveRule)] : []),
+    ...(ruleType === 'volumes'
+      ? volumeSpecLines(volumeRule, escapeYaml(volumeRule.message.trim() || autoVolumeMessage(volumeRule)))
+      : ruleType === 'env'
+      ? envSpecLines(envRule)
+      : ['  validations:', ...validationLines]),
   ].join('\n')
 }
 
@@ -838,20 +919,27 @@ function parseExpressionToAnnotationRule(expr: string, msg: string): LabelRule |
   return null
 }
 
+// A ceiling validation: which resource and the quantity it may not exceed.
+function parseExpressionToResourceMax(expr: string): { resource: 'cpu' | 'memory'; max: string } | null {
+  const m = expr.match(/quantity\(c\.resources\.limits\.(cpu|memory)\)\.compareTo\(quantity\('([^']+)'\)\)/)
+  return m ? { resource: m[1] as 'cpu' | 'memory', max: m[2] } : null
+}
+
 function parseExpressionToResourceLimitRule(expr: string, msg: string): ResourceLimitRule | null {
   const e = expr.replace(/\s+/g, ' ').trim()
   if (!e.includes('has(c.resources.limits')) return null
   const hasCpu = e.includes('has(c.resources.limits.cpu)')
   const hasMem = e.includes('has(c.resources.limits.memory)')
-  if (hasCpu && hasMem) return { limitType: 'both', message: msg }
-  if (hasCpu) return { limitType: 'cpu', message: msg }
-  if (hasMem) return { limitType: 'memory', message: msg }
+  if (hasCpu && hasMem) return { limitType: 'both', message: msg, maxCpu: '', maxMemory: '' }
+  if (hasCpu) return { limitType: 'cpu', message: msg, maxCpu: '', maxMemory: '' }
+  if (hasMem) return { limitType: 'memory', message: msg, maxCpu: '', maxMemory: '' }
   return null
 }
 
-type SecurityContextPart = 'no-privileged' | 'run-as-non-root'
+type SecurityContextPart = 'no-privileged' | 'run-as-non-root' | 'no-privilege-escalation'
 function parseExpressionToSecurityContextPart(expr: string): SecurityContextPart | null {
   const e = expr.replace(/\s+/g, ' ').trim()
+  if (e.includes('c.?securityContext.?allowPrivilegeEscalation.orValue(')) return 'no-privilege-escalation'
   if (e.includes('c.securityContext.privileged == false')) return 'no-privileged'
   if (e.includes('c.?securityContext.?runAsNonRoot.orValue(')) return 'run-as-non-root'
   return null
@@ -972,6 +1060,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
   resourceLimitRules: ResourceLimitRule[]; securityContextRule: SecurityContextRule
   hostAccessRule: HostAccessRule; configMapSizeRule: SizeLimitRule; secretSizeRule: SizeLimitRule
   vulnerabilityRule: VulnerabilityRule
+  volumeRule: VolumeRule; envRule: EnvRule; cveRule: CveRule
 } | null {
   try {
     const doc = yaml.load(rawYaml) as Record<string, unknown>
@@ -984,20 +1073,28 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     // The size limits are whole-spec shapes (a fixed validation + variables +
     // matchConditions), not per-validation expressions, so they branch before
     // the loop. The regenerate-and-compare guard below still applies.
-    const vuln = parseVulnerabilitySpec(spec)
-    if (vuln) {
+    // Rule types whose spec is one fixed shape are recognised by what they
+    // keep in it, then checked like the rest: regenerate and compare.
+    const cve = parseCveSpec(spec)
+    const vuln = cve ? null : parseVulnerabilitySpec(spec)
+    const volume = parseVolumeSpec(spec)
+    const env = parseEnvSpec(spec)
+    const whole: PolicyRuleType | null = cve ? 'cve' : vuln ? 'vulnerability' : volume ? 'volumes' : env ? 'env' : null
+    if (whole) {
       if (metadataBeyondBuilder(doc)) return null
       const result = {
-        name: meta?.name ?? '', ruleType: 'vulnerability' as PolicyRuleType, applyTo: 'workloads' as LabelApplyTo,
+        name: meta?.name ?? '', ruleType: whole, applyTo: 'workloads' as LabelApplyTo,
         labelRules: [], imageRules: [], replicaRules: [], resourceLimitRules: [],
         securityContextRule: emptySecurityContextRule(), hostAccessRule: emptyHostAccessRule(),
         configMapSizeRule: emptySizeLimitRule(), secretSizeRule: emptySizeLimitRule(),
-        vulnerabilityRule: vuln,
+        vulnerabilityRule: vuln ?? emptyVulnerabilityRule(),
+        volumeRule: volume ?? emptyVolumeRule(), envRule: env ?? emptyEnvRule(), cveRule: cve ?? emptyCveRule(),
       }
       const regen = yaml.load(generatePolicyYaml(
         result.name, result.ruleType, [], [], [], result.applyTo, [],
         result.securityContextRule, result.hostAccessRule,
-        result.configMapSizeRule, result.secretSizeRule, vuln,
+        result.configMapSizeRule, result.secretSizeRule, result.vulnerabilityRule,
+        { volumeRule: result.volumeRule, envRule: result.envRule, cveRule: result.cveRule },
       )) as Record<string, unknown> | undefined
       if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) return null
       return result
@@ -1013,6 +1110,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
         configMapSizeRule: sized.ruleType === 'configmap-size' ? sized.rule : emptySizeLimitRule(),
         secretSizeRule: sized.ruleType === 'secret-size' ? sized.rule : emptySizeLimitRule(),
         vulnerabilityRule: emptyVulnerabilityRule(),
+        volumeRule: emptyVolumeRule(), envRule: emptyEnvRule(), cveRule: emptyCveRule(),
       }
       const regen = yaml.load(generatePolicyYaml(
         result.name, result.ruleType, [], [], [], result.applyTo, [],
@@ -1028,6 +1126,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     const replicaRules: ReplicaRule[] = []
     const annotationRules: LabelRule[] = []
     const resourceLimitRules: ResourceLimitRule[] = []
+    const resourceMax: { cpu?: string; memory?: string } = {}
     const scParts: { part: SecurityContextPart; message: string }[] = []
     let hostAccessParsed: HostAccessRule | null = null
     for (const v of spec.validations) {
@@ -1039,6 +1138,8 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       if (ir) { imageRules.push(ir); continue }
       const rr = parseExpressionToReplicaRule(v.expression ?? '', v.message ?? '')
       if (rr) { replicaRules.push(rr); continue }
+      const mx = parseExpressionToResourceMax(v.expression ?? '')
+      if (mx) { resourceMax[mx.resource] = mx.max; continue }
       const rlr = parseExpressionToResourceLimitRule(v.expression ?? '', v.message ?? '')
       if (rlr) { resourceLimitRules.push(rlr); continue }
       const scp = parseExpressionToSecurityContextPart(v.expression ?? '')
@@ -1050,8 +1151,19 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     // Build security context rule from parts
     const hasNoPriv = scParts.some(p => p.part === 'no-privileged')
     const hasNonRoot = scParts.some(p => p.part === 'run-as-non-root')
-    const checkType: SecurityContextCheckType = hasNoPriv && hasNonRoot ? 'both'
+    const hasNoEsc = scParts.some(p => p.part === 'no-privilege-escalation')
+    // The pairs the select cannot show come back different from the regenerated
+    // spec below, and so open in the YAML editor.
+    const checkType: SecurityContextCheckType = hasNoPriv && hasNonRoot && hasNoEsc ? 'all'
+      : hasNoPriv && hasNonRoot ? 'both'
+      : hasNoEsc ? 'no-privilege-escalation'
       : hasNonRoot ? 'run-as-non-root' : 'no-privileged'
+    // The ceilings belong to the one rule the form shows.
+    if (resourceLimitRules.length > 0) {
+      resourceLimitRules[0] = { ...resourceLimitRules[0], maxCpu: resourceMax.cpu ?? '', maxMemory: resourceMax.memory ?? '' }
+    } else if (resourceMax.cpu || resourceMax.memory) {
+      return null
+    }
     const securityContextRule: SecurityContextRule = {
       checkType,
       message: scParts[0]?.message ?? '',
@@ -1068,7 +1180,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       : hostAccessParsed !== null ? 'host-access'
       : 'label'
     const applyTo = (meta?.annotations?.['sentinel.io/apply-to'] as LabelApplyTo | undefined) || 'workloads'
-    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule: emptySizeLimitRule(), secretSizeRule: emptySizeLimitRule(), vulnerabilityRule: emptyVulnerabilityRule() }
+    const result = { name: meta?.name ?? '', ruleType, applyTo, labelRules: annotationRules.length > 0 ? annotationRules : labelRules, imageRules, replicaRules, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule: emptySizeLimitRule(), secretSizeRule: emptySizeLimitRule(), vulnerabilityRule: emptyVulnerabilityRule(), volumeRule: emptyVolumeRule(), envRule: emptyEnvRule(), cveRule: emptyCveRule() }
 
     // The builder may only open a policy it can reproduce: saving regenerates
     // the whole manifest, so whatever these fields cannot show — a hand-tuned
@@ -1208,6 +1320,10 @@ export function VAPPage() {
   const [configMapSizeRule, setConfigMapSizeRule] = useState<SizeLimitRule>(emptySizeLimitRule())
   const [secretSizeRule, setSecretSizeRule] = useState<SizeLimitRule>(emptySizeLimitRule())
   const [vulnerabilityRule, setVulnerabilityRule] = useState<VulnerabilityRule>(emptyVulnerabilityRule())
+  const [volumeRule, setVolumeRule] = useState<VolumeRule>(emptyVolumeRule())
+  const [envRule, setEnvRule] = useState<EnvRule>(emptyEnvRule())
+  const [cveRule, setCveRule] = useState<CveRule>(emptyCveRule())
+  const moreRules: MoreRules = { volumeRule, envRule, cveRule }
   const [builderSaving, setBuilderSaving] = useState(false)
 
   const updateRule = (i: number, field: keyof LabelRule, val: string) =>
@@ -1242,6 +1358,9 @@ export function VAPPage() {
     setConfigMapSizeRule(emptySizeLimitRule())
     setSecretSizeRule(emptySizeLimitRule())
     setVulnerabilityRule(emptyVulnerabilityRule())
+    setVolumeRule(emptyVolumeRule())
+    setEnvRule(emptyEnvRule())
+    setCveRule(emptyCveRule())
   }
 
   // Binding builder state
@@ -1300,6 +1419,9 @@ export function VAPPage() {
         setConfigMapSizeRule(parsed.configMapSizeRule)
         setSecretSizeRule(parsed.secretSizeRule)
         setVulnerabilityRule(parsed.vulnerabilityRule)
+        setVolumeRule(parsed.volumeRule)
+        setEnvRule(parsed.envRule)
+        setCveRule(parsed.cveRule)
         setShowBuilder(true)
         return
       }
@@ -1417,16 +1539,19 @@ export function VAPPage() {
       : builderRuleType === 'image'
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
-      ? true
+      ? quantityOk(resourceLimitRules[0].maxCpu) && quantityOk(resourceLimitRules[0].maxMemory)
       : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
       ? true
       : builderRuleType === 'vulnerability'
       ? vulnerabilityRuleValid(vulnerabilityRule)
+      : builderRuleType === 'cve' ? cveRuleValid(cveRule)
+      : builderRuleType === 'volumes' ? volumeRuleValid(volumeRule)
+      : builderRuleType === 'env' ? envRuleValid(envRule)
       : replicaRules.some(r => r.maxReplicas > 0)
     if (!nameOk || !rulesOk) return
     setBuilderSaving(true)
     try {
-      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule, vulnerabilityRule)
+      const y = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule, vulnerabilityRule, moreRules)
       if (builderEditName) await vapApi.updatePolicy(builderEditName, y)
       else await vapApi.applyPolicy(y)
       toast.success('Policy applied.')
@@ -1462,15 +1587,18 @@ export function VAPPage() {
 
   // ── Policy builder view ────────────────────────────────────────────────────
   if (showBuilder) {
-    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule, vulnerabilityRule)
+    const previewYaml = generatePolicyYaml(builderName, builderRuleType, labelRules, imageRules, replicaRules, builderApplyTo, resourceLimitRules, securityContextRule, hostAccessRule, configMapSizeRule, secretSizeRule, vulnerabilityRule, moreRules)
     const rulesOk = (builderRuleType === 'label' || builderRuleType === 'annotation')
       ? labelRules.some(r => r.key.trim() && r.value.trim())
       : builderRuleType === 'image'
       ? imageRules.some(r => r.type === 'no-latest' || r.registry.trim())
       : builderRuleType === 'resource-limits'
-      ? true
+      ? quantityOk(resourceLimitRules[0].maxCpu) && quantityOk(resourceLimitRules[0].maxMemory)
       : (builderRuleType === 'security-context' || builderRuleType === 'host-access')
       ? true
+      : builderRuleType === 'cve' ? cveRuleValid(cveRule)
+      : builderRuleType === 'volumes' ? volumeRuleValid(volumeRule)
+      : builderRuleType === 'env' ? envRuleValid(envRule)
       : builderRuleType === 'configmap-size'
       ? kbToBytes(configMapSizeRule.totalKB) > 0
       : builderRuleType === 'secret-size'
@@ -1526,6 +1654,9 @@ export function VAPPage() {
                         setConfigMapSizeRule(emptySizeLimitRule())
                         setSecretSizeRule(emptySizeLimitRule())
                         setVulnerabilityRule(emptyVulnerabilityRule())
+                        setVolumeRule(emptyVolumeRule())
+                        setEnvRule(emptyEnvRule())
+                        setCveRule(emptyCveRule())
                       }}
                     >
                       <SelectTrigger aria-label="Rule Type">
@@ -1781,6 +1912,19 @@ export function VAPPage() {
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="flex gap-4">
+                        {([['maxCpu', 'Max CPU limit'], ['maxMemory', 'Max memory limit']] as const).map(([field, label]) => (
+                          <div key={field} className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">{label} (optional)</span>
+                            <Input
+                              value={rule[field]}
+                              onChange={e => updateResourceLimitRule(0, field, e.target.value)}
+                              aria-invalid={!quantityOk(rule[field])}
+                              className="h-8 w-40 text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
                         <Input value={rule.message} onChange={e => updateResourceLimitRule(0, 'message', e.target.value)}
@@ -1789,6 +1933,7 @@ export function VAPPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
+                      A maximum is written as Kubernetes writes quantities: 2, 500m, 4Gi.
                     </p>
                   </div>
                 )
@@ -1807,7 +1952,9 @@ export function VAPPage() {
                           <SelectGroup>
                             <SelectItem value="no-privileged">No Privileged Containers</SelectItem>
                             <SelectItem value="run-as-non-root">Run as Non-Root</SelectItem>
-                            <SelectItem value="both">Both</SelectItem>
+                            <SelectItem value="no-privilege-escalation">No Privilege Escalation</SelectItem>
+                            <SelectItem value="both">No Privileged Containers and Run as Non-Root</SelectItem>
+                            <SelectItem value="all">All three</SelectItem>
                           </SelectGroup>
                         </SelectContent>
                       </Select>
@@ -1900,6 +2047,90 @@ export function VAPPage() {
                   </div>
                 )
               })()}
+
+              {/* ── Blocked CVEs ── */}
+              {builderRuleType === 'cve' && (
+                <div className="flex flex-col gap-3">
+                  <Label>Blocked CVEs</Label>
+                  <div className="flex flex-col gap-1 rounded-lg border p-4">
+                    <span className="text-xs text-muted-foreground">Vulnerability IDs, separated by commas</span>
+                    <CommaListInput value={cveRule.ids} onChange={ids => setCveRule({ ids })} className="h-8 text-sm" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    An image that has any of these is refused. Only images K8s Sentinel has scanned are checked.
+                  </p>
+                </div>
+              )}
+
+              {/* ── hostPath volumes ── */}
+              {builderRuleType === 'volumes' && (
+                <div className="flex flex-col gap-3">
+                  <Label>Host Path Rule</Label>
+                  <div className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Deny</span>
+                      <Select value={volumeRule.mode} onValueChange={v => setVolumeRule(r => ({ ...r, mode: v as VolumeRule['mode'] }))}>
+                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="all">Every hostPath volume</SelectItem>
+                            <SelectItem value="paths">hostPath volumes under these paths</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {volumeRule.mode === 'paths' && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Paths, separated by commas</span>
+                        <CommaListInput value={volumeRule.paths} onChange={paths => setVolumeRule(r => ({ ...r, paths }))} className="h-8 text-sm" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Violation Message (optional)</span>
+                      <Input
+                        value={volumeRule.message}
+                        onChange={e => setVolumeRule(r => ({ ...r, message: e.target.value }))}
+                        placeholder={autoVolumeMessage(volumeRule)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
+                  </p>
+                </div>
+              )}
+
+              {/* ── Environment variables ── */}
+              {builderRuleType === 'env' && (
+                <div className="flex flex-col gap-3">
+                  <Label>Environment Variable Rule</Label>
+                  <div className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Required in every container, separated by commas</span>
+                      <CommaListInput value={envRule.required} onChange={required => setEnvRule(r => ({ ...r, required }))} className="h-8 text-sm" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Not allowed, separated by commas</span>
+                      <CommaListInput value={envRule.forbidden} onChange={forbidden => setEnvRule(r => ({ ...r, forbidden }))} className="h-8 text-sm" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="env-no-plain-secrets"
+                        checked={envRule.noPlainSecrets}
+                        onCheckedChange={v => setEnvRule(r => ({ ...r, noPlainSecrets: v === true }))}
+                      />
+                      <label htmlFor="env-no-plain-secrets" className="cursor-pointer text-sm">
+                        Deny secrets written in the manifest
+                      </label>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    A secret is a variable whose name contains password, secret, token, key or credential and whose
+                    value is written out. One taken from a Secret with valueFrom passes.
+                  </p>
+                </div>
+              )}
 
               {/* ── Vulnerability rule ── */}
               {builderRuleType === 'vulnerability' && (

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -25,7 +26,10 @@ type Gate struct {
 	dyn       dynamic.Interface
 	namespace string
 	// Every image a scan has a result for, from wherever results are kept.
-	scanned func(ctx context.Context) []ScannedImage
+	// named is the vulnerabilities some policy refuses by ID; each image comes
+	// back with the ones among them it has.
+	scanned func(ctx context.Context, named map[string]bool) []ScannedImage
+	wake    chan struct{}
 
 	legacyGone bool
 	lastErr    string
@@ -33,8 +37,50 @@ type Gate struct {
 
 // New makes the gate. namespace is Sentinel's own, which the policies never
 // apply to.
-func New(client kubernetes.Interface, dyn dynamic.Interface, namespace string, scanned func(ctx context.Context) []ScannedImage) *Gate {
-	return &Gate{client: client, dyn: dyn, namespace: namespace, scanned: scanned}
+func New(client kubernetes.Interface, dyn dynamic.Interface, namespace string, scanned func(ctx context.Context, named map[string]bool) []ScannedImage) *Gate {
+	return &Gate{client: client, dyn: dyn, namespace: namespace, scanned: scanned, wake: make(chan struct{}, 1)}
+}
+
+// Refresh has the list worked out again now, for a caller that knows a policy
+// just changed which vulnerabilities are named.
+func (g *Gate) Refresh() {
+	if g == nil {
+		return
+	}
+	select {
+	case g.wake <- struct{}{}:
+	default:
+	}
+}
+
+// NamedVariable is the policy variable that lists the vulnerabilities a policy
+// refuses by ID, as a CEL list of quoted strings. The Admission Policy page
+// writes it; this reads it back to know what to look for in the scan results.
+const NamedVariable = "blockedCVEs"
+
+var quoted = regexp.MustCompile(`'([^']+)'`)
+
+// named is every vulnerability ID some policy in the cluster refuses.
+func (g *Gate) named(ctx context.Context) (map[string]bool, error) {
+	policies, err := g.client.AdmissionregistrationV1().ValidatingAdmissionPolicies().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("read the admission policies: %w", err)
+	}
+	out := map[string]bool{}
+	for _, p := range policies.Items {
+		if p.Spec.ParamKind == nil || p.Spec.ParamKind.Kind != "VulnerabilityGate" {
+			continue
+		}
+		for _, v := range p.Spec.Variables {
+			if v.Name != NamedVariable {
+				continue
+			}
+			for _, m := range quoted.FindAllStringSubmatch(v.Expression, -1) {
+				out[m[1]] = true
+			}
+		}
+	}
+	return out, nil
 }
 
 // Run keeps the list in step with the scan results until ctx ends.
@@ -47,6 +93,7 @@ func (g *Gate) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+		case <-g.wake:
 		}
 	}
 }
@@ -65,8 +112,12 @@ func (g *Gate) reconcile(ctx context.Context) {
 			g.legacyGone = true
 		}
 	}
-	list := Build(g.scanned(ctx))
-	err := g.write(ctx, list)
+	named, err := g.named(ctx)
+	var list List
+	if err == nil {
+		list = Build(g.scanned(ctx, named))
+		err = g.write(ctx, list)
+	}
 	if ctx.Err() != nil {
 		return
 	}
@@ -117,6 +168,13 @@ func (g *Gate) spec(list List) map[string]any {
 		images[k] = map[string]any{
 			"critical": int64(c.Critical), "high": int64(c.High),
 			"fixableCritical": int64(c.FixableCritical), "fixableHigh": int64(c.FixableHigh),
+		}
+		if ids := list.CVEs[k]; len(ids) > 0 {
+			cves := make([]any, len(ids))
+			for i, id := range ids {
+				cves[i] = id
+			}
+			images[k].(map[string]any)["cves"] = cves
 		}
 	}
 	// The cluster's own components and Sentinel's are never held back: a policy

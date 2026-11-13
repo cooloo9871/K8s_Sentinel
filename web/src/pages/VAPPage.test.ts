@@ -171,12 +171,12 @@ describe('tryParseBuilderPolicy', () => {
 
     for (const limitType of ['cpu', 'memory', 'both'] as const) {
       const raw = generatePolicyYaml('limits', 'resource-limits', [], [], [], 'workloads',
-        [{ limitType, message: '' }])
+        [{ limitType, message: '', maxCpu: '', maxMemory: '' }])
       expect(tryParseBuilderPolicy(raw)?.resourceLimitRules[0]?.limitType, limitType).toBe(limitType)
       expect(tryParseBuilderPolicy(withServerDefaults(raw))).not.toBeNull()
     }
 
-    for (const checkType of ['no-privileged', 'run-as-non-root', 'both'] as const) {
+    for (const checkType of ['no-privileged', 'run-as-non-root', 'both', 'no-privilege-escalation', 'all'] as const) {
       const raw = generatePolicyYaml('sc', 'security-context', [], [], [], 'workloads', [],
         { checkType, message: '' })
       expect(tryParseBuilderPolicy(raw)?.securityContextRule.checkType, checkType).toBe(checkType)
@@ -392,5 +392,56 @@ describe('the vulnerability rule', () => {
     expect(tryParseBuilderBinding(generateBindingYaml('b', 'p', 'all', [], ['Deny']))?.gateParam).toBe(false)
     // Some other parameter is not something the form can keep.
     expect(tryParseBuilderBinding(binding.replace('sentinel-vulnerability-gate', 'mine'))).toBeNull()
+  })
+})
+
+describe('the rule types added after NeuVector\'s criteria', () => {
+  const gen = (type: Parameters<typeof generatePolicyYaml>[1], more: Parameters<typeof generatePolicyYaml>[12]) =>
+    generatePolicyYaml('p', type, [], [], [], 'workloads', [], undefined, undefined, undefined, undefined, undefined, more)
+  const roundTrip = (raw: string) => {
+    for (const doc of [raw, withServerDefaults(raw)]) expect(tryParseBuilderPolicy(doc), doc).not.toBeNull()
+    return tryParseBuilderPolicy(raw)!
+  }
+
+  it('hostPath volumes: all of them, or under given paths', () => {
+    const all = roundTrip(gen('volumes', { volumeRule: { mode: 'all', paths: [], message: '' } }))
+    expect(all.ruleType).toBe('volumes')
+    expect(all.volumeRule).toEqual({ mode: 'all', paths: [], message: '' })
+
+    const raw = gen('volumes', { volumeRule: { mode: 'paths', paths: ['/var/run/', '/etc'], message: 'no' } })
+    expect(raw).toContain(`"['/var/run', '/etc']"`)
+    expect(roundTrip(raw).volumeRule).toEqual({ mode: 'paths', paths: ['/var/run', '/etc'], message: 'no' })
+  })
+
+  it('environment variables: required, forbidden, and secrets in the manifest', () => {
+    const rule = { required: ['TZ'], forbidden: ['DEBUG', 'AWS_SECRET_ACCESS_KEY'], noPlainSecrets: true }
+    const parsed = roundTrip(gen('env', { envRule: rule }))
+    expect(parsed.ruleType).toBe('env')
+    expect(parsed.envRule).toEqual(rule)
+    const only = { required: [], forbidden: [], noPlainSecrets: true }
+    expect(roundTrip(gen('env', { envRule: only })).envRule).toEqual(only)
+  })
+
+  it('blocked CVEs: named in the variable K8s Sentinel reads, and bound to its counts', () => {
+    const raw = gen('cve', { cveRule: { ids: ['CVE-2024-3094', 'GHSA-aaaa-bbbb-cccc'] } })
+    expect(raw).toContain('- name: blockedCVEs')
+    expect(raw).toContain(`"['CVE-2024-3094', 'GHSA-aaaa-bbbb-cccc']"`)
+    expect(raw).toContain('failurePolicy: Ignore')
+    expect(policyTakesGate(raw)).toBe(true)
+    const parsed = roundTrip(raw)
+    expect(parsed.ruleType).toBe('cve')
+    expect(parsed.cveRule.ids).toEqual(['CVE-2024-3094', 'GHSA-aaaa-bbbb-cccc'])
+  })
+
+  it('a value that could end the expression is left out of it', () => {
+    const raw = gen('cve', { cveRule: { ids: ["x'] || true || ['", 'CVE-1-1'] } })
+    expect(raw).toContain(`"['CVE-1-1']"`)
+  })
+
+  it('resource limits: a ceiling reopens with the rule it belongs to', () => {
+    const raw = generatePolicyYaml('limits', 'resource-limits', [], [], [], 'workloads',
+      [{ limitType: 'both', message: '', maxCpu: '2', maxMemory: '4Gi' }])
+    expect(raw).toContain("quantity(c.resources.limits.memory).compareTo(quantity('4Gi')) <= 0")
+    expect(roundTrip(raw).resourceLimitRules).toMatchObject([{ limitType: 'both', maxCpu: '2', maxMemory: '4Gi' }])
   })
 })

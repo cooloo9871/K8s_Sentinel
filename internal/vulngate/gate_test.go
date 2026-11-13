@@ -132,7 +132,7 @@ func spec(t *testing.T, g *Gate) map[string]any {
 func TestTheListIsWrittenAndKeptInStep(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	scanned := []ScannedImage{{Ref: "nginx:1.25", Counts: Counts{Critical: 7, High: 50, FixableCritical: 3}}}
-	g := New(client, newDyn(), "sentinel-system", func(context.Context) []ScannedImage { return scanned })
+	g := New(client, newDyn(), "sentinel-system", func(context.Context, map[string]bool) []ScannedImage { return scanned })
 	ctx := context.Background()
 	g.reconcile(ctx)
 
@@ -170,12 +170,62 @@ func TestWhatV0650MadeIsRemovedAndNothingElse(t *testing.T) {
 			&admissionv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: Name, Labels: labels}},
 			&admissionv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: Name, Labels: labels}},
 		)
-		g := New(client, newDyn(), "sentinel-system", func(context.Context) []ScannedImage { return nil })
+		g := New(client, newDyn(), "sentinel-system", func(context.Context, map[string]bool) []ScannedImage { return nil })
 		g.reconcile(ctx)
 		_, perr := client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Get(ctx, Name, metav1.GetOptions{})
 		_, berr := client.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Get(ctx, Name, metav1.GetOptions{})
 		if gone := k8serrors.IsNotFound(perr) && k8serrors.IsNotFound(berr); gone != (labels != nil) {
 			t.Errorf("labels %v: removed = %v (policy %v, binding %v)", labels, gone, perr, berr)
 		}
+	}
+}
+
+// A policy names vulnerabilities in a variable; the images that have them are
+// listed with them, whatever their counts.
+func TestImagesWithANamedVulnerabilityAreListedWithIt(t *testing.T) {
+	ctx := context.Background()
+	client := fake.NewSimpleClientset(
+		&admissionv1.ValidatingAdmissionPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "no-xz"},
+			Spec: admissionv1.ValidatingAdmissionPolicySpec{
+				ParamKind: &admissionv1.ParamKind{APIVersion: "sentinel.io/v1", Kind: "VulnerabilityGate"},
+				Variables: []admissionv1.Variable{{Name: NamedVariable, Expression: "['CVE-2024-3094', 'GHSA-aaaa-bbbb-cccc']"}},
+			},
+		},
+		// Another kind of parameter: not ours to read.
+		&admissionv1.ValidatingAdmissionPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "other"},
+			Spec: admissionv1.ValidatingAdmissionPolicySpec{
+				ParamKind: &admissionv1.ParamKind{APIVersion: "v1", Kind: "ConfigMap"},
+				Variables: []admissionv1.Variable{{Name: NamedVariable, Expression: "['CVE-1-1']"}},
+			},
+		},
+	)
+	var asked map[string]bool
+	g := New(client, newDyn(), "sentinel-system", func(_ context.Context, named map[string]bool) []ScannedImage {
+		asked = named
+		return []ScannedImage{
+			{Ref: "quay.io/a/medium-only:1", CVEs: []string{"CVE-2024-3094"}},
+			{Ref: "quay.io/a/clean:1"},
+			{Ref: "quay.io/a/twice:1", Counts: Counts{Critical: 1}},
+			{Ref: "quay.io/a/twice:1", CVEs: []string{"GHSA-aaaa-bbbb-cccc"}},
+		}
+	})
+	g.reconcile(ctx)
+	if len(asked) != 2 || !asked["CVE-2024-3094"] || !asked["GHSA-aaaa-bbbb-cccc"] {
+		t.Fatalf("asked for %v", asked)
+	}
+	s := spec(t, g)
+	if ids, _, _ := unstructured.NestedStringSlice(s, "images", "quay.io/a/medium-only:1", "cves"); len(ids) != 1 || ids[0] != "CVE-2024-3094" {
+		t.Errorf("medium-only = %v", s["images"])
+	}
+	if _, ok, _ := unstructured.NestedMap(s, "images", "quay.io/a/clean:1"); ok {
+		t.Error("an image with nothing to refuse was listed")
+	}
+	// Two results for one image: the counts of one and the named ID of the other.
+	ids, _, _ := unstructured.NestedStringSlice(s, "images", "quay.io/a/twice:1", "cves")
+	c, _, _ := unstructured.NestedInt64(s, "images", "quay.io/a/twice:1", "critical")
+	if len(ids) != 1 || c != 1 {
+		t.Errorf("twice = cves %v critical %d", ids, c)
 	}
 }

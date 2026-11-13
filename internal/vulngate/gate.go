@@ -41,6 +41,8 @@ type ScannedImage struct {
 	// As a pod spec or a registry names it: "nginx:1.27", "quay.io/org/app:v2".
 	Ref string
 	Counts
+	// The vulnerabilities in it that some policy names, by ID.
+	CVEs []string
 }
 
 // Counts is what the list says about one image.
@@ -56,14 +58,17 @@ type Counts struct {
 type List struct {
 	// An image reference, in every spelling a pod spec may use, to its counts.
 	Data map[string]Counts
+	// The same references to the vulnerabilities some policy names that the
+	// image has. Images with none have no entry.
+	CVEs map[string][]string
 	// Images that did not fit in the list. They are the ones with the fewest
 	// vulnerabilities.
 	LeftOut int
 }
 
 // Build works out the list from every scan result there is. An image with no
-// critical and no high vulnerability is over no limit a policy can set, so it
-// is not listed.
+// critical and no high vulnerability, and none that a policy names, is one no
+// policy can refuse, so it is not listed.
 func Build(scanned []ScannedImage) List {
 	// The same image may have been scanned as a workload and from a registry.
 	// The higher counts win: a result that says it is over a limit is not
@@ -71,15 +76,18 @@ func Build(scanned []ScannedImage) List {
 	worst := map[string]ScannedImage{}
 	for _, img := range scanned {
 		ref := canonical(img.Ref)
-		if ref == "" || (img.Critical <= 0 && img.High <= 0) {
+		if ref == "" || (img.Critical <= 0 && img.High <= 0 && len(img.CVEs) == 0) {
 			continue
 		}
-		if cur, ok := worst[ref]; ok {
-			if img.Critical < cur.Critical || (img.Critical == cur.Critical && img.High <= cur.High) {
-				continue
-			}
-		}
 		img.Ref = ref
+		if cur, ok := worst[ref]; ok {
+			// Either scan finding a named vulnerability is enough to list it.
+			named := union(cur.CVEs, img.CVEs)
+			if img.Critical < cur.Critical || (img.Critical == cur.Critical && img.High <= cur.High) {
+				img = cur
+			}
+			img.CVEs = named
+		}
 		worst[ref] = img
 	}
 	images := make([]ScannedImage, 0, len(worst))
@@ -96,7 +104,7 @@ func Build(scanned []ScannedImage) List {
 		return images[i].Ref < images[j].Ref
 	})
 
-	list := List{Data: map[string]Counts{}}
+	list := List{Data: map[string]Counts{}, CVEs: map[string][]string{}}
 	size := 0
 	for _, img := range images {
 		keys := []string{}
@@ -107,6 +115,9 @@ func Build(scanned []ScannedImage) List {
 			}
 			keys = append(keys, k)
 			add += len(k) + entryBytes
+			for _, id := range img.CVEs {
+				add += len(id) + 3
+			}
 		}
 		if len(keys) == 0 {
 			continue
@@ -117,10 +128,27 @@ func Build(scanned []ScannedImage) List {
 		}
 		for _, k := range keys {
 			list.Data[k] = img.Counts
+			if len(img.CVEs) > 0 {
+				list.CVEs[k] = img.CVEs
+			}
 		}
 		size += add
 	}
 	return list
+}
+
+// union is both lists as one, sorted, each ID once.
+func union(a, b []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, id := range append(append([]string{}, a...), b...) {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 var dockerHubHosts = map[string]bool{

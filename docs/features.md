@@ -93,7 +93,7 @@ the quarantine: the new pod is not the one that was contained.
 ### Admission Policy (ValidatingAdmissionPolicy)
 
 - Manage native Kubernetes VAP resources and bindings, via YAML editor or a UI builder that generates CEL
-- The builder covers ten rule types and reverse-parses existing policies so they can be reopened in the form:
+- The builder covers thirteen rule types and reverse-parses existing policies so they can be reopened in the form:
 
   | Rule Type | Description |
   |---|---|
@@ -101,12 +101,15 @@ the quarantine: the new pod is not the one that was contained.
   | **Annotation Check** | Require or forbid specific annotation key=value pairs; scoped to chosen resources |
   | **Image Policy** | Forbid the `:latest` tag (the tag colon is looked for after the last slash, so a registry port cannot satisfy it; digest pins pass); require images from named registries (prefix compared case-insensitively, trailing slash enforced against subdomain tricks). Covers containers, initContainers and ephemeral (kubectl debug) containers across every workload type, ReplicationControllers included |
   | **Replica Limit** | Cap replicas on Deployments and StatefulSets. The guard reads the request resource, so `kubectl scale` and HPA changes through the scale subresource are capped too |
-  | **Resource Limits** | Require CPU and memory limits; covers every workload type and initContainers |
-  | **Security Context** | Forbid privileged containers (ephemeral debug containers included); require runAsNonRoot, honouring pod and container level inheritance. Equivalent privileges via `capabilities` are out of scope |
+  | **Resource Limits** | Require CPU and memory limits, and optionally cap them (a limit over `4Gi`, say, is refused); covers every workload type and initContainers |
+  | **Security Context** | Forbid privileged containers (ephemeral debug containers included); require runAsNonRoot, honouring pod and container level inheritance; require `allowPrivilegeEscalation: false`, which has to be written out since unset means allowed. Equivalent privileges via `capabilities` are out of scope |
   | **Host Access** | Forbid hostNetwork, hostPID and hostIPC across Pods and template-based workloads. `hostPort` is out of scope |
   | **ConfigMap Size Limit** | One cap on the total size of a ConfigMap (`data` and `binaryData` combined, key names included). A new ConfigMap must fit; an existing oversized one may stay or shrink but not grow (its content may still be rewritten at equal size). A cost-budget guard skips maps with over 200 keys so they cannot become permanently unwritable, which also means such maps are not size-checked |
   | **Secret Size Limit** | The same total cap for Secrets (`data`, base64 decoded). Service-account tokens, bootstrap tokens and Helm release blobs are exempt; the exemption keys on `type`, which a Secret author sets, so it is a convenience not a boundary. `stringData` needs no handling since the apiserver folds it into `data` before admission |
   | **Vulnerability Limit** | Refuse images with more critical or high vulnerabilities than allowed, by the counts of Sentinel's own scans. See [Refusing vulnerable images](#refusing-vulnerable-images) |
+  | **Blocked CVEs** | Refuse images that have any of the vulnerabilities named, whatever their severity. Sentinel looks the IDs up in its scan results when the policy is saved and keeps them current; like the limit, it acts only on images it has scanned. For the day a vulnerability is serious enough to stop by name |
+  | **Host Path Volumes** | Forbid `hostPath` volumes, all of them or those under given paths (`/var/run` covers `/var/run/docker.sock`). Other volume types are not looked at |
+  | **Environment Variables** | Require variables in every container, forbid others, and refuse a secret written in the manifest: a variable whose name contains password, secret, token, key or credential with a literal value. One taken from a Secret with `valueFrom` passes, as do names ending in file, path, name or dir. It goes by the name, so it is a net for mistakes, not a detector of secrets |
 
 - **Binding Builder** — pick the policy, the namespace scope and validation actions (Deny / Audit / Warn). The scope is all namespaces, **only** a chosen set, or **all except** a chosen set (e.g. everywhere but `kube-system`), with several namespaces selectable at once
 - Resources created through the UI are tagged `sentinel.io/builder: "true"` so Edit reopens the builder

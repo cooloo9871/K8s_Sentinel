@@ -32,7 +32,9 @@ func getVAP(store *k8s.Store) http.HandlerFunc {
 	}
 }
 
-func applyVAP(store *k8s.Store) http.HandlerFunc {
+// applied runs after a policy is stored: one that names vulnerabilities needs
+// them looked up in the scan results before it can refuse anything.
+func applyVAP(store *k8s.Store, applied func()) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			RawYAML string `json:"rawYaml"`
@@ -48,6 +50,7 @@ func applyVAP(store *k8s.Store) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		applied()
 		writeJSON(w, http.StatusOK, map[string]string{"status": "applied"})
 	}
 }
