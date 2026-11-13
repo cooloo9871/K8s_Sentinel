@@ -37,7 +37,7 @@ import {
   volumeRuleValid, envRuleValid, cveRuleValid,
   autoVolumeMessage, volumeSpecLines, parseVolumeSpec,
   envSpecLines, parseEnvSpec,
-  cveVariableLines, CVE_VALIDATION, parseCveSpec, POD_SPEC_VARIABLE,
+  cveVariableLines, CVE_VALIDATION, parseCveSpec, POD_SPEC_VARIABLE, SPEC_CHANGE_CONDITION,
 } from './vapMoreRules'
 
 type EditTarget = { kind: 'policy' | 'binding'; name?: string; yaml: string }
@@ -137,10 +137,11 @@ interface VulnerabilityRule {
 
 const emptyVulnerabilityRule = (): VulnerabilityRule => ({ critical: '', high: '', fixableOnly: false })
 
-// "" is not counted; anything else has to be a whole number from 0 up.
+// "" is not counted; anything else has to be a whole number from 0 up, and
+// short enough to be written out as one.
 function vulnLimit(v: string): number | null {
   const t = v.trim()
-  return /^\d+$/.test(t) ? Number(t) : null
+  return /^\d{1,6}$/.test(t) ? Number(t) : null
 }
 
 function vulnerabilityRuleValid(rule: VulnerabilityRule): boolean {
@@ -459,11 +460,12 @@ function resourceLimitRuleToYamlLines(rule: ResourceLimitRule): string[] {
   ]
 }
 
-// A ceiling on a limit that is set; whether it has to be set is the rule above.
+// A ceiling on a limit. The limit has to be set for there to be one: a
+// container with no limit may use more than any ceiling.
 function resourceMaxLines(resource: 'cpu' | 'memory', max: string): string[] {
   const q = max.trim()
   if (!q || !QUANTITY.test(q)) return []
-  const check = `all(c, !has(c.resources) || !has(c.resources.limits) || !has(c.resources.limits.${resource}) || quantity(c.resources.limits.${resource}).compareTo(quantity('${q}')) <= 0)`
+  const check = `all(c, has(c.resources) && has(c.resources.limits) && has(c.resources.limits.${resource}) && quantity(c.resources.limits.${resource}).compareTo(quantity('${q}')) <= 0)`
   return [
     '    - expression: >-',
     `        object.spec.?containers.orValue([]).${check} &&`,
@@ -472,7 +474,7 @@ function resourceMaxLines(resource: 'cpu' | 'memory', max: string): string[] {
     `        object.spec.?template.?spec.?initContainers.orValue([]).${check} &&`,
     `        object.spec.?jobTemplate.?spec.?template.?spec.?containers.orValue([]).${check} &&`,
     `        object.spec.?jobTemplate.?spec.?template.?spec.?initContainers.orValue([]).${check}`,
-    `      message: "${resource === 'cpu' ? 'CPU' : 'Memory'} limit must not exceed ${q}"`,
+    `      message: "${resource === 'cpu' ? 'CPU' : 'Memory'} limit must be set and must not exceed ${q}"`,
     '      reason: Forbidden',
   ]
 }
@@ -607,11 +609,11 @@ function sizeRuleToYamlLines(kind: 'ConfigMap' | 'Secret', rule: SizeLimitRule):
 // The vulnerability rule reads the counts K8s Sentinel keeps in the cluster for
 // every image it has scanned: the VulnerabilityGate object the binding passes
 // in as params. An image that is not in it has not been scanned and is
-// admitted. Only what a person or a pipeline submits is checked; pods a
-// controller makes from a workload already admitted are left alone, so an image
-// that goes over the limit tomorrow does not stop what runs today from coming
-// back up. failurePolicy is Ignore for the same reason: counts that cannot be
-// read must not be what stops a cluster from deploying.
+// admitted. What the cluster's own controllers create from a workload already
+// admitted is left alone, so an image that goes over the limit tomorrow does
+// not stop what runs today from coming back up. failurePolicy is Ignore for
+// the same reason: counts that cannot be read must not be what stops a cluster
+// from deploying.
 export const GATE_PARAM_KIND = 'VulnerabilityGate'
 export const GATE_PARAM_NAME = 'sentinel-vulnerability-gate'
 
@@ -620,20 +622,28 @@ function vulnerabilityFields(fixableOnly: boolean): [string, string] {
   return fixableOnly ? ['fixableCritical', 'fixableHigh'] : ['critical', 'high']
 }
 
-// What every rule that reads the scan counts shares: skip what a controller
-// made, find the images, and leave the exempt namespaces alone.
+// What every rule that reads the scan counts shares: skip what the cluster's
+// own controllers make, find the images, and leave the exempt namespaces alone.
+//
+// A controller is known by who is asking, not by the object saying it has an
+// owner: anyone may write an ownerReference into a manifest. The built-in
+// controllers act as kube-controller-manager or as their service accounts in
+// kube-system, and a kubelet announces its static pods as its node.
 const GATE_BASE_LINES = [
   '  matchConditions:',
-  '    - name: not-created-by-a-controller',
+  '    - name: not-from-a-cluster-controller',
   '      expression: >-',
-  '        !has(object.metadata.ownerReferences) ||',
-  '        size(object.metadata.ownerReferences) == 0',
+  "        !(request.userInfo.username == 'system:kube-controller-manager' ||",
+  "        request.userInfo.username.startsWith('system:serviceaccount:kube-system:') ||",
+  "        request.userInfo.username.startsWith('system:node:'))",
+  ...SPEC_CHANGE_CONDITION,
   '  variables:',
   ...POD_SPEC_VARIABLE,
   '    - name: images',
   '      expression: >-',
-  '        (variables.podSpec.containers +',
-  '        (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])).map(c, c.image)',
+  '        variables.podSpec.containers.map(c, c.image) +',
+  '        variables.podSpec.?initContainers.orValue([]).map(c, c.image) +',
+  '        variables.podSpec.?ephemeralContainers.orValue([]).map(c, c.image)',
   '    - name: exempt',
   '      expression: >-',
   '        has(params.spec) && has(params.spec.exemptNamespaces) &&',
@@ -745,7 +755,7 @@ export function generatePolicyYaml(
         '      - apiGroups: [""]',
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
-        '        resources: ["pods"]',
+        '        resources: ["pods", "replicationcontrollers"]',
         '      - apiGroups: ["apps"]',
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
@@ -754,6 +764,11 @@ export function generatePolicyYaml(
         '        apiVersions: ["v1"]',
         '        operations: [CREATE, UPDATE]',
         '        resources: ["jobs", "cronjobs"]',
+        // kubectl debug adds a container, and so an image, through this.
+        '      - apiGroups: [""]',
+        '        apiVersions: ["v1"]',
+        '        operations: [UPDATE]',
+        '        resources: ["pods/ephemeralcontainers"]',
       ]
     : (ruleType === 'image' || ruleType === 'resource-limits' || ruleType === 'security-context' || ruleType === 'host-access' || ruleType === 'volumes' || ruleType === 'env')
     ? [
@@ -1164,9 +1179,15 @@ export function tryParseBuilderPolicy(rawYaml: string): {
     } else if (resourceMax.cpu || resourceMax.memory) {
       return null
     }
+    // A message that is the one written when the field is left blank reads
+    // back as blank, so that changing the check changes the message with it.
+    const scMessage = scParts[0]?.message ?? ''
     const securityContextRule: SecurityContextRule = {
       checkType,
-      message: scParts[0]?.message ?? '',
+      message: scMessage === autoSecurityContextMessage({ checkType, message: '' }) ? '' : scMessage,
+    }
+    for (const [i, r] of resourceLimitRules.entries()) {
+      if (r.message === autoResourceLimitMessage(r)) resourceLimitRules[i] = { ...r, message: '' }
     }
     const hostAccessRule: HostAccessRule = hostAccessParsed ?? emptyHostAccessRule()
     // All rules must be the same type
@@ -1933,7 +1954,7 @@ export function VAPPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
-                      A maximum is written as Kubernetes writes quantities: 2, 500m, 4Gi.
+                      A maximum is written as Kubernetes writes quantities: 2, 500m, 4Gi. With one given, that limit has to be set.
                     </p>
                   </div>
                 )
@@ -2054,7 +2075,7 @@ export function VAPPage() {
                   <Label>Blocked CVEs</Label>
                   <div className="flex flex-col gap-1 rounded-lg border p-4">
                     <span className="text-xs text-muted-foreground">Vulnerability IDs, separated by commas</span>
-                    <CommaListInput value={cveRule.ids} onChange={ids => setCveRule({ ids })} className="h-8 text-sm" />
+                    <CommaListInput key={builderEditName ?? 'new'} value={cveRule.ids} onChange={ids => setCveRule({ ids })} className="h-8 text-sm" />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     An image that has any of these is refused. Only images K8s Sentinel has scanned are checked.
@@ -2074,7 +2095,7 @@ export function VAPPage() {
                         <SelectContent>
                           <SelectGroup>
                             <SelectItem value="all">Every hostPath volume</SelectItem>
-                            <SelectItem value="paths">hostPath volumes under these paths</SelectItem>
+                            <SelectItem value="paths">hostPath volumes that reach these paths</SelectItem>
                           </SelectGroup>
                         </SelectContent>
                       </Select>
@@ -2082,7 +2103,7 @@ export function VAPPage() {
                     {volumeRule.mode === 'paths' && (
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Paths, separated by commas</span>
-                        <CommaListInput value={volumeRule.paths} onChange={paths => setVolumeRule(r => ({ ...r, paths }))} className="h-8 text-sm" />
+                        <CommaListInput key={builderEditName ?? 'new'} value={volumeRule.paths} onChange={paths => setVolumeRule(r => ({ ...r, paths }))} className="h-8 text-sm" />
                       </div>
                     )}
                     <div className="flex flex-col gap-1">
@@ -2108,15 +2129,16 @@ export function VAPPage() {
                   <div className="flex flex-col gap-3 rounded-lg border p-4">
                     <div className="flex flex-col gap-1">
                       <span className="text-xs text-muted-foreground">Required in every container, separated by commas</span>
-                      <CommaListInput value={envRule.required} onChange={required => setEnvRule(r => ({ ...r, required }))} className="h-8 text-sm" />
+                      <CommaListInput key={builderEditName ?? 'new'} value={envRule.required} onChange={required => setEnvRule(r => ({ ...r, required }))} className="h-8 text-sm" />
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-xs text-muted-foreground">Not allowed, separated by commas</span>
-                      <CommaListInput value={envRule.forbidden} onChange={forbidden => setEnvRule(r => ({ ...r, forbidden }))} className="h-8 text-sm" />
+                      <CommaListInput key={builderEditName ?? 'new'} value={envRule.forbidden} onChange={forbidden => setEnvRule(r => ({ ...r, forbidden }))} className="h-8 text-sm" />
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     A name that is not allowed is matched whole, in any capitalisation. A required name has to be exact.
+                    Variables a container takes from envFrom are not seen.
                   </p>
                 </div>
               )}

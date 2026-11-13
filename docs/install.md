@@ -201,6 +201,8 @@ Leave these alone if you read them with another tool; Sentinel does not use them
 
 **Re-applying `deploy/sentinel.yaml` puts back what the file says.** If you changed the Deployment or the Service by editing the file (a PersistentVolumeClaim in place of the `emptyDir`, `AUDIT_WEBHOOK_TOKEN`, a pinned image tag, a `NodePort`), carry those edits into the new file before applying it, or apply your own copy. Applied as it comes, the data volume goes back to `emptyDir`, which is an empty Sentinel with the `admin` / `admin` account, and an audit webhook token set in the file is dropped. Changes made with `kubectl set env` or `kubectl patch`, and a `clusterIP` you chose, are kept.
 
+**Upgrading to v0.69.0:** no manifest change is required. Vulnerability Limit, Blocked CVEs, Host Path Volumes and Environment Variables policies made before it keep working as they were written and open in the YAML editor; make them again in the form to get the corrected rules, of which the first two matter: the earlier ones could be passed by a manifest that names an owner for itself.
+
 **Upgrading to v0.68.0, from any version:** re-apply `deploy/sentinel.yaml`, then restart Sentinel. The `VulnerabilityGate` kind gains the list of named vulnerabilities each image has; without it a Blocked CVEs policy admits everything, and Sentinel's log says the kind is older than it.
 
 **Upgrading to v0.67.0, from any version:** re-apply `deploy/sentinel.yaml`, then restart Sentinel. The `VulnerabilityGate` kind gains the counts of vulnerabilities with a fix available; without them a Vulnerabilities policy set to count only those admits everything, and Sentinel's log says the kind is older than it. Registries scanned before the upgrade have no such counts until their next scan.

@@ -30,6 +30,15 @@ const PATH = /^\/[^'"\\\s]*$/
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_.-]*$/
 const VULN_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
 
+// Scanners write CVE-2024-3094 and GHSA-xxxx-xxxx-xxxx, and the policy compares
+// the text: "cve-2024-3094" would be a policy that never matches anything.
+export function normalizeVulnId(id: string): string {
+  const t = id.trim()
+  if (/^cve-/i.test(t)) return t.toUpperCase()
+  if (/^ghsa-/i.test(t)) return 'GHSA-' + t.slice(5).toLowerCase()
+  return t
+}
+
 // "/var/run/" and "/var/run" are one path; "/" is every path.
 const cleanPath = (p: string) => p.trim().replace(/\/+$/, '')
 
@@ -62,6 +71,15 @@ function readList(spec: unknown, name: string): string[] | null {
   return [...String(v.expression ?? '').matchAll(/'([^']*)'/g)].map(m => m[1])
 }
 
+// An update that leaves the spec as it was is let through: a label, an
+// annotation, or a finalizer being taken off as the object is deleted. Without
+// this, an object that broke the rule before the rule existed could not even
+// be removed cleanly.
+export const SPEC_CHANGE_CONDITION = [
+  '    - name: creates-or-changes-the-spec',
+  `      expression: "request.operation == 'CREATE' || object.spec != oldObject.spec"`,
+]
+
 // The pod spec, wherever the object keeps it.
 export const POD_SPEC_VARIABLE = [
   '    - name: podSpec',
@@ -75,21 +93,30 @@ export const POD_SPEC_VARIABLE = [
 export function autoVolumeMessage(r: VolumeRule): string {
   const paths = r.paths.map(cleanPath).map(p => p || '/')
   return r.mode === 'paths' && paths.length
-    ? `hostPath volumes under ${paths.join(', ')} are not allowed`
+    ? `hostPath volumes that reach ${paths.join(', ')} are not allowed`
     : 'hostPath volumes are not allowed'
 }
 
 export function volumeSpecLines(r: VolumeRule, message: string): string[] {
   const paths = r.mode === 'paths' ? r.paths.filter(p => PATH.test(p.trim())).map(cleanPath) : []
+  // A path is refused when it is a denied one, lies under one, or contains
+  // one ("/var" gives access to "/var/run"). One written so that the
+  // comparison cannot be trusted, "//var/run" or "/./var/run", is refused too:
+  // the kernel reads those as the same place.
   return [
+    '  matchConditions:',
+    ...SPEC_CHANGE_CONDITION,
     '  variables:',
     ...POD_SPEC_VARIABLE,
     ...listVariable('deniedHostPaths', paths),
     '  validations:',
     '    - expression: >-',
     '        !variables.podSpec.?volumes.orValue([]).exists(v, has(v.hostPath) &&',
-    '        (size(variables.deniedHostPaths) == 0 || variables.deniedHostPaths.exists(p,',
-    "        v.hostPath.path == p || v.hostPath.path.startsWith(p + '/'))))",
+    '        (size(variables.deniedHostPaths) == 0 ||',
+    "        v.hostPath.path.contains('//') || v.hostPath.path.contains('/./') || v.hostPath.path.endsWith('/.') ||",
+    '        variables.deniedHostPaths.exists(p,',
+    "        v.hostPath.path == p || v.hostPath.path.startsWith(p + '/') ||",
+    "        p.startsWith(v.hostPath.path.endsWith('/') ? v.hostPath.path : v.hostPath.path + '/'))))",
     `      message: "${message}"`,
     '      reason: Forbidden',
   ]
@@ -142,6 +169,8 @@ export function envSpecLines(r: EnvRule): string[] {
     validations.push('    - expression: "true"')
   }
   return [
+    '  matchConditions:',
+    ...SPEC_CHANGE_CONDITION,
     '  variables:',
     ...POD_SPEC_VARIABLE,
     ...listVariable('requiredEnv', required),
@@ -166,7 +195,7 @@ const NAMED_VARIABLE = 'blockedCVEs'
 
 export function cveVariableLines(r: CveRule): string[] {
   return [
-    ...listVariable(NAMED_VARIABLE, r.ids.filter(id => VULN_ID.test(id))),
+    ...listVariable(NAMED_VARIABLE, r.ids.filter(id => VULN_ID.test(id)).map(normalizeVulnId)),
     '    - name: hits',
     '      expression: >-',
     '        has(params.spec) && has(params.spec.images)',

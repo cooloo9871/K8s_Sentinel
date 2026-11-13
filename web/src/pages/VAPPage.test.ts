@@ -447,4 +447,54 @@ describe('the rule types added after NeuVector\'s criteria', () => {
     expect(raw).toContain("quantity(c.resources.limits.memory).compareTo(quantity('4Gi')) <= 0")
     expect(roundTrip(raw).resourceLimitRules).toMatchObject([{ limitType: 'both', maxCpu: '2', maxMemory: '4Gi' }])
   })
+
+  it('a CVE typed in lower case is written the way scanners write it', () => {
+    const raw = gen('cve', { cveRule: { ids: ['cve-2021-44228', 'ghsa-AAAA-bbbb-cccc'] } })
+    expect(raw).toContain(`"['CVE-2021-44228', 'GHSA-aaaa-bbbb-cccc']"`)
+    expect(roundTrip(raw).cveRule.ids).toEqual(['CVE-2021-44228', 'GHSA-aaaa-bbbb-cccc'])
+  })
+
+  it('a controller is told by who asks, not by an ownerReference anyone can write', () => {
+    for (const raw of [gen('cve', { cveRule: { ids: ['CVE-1-1'] } }),
+      generatePolicyYaml('v', 'vulnerability', [], [], [], 'workloads', [], undefined, undefined, undefined, undefined, { critical: '0', high: '', fixableOnly: false })]) {
+      expect(raw).not.toContain('ownerReferences')
+      expect(raw).toContain("request.userInfo.username.startsWith('system:serviceaccount:kube-system:')")
+      expect(raw).toContain('replicationcontrollers')
+      expect(raw).toContain('pods/ephemeralcontainers')
+      expect(raw).toContain('ephemeralContainers.orValue([]).map(c, c.image)')
+    }
+  })
+
+  it('an update that leaves the spec alone is not held up by the new rules', () => {
+    for (const raw of [
+      gen('cve', { cveRule: { ids: ['CVE-1-1'] } }),
+      gen('volumes', { volumeRule: { mode: 'all', paths: [], message: '' } }),
+      gen('env', { envRule: { required: ['TZ'], forbidden: [] } }),
+    ]) expect(raw).toContain("request.operation == 'CREATE' || object.spec != oldObject.spec")
+  })
+
+  it('a ceiling makes the limit itself required', () => {
+    const raw = generatePolicyYaml('limits', 'resource-limits', [], [], [], 'workloads',
+      [{ limitType: 'memory', message: '', maxCpu: '2', maxMemory: '' }])
+    expect(raw).toContain("has(c.resources.limits.cpu) && quantity(c.resources.limits.cpu).compareTo(quantity('2')) <= 0")
+  })
+
+  it('a message left blank reads back blank', () => {
+    const sc = generatePolicyYaml('sc', 'security-context', [], [], [], 'workloads', [],
+      { checkType: 'no-privileged', message: '' })
+    expect(tryParseBuilderPolicy(sc)?.securityContextRule.message).toBe('')
+    const kept = generatePolicyYaml('sc', 'security-context', [], [], [], 'workloads', [],
+      { checkType: 'no-privileged', message: 'mine' })
+    expect(tryParseBuilderPolicy(kept)?.securityContextRule.message).toBe('mine')
+    const rl = generatePolicyYaml('limits', 'resource-limits', [], [], [], 'workloads',
+      [{ limitType: 'cpu', message: '', maxCpu: '', maxMemory: '' }])
+    expect(tryParseBuilderPolicy(rl)?.resourceLimitRules[0].message).toBe('')
+  })
+
+  it('a vulnerability limit too long to be a number is not one', () => {
+    const raw = generatePolicyYaml('v', 'vulnerability', [], [], [], 'workloads', [], undefined, undefined, undefined, undefined,
+      { critical: '9999999999999999999999', high: '3', fixableOnly: false })
+    expect(raw).not.toContain('e+')
+    expect(raw).toContain('.high > 3')
+  })
 })
