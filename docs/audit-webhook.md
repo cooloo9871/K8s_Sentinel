@@ -46,6 +46,37 @@ Add to the kube-apiserver flags:
 --audit-webhook-batch-max-wait=5s
 ```
 
+## Keeping the address fixed
+
+The kube-apiserver runs on the host network and resolves names with the node's DNS, not the cluster's, so `sentinel.sentinel-system.svc` does not work in this file: it has to be an IP.
+
+A Service keeps its ClusterIP for as long as it exists. Restarting or upgrading Sentinel does not change it; deleting the Service does, which is what an uninstall and reinstall amounts to. To get the same address back every time, choose it yourself. Pick a free address in the cluster's Service range and set it on the Service:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel
+  namespace: sentinel-system
+spec:
+  clusterIP: 10.96.100.100
+  selector:
+    app: sentinel
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+```
+
+`clusterIP` cannot be changed on a Service that exists, so delete the Service and apply it again:
+
+```bash
+kubectl -n sentinel-system delete service sentinel
+kubectl apply -f sentinel-service.yaml
+```
+
+Keep this Service in a file of your own, applied after `deploy/sentinel.yaml`: re-applying the manifest with a Service that has a different or no `clusterIP` is refused or leaves yours in place, never silently moved. The range differs per cluster (`kubectl cluster-info dump | grep -m1 service-cluster-ip-range`), which is why the manifest does not set one.
+
 ## Protecting the endpoint
 
 The apiserver posts audit batches to Sentinel's ClusterIP, so this endpoint sits
