@@ -379,7 +379,7 @@ volumes:
 | `TETRAGON_NAMESPACE` | `kube-system` | Namespace where Tetragon is installed |
 | `CILIUM_NAMESPACE` | `kube-system` | Namespace where Cilium is installed |
 | `TETRAGON_GRPC_PORT` | `54321` | Port of the Tetragon agent's gRPC server |
-| `HUBBLE_RELAY_ADDRESS` | `hubble-relay.<ns>.svc.cluster.local:80` | Hubble Relay endpoint; the default resolves the namespace Cilium was found in |
+| `HUBBLE_RELAY_ADDRESS` | `hubble-relay.<ns>.svc:80` | Hubble Relay endpoint; the default resolves the namespace Cilium was found in |
 | `HUBBLE_RELAY_TLS` / `TETRAGON_GRPC_TLS` | *(unset)* | Set to `true` when the endpoint serves TLS; `*_CA` names a CA file when the certificate is not signed by a system root, and `*_SERVER_NAME` names the identity to verify against (required for the Tetragon agents, which are dialed by pod IP) |
 | `AUDIT_WEBHOOK_TOKEN` | *(unset)* | Token the [audit webhook](audit-webhook.md) requires when set, carried at the end of the webhook URL; unset leaves the endpoint open |
 | `JWT_SECRET` | *(unset)* | Session-token signing key, at least 32 characters. Inject it from a Kubernetes Secret and sessions survive Pod restarts without a PersistentVolume; unset, the key lives in `DATA_DIR/.jwt-secret` and on an `emptyDir` regenerates on every restart, logging everyone out |

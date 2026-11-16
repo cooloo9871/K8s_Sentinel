@@ -145,7 +145,7 @@ func (s *Store) DetectCilium(ctx context.Context) bool {
 
 // relayAddressIn is the relay endpoint for a given Cilium namespace.
 func relayAddressIn(ns string) string {
-	return "hubble-relay." + ns + ".svc.cluster.local:80"
+	return "hubble-relay." + ns + ".svc:80"
 }
 
 // hubbleRelayAddress is where Hubble Relay serves the aggregated Observer API.

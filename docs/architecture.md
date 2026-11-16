@@ -107,7 +107,7 @@ Each `GetFlowsResponse` is bridged the same way (proto-names marshal → the exi
 
 **Cilium's namespace must be detected to address Relay.** Detection probes
 `kube-system`, `cilium` and `cilium-system`; the relay endpoint defaults to
-`hubble-relay.<ns>.svc.cluster.local:80` in whichever it finds, overridable with
+`hubble-relay.<ns>.svc:80` in whichever it finds, overridable with
 `HUBBLE_RELAY_ADDRESS`.
 
 Every flow goes three ways:
