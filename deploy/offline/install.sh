@@ -96,8 +96,19 @@ existing_tetragon="$(kubectl get daemonset -A -l app.kubernetes.io/name=tetragon
 if [ -n "$existing_tetragon" ]; then
   echo "[tetragon] already installed, skipping"
 else
+  # On CRI-O, Tetragon cannot tell which pod a process belongs to from the
+  # name of its cgroup, and asks the runtime instead. Only when every node
+  # runs CRI-O: the DaemonSet has one socket path for all of them.
+  tetragon_manifest="$WORK/tetragon.yaml"
+  runtimes="$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.containerRuntimeVersion}{"\n"}{end}')"
+  if [ -n "$runtimes" ] && ! echo "$runtimes" | grep -qv '^cri-o://'; then
+    echo "[tetragon] the nodes run CRI-O: pods are looked up through its socket"
+    tetragon_manifest="$WORK/tetragon-crio.yaml"
+  elif echo "$runtimes" | grep -q '^cri-o://'; then
+    echo "[tetragon] only some nodes run CRI-O: events from those will name no pod; see docs/install.md"
+  fi
   echo "[tetragon] installing"
-  kubectl apply -f "$WORK/tetragon.yaml"
+  kubectl apply -f "$tetragon_manifest"
   kubectl rollout status daemonset/tetragon -n kube-system --timeout=300s
 fi
 kubectl apply -f "$WORK/tetragon-grpc-policy.yaml"

@@ -153,6 +153,24 @@ no kustomize. This does not install Trivy Operator; see the next section.
 kubectl apply -f deploy/sentinel.yaml
 ```
 
+### Nodes on CRI-O
+
+On CRI-O, Tetragon cannot tell which pod a process belongs to from the name of its cgroup. Every event then arrives without a pod: Behavior Discovery lists only `runc`, Security Events carry no pod and no **Quarantine this pod** button, and a Tracing Policy that selects pods matches none. Tetragon has to ask the runtime instead, through its socket.
+
+The installers, the offline one included, look at the container runtime the nodes report and set this up when every node runs CRI-O. Nothing is changed on a Tetragon that was already installed, and nothing is set up when only some nodes run CRI-O, because the DaemonSet has one socket path for all of them. In either case, set it yourself, with the version of the chart that is installed (`helm -n kube-system list`):
+
+```bash
+helm repo update cilium
+helm -n kube-system upgrade tetragon cilium/tetragon --version <installed version> --reuse-values \
+  --set tetragon.cri.enabled=true \
+  --set tetragon.cri.socketHostPath=/var/run/crio/crio.sock \
+  --set tetragon.cgidmap.enabled=true
+kubectl -n kube-system rollout status daemonset/tetragon
+kubectl -n sentinel-system rollout restart deployment/sentinel
+```
+
+`/var/run/crio/crio.sock` is where CRI-O listens unless it was configured otherwise. A chart version other than the installed one, together with `--reuse-values`, can be refused by the API server. Processes that were running before Tetragon restarted may still show without a pod until their workload restarts.
+
 ## Offline install
 
 For a cluster with no internet access. Every [release](https://github.com/cooloo9871/K8s_Sentinel/releases) from v0.71.0 on carries two assets:

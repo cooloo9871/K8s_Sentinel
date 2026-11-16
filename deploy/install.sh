@@ -63,9 +63,25 @@ else
   #
   # Installed as a Helm release, the way install-job.yaml does: applied as
   # rendered templates there was no release for a later `helm upgrade`.
+  #
+  # On CRI-O, Tetragon cannot tell which pod a process belongs to from the
+  # name of its cgroup, and every event arrives without one. There it asks the
+  # runtime instead. Only when every node runs CRI-O: the DaemonSet has one
+  # socket path for all of them.
+  cri_args=()
+  runtimes="$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.containerRuntimeVersion}{"\n"}{end}')"
+  if [ -n "$runtimes" ] && ! echo "$runtimes" | grep -qv '^cri-o://'; then
+    echo "[tetragon] the nodes run CRI-O: pods are looked up through its socket"
+    cri_args=(--set tetragon.cri.enabled=true
+      --set tetragon.cri.socketHostPath=/var/run/crio/crio.sock
+      --set tetragon.cgidmap.enabled=true)
+  elif echo "$runtimes" | grep -q '^cri-o://'; then
+    echo "[tetragon] only some nodes run CRI-O: events from those will name no pod; see docs/install.md"
+  fi
   "${HELM}" install tetragon cilium/tetragon -n kube-system \
     --set hostNetwork=false \
-    --set tetragon.grpc.address=0.0.0.0:54321
+    --set tetragon.grpc.address=0.0.0.0:54321 \
+    ${cri_args[@]+"${cri_args[@]}"}
 
   echo "[tetragon] waiting for DaemonSet to be ready..."
   kubectl rollout status daemonset/tetragon -n kube-system --timeout=120s

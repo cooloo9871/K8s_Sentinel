@@ -31,6 +31,15 @@ helm template tetragon tetragon --repo https://helm.cilium.io --version "$TETRAG
   --namespace kube-system --include-crds \
   --set hostNetwork=false --set tetragon.grpc.address=0.0.0.0:54321 \
   > "$B/manifests/tetragon.yaml"
+# The same again for clusters on CRI-O, where Tetragon has to ask the runtime
+# which pod a process belongs to. install.sh applies this one when every node
+# runs CRI-O.
+helm template tetragon tetragon --repo https://helm.cilium.io --version "$TETRAGON_CHART_VERSION" \
+  --namespace kube-system --include-crds \
+  --set hostNetwork=false --set tetragon.grpc.address=0.0.0.0:54321 \
+  --set tetragon.cri.enabled=true --set tetragon.cri.socketHostPath=/var/run/crio/crio.sock \
+  --set tetragon.cgidmap.enabled=true \
+  > "$B/manifests/tetragon-crio.yaml"
 # The operator's CRDs go in a file of their own: the chart also holds objects
 # of those kinds, and applied in one go with their definitions they are refused
 # as kinds the API server has not heard of yet.
