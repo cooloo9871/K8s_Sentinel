@@ -15,6 +15,7 @@ import { IconRefresh, IconNetwork, IconAlertTriangle, IconSearch, IconLayoutGrid
 } from '@tabler/icons-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScopeFilter } from '../components/ScopeFilter'
+import { QuarantineAction } from '../components/QuarantineAction'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -516,7 +517,7 @@ export function NetworkTopologyPage() {
       setTimeout(() => reactFlowRef.current?.fitView(), 100)
     }
     // Clear selectedNode if it's no longer visible after filter change
-    setSelectedNode(prev => prev && nodeMap[prev.id] ? prev : null)
+    setSelectedNode(prev => (prev && nodeMap[prev.id]) ?? null)
     // The panel describes what the canvas draws now, not a snapshot from the
     // click. Same id → refreshed counts and ports; the id changes when the
     // verdict flips (a blocked edge is a different id), so fall back to the
@@ -919,6 +920,14 @@ export function NetworkTopologyPage() {
                               ))}
                             </div>
                           </div>
+                        )}
+                        {!selectedNode.quarantined && (
+                          <QuarantineAction
+                            namespace={selectedNode.namespace}
+                            pod={selectedNode.pod}
+                            quarantined={false}
+                            onChanged={() => load()}
+                          />
                         )}
                         {selectedNode.quarantined && (
                           <div className="rounded bg-red-50 px-2 py-1.5 text-[11px] leading-snug text-red-700">

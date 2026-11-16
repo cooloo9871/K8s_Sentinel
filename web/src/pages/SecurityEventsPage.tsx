@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { IconActivity, IconChevronDown, IconChevronRight, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { IconActivity, IconChevronDown, IconChevronRight, IconLock, IconWifi, IconWifiOff } from '@tabler/icons-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -11,13 +11,7 @@ import { ScopeFilter, matchesScopeFilter } from '../components/ScopeFilter'
 import { FilterPopover, matchesFilter } from '../components/FilterPopover'
 import { useSecurityEvents, type DisplayEvent, type Severity } from '../layout/SecurityEventsProvider'
 import { quarantineApi } from '../api/client'
-import { IconLock } from '@tabler/icons-react'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { useToast } from '../layout/AppToaster'
-import { useAuth } from '../layout/AuthContext'
+import { QuarantineAction } from '../components/QuarantineAction'
 import { formatTWTime } from '../utils/time'
 import { exportCSV } from '../utils/exportEvents'
 import { RelativeTime } from '../components/RelativeTime'
@@ -48,79 +42,6 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   )
 }
 
-
-// QuarantineAction cuts the pod off from the network without killing it. It is
-// offered per event rather than as a standing rule: this contains the one pod
-// the event names, chosen by a person, and changes nothing about future events.
-function QuarantineAction({ e, quarantined, onChanged }: {
-  e: DisplayEvent
-  quarantined: boolean
-  onChanged: () => void
-}) {
-  const [busy, setBusy] = useState(false)
-  const [asking, setAsking] = useState(false)
-  const toast = useToast()
-  const { user } = useAuth()
-
-  if (!e.pod || !e.namespace) return null
-
-  // Containment is a fact about the pod, not about the event being read, so
-  // every event that pod produced says so — and none of them offers to do it
-  // again.
-  if (quarantined) {
-    return (
-      <p className="mt-2 flex items-center gap-1 text-xs text-red-600">
-        <IconLock size={12} /> This pod is quarantined. Release it from the Quarantine page.
-      </p>
-    )
-  }
-  if (user?.role !== 'admin') return null
-
-  const run = async () => {
-    setBusy(true)
-    try {
-      await quarantineApi.add(e.namespace, e.pod)
-      toast.success(`${e.pod} quarantined. Network cut off, container left running.`)
-      onChanged()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Could not quarantine ${e.pod}`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // Confirmed first: this cuts a running workload off the network, and the
-  // button sits inside a row you opened to read rather than to act. The dialog
-  // names the pod, because the row that was expanded is not necessarily the row
-  // still under the pointer.
-  return (
-    <AlertDialog open={asking} onOpenChange={setAsking}>
-      <Button
-        variant="outline"
-        size="sm"
-        className="mt-2 h-7 w-fit border-red-300 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-        disabled={busy}
-        onClick={() => setAsking(true)}
-      >
-        {busy ? 'Quarantining…' : 'Quarantine this pod'}
-      </Button>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Quarantine this pod?</AlertDialogTitle>
-          <AlertDialogDescription>
-            <span className="font-mono font-medium">{e.namespace}/{e.pod}</span> loses all network
-            access. The container keeps running, so anything it serves stops. Release it from
-            Policies → Quarantine.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={run}>Quarantine</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
 
 function DetailRow({ e, quarantined, onChanged }: {
   e: DisplayEvent
@@ -189,7 +110,7 @@ function DetailRow({ e, quarantined, onChanged }: {
             </div>
           ))}
         </div>
-        <QuarantineAction e={e} quarantined={quarantined} onChanged={onChanged} />
+        <QuarantineAction namespace={e.namespace} pod={e.pod} quarantined={quarantined} onChanged={onChanged} />
       </TableCell>
     </TableRow>
   )

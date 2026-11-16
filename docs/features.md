@@ -47,6 +47,7 @@ Tetragon's `Sigkill` already does; deleting the pod is worse, because the
 Deployment hands back a replacement and the evidence goes with it.
 
 - **Quarantine** from a Security Event, in the expanded detail — it contains the one pod that event names
+- **Quarantine this pod** on the Network Topology, in the detail panel of a pod you clicked — for a pod seen connecting out, or being reached from outside, before any event names it
 - **Policies → Quarantine** lists what is contained, with who asked and when, and releases it
 - On **Network Topology** a contained pod carries a red border and a lock
 
