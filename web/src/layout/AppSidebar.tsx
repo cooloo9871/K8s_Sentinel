@@ -38,7 +38,7 @@ const GROUPS: NavGroup[] = [
       { to: '/policies/tracing', label: 'Tracing Policy' },
       { to: '/security/discovery', label: 'Behavior Discovery' },
       { to: '/policies/templates', label: 'Templates' },
-      { to: '/policies/admission', label: 'Admission Policy', clusterOnly: true },
+      { to: '/policies/admission', label: 'Admission Policy' },
       { to: '/policies/network', label: 'Network Policy' },
       { to: '/policies/quarantine', label: 'Quarantine' },
     ],

@@ -34,6 +34,9 @@ type VAPRecord struct {
 	CreatedBy       string `json:"createdBy"`
 	CreatedAt       string `json:"createdAt"`
 	RawYAML         string `json:"rawYaml"`
+	// The namespaces it is for, when it was made by an account limited to
+	// namespaces; empty when it is the cluster's. See vap_scope.go.
+	Namespaces []string `json:"namespaces"`
 }
 
 // VAPBindingRecord is a ValidatingAdmissionPolicyBinding as returned by the list/get API.
@@ -45,6 +48,9 @@ type VAPBindingRecord struct {
 	CreatedBy         string   `json:"createdBy"`
 	CreatedAt         string   `json:"createdAt"`
 	RawYAML           string   `json:"rawYaml"`
+	// The namespaces it is held to, when it is marked for namespaces and its
+	// selector names them and nothing else; empty otherwise.
+	Namespaces []string `json:"namespaces"`
 }
 
 func (s *Store) ListVAP(ctx context.Context) ([]VAPRecord, error) {
@@ -86,15 +92,20 @@ func (s *Store) ApplyVAPRaw(ctx context.Context, rawYAML, createdBy string) erro
 	obj.SetResourceVersion("")
 	obj.SetUID("")
 	obj.SetManagedFields(nil)
-	_, err = s.client.Resource(vapGVR).Create(ctx, obj, metav1.CreateOptions{})
-	if err == nil {
-		return nil
-	}
-	if !k8serrors.IsAlreadyExists(err) {
+	// Looked up first and not after a failed create: whether the policy is
+	// marked for namespaces decides what may be created.
+	existing, err := s.client.Resource(vapGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil && !k8serrors.IsNotFound(err) {
 		return err
 	}
-	existing, err := s.client.Resource(vapGVR).Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		keepOwnerNamespaces(obj, existing)
+	}
+	if len(OwnerNamespaces(obj)) > 0 {
+		namespacedOnly(obj)
+	}
 	if err != nil {
+		_, err = s.client.Resource(vapGVR).Create(ctx, obj, metav1.CreateOptions{})
 		return err
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
@@ -162,6 +173,7 @@ func (s *Store) ApplyVAPBindingRaw(ctx context.Context, rawYAML, createdBy strin
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	preserveCreatedBy(obj, existing)
+	keepOwnerNamespaces(obj, existing)
 	_, err = s.client.Resource(vapBindingGVR).Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
@@ -196,6 +208,7 @@ func toVAPRecord(item unstructured.Unstructured) (VAPRecord, error) {
 	return VAPRecord{
 		Name:            item.GetName(),
 		Namespace:       "cluster-wide",
+		Namespaces:      nonNilStrings(OwnerNamespaces(&item)),
 		FailurePolicy:   failurePolicy,
 		ValidationCount: len(validations),
 		CreatedBy:       createdBy,
@@ -223,13 +236,25 @@ func toVAPBindingRecord(item unstructured.Unstructured) (VAPBindingRecord, error
 	if v := item.GetAnnotations()[annotationCreatedBy]; v != "" {
 		createdBy = v
 	}
+	var held []string
+	if len(OwnerNamespaces(&item)) > 0 {
+		held, _ = PinnedNamespaces(&item)
+	}
 	return VAPBindingRecord{
 		Name:              item.GetName(),
 		Namespace:         "cluster-wide",
+		Namespaces:        nonNilStrings(held),
 		PolicyName:        policyName,
 		ValidationActions: actions,
 		CreatedBy:         createdBy,
 		CreatedAt:         createdAt,
 		RawYAML:           string(rawYAML),
 	}, nil
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

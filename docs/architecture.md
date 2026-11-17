@@ -622,8 +622,7 @@ before the field has). Like the role, the list is read from the account on
 every request and is not in the token, so changing it reaches a session that is
 already open. `internal/handler/scope.go` is the whole mechanism:
 
-- routes about the cluster as a whole (settings, accounts, admission policies,
-  registries, event sources, the audit log, the global mode, template writes)
+- routes about the cluster as a whole (settings, accounts, registries, event sources, the audit log, the global mode, template writes)
   sit behind `clusterWide`, which refuses a limited account;
 - routes about namespaced things filter what they list with `inScope` and
   refuse a read or write outside the account's namespaces with
@@ -631,6 +630,12 @@ already open. `internal/handler/scope.go` is the whole mechanism:
   cluster-wide policy is neither listed nor writable. A write is checked
   against the namespace the store will use (the one in the manifest or form),
   not only the one in the URL;
+- admission policies and bindings have no namespace, so they are told apart by
+  a mark instead: one written by a limited account is checked and annotated
+  `sentinel.io/namespaces` (`internal/handler/vap_scope.go`), and the store
+  then keeps every policy so marked to namespaced resources and carries the
+  mark across saves that omit it (`internal/k8s/vap_scope.go`). A limited
+  account lists and writes only what is marked for namespaces all its own;
 - the event streams drop what is outside as they send;
 - the Network Topology and the Hubble flow stream are not filtered.
 

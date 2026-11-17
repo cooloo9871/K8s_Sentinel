@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,15 @@ func listVAP(store *k8s.Store) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		if sc := scopeOf(r); !sc.cluster() {
+			kept := []k8s.VAPRecord{}
+			for _, rec := range records {
+				if sc.manages(rec.Namespaces) {
+					kept = append(kept, rec)
+				}
+			}
+			records = kept
+		}
 		writeJSON(w, http.StatusOK, records)
 	}
 }
@@ -24,8 +34,8 @@ func getVAP(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
 		rec, err := store.GetVAP(r.Context(), name)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+		if err != nil || !scopeOf(r).manages(rec.Namespaces) {
+			http.Error(w, fmt.Sprintf("admission policy %q not found", name), http.StatusNotFound)
 			return
 		}
 		writeJSON(w, http.StatusOK, rec)
@@ -46,6 +56,14 @@ func applyVAP(store *k8s.Store, applied func()) http.HandlerFunc {
 		if !checkManifestName(w, r, body.RawYAML) {
 			return
 		}
+		if sc := scopeOf(r); !sc.cluster() {
+			limited, err := limitPolicy(r.Context(), store, sc, body.RawYAML)
+			if err != nil {
+				writeRefusal(w, err)
+				return
+			}
+			body.RawYAML = limited
+		}
 		if err := store.ApplyVAPRaw(r.Context(), body.RawYAML, claimsFromCtx(r).Username); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -58,6 +76,12 @@ func applyVAP(store *k8s.Store, applied func()) http.HandlerFunc {
 func deleteVAP(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
+		if sc := scopeOf(r); !sc.cluster() {
+			if rec, err := store.GetVAP(r.Context(), name); err != nil || !sc.manages(rec.Namespaces) {
+				http.Error(w, fmt.Sprintf("admission policy %q is not this account's to delete", name), http.StatusForbidden)
+				return
+			}
+		}
 		if err := store.DeleteVAP(r.Context(), name); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -73,6 +97,15 @@ func listVAPBindings(store *k8s.Store) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		if sc := scopeOf(r); !sc.cluster() {
+			kept := []k8s.VAPBindingRecord{}
+			for _, rec := range records {
+				if sc.manages(rec.Namespaces) {
+					kept = append(kept, rec)
+				}
+			}
+			records = kept
+		}
 		writeJSON(w, http.StatusOK, records)
 	}
 }
@@ -81,8 +114,8 @@ func getVAPBinding(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
 		rec, err := store.GetVAPBinding(r.Context(), name)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+		if err != nil || !scopeOf(r).manages(rec.Namespaces) {
+			http.Error(w, fmt.Sprintf("binding %q not found", name), http.StatusNotFound)
 			return
 		}
 		writeJSON(w, http.StatusOK, rec)
@@ -101,6 +134,14 @@ func applyVAPBinding(store *k8s.Store) http.HandlerFunc {
 		if !checkManifestName(w, r, body.RawYAML) {
 			return
 		}
+		if sc := scopeOf(r); !sc.cluster() {
+			limited, err := limitBinding(r.Context(), store, sc, body.RawYAML)
+			if err != nil {
+				writeRefusal(w, err)
+				return
+			}
+			body.RawYAML = limited
+		}
 		if err := store.ApplyVAPBindingRaw(r.Context(), body.RawYAML, claimsFromCtx(r).Username); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -112,6 +153,12 @@ func applyVAPBinding(store *k8s.Store) http.HandlerFunc {
 func deleteVAPBinding(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
+		if sc := scopeOf(r); !sc.cluster() {
+			if rec, err := store.GetVAPBinding(r.Context(), name); err != nil || !sc.manages(rec.Namespaces) {
+				http.Error(w, fmt.Sprintf("binding %q is not this account's to delete", name), http.StatusForbidden)
+				return
+			}
+		}
 		if err := store.DeleteVAPBinding(r.Context(), name); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

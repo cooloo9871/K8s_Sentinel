@@ -82,11 +82,11 @@ function AppRoutes() {
           <Route path="/settings/retention" element={cluster(<SecurityRetentionPage />)} />
           <Route path="/settings/audit" element={cluster(<AuditLogPage />)} />
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
-          <Route path="/policies/admission" element={cluster(<VAPPage />)} />
-          <Route path="/policies/admission/new" element={cluster(<VAPPage />)} />
-          <Route path="/policies/admission/:name/edit" element={cluster(<VAPPage />)} />
-          <Route path="/policies/admission/bindings/new" element={cluster(<VAPPage />)} />
-          <Route path="/policies/admission/bindings/:name/edit" element={cluster(<VAPPage />)} />
+          <Route path="/policies/admission" element={<VAPPage />} />
+          <Route path="/policies/admission/new" element={<VAPPage />} />
+          <Route path="/policies/admission/:name/edit" element={<VAPPage />} />
+          <Route path="/policies/admission/bindings/new" element={<VAPPage />} />
+          <Route path="/policies/admission/bindings/:name/edit" element={<VAPPage />} />
           <Route path="/policies/network" element={<CNPPage />} />
           <Route path="/policies/network/new" element={<CNPPage />} />
           <Route path="/policies/network/:name/edit" element={<CNPPage />} />

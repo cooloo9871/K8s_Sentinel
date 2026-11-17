@@ -97,7 +97,7 @@ export function DashboardPage() {
 
   const load = (showSpinner = false) => {
     if (showSpinner) setLoading(true)
-    // The global mode, admission policies and event sources are the cluster's,
+    // The global mode and event sources are the cluster's,
     // and are not asked for by an account limited to namespaces.
     Promise.all([policyApi.list(), limited ? Promise.resolve('Monitoring') : modeApi.get()])
       .then(([p, m]) => {
@@ -115,10 +115,10 @@ export function DashboardPage() {
     vulnApi.overview()
       .then(setVulns)
       .catch(() => {})
-    if (limited) return
     Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
+    if (limited) return
     fetch('/api/tetragon/agents')
       .then(r => r.json())
       .then((d: { agents: { ready: boolean; phase: string; ingestObserved: boolean; ingestConnected: boolean }[] }) => {
@@ -296,8 +296,8 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Admission Policy: the cluster's, so not for an account limited to namespaces */}
-      {!limited && <Card>
+      {/* Admission Policy */}
+      <Card>
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-base font-semibold">Admission Policy</h3>
@@ -342,7 +342,7 @@ export function DashboardPage() {
             </Table>
           )}
         </CardContent>
-      </Card>}
+      </Card>
 
       {/* Network Policy — hidden entirely on clusters without Cilium, since the
           feature is unavailable there rather than merely empty */}

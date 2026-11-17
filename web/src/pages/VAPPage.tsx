@@ -1066,8 +1066,16 @@ function parseVulnerabilitySpec(spec: any): VulnerabilityRule | null {
 function metadataBeyondBuilder(doc: Record<string, unknown>): boolean {
   const meta = (doc.metadata ?? {}) as { labels?: Record<string, unknown>; annotations?: Record<string, unknown> }
   if (Object.keys(meta.labels ?? {}).length > 0) return true
-  const ownAnnotations = ['sentinel.io/builder', 'sentinel.io/apply-to', 'sentinel.io/created-by', 'kubectl.kubernetes.io/last-applied-configuration']
+  // sentinel.io/namespaces is the server's: it puts it back on every save.
+  const ownAnnotations = ['sentinel.io/builder', 'sentinel.io/apply-to', 'sentinel.io/created-by', 'sentinel.io/namespaces', 'kubectl.kubernetes.io/last-applied-configuration']
   return Object.keys(meta.annotations ?? {}).some(k => !ownAnnotations.includes(k))
+}
+
+// forNamespaces reports whether a policy or binding was made by an account
+// limited to namespaces, which the server marks.
+function forNamespaces(doc: Record<string, unknown>): boolean {
+  const meta = (doc.metadata ?? {}) as { annotations?: Record<string, unknown> }
+  return !!meta.annotations?.['sentinel.io/namespaces']
 }
 
 // specForCompare renders a spec for comparison against a regenerated one,
@@ -1079,7 +1087,7 @@ function metadataBeyondBuilder(doc: Record<string, unknown>): boolean {
 // non-default (matchPolicy: Exact) is a real difference a rebuild would
 // erase, and still forces the YAML editor.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function specForCompare(spec: any): string {
+function specForCompare(spec: any, forNamespaces = false): string {
   const copy = JSON.parse(JSON.stringify(spec ?? {}))
   const emptyObj = (v: unknown) => typeof v === 'object' && v !== null && Object.keys(v).length === 0
   for (const mc of [copy.matchConstraints, copy.matchResources]) {
@@ -1089,7 +1097,9 @@ function specForCompare(spec: any): string {
     if (emptyObj(mc.objectSelector)) delete mc.objectSelector
     for (const rules of [mc.resourceRules, mc.excludeResourceRules]) {
       for (const r of rules ?? []) {
-        if (r.scope === '*') delete r.scope
+        // On a policy marked for namespaces the server sets Namespaced on
+        // every save, so there it is no more the builder's to lose.
+        if (r.scope === '*' || (forNamespaces && r.scope === 'Namespaced')) delete r.scope
       }
     }
   }
@@ -1140,7 +1150,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
         result.configMapSizeRule, result.secretSizeRule, result.vulnerabilityRule,
         { volumeRule: result.volumeRule, envRule: result.envRule, cveRule: result.cveRule },
       )) as Record<string, unknown> | undefined
-      if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) return null
+      if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec, forNamespaces(doc))) return null
       return result
     }
 
@@ -1161,7 +1171,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
         result.securityContextRule, result.hostAccessRule,
         result.configMapSizeRule, result.secretSizeRule,
       )) as Record<string, unknown> | undefined
-      if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) return null
+      if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec, forNamespaces(doc))) return null
       return result
     }
 
@@ -1242,7 +1252,7 @@ export function tryParseBuilderPolicy(rawYaml: string): {
       result.name, ruleType, result.labelRules, imageRules, replicaRules,
       applyTo, resourceLimitRules, securityContextRule, hostAccessRule,
     )) as Record<string, unknown> | undefined
-    if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
+    if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec, forNamespaces(doc))) {
       return null
     }
     return result
@@ -1314,7 +1324,7 @@ export function tryParseBuilderBinding(rawYaml: string): {
     const regen = yaml.load(generateBindingYaml(
       result.name, result.policyName, result.nsMode, result.namespaces, result.actions, result.gateParam,
     )) as Record<string, unknown> | undefined
-    if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec)) {
+    if (!regen || specForCompare(regen.spec) !== specForCompare(doc.spec, forNamespaces(doc))) {
       return null
     }
     return result
@@ -1325,7 +1335,10 @@ export function tryParseBuilderBinding(rawYaml: string): {
 
 
 export function VAPPage() {
-  const { user } = useAuth()
+  // limited: the account is an admin of some namespaces. Its policies reach
+  // namespaced resources only and its bindings name its namespaces; the server
+  // refuses anything else, and the form does not offer it.
+  const { user, limited } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
 
@@ -1418,8 +1431,10 @@ export function VAPPage() {
   const [bindingEditName, setBindingEditName] = useState<string | undefined>()
   const [bindingName, setBindingName] = useState('')
   const [bindingPolicy, setBindingPolicy] = useState('')
-  const [bindingNsMode, setBindingNsMode] = useState<BindingNsMode>('all')
-  const [bindingNamespaces, setBindingNamespaces] = useState<string[]>([])
+  const [bindingNsMode, setBindingNsMode] = useState<BindingNsMode>(limited ? 'include' : 'all')
+  // A new binding of an account limited to namespaces starts on its own.
+  const ownNamespaces = limited ? user?.namespaces ?? [] : []
+  const [bindingNamespaces, setBindingNamespaces] = useState<string[]>(ownNamespaces)
   const [clusterNamespaces, setClusterNamespaces] = useState<string[]>([])
   const [bindingActions, setBindingActions] = useState<Set<ValidationAction>>(new Set(['Deny']))
   const [bindingBuilderSaving, setBindingBuilderSaving] = useState(false)
@@ -1515,7 +1530,7 @@ export function VAPPage() {
       } else {
         setBindingEditName(undefined)
         setBindingName(''); setBindingPolicy('')
-        setBindingNsMode('all'); setBindingNamespaces([])
+        setBindingNsMode(limited ? 'include' : 'all'); setBindingNamespaces(ownNamespaces)
         setBindingActions(new Set(['Deny']))
         setBindingHadGate(false)
         setShowBindingBuilder(true)
@@ -1754,7 +1769,7 @@ export function VAPPage() {
                         <SelectItem value="serviceaccounts">ServiceAccounts</SelectItem>
                         <SelectItem value="ingresses">Ingresses</SelectItem>
                         <SelectItem value="networkpolicies">NetworkPolicies</SelectItem>
-                        <SelectItem value="namespaces">Namespaces</SelectItem>
+                        {!limited && <SelectItem value="namespaces">Namespaces</SelectItem>}
                       </SelectGroup>
                     </SelectContent>
                   </Select>
@@ -2311,9 +2326,9 @@ export function VAPPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="all">All namespaces</SelectItem>
+                      {!limited && <SelectItem value="all">All namespaces</SelectItem>}
                       <SelectItem value="include">Only these namespaces</SelectItem>
-                      <SelectItem value="exclude">All except these namespaces</SelectItem>
+                      {!limited && <SelectItem value="exclude">All except these namespaces</SelectItem>}
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -2469,7 +2484,10 @@ export function VAPPage() {
                       <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No policies found</TableCell></TableRow>
                     ) : policies.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
                       <TableRow key={p.name}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {p.name}
+                          {p.namespaces?.map(ns => <Badge key={ns} variant="outline" className="ml-2 font-mono text-[10px]">{ns}</Badge>)}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={p.failurePolicy === 'Fail' ? 'destructive' : 'secondary'}>{p.failurePolicy || '—'}</Badge>
                         </TableCell>
@@ -2529,7 +2547,10 @@ export function VAPPage() {
                       <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No bindings found</TableCell></TableRow>
                     ) : bindings.filter(b => !search || b.name.toLowerCase().includes(search.toLowerCase())).map(b => (
                       <TableRow key={b.name}>
-                        <TableCell className="font-medium">{b.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {b.name}
+                          {b.namespaces?.map(ns => <Badge key={ns} variant="outline" className="ml-2 font-mono text-[10px]">{ns}</Badge>)}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{b.policyName}</TableCell>
                         <TableCell>
                           <div className="flex gap-1 flex-wrap">

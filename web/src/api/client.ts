@@ -195,6 +195,8 @@ export interface VAPRecord {
   createdBy: string
   createdAt: string
   rawYaml: string
+  // The namespaces it is for, when made by an account limited to namespaces.
+  namespaces?: string[]
 }
 
 export interface VAPBindingRecord {
@@ -205,6 +207,7 @@ export interface VAPBindingRecord {
   createdBy: string
   createdAt: string
   rawYaml: string
+  namespaces?: string[]
 }
 
 export interface AdmissionEvent {

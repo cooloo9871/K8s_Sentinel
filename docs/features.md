@@ -301,7 +301,14 @@ A ValidatingAdmissionPolicy cannot look anything up while it decides. Sentinel t
 - **Access by namespace** — an account can be limited to some namespaces, when it is created or later (**Users → Access**; the change reaches a session already open). Its role still applies inside them: a limited Admin creates and edits there, a limited Viewer reads.
   - *Sees and manages, in its namespaces only:* namespaced Tracing Policies and Network Policies, Behavior Discovery, Security Events, Admission Events, Vulnerabilities (Workloads), Quarantine
   - *Sees whole:* the Network Topology, since a connection has two ends and the far one is seldom its own. Quarantine from the topology still works on its own pods only
-  - *Does not see:* cluster-wide Tracing Policies and Network Policies, Admission Policies, Registries, Event Sources, the global Protect mode, the Audit Log and all of Settings. An event caused by a cluster-wide policy on one of its pods is shown, with the policy's name
+  - *Does not see:* cluster-wide Tracing Policies and Network Policies, the cluster's Admission Policies, Registries, Event Sources, the global Protect mode, the Audit Log and all of Settings. An event caused by a cluster-wide policy on one of its pods is shown, with the policy's name
+  - *Admission Policy:* a limited Admin makes policies and bindings for its own namespaces, and sees those only. Kubernetes has no namespaced admission policy, so Sentinel marks each one with the namespaces it is for (`sentinel.io/namespaces`) and holds it to them:
+    - the policy matches namespaced resources only (`scope: Namespaced` is set on every rule), because a binding's namespace selector does not keep a policy off nodes, cluster roles or namespaces themselves
+    - the binding must be **Only these namespaces**, among the account's own and those its policy is for. All namespaces, All except, and selecting by any other label are refused
+    - it can bind only policies marked for its namespaces, not the cluster's, and cannot change or delete a binding the cluster's Admin made for its namespace
+    - parameters are refused, except the scan counts the vulnerability rules read
+    - a policy is not created under a name some binding already refers to
+    - a policy made this way stays marked when an Admin of the whole cluster edits it. Limited accounts of the same namespaces share it; one with fewer namespaces than the policy is marked for does not see it
   - *Templates:* read, and used to make policies; adding, editing and deleting them is for an Admin of the whole cluster, since they are shared by everyone
   - An Admin of some namespaces cannot manage accounts or reset another account's password. An account cannot limit itself, so one that manages the others always remains
   - It is enforced by the server on every request and event stream, not by hiding pages. It is a division of work inside a team, not isolation between tenants: the topology shows the names of every namespace and workload

@@ -108,6 +108,12 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/cnp", listCNP(cfg.Store))
 		r.Get("/api/cnp/{name}", getCNP(cfg.Store))
 		r.Get("/api/quarantine", listQuarantined(cfg.Store))
+		// Admission policies are the cluster's, but an account limited to
+		// namespaces has those marked for them; see vap_scope.go.
+		r.Get("/api/vap", listVAP(cfg.Store))
+		r.Get("/api/vap/{name}", getVAP(cfg.Store))
+		r.Get("/api/vap-bindings", listVAPBindings(cfg.Store))
+		r.Get("/api/vap-bindings/{name}", getVAPBinding(cfg.Store))
 		r.Get("/api/vulnerabilities", getVulnerabilities(cfg.Store))
 		r.Get("/api/vulnerabilities/{namespace}/{kind}/{name}", getWorkloadVulnerabilities(cfg.Store))
 
@@ -120,10 +126,6 @@ func New(cfg Config) http.Handler {
 			r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
 			r.Get("/api/alerts", listAlerts(cfg.Alerts))
 			r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
-			r.Get("/api/vap", listVAP(cfg.Store))
-			r.Get("/api/vap/{name}", getVAP(cfg.Store))
-			r.Get("/api/vap-bindings", listVAPBindings(cfg.Store))
-			r.Get("/api/vap-bindings/{name}", getVAPBinding(cfg.Store))
 			r.Get("/api/registries", listRegistries(cfg.Registries, cfg.RegistryScans))
 			r.Get("/api/registries/{id}/images", registryImages(cfg.Registries, cfg.RegistryScans))
 			r.Get("/api/registries/{id}/findings", registryFindings(cfg.RegistryScans))
@@ -147,6 +149,12 @@ func New(cfg Config) http.Handler {
 			r.Post("/api/cnp", applyCNP(cfg.Store))
 			r.Put("/api/cnp/{name}", applyCNP(cfg.Store))
 			r.Delete("/api/cnp/{name}", deleteCNP(cfg.Store))
+			r.Post("/api/vap", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
+			r.Put("/api/vap/{name}", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
+			r.Delete("/api/vap/{name}", deleteVAP(cfg.Store))
+			r.Post("/api/vap-bindings", applyVAPBinding(cfg.Store))
+			r.Put("/api/vap-bindings/{name}", applyVAPBinding(cfg.Store))
+			r.Delete("/api/vap-bindings/{name}", deleteVAPBinding(cfg.Store))
 
 			// The rest is the cluster's.
 			r.Group(func(r chi.Router) {
@@ -166,12 +174,6 @@ func New(cfg Config) http.Handler {
 				r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
 				r.Delete("/api/alerts/{id}", deleteAlert(cfg.Alerts))
 				r.Post("/api/rsyslog/test", testRsyslog(cfg.RsyslogDispatch))
-				r.Post("/api/vap", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
-				r.Put("/api/vap/{name}", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
-				r.Delete("/api/vap/{name}", deleteVAP(cfg.Store))
-				r.Post("/api/vap-bindings", applyVAPBinding(cfg.Store))
-				r.Put("/api/vap-bindings/{name}", applyVAPBinding(cfg.Store))
-				r.Delete("/api/vap-bindings/{name}", deleteVAPBinding(cfg.Store))
 				r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
 				r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
 				r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))

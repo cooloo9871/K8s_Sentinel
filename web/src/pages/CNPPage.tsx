@@ -587,11 +587,6 @@ export function CNPPage() {
             <h4 className="text-xl font-semibold">
               {editing ? `Edit ${editing.name}` : 'New Network Policy'}
             </h4>
-            {!editing && !usingForm && (
-              <p className="text-sm text-muted-foreground">
-                Scope is determined by the manifest kind: CiliumNetworkPolicy is namespaced, CiliumClusterwideNetworkPolicy is not.
-              </p>
-            )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate('/policies/network')}>Cancel</Button>
