@@ -52,6 +52,7 @@ type Store struct {
 	Discovery  *DiscoveryProfileStore
 	Templates  *TemplateStore
 	containers *containerResolver
+	lineage    *containerLineage
 
 	// Tetragon fan-out broadcast — single stream shared by all consumers
 	tetragonMu   sync.RWMutex
@@ -127,6 +128,7 @@ func NewStore(client dynamic.Interface, typed kubernetes.Interface, _ *rest.Conf
 		Discovery:    NewDiscoveryProfileStore(),
 		Templates:    NewTemplateStore(templatesFile),
 		containers:   newContainerResolver(),
+		lineage:      newContainerLineage(),
 		tetragonSubs: make(map[chan TetragonEvent]struct{}),
 		ciliumSubs:   make(map[chan CiliumFlow]struct{}),
 		ciliumTopo:   make(map[string]CiliumTopoEntry),

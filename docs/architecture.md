@@ -77,6 +77,30 @@ same `parseTetragonLog` the CLI output used. The careful parsing, dedup and
 attribution logic is reused unchanged; a bridge test pins that the protobuf still
 reproduces the CLI shape.
 
+**Which pod a process is in**: Tetragon says, when it can. It reads the pod from
+the name of the process's cgroup, which works where a container's processes sit
+directly in the cgroup named after it (containerd with runc). CRI-O with crun puts
+them one level down, in a cgroup called `container`, and there every event arrives
+without a pod. Tetragon's other way, asking the runtime (`enable-cri` with
+`enable-cgidmap`), was measured on 1.8.0 and is not used: it places only processes
+started after the agent, and it records one cgroup ID for the policy filter and
+another for the tracker the kernel side looks up, so namespaced policies stop
+matching anything.
+
+So `containerLineage` (`internal/k8s/lineage.go`) places what Tetragon did not.
+Every runtime leaves the container ID on the command line of whatever starts a
+process in a container: `conmon -c <id>` is the parent of a container's first
+process, `runc`/`crun ... exec <id>` of one put in later. A process started by one
+of those is in that container, and so is everything it starts, which is followed
+exec by exec in a table of exec ID to container ID; entries leave on
+`process_exit`. The agent's process-cache dump seeds the table with what was
+already running. The container ID then resolves to a pod through the API, which
+for a container that started this instant takes a moment: such events wait up to
+about twenty seconds for the pod's status to list it. The runtime's own steps
+(`runc init`, `crun create`) are never placed, and containerd's shim is not
+treated as a runtime, because the ID it carries is the sandbox's. An event
+Tetragon did name a pod for is left exactly as it came.
+
 The only subscriber is `security.Store`.
 
 **Alerts and rsyslog do not subscribe to this raw stream.** They subscribe to

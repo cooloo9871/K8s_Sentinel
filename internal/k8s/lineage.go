@@ -1,0 +1,185 @@
+package k8s
+
+import (
+	"path"
+	"strings"
+	"sync"
+
+	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
+)
+
+// containerLineage remembers which container a process runs in, for the nodes
+// where Tetragon cannot say.
+//
+// Tetragon names the pod of a process from the name of its cgroup. That works
+// where the processes of a container sit directly in a cgroup named after it
+// (containerd with runc). Where the runtime puts them one level further down,
+// in a cgroup called "container" (CRI-O with crun), the name says nothing, and
+// every event arrives without a pod. The other way Tetragon has of finding the
+// pod, asking the runtime, places some processes and stops namespaced policies
+// from being enforced, so it is not used.
+//
+// What every runtime does leave in plain sight is the container ID on the
+// command line of whatever started the process: the monitor a container's
+// first process is a child of, or the runtime that put a later one into it. A
+// process started by one of those is in that container, and so is everything
+// that process starts. This follows that, one exec at a time.
+type containerLineage struct {
+	mu  sync.Mutex
+	ids map[string]string // exec ID → container ID
+}
+
+// lineageMax bounds the table. Entries leave when their process exits; this is
+// for the exits that were never heard.
+const lineageMax = 200_000
+
+func newContainerLineage() *containerLineage {
+	return &containerLineage{ids: make(map[string]string)}
+}
+
+func (l *containerLineage) get(execID string) string {
+	if execID == "" {
+		return ""
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.ids[execID]
+}
+
+func (l *containerLineage) put(execID, containerID string) {
+	if execID == "" || containerID == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.ids) >= lineageMax {
+		// Any tenth of them: a process whose entry is lost is one whose
+		// children go unplaced, not one that is placed wrongly.
+		n := lineageMax / 10
+		for id := range l.ids {
+			delete(l.ids, id)
+			if n--; n == 0 {
+				break
+			}
+		}
+	}
+	l.ids[execID] = containerID
+}
+
+func (l *containerLineage) forget(execID string) {
+	l.mu.Lock()
+	delete(l.ids, execID)
+	l.mu.Unlock()
+}
+
+// place returns the container proc runs in, or "" when nothing says. parent is
+// the parent as the event carries it, and may be nil.
+func (l *containerLineage) place(proc, parent *tetragon.Process) string {
+	if proc == nil {
+		return ""
+	}
+	if id := l.get(proc.GetExecId()); id != "" {
+		return id
+	}
+	id := l.get(proc.GetParentExecId())
+	// The runtime's own steps, "runc init" or a monitor starting "crun
+	// create", are on the node and not what the workload runs.
+	if id == "" && parent != nil && !isContainerRuntime(proc.GetBinary()) {
+		id = runtimeContainerID(parent.GetBinary(), parent.GetArguments())
+	}
+	l.put(proc.GetExecId(), id)
+	return id
+}
+
+// seed learns from an agent's whole process cache, which holds the processes
+// that were running before anything was listening, and returns those it
+// placed, each with its container.
+func (l *containerLineage) seed(procs []*tetragon.Process) map[*tetragon.Process]string {
+	byID := make(map[string]*tetragon.Process, len(procs))
+	for _, p := range procs {
+		if id := p.GetExecId(); id != "" {
+			byID[id] = p
+		}
+	}
+	placed := make(map[*tetragon.Process]string)
+	for _, p := range procs {
+		if p.GetPod() != nil {
+			continue
+		}
+		if isContainerRuntime(p.GetBinary()) {
+			continue
+		}
+		// Up the tree to the first ancestor that names a container. The depth
+		// is bounded for a cache whose parents loop.
+		id := ""
+		for cur, depth := p, 0; id == "" && depth < 64; depth++ {
+			if id = l.get(cur.GetParentExecId()); id != "" {
+				break
+			}
+			par := byID[cur.GetParentExecId()]
+			if par == nil || par == cur {
+				break
+			}
+			id = runtimeContainerID(par.GetBinary(), par.GetArguments())
+			cur = par
+		}
+		if id == "" {
+			continue
+		}
+		l.put(p.GetExecId(), id)
+		placed[p] = id
+	}
+	return placed
+}
+
+// isContainerRuntime reports whether a binary is a container runtime or the
+// monitor of one: runc, crun, youki, conmon, or a runtime running from a
+// sealed copy of itself, which shows as the file descriptor it was started
+// from. containerd's shim is not one: the ID it carries is the sandbox's, which
+// is no container of the pod.
+func isContainerRuntime(binary string) bool {
+	base := path.Base(binary)
+	switch {
+	case strings.Contains(base, "shim"):
+		return false
+	case strings.Contains(binary, "runc"), strings.Contains(base, "crun"),
+		base == "youki", strings.HasPrefix(base, "conmon"),
+		strings.HasPrefix(binary, "/dev/fd/"), strings.HasPrefix(binary, "/proc/self/fd/"):
+		return true
+	}
+	return false
+}
+
+// runtimeContainerID returns the container a runtime process is working on,
+// which is on its command line.
+func runtimeContainerID(binary, args string) string {
+	if !isContainerRuntime(binary) {
+		return ""
+	}
+	for _, word := range strings.Fields(args) {
+		if len(word) == 64 && isHexString(word) {
+			return word
+		}
+	}
+	return ""
+}
+
+// eventProcesses returns the process an event is about and its parent, and
+// whether the event is the process exiting.
+func eventProcesses(resp *tetragon.GetEventsResponse) (proc, parent *tetragon.Process, exit bool) {
+	switch {
+	case resp.GetProcessExec() != nil:
+		return resp.GetProcessExec().GetProcess(), resp.GetProcessExec().GetParent(), false
+	case resp.GetProcessExit() != nil:
+		return resp.GetProcessExit().GetProcess(), resp.GetProcessExit().GetParent(), true
+	case resp.GetProcessKprobe() != nil:
+		return resp.GetProcessKprobe().GetProcess(), resp.GetProcessKprobe().GetParent(), false
+	case resp.GetProcessTracepoint() != nil:
+		return resp.GetProcessTracepoint().GetProcess(), resp.GetProcessTracepoint().GetParent(), false
+	case resp.GetProcessUprobe() != nil:
+		return resp.GetProcessUprobe().GetProcess(), resp.GetProcessUprobe().GetParent(), false
+	case resp.GetProcessLsm() != nil:
+		return resp.GetProcessLsm().GetProcess(), resp.GetProcessLsm().GetParent(), false
+	}
+	return nil, nil, false
+}

@@ -216,6 +216,11 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 		// A received message means the stream is live and delivering, the
 		// heartbeat that distinguishes a quiet cluster from a broken one.
 		s.ingestion.MarkTetragonEvent(pod.Node)
+		proc, parent, exited := eventProcesses(resp)
+		if exited {
+			s.lineage.forget(proc.GetExecId())
+			continue
+		}
 		// The gRPC message is bridged through the same parser the CLI JSON used,
 		// by marshaling it exactly as `tetra getevents -o json` does.
 		line, err := marshalJSON(resp)
@@ -229,23 +234,34 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 		if evt.isOwnExportWrite() {
 			continue
 		}
-		// For runc events with no pod context, resolve container ID → pod via K8s API.
-		// For execve kprobes: evt.Binary is the exec'd binary (e.g. "bash"), not runc.
-		// The container ID is still in evt.Arguments (from the calling runc process),
-		// and evt.ParentBin identifies the true runc caller.
-		if evt.Pod == "" && evt.HookKind() != "" {
-			checkBin := evt.Binary
-			if strings.Contains(evt.ParentBin, "runc") {
-				checkBin = evt.ParentBin
-			}
-			if cid := extractContainerIDFromRunc(checkBin, evt.Arguments); cid != "" {
-				pod, ns, ctr := s.containers.resolve(ctx, s, cid)
-				if pod != "" {
-					evt.Pod = pod
-					evt.Namespace = ns
-					evt.Container = ctr
+		own := runtimeContainerID(proc.GetBinary(), proc.GetArguments())
+		if evt.Pod == "" {
+			// Tetragon could not say which pod: the process tree can.
+			cid := s.lineage.place(proc, parent)
+			// A hook firing in the runtime itself is the runtime about to
+			// become the container's process, an execve of its entrypoint.
+			if cid == "" && evt.HookKind() != "" {
+				cid = own
+				// "runc init" names no container; what started it does.
+				if cid == "" && parent != nil && isContainerRuntime(proc.GetBinary()) {
+					cid = runtimeContainerID(parent.GetBinary(), parent.GetArguments())
 				}
 			}
+			if cid == "" {
+				if evt.Type == "exec" {
+					continue // a process of the node
+				}
+			} else if !s.placeInPod(ctx, &evt, cid) {
+				// A container that started this instant is not in its pod's
+				// status yet.
+				s.deliverOncePlaced(ctx, evt, cid, out)
+				continue
+			}
+		} else if evt.Type == "exec" && own != "" && proc.GetDocker() != "" && strings.HasPrefix(own, proc.GetDocker()) {
+			// The runtime setting a container up spends a moment in that
+			// container's cgroup, and Tetragon then counts it as the pod's.
+			// It is not something the workload ran.
+			continue
 		}
 		select {
 		case out <- evt:
@@ -253,6 +269,60 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 			return nil
 		}
 	}
+}
+
+// placeInPod fills in the pod a container belongs to, and reports whether it
+// could.
+func (s *Store) placeInPod(ctx context.Context, evt *TetragonEvent, containerID string) bool {
+	pod, ns, ctr := s.containers.resolve(ctx, s, containerID)
+	if pod == "" {
+		return false
+	}
+	evt.Pod, evt.Namespace, evt.Container = pod, ns, ctr
+	return true
+}
+
+// pendingPlacements bounds the events waiting for their container to show up
+// in a pod's status.
+var pendingPlacements = make(chan struct{}, 512)
+
+// deliverOncePlaced holds an event until the API server lists its container,
+// which for one that has just started is a moment after its first process
+// runs. Given up on, an exec is dropped and anything else is delivered as it
+// is: an event without a pod is still an event.
+func (s *Store) deliverOncePlaced(ctx context.Context, evt TetragonEvent, containerID string, out chan<- TetragonEvent) {
+	send := func() {
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+		}
+	}
+	select {
+	case pendingPlacements <- struct{}{}:
+	default:
+		if evt.Type != "exec" {
+			send()
+		}
+		return
+	}
+	go func() {
+		defer func() { <-pendingPlacements }()
+		for _, wait := range []time.Duration{2 * time.Second, 5 * time.Second, 15 * time.Second} {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(wait):
+			}
+			s.containers.forgetUnresolved(containerID)
+			if s.placeInPod(ctx, &evt, containerID) {
+				send()
+				return
+			}
+		}
+		if evt.Type != "exec" {
+			send()
+		}
+	}()
 }
 
 // isOwnExportWrite reports the agent writing its own export log.
@@ -316,7 +386,8 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 			return TetragonEvent{}, false
 		}
 		fillProcess(&evt, proc)
-		if evt.Pod == "" || evt.Binary == "" {
+		// One without a pod is kept: the stream places it, or drops it.
+		if evt.Binary == "" {
 			return TetragonEvent{}, false
 		}
 		evt.Type = "exec"

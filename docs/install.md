@@ -155,21 +155,22 @@ kubectl apply -f deploy/sentinel.yaml
 
 ### Nodes on CRI-O
 
-On CRI-O, Tetragon cannot tell which pod a process belongs to from the name of its cgroup. Every event then arrives without a pod: Behavior Discovery lists only `runc`, Security Events carry no pod and no **Quarantine this pod** button, and a Tracing Policy that selects pods matches none. Tetragon has to ask the runtime instead, through its socket.
+Nothing extra to set up: install the same way, with Tetragon as the installers leave it.
 
-The installers, the offline one included, look at the container runtime the nodes report and set this up when every node runs CRI-O. Nothing is changed on a Tetragon that was already installed, and nothing is set up when only some nodes run CRI-O, because the DaemonSet has one socket path for all of them. In either case, set it yourself, with the version of the chart that is installed (`helm -n kube-system list`):
+On CRI-O with crun, the processes of a container sit in a cgroup one level below the one named after the container, and Tetragon, which reads the pod from that name, reports every event without one. K8s Sentinel places those processes itself, from the container ID on the command line of what started them (see [architecture.md](architecture.md#31-tetragon--runtime-events)). Tracing Policies are enforced as on any other runtime, and Behavior Discovery and Security Events name the pod.
+
+**Leave Tetragon's `tetragon.cri.enabled` and `tetragon.cgidmap.enabled` off.** They are Tetragon's own answer to this, and with Tetragon 1.8.0 they place only some processes while stopping namespaced Tracing Policies from being enforced at all: nothing a policy says to kill is killed. The v0.77.0 installers switched them on for CRI-O clusters. If yours was installed with that release, or you set them by hand, switch them back, with the version of the chart that is installed (`helm -n kube-system list`):
 
 ```bash
 helm repo update cilium
 helm -n kube-system upgrade tetragon cilium/tetragon --version <installed version> --reuse-values \
-  --set tetragon.cri.enabled=true \
-  --set tetragon.cri.socketHostPath=/var/run/crio/crio.sock \
-  --set tetragon.cgidmap.enabled=true
+  --set tetragon.cri.enabled=false \
+  --set tetragon.cgidmap.enabled=false
 kubectl -n kube-system rollout status daemonset/tetragon
 kubectl -n sentinel-system rollout restart deployment/sentinel
 ```
 
-`/var/run/crio/crio.sock` is where CRI-O listens unless it was configured otherwise. A chart version other than the installed one, together with `--reuse-values`, can be refused by the API server. Processes that were running before Tetragon restarted may still show without a pod until their workload restarts.
+An offline install made with the v0.77.0 bundle applied `tetragon-crio.yaml`; apply `manifests/tetragon.yaml` from this bundle over it instead.
 
 ## Offline install
 

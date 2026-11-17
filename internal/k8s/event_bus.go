@@ -130,9 +130,23 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, pod podEndpoint) (
 		return 0, fmt.Errorf("no process cache in response")
 	}
 
+	// The processes Tetragon named no pod for, placed by what started them.
+	procs := make([]*tetragon.Process, 0, len(pc.Processes))
+	for _, p := range pc.Processes {
+		procs = append(procs, p.GetProcess())
+	}
+	seeded := 0
+	now := time.Now().UTC().Format(time.RFC3339)
+	for p, containerID := range s.lineage.seed(procs) {
+		evt := TetragonEvent{Type: "exec", Binary: p.GetBinary(), Time: now}
+		if evt.Binary != "" && s.placeInPod(ctx, &evt, containerID) {
+			s.Discovery.Update(evt)
+			seeded++
+		}
+	}
+
 	// Each ProcessInternal marshals to the shape the seeder already reads, so
 	// the JSON path is reused rather than a second decoder written.
-	seeded := 0
 	for _, p := range pc.Processes {
 		line, err := marshalJSON(p)
 		if err != nil {

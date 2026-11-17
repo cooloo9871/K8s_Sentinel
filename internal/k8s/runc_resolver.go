@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 type resolvedPod struct {
@@ -58,7 +60,9 @@ func (r *containerResolver) resolve(ctx context.Context, s *Store, containerID s
 		}
 	}
 	for _, p := range pods.Items {
-		for _, cs := range p.Status.ContainerStatuses {
+		statuses := append(append(append([]corev1.ContainerStatus{}, p.Status.InitContainerStatuses...),
+			p.Status.ContainerStatuses...), p.Status.EphemeralContainerStatuses...)
+		for _, cs := range statuses {
 			id := stripCRIPrefix(cs.ContainerID)
 			if id == "" {
 				continue
@@ -95,18 +99,14 @@ func stripCRIPrefix(id string) string {
 	return id
 }
 
-// extractContainerIDFromRunc finds the 64-char hex container ID from runc arguments.
-// runc args end with: ... <container-id>
-func extractContainerIDFromRunc(binary, args string) string {
-	if !strings.Contains(binary, "runc") {
-		return ""
+// forgetUnresolved drops the memory of an ID having resolved to nothing, for
+// a container that may have appeared since.
+func (r *containerResolver) forgetUnresolved(containerID string) {
+	r.mu.Lock()
+	if c, ok := r.cache[containerID]; ok && c.pod == "" {
+		delete(r.cache, containerID)
 	}
-	for _, word := range strings.Fields(args) {
-		if len(word) == 64 && isHexString(word) {
-			return word
-		}
-	}
-	return ""
+	r.mu.Unlock()
 }
 
 func isHexString(s string) bool {
