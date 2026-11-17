@@ -135,8 +135,10 @@ func TestALimitedAccountCannotTouchOtherPolicies(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"cluster-rule", "b-rule"} {
-		if got := status(write(t, s, teamA, "policy", policyYAML(name, ""))); got != http.StatusForbidden {
-			t.Errorf("overwriting %s = %d, want 403", name, got)
+		// Told that the name is taken, since nothing it can see would say so.
+		err := write(t, s, teamA, "policy", policyYAML(name, ""))
+		if got := status(err); got != http.StatusConflict || !strings.Contains(err.Error(), "already exists") {
+			t.Errorf("overwriting %s = %d %v, want 409 saying it already exists", name, got, err)
 		}
 	}
 	// Claiming namespaces it does not have gets it its own.
@@ -216,8 +218,8 @@ func TestALimitedAccountsBindingNamesItsNamespaces(t *testing.T) {
 	if err := write(t, s, scope{}, "binding", bindingYAML("imposed", "cluster-rule", only("team-a"))); err != nil {
 		t.Fatal(err)
 	}
-	if got := status(write(t, s, teamA, "binding", bindingYAML("imposed", "a-rule", only("team-a")))); got != http.StatusForbidden {
-		t.Errorf("overwriting the cluster's binding = %d, want 403", got)
+	if got := status(write(t, s, teamA, "binding", bindingYAML("imposed", "a-rule", only("team-a")))); got != http.StatusConflict {
+		t.Errorf("overwriting the cluster's binding = %d, want 409", got)
 	}
 	if rec, _ := s.GetVAPBinding(ctx, "imposed"); teamA.manages(rec.Namespaces) {
 		t.Error("the cluster's binding to team-a is listed as the team's")

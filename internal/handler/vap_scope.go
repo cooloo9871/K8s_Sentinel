@@ -100,7 +100,10 @@ func limitPolicy(ctx context.Context, store vapReader, sc scope, rawYAML string)
 	switch {
 	case err == nil:
 		if !sc.manages(existing.Namespaces) {
-			return "", refuse(http.StatusForbidden, "admission policy %q is not this account's to change", name)
+			// The name is taken by a policy the account cannot see, which it
+			// has to be told: names are the cluster's, and nothing on its
+			// own pages would explain the refusal.
+			return "", refuse(http.StatusConflict, "An admission policy named %q already exists. Choose another name.", name)
 		}
 		// It stays whose it was: a save cannot take it from the others it is for.
 		owner = existing.Namespaces
@@ -113,7 +116,7 @@ func limitPolicy(ctx context.Context, store vapReader, sc scope, rawYAML string)
 		}
 		for _, b := range bindings {
 			if b.PolicyName == name {
-				return "", refuse(http.StatusConflict, "binding %q already refers to a policy named %q; choose another name", b.Name, name)
+				return "", refuse(http.StatusConflict, "The name %q is already in use by a binding. Choose another name.", name)
 			}
 		}
 		// It may be made for fewer namespaces than the account has.
@@ -146,7 +149,7 @@ func limitBinding(ctx context.Context, store vapReader, sc scope, rawYAML string
 	name := obj.GetName()
 	if existing, err := store.GetVAPBinding(ctx, name); err == nil {
 		if !sc.manages(existing.Namespaces) {
-			return "", refuse(http.StatusForbidden, "binding %q is not this account's to change", name)
+			return "", refuse(http.StatusConflict, "A binding named %q already exists. Choose another name.", name)
 		}
 	} else if !k8serrors.IsNotFound(err) {
 		return "", err
