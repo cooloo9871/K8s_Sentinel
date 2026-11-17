@@ -221,6 +221,9 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 			s.lineage.forget(proc.GetExecId())
 			continue
 		}
+		if resp.GetProcessExec() != nil && isOwnProcNames(proc, parent) {
+			continue
+		}
 		// The gRPC message is bridged through the same parser the CLI JSON used,
 		// by marshaling it exactly as `tetra getevents -o json` does.
 		line, err := marshalJSON(resp)

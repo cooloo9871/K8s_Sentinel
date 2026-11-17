@@ -125,8 +125,9 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     # patch is for the quarantine label; the rest reads workloads. Events are
-    # collected over the Tetragon and Hubble gRPC APIs, so no pods/exec — which
-    # would have been equivalent to running any command in any container.
+    # collected over the Tetragon and Hubble gRPC APIs, so no pods/exec here,
+    # which would be running any command in any container of the cluster. The
+    # one exec Sentinel does is in Tetragon's namespace: see sentinel-tetragon-exec.
     verbs: ["get", "list", "watch", "patch"]
   - apiGroups: ["apps"]
     resources: ["replicasets", "deployments", "daemonsets", "statefulsets"]
@@ -193,6 +194,41 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: sentinel
+subjects:
+  - kind: ServiceAccount
+    name: sentinel
+    namespace: sentinel-system
+---
+# Behavior Discovery names a process that was running before Tetragon started
+# by the path it was started by, which Tetragon does not keep and its API does
+# not carry. Sentinel reads it on the node, by running a fixed script in the
+# Tetragon container. Kubernetes cannot grant exec for one pod template only,
+# so this is exec in every pod of this namespace: a Sentinel that is taken over
+# is a way onto the nodes. Delete this Role and its binding to do without, and
+# those processes are listed by the file the kernel loaded for them (a "sleep"
+# that is a link to "coreutils" as "coreutils"). Where Tetragon is installed in
+# another namespace, create both there instead.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sentinel-tetragon-exec
+  namespace: kube-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    # An exec over WebSocket is authorized as get by some API server versions
+    # and as create by others.
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sentinel-tetragon-exec
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sentinel-tetragon-exec
 subjects:
   - kind: ServiceAccount
     name: sentinel

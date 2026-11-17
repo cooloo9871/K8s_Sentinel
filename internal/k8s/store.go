@@ -43,6 +43,7 @@ type Store struct {
 	// An interface, not *kubernetes.Clientset, so tests can inject a fake. Only
 	// CoreV1/AppsV1/NetworkingV1 are used, all of which it covers.
 	typed      kubernetes.Interface
+	restCfg    *rest.Config // for procNames only
 	modeMu     sync.RWMutex
 	globalMode string // explicitly set by user; never auto-derived from policies
 	// False until SetMode has run in this process. The switch is not stored
@@ -116,14 +117,14 @@ type Store struct {
 
 // NewStore creates a Store wrapping the given clients. templatesFile is the
 // persistence path for custom policy templates (derived from DATA_DIR).
-// The rest.Config parameter is retained for signature stability but no longer
-// used: event collection moved from kubectl exec to the Tetragon and Hubble
-// gRPC APIs, so the Store dials pod IPs directly rather than opening exec
-// streams.
-func NewStore(client dynamic.Interface, typed kubernetes.Interface, _ *rest.Config, templatesFile string) *Store {
+// Events are collected over the Tetragon and Hubble gRPC APIs, which the Store
+// reaches by dialling pod IPs. The rest.Config is for the one thing those do
+// not carry, read by exec in the Tetragon container: see procNames.
+func NewStore(client dynamic.Interface, typed kubernetes.Interface, restCfg *rest.Config, templatesFile string) *Store {
 	return &Store{
 		client:       client,
 		typed:        typed,
+		restCfg:      restCfg,
 		globalMode:   "Monitoring",
 		Discovery:    NewDiscoveryProfileStore(),
 		Templates:    NewTemplateStore(templatesFile),

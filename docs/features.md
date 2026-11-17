@@ -119,6 +119,7 @@ the quarantine: the new pod is not the one that was contained.
 ## Behavior Discovery
 
 - Learns the processes each pod actually executes from the Tetragon base sensor — **no TracingPolicy required**
+- Processes that were already running are learned too, whenever Tetragon was installed or restarted, and are listed by the path they were started by (`/usr/bin/sleep`, not the `coreutils` it links to). That last part reads the node through the Tetragon container; see [install.md](install.md#exec-in-the-tetragon-namespace) for the permission and how to do without it
 - Grouped by Deployment, DaemonSet and StatefulSet
 - **Create Policy** prefills a policy form with the observed pod selector and binaries
 

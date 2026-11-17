@@ -77,6 +77,25 @@ same `parseTetragonLog` the CLI output used. The careful parsing, dedup and
 attribution logic is reused unchanged; a bridge test pins that the protobuf still
 reproduces the CLI shape.
 
+**What a process is called**: the path it was started by, which is what
+`sys_execve` is given and so what a process rule compares. Tetragon reports that
+for every exec it sees. A process that was running before the agent started it
+reads from `/proc` instead, where `exe` is the file the kernel loaded with links
+followed (`coreutils` for `sleep`, `dash` for `/bin/sh`), and it discards
+`argv[0]`, the one place the started-by name is left. For those processes
+(`flags` contains `procFS`), `procNames` (`internal/k8s/procnames.go`) runs a fixed
+script in the agent's `tetragon` container, which has the node's `/proc`. It takes
+process IDs on stdin and, for each, prints `exe` and the started-by path: `argv[0]`
+when that is an absolute path that exists in the process's root, otherwise the
+first hit for it along the process's own `PATH` in that root. A process whose
+title is no such path keeps Tetragon's name, and so does one whose `exe` no longer
+matches what Tetragon read, which is a process ID that has been reused. This is the
+one use of `pods/exec`, granted by a Role in Tetragon's namespace; without it the
+names stay as Tetragon read them. The cache is read at startup and again for each
+agent that appears afterwards, so Tetragon installed or restarted later is covered
+too. A script started by its `#!` line is the known gap: its `argv[0]` is the
+interpreter, where a live exec reports the script.
+
 **Which pod a process is in**: Tetragon says, when it can. It reads the pod from
 the name of the process's cgroup, which works where a container's processes sit
 directly in the cgroup named after it (containerd with runc). CRI-O with crun puts
@@ -665,6 +684,8 @@ PersistentVolume (see §7 and [install.md](install.md#persistent-storage)) to ke
 data across restarts.
 
 **Resolved since first draft:** the audit webhook can now require a bearer token
-(v0.39.1), and `pods/exec` is gone — events are collected over the Tetragon and
-Hubble gRPC APIs (v0.43.0), so the ClusterRole no longer grants the exec that was
-equivalent to cluster-admin.
+(v0.39.1), and cluster-wide `pods/exec` is gone — events are collected over the
+Tetragon and Hubble gRPC APIs (v0.43.0), so the ClusterRole no longer grants the
+exec that was equivalent to cluster-admin. Exec in Tetragon's namespace alone came
+back in v0.79.0, under a Role that can be removed (see §3.1, "What a process is
+called").

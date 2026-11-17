@@ -20,7 +20,9 @@ import (
 func (s *Store) StartDiscoveryLoop(ctx context.Context) {
 	// Primary: seed + stream events.
 	go func() {
-		s.scanRunningProcesses(ctx)
+		seeded := map[podEndpoint]bool{}
+		s.scanRunningProcesses(ctx, seeded)
+		go s.seedNewAgents(ctx, seeded)
 
 		for {
 			if ctx.Err() != nil {
@@ -72,7 +74,9 @@ func (s *Store) runDiscoveryOnce(ctx context.Context) {
 // which holds ALL processes Tetragon has tracked, including those running
 // before K8s Sentinel started. Falls back to pod-spec seeding when the dump is
 // unavailable (an older Tetragon, or an unreachable agent).
-func (s *Store) scanRunningProcesses(ctx context.Context) {
+//
+// seeded is given the agents whose cache was read.
+func (s *Store) scanRunningProcesses(ctx context.Context, seeded map[podEndpoint]bool) {
 	if s.typed == nil {
 		return
 	}
@@ -91,6 +95,7 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 		} else {
 			total += n
 			anyOK = true
+			seeded[pod] = true
 		}
 	}
 	if !anyOK {
@@ -100,6 +105,49 @@ func (s *Store) scanRunningProcesses(ctx context.Context) {
 	}
 	// Always populate workload info regardless of which seeding path was used.
 	s.populateWorkloadInfo(ctx)
+}
+
+// seedNewAgents reads the process cache of each Tetragon agent that appears
+// after startup: Tetragon installed or restarted later, or a node that joined.
+// What such an agent found already running is in its cache and in no event.
+func (s *Store) seedNewAgents(ctx context.Context, seeded map[podEndpoint]bool) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		pods, err := s.findAllTetragonPods(ctx)
+		if err != nil {
+			continue
+		}
+		alive := make(map[podEndpoint]bool, len(pods))
+		found := false
+		for _, pod := range pods {
+			alive[pod] = true
+			if seeded[pod] {
+				continue
+			}
+			// An agent that is not answering yet is tried again next time.
+			n, err := s.dumpProcessCacheViaTetra(ctx, pod)
+			if err != nil {
+				continue
+			}
+			seeded[pod] = true
+			found = true
+			fmt.Printf("[sentinel-discovery] seeded %d processes from new agent %s\n", n, pod.Name)
+		}
+		for pod := range seeded {
+			if !alive[pod] {
+				delete(seeded, pod)
+			}
+		}
+		if found {
+			s.populateWorkloadInfo(ctx)
+		}
+	}
 }
 
 // dumpProcessCacheViaTetra reads the Tetragon agent's whole process cache over
@@ -135,9 +183,27 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, pod podEndpoint) (
 	for _, p := range pc.Processes {
 		procs = append(procs, p.GetProcess())
 	}
+	placed := s.lineage.seed(procs)
+
+	// Those that were running before Tetragon was, by the path they were
+	// started by rather than the file /proc gives for them.
+	var scanned []*tetragon.Process
+	for _, p := range procs {
+		if scannedFromProc(p) && (p.GetPod() != nil || placed[p] != "") {
+			scanned = append(scanned, p)
+		}
+	}
+	if len(scanned) > 0 {
+		names, err := s.procNames(ctx, pod, scanned)
+		if err != nil {
+			fmt.Printf("[sentinel-discovery] %s: processes already running keep the names Tetragon read for them: %v\n", pod.Name, err)
+		}
+		renameStartedBy(scanned, names)
+	}
+
 	seeded := 0
 	now := time.Now().UTC().Format(time.RFC3339)
-	for p, containerID := range s.lineage.seed(procs) {
+	for p, containerID := range placed {
 		evt := TetragonEvent{Type: "exec", Binary: p.GetBinary(), Time: now}
 		if evt.Binary != "" && s.placeInPod(ctx, &evt, containerID) {
 			s.Discovery.Update(evt)

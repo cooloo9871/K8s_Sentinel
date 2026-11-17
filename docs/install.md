@@ -422,10 +422,12 @@ volumes:
 
 ## RBAC
 
-Sentinel collects events over the Tetragon and Hubble gRPC APIs, so it holds
-**no `pods/exec`** — the permission that would let it run any command in any
-container. The only write it keeps is `patch` on `pods`, for the quarantine
-label; everything else is read-only.
+Sentinel collects events over the Tetragon and Hubble gRPC APIs, so its
+ClusterRole holds **no `pods/exec`**, the permission that would let it run any
+command in any container of the cluster. The one exec it does is in Tetragon's
+namespace, under [a Role of its own](#exec-in-the-tetragon-namespace) that you can
+remove. The only cluster-wide write it keeps is `patch` on `pods`, for the
+quarantine label; everything else is read-only.
 
 | API Group | Resources | Verbs |
 |---|---|---|
@@ -448,6 +450,38 @@ label; everything else is read-only.
 | `apps` | `replicasets`, `deployments`, `daemonsets`, `statefulsets` | get, list |
 | `aquasecurity.github.io` | `vulnerabilityreports` | get, list |
 | `batch` | `jobs` | get, list |
+
+### Exec in the Tetragon namespace
+
+Behavior Discovery lists each process by the path it was started by, because that
+is what a process rule matches. For a process that was already running when
+Tetragon started, Tetragon has only the file the kernel loaded, with links
+followed: a `sleep` that is a link to `coreutils` is `coreutils`, `/bin/sh` is
+`dash`. A profile learned from those names would refuse the real ones the next
+time the pod starts. Tetragon's API does not carry the started-by path, so
+Sentinel reads it on the node, by running one fixed script in the `tetragon`
+container that takes process IDs and nothing else.
+
+That needs a **Role in `kube-system`**:
+
+| API Group | Resources | Verbs |
+|---|---|---|
+| `""` (core) | `pods/exec` | get, create |
+
+Kubernetes cannot grant exec for one kind of pod, so this is exec in every pod of
+that namespace, Tetragon's privileged ones included: someone who takes over
+Sentinel can get onto the nodes with it. To do without, delete the Role and its
+binding:
+
+```bash
+kubectl -n kube-system delete rolebinding,role sentinel-tetragon-exec
+```
+
+Everything else keeps working. Processes that were running before Tetragon are
+then listed by the file the kernel loaded, and Sentinel's log says so; check those
+entries before turning a profile into a whitelist. Where Tetragon is installed in
+another namespace (`TETRAGON_NAMESPACE`), create the Role and binding there
+instead.
 
 Registry scanning adds a **Role in `sentinel-system` only**, for the Trivy Jobs Sentinel starts there:
 
