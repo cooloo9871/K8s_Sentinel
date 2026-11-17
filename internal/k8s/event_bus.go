@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
@@ -127,17 +128,25 @@ func (s *Store) seedNewAgents(ctx context.Context, seeded map[podEndpoint]bool) 
 		found := false
 		for _, pod := range pods {
 			alive[pod] = true
-			if seeded[pod] {
+			// A stream that connected, for the first time or again, may have
+			// missed what started in between.
+			asked := s.lineage.takeSeed(pod)
+			if seeded[pod] && !asked {
 				continue
 			}
 			// An agent that is not answering yet is tried again next time.
 			n, err := s.dumpProcessCacheViaTetra(ctx, pod)
 			if err != nil {
+				if asked {
+					s.lineage.askSeed(pod)
+				}
 				continue
+			}
+			if !seeded[pod] {
+				fmt.Printf("[sentinel-discovery] seeded %d processes from new agent %s\n", n, pod.Name)
 			}
 			seeded[pod] = true
 			found = true
-			fmt.Printf("[sentinel-discovery] seeded %d processes from new agent %s\n", n, pod.Name)
 		}
 		for pod := range seeded {
 			if !alive[pod] {
@@ -205,7 +214,7 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, pod podEndpoint) (
 	now := time.Now().UTC().Format(time.RFC3339)
 	for p, containerID := range placed {
 		evt := TetragonEvent{Type: "exec", Binary: p.GetBinary(), Time: now}
-		if evt.Binary != "" && s.placeInPod(ctx, &evt, containerID) {
+		if evt.Binary != "" && !strings.HasPrefix(evt.Binary, "[") && s.placeInPod(ctx, &evt, containerID) {
 			s.Discovery.Update(evt)
 			seeded++
 		}
@@ -214,6 +223,13 @@ func (s *Store) dumpProcessCacheViaTetra(ctx context.Context, pod podEndpoint) (
 	// Each ProcessInternal marshals to the shape the seeder already reads, so
 	// the JSON path is reused rather than a second decoder written.
 	for _, p := range pc.Processes {
+		// The cache still holds the runtime that set up or entered a container
+		// a moment ago, counted as the pod's.
+		// "[name]" is how Tetragon writes a process with no file to its name:
+		// one that has exited and not been reaped. It ran under another name.
+		if isRuntimeInItsContainer(p.GetProcess()) || strings.HasPrefix(p.GetProcess().GetBinary(), "[") {
+			continue
+		}
 		line, err := marshalJSON(p)
 		if err != nil {
 			continue

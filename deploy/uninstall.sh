@@ -164,6 +164,12 @@ del serviceaccount -n kube-system sentinel-installer
 # The NetworkPolicy is Sentinel's and lets only Sentinel in: left on a Tetragon
 # that stays, it would shut everyone out of its gRPC API for good.
 del networkpolicy -n "$TETRAGON_NS" tetragon-grpc
+# Sentinel's leave to exec in the Tetragon pods. Left behind, it would be given
+# to whoever next made a ServiceAccount of Sentinel's name.
+for ns in kube-system "$TETRAGON_NS"; do
+  del rolebinding -n "$ns" sentinel-tetragon-exec
+  del role -n "$ns" sentinel-tetragon-exec
+done
 TETRAGON_REMOVED=false
 if $KEEP_TETRAGON; then
   echo "[tetragon] kept. Its gRPC API is no longer limited to Sentinel; it has no authentication of its own"

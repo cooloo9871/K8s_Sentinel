@@ -31,32 +31,54 @@ import (
 // procNamesScript reads process IDs, one a line, and for each prints the ID,
 // the file /proc says it runs, and the path it was started by, tab-separated.
 // A bare name is looked up the way the runtime or shell that started it did:
-// through the PATH of the process, inside its own root. A link counts as
-// found without being followed, since an absolute one would be followed in
-// the wrong root. A process whose command line is not a path that exists (one
-// that rewrote its title, a relative path) prints nothing.
+// through the PATH of the process, inside its own root.
+//
+// Everything it reads belongs to the workload, which may have written it to
+// mislead. So a path is only believed when it leads, link by link inside the
+// process's own root, to the very file the process is running: a process
+// cannot be listed under a name that would run something else. A name with a
+// tab or a newline in it is passed over, those being what separates the
+// output. A process whose command line is no such path (one that rewrote its
+// title, a relative path) prints nothing. Only the first 64 directories of a
+// PATH are tried, so that no workload can make the lookup long.
 const procNamesScript = "# " + procNamesMark + `
+set -f
 P=/procRoot; [ -d $P/1 ] || P=/proc
+nl='
+'
+tab=$(printf '\t')
+# Whether the path $1, in the root of the process, is the file it is running.
+runs() {
+  f=$d/root$1; n=0
+  while [ -L "$f" ]; do
+    n=$((n+1)); [ $n -le 16 ] || return 1
+    t=$(readlink "$f") || return 1
+    case $t in /*) f=$d/root$t ;; *) f=${f%/*}/$t ;; esac
+  done
+  [ -f "$f" ] && [ "$f" -ef "$d/exe" ]
+}
 while read -r pid; do
   d=$P/$pid; a0=; r=
   { IFS= read -r -d '' a0 < $d/cmdline; } 2>/dev/null
   [ -n "$a0" ] || continue
   exe=$(readlink $d/exe 2>/dev/null) || continue
   case $a0 in
-    /*) f=$d/root$a0
-        if [ -L "$f" ] || { [ -f "$f" ] && [ -x "$f" ]; }; then r=$a0; fi ;;
+    /*) if runs "$a0"; then r=$a0; fi ;;
     */*) ;;
     *) path=$(tr '\0' '\n' < $d/environ 2>/dev/null | sed -n 's/^PATH=//p' | head -n1)
        [ -n "$path" ] || path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
        oldifs=$IFS; IFS=:
+       k=0
        for dir in $path; do
+         k=$((k+1)); [ $k -le 64 ] || break
          case $dir in /*) ;; *) continue ;; esac
-         f=$d/root$dir/$a0
-         if [ -L "$f" ] || { [ -f "$f" ] && [ -x "$f" ]; }; then r=$dir/$a0; break; fi
+         if runs "$dir/$a0"; then r=$dir/$a0; break; fi
        done
        IFS=$oldifs ;;
   esac
-  [ -n "$r" ] && printf '%s\t%s\t%s\n' "$pid" "$exe" "$r"
+  [ -n "$r" ] || continue
+  case $exe$r in *"$nl"*|*"$tab"*) continue ;; esac
+  printf '%s\t%s\t%s\n' "$pid" "$exe" "$r"
 done
 exit 0
 `
@@ -158,10 +180,15 @@ func (s *Store) procNames(ctx context.Context, agent podEndpoint, procs []*tetra
 	if err := exec.StreamWithContext(execCtx, remotecommand.StreamOptions{
 		Stdin: &stdin, Stdout: &stdout, Stderr: &stderr,
 	}); err != nil {
+		// What was answered before it failed still stands: one workload that
+		// makes the lookup slow does not cost the node's other pods theirs.
+		// The last line may be cut short, and is left out.
+		out := stdout.Bytes()
+		out = out[:bytes.LastIndexByte(out, '\n')+1]
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return nil, fmt.Errorf("%w: %s", err, firstLine(msg))
+			err = fmt.Errorf("%w: %s", err, firstLine(msg))
 		}
-		return nil, err
+		return parseProcNames(out), err
 	}
 	return parseProcNames(stdout.Bytes()), nil
 }

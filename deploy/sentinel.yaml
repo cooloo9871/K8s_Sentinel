@@ -207,7 +207,8 @@ subjects:
 # is a way onto the nodes. Delete this Role and its binding to do without, and
 # those processes are listed by the file the kernel loaded for them (a "sleep"
 # that is a link to "coreutils" as "coreutils"). Where Tetragon is installed in
-# another namespace, create both there instead.
+# another namespace, create both there and delete these: here they would give
+# exec in kube-system for nothing.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

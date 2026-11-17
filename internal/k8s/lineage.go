@@ -4,6 +4,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
 )
@@ -27,6 +28,10 @@ import (
 type containerLineage struct {
 	mu  sync.Mutex
 	ids map[string]string // exec ID → container ID
+	// Containers that turned out to belong to no pod, and when that was found.
+	stray map[string]time.Time
+	// Agents whose process cache should be read again.
+	reseed map[podEndpoint]bool
 }
 
 // lineageMax bounds the table. Entries leave when their process exits; this is
@@ -34,7 +39,11 @@ type containerLineage struct {
 const lineageMax = 200_000
 
 func newContainerLineage() *containerLineage {
-	return &containerLineage{ids: make(map[string]string)}
+	return &containerLineage{
+		ids:    make(map[string]string),
+		stray:  make(map[string]time.Time),
+		reseed: make(map[podEndpoint]bool),
+	}
 }
 
 func (l *containerLineage) get(execID string) string {
@@ -72,6 +81,45 @@ func (l *containerLineage) forget(execID string) {
 	l.mu.Unlock()
 }
 
+// strayFor is how long a container found in no pod is taken to be in none.
+const strayFor = 2 * time.Minute
+
+// noPods records that a container was looked for in every pod and not found.
+func (l *containerLineage) noPods(containerID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	for id, at := range l.stray {
+		if now.Sub(at) >= strayFor {
+			delete(l.stray, id)
+		}
+	}
+	l.stray[containerID] = now
+}
+
+func (l *containerLineage) isNoPods(containerID string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	at, ok := l.stray[containerID]
+	return ok && time.Since(at) < strayFor
+}
+
+// askSeed asks for an agent's process cache to be read again, and takeSeed
+// reports, once, whether that was asked.
+func (l *containerLineage) askSeed(agent podEndpoint) {
+	l.mu.Lock()
+	l.reseed[agent] = true
+	l.mu.Unlock()
+}
+
+func (l *containerLineage) takeSeed(agent podEndpoint) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	asked := l.reseed[agent]
+	delete(l.reseed, agent)
+	return asked
+}
+
 // place returns the container proc runs in, or "" when nothing says. parent is
 // the parent as the event carries it, and may be nil.
 func (l *containerLineage) place(proc, parent *tetragon.Process) string {
@@ -85,7 +133,7 @@ func (l *containerLineage) place(proc, parent *tetragon.Process) string {
 	// The runtime's own steps, "runc init" or a monitor starting "crun
 	// create", are on the node and not what the workload runs.
 	if id == "" && parent != nil && !isContainerRuntime(proc.GetBinary()) {
-		id = runtimeContainerID(parent.GetBinary(), parent.GetArguments())
+		id = startsInContainer(parent.GetBinary(), parent.GetArguments())
 	}
 	l.put(proc.GetExecId(), id)
 	return id
@@ -120,7 +168,7 @@ func (l *containerLineage) seed(procs []*tetragon.Process) map[*tetragon.Process
 			if par == nil || par == cur {
 				break
 			}
-			id = runtimeContainerID(par.GetBinary(), par.GetArguments())
+			id = startsInContainer(par.GetBinary(), par.GetArguments())
 			cur = par
 		}
 		if id == "" {
@@ -138,16 +186,27 @@ func (l *containerLineage) seed(procs []*tetragon.Process) map[*tetragon.Process
 // from. containerd's shim is not one: the ID it carries is the sandbox's, which
 // is no container of the pod.
 func isContainerRuntime(binary string) bool {
-	base := path.Base(binary)
-	switch {
-	case strings.Contains(base, "shim"):
-		return false
-	case strings.Contains(binary, "runc"), strings.Contains(base, "crun"),
-		base == "youki", strings.HasPrefix(base, "conmon"),
-		strings.HasPrefix(binary, "/dev/fd/"), strings.HasPrefix(binary, "/proc/self/fd/"):
+	// A runtime running from a sealed copy of itself.
+	if strings.HasPrefix(binary, "/dev/fd/") || strings.HasPrefix(binary, "/proc/self/fd/") ||
+		strings.HasPrefix(binary, "/memfd:runc") || binary == "/proc/self/exe" {
 		return true
 	}
-	return false
+	// By name and not by a substring of the path: "truncate" has "runc" in it.
+	switch base := path.Base(binary); base {
+	case "runc", "crun", "youki":
+		return true
+	default:
+		return strings.HasPrefix(base, "conmon")
+	}
+}
+
+// isRuntimeInItsContainer reports whether a process Tetragon counts as a
+// pod's is the runtime working on that very container. Setting a container up
+// or entering it, the runtime spends a moment in the container's cgroup, and
+// it is not something the workload ran.
+func isRuntimeInItsContainer(p *tetragon.Process) bool {
+	own := runtimeContainerID(p.GetBinary(), p.GetArguments())
+	return own != "" && p.GetDocker() != "" && strings.HasPrefix(own, p.GetDocker())
 }
 
 // runtimeContainerID returns the container a runtime process is working on,
@@ -159,6 +218,24 @@ func runtimeContainerID(binary, args string) string {
 	for _, word := range strings.Fields(args) {
 		if len(word) == 64 && isHexString(word) {
 			return word
+		}
+	}
+	return ""
+}
+
+// startsInContainer returns the container that the children of a runtime
+// process run in, or "" when they run on the node. A monitor's child is the
+// container's first process, and what "exec" starts is in the container. What
+// "create" or "run" starts directly are its hooks (a GPU runtime hook, a
+// seccomp one), which run on the node on the container's behalf.
+func startsInContainer(binary, args string) string {
+	id := runtimeContainerID(binary, args)
+	if id == "" || strings.HasPrefix(path.Base(binary), "conmon") {
+		return id
+	}
+	for _, word := range strings.Fields(args) {
+		if word == "exec" {
+			return id
 		}
 	}
 	return ""

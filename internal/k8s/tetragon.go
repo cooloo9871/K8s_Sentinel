@@ -147,7 +147,7 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 			wg.Add(1)
 			go func(p podEndpoint) {
 				defer wg.Done()
-				s.streamFromPodUntilDone(podCtx, p, out)
+				s.streamFromPodUntilDone(podCtx, p, out, &wg)
 			}(p)
 		}
 		for p, cancel := range running {
@@ -170,9 +170,9 @@ func (s *Store) StreamTetragonEvents(ctx context.Context, out chan<- TetragonEve
 
 // streamFromPodUntilDone keeps one agent's stream open, dialling again ten
 // seconds after it ends, until the context is cancelled.
-func (s *Store) streamFromPodUntilDone(ctx context.Context, p podEndpoint, out chan<- TetragonEvent) {
+func (s *Store) streamFromPodUntilDone(ctx context.Context, p podEndpoint, out chan<- TetragonEvent, placing *sync.WaitGroup) {
 	for {
-		if err := s.streamFromPod(ctx, p, out); err != nil && ctx.Err() == nil {
+		if err := s.streamFromPod(ctx, p, out, placing); err != nil && ctx.Err() == nil {
 			log.Printf("tetragon-stream: pod %s: %v", p.Name, err)
 		}
 		select {
@@ -183,7 +183,7 @@ func (s *Store) streamFromPodUntilDone(ctx context.Context, p podEndpoint, out c
 	}
 }
 
-func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- TetragonEvent) error {
+func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- TetragonEvent, placing *sync.WaitGroup) error {
 	conn, err := dialGRPC("TETRAGON_GRPC", pod.IP+":"+tetragonGRPCPort())
 	if err != nil {
 		if ctx.Err() == nil { // not a mark for our own cancellation
@@ -203,6 +203,9 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 	// The stream is open; from here the agent is genuinely reachable, which
 	// pod readiness alone never told us.
 	s.ingestion.MarkTetragonConnected(pod.Node)
+	// Whatever started while nothing was listening is in no event, only in
+	// the agent's cache.
+	s.lineage.askSeed(pod)
 
 	for {
 		resp, err := stream.Recv()
@@ -219,9 +222,6 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 		proc, parent, exited := eventProcesses(resp)
 		if exited {
 			s.lineage.forget(proc.GetExecId())
-			continue
-		}
-		if resp.GetProcessExec() != nil && isOwnProcNames(proc, parent) {
 			continue
 		}
 		// The gRPC message is bridged through the same parser the CLI JSON used,
@@ -255,15 +255,23 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 					continue // a process of the node
 				}
 			} else if !s.placeInPod(ctx, &evt, cid) {
-				// A container that started this instant is not in its pod's
-				// status yet.
-				s.deliverOncePlaced(ctx, evt, cid, out)
-				continue
+				if s.lineage.isNoPods(cid) {
+					if evt.Type == "exec" {
+						continue
+					}
+				} else {
+					// A container that started this instant is not in its
+					// pod's status yet.
+					s.deliverOncePlaced(ctx, evt, cid, out, placing)
+					continue
+				}
 			}
-		} else if evt.Type == "exec" && own != "" && proc.GetDocker() != "" && strings.HasPrefix(own, proc.GetDocker()) {
-			// The runtime setting a container up spends a moment in that
-			// container's cgroup, and Tetragon then counts it as the pod's.
-			// It is not something the workload ran.
+		} else if evt.Type == "exec" && isRuntimeInItsContainer(proc) {
+			continue
+		}
+		// Only in the agent's own namespace: anywhere else the mark is just
+		// something a process chose to have on its command line.
+		if evt.Type == "exec" && evt.Namespace == tetragonNamespace() && isOwnProcNames(proc, parent) {
 			continue
 		}
 		select {
@@ -293,7 +301,9 @@ var pendingPlacements = make(chan struct{}, 512)
 // which for one that has just started is a moment after its first process
 // runs. Given up on, an exec is dropped and anything else is delivered as it
 // is: an event without a pod is still an event.
-func (s *Store) deliverOncePlaced(ctx context.Context, evt TetragonEvent, containerID string, out chan<- TetragonEvent) {
+//
+// placing counts the waits, for the caller that closes out to wait them out.
+func (s *Store) deliverOncePlaced(ctx context.Context, evt TetragonEvent, containerID string, out chan<- TetragonEvent, placing *sync.WaitGroup) {
 	send := func() {
 		select {
 		case out <- evt:
@@ -308,7 +318,9 @@ func (s *Store) deliverOncePlaced(ctx context.Context, evt TetragonEvent, contai
 		}
 		return
 	}
+	placing.Add(1)
 	go func() {
+		defer placing.Done()
 		defer func() { <-pendingPlacements }()
 		for _, wait := range []time.Duration{2 * time.Second, 5 * time.Second, 15 * time.Second} {
 			select {
@@ -316,12 +328,14 @@ func (s *Store) deliverOncePlaced(ctx context.Context, evt TetragonEvent, contai
 				return
 			case <-time.After(wait):
 			}
-			s.containers.forgetUnresolved(containerID)
 			if s.placeInPod(ctx, &evt, containerID) {
 				send()
 				return
 			}
 		}
+		// Not one of a pod's: a container something else on the node runs, or
+		// one whose pod is gone. The events that follow do not wait.
+		s.lineage.noPods(containerID)
 		if evt.Type != "exec" {
 			send()
 		}

@@ -160,3 +160,54 @@ func TestRuntimeContainerID(t *testing.T) {
 		}
 	}
 }
+
+// What "create" starts directly is a hook on the node; what a monitor or
+// "exec" starts is in the container.
+func TestStartsInContainer(t *testing.T) {
+	cases := []struct{ binary, args, want string }{
+		{"/usr/bin/conmon", "-b /run/x -c " + cidA + " -n k8s_app", cidA},
+		{"/usr/libexec/crio/crun", "--root /run/crun exec --process /tmp/p " + cidA, cidA},
+		{"/dev/fd/3", "--root /run/crun exec --process /tmp/p " + cidA, cidA},
+		{"/usr/sbin/runc", "--root /run/runc exec --detach " + cidA, cidA},
+		{"/usr/libexec/crio/crun", "--root /run/crun create --bundle /run/b " + cidA, ""},
+		{"/usr/sbin/runc", "--root /run/runc run " + cidA, ""},
+		{"/bin/sh", "-c exec " + cidA, ""},
+	}
+	for _, c := range cases {
+		if got := startsInContainer(c.binary, c.args); got != c.want {
+			t.Errorf("startsInContainer(%q, %q) = %q, want %q", c.binary, c.args, got, c.want)
+		}
+	}
+}
+
+func TestRuntimeIsToldByNameNotSubstring(t *testing.T) {
+	for _, b := range []string{"/usr/bin/truncate", "/usr/bin/scrunch", "/usr/local/bin/containerd-shim-runc-v2", "/bin/sh"} {
+		if isContainerRuntime(b) {
+			t.Errorf("%s was taken for a container runtime", b)
+		}
+	}
+	for _, b := range []string{"/usr/sbin/runc", "/usr/libexec/crio/crun", "/usr/bin/conmon", "/usr/bin/conmonrs", "/dev/fd/3", "/proc/self/fd/6", "/memfd:runc_cloned:/proc/self/exe", "/proc/self/exe"} {
+		if !isContainerRuntime(b) {
+			t.Errorf("%s was not taken for a container runtime", b)
+		}
+	}
+}
+
+func TestStrayContainersAndSeedRequests(t *testing.T) {
+	l := newContainerLineage()
+	if l.isNoPods(cidA) {
+		t.Fatal("stray before being found so")
+	}
+	l.noPods(cidA)
+	if !l.isNoPods(cidA) || l.isNoPods(cidB) {
+		t.Fatal("stray containers misremembered")
+	}
+	agent := podEndpoint{Name: "tetragon-x", IP: "10.0.0.1", Node: "n1"}
+	if l.takeSeed(agent) {
+		t.Fatal("a seed nobody asked for")
+	}
+	l.askSeed(agent)
+	if !l.takeSeed(agent) || l.takeSeed(agent) {
+		t.Fatal("a seed request is taken once")
+	}
+}

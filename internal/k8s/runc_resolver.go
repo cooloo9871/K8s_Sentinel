@@ -16,6 +16,17 @@ type resolvedPod struct {
 	cachedAt  time.Time
 }
 
+// fresh reports whether a cached answer still stands. A container that was
+// found stays found for half a minute. One that was not may be a container
+// that started this instant and is not in its pod's status yet, so that
+// answer lasts only long enough for the events arriving together to share it.
+func (c resolvedPod) fresh() bool {
+	if c.pod == "" {
+		return time.Since(c.cachedAt) < 2*time.Second
+	}
+	return time.Since(c.cachedAt) < 30*time.Second
+}
+
 // containerResolver maps container IDs to pod info with a 30-second TTL cache.
 type containerResolver struct {
 	mu    sync.RWMutex
@@ -34,7 +45,7 @@ func (r *containerResolver) resolve(ctx context.Context, s *Store, containerID s
 	}
 
 	r.mu.RLock()
-	if c, ok := r.cache[containerID]; ok && time.Since(c.cachedAt) < 30*time.Second {
+	if c, ok := r.cache[containerID]; ok && c.fresh() {
 		r.mu.RUnlock()
 		return c.pod, c.namespace, c.container
 	}
@@ -45,7 +56,7 @@ func (r *containerResolver) resolve(ctx context.Context, s *Store, containerID s
 	// requests on a cache miss (thundering herd).
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if c, ok := r.cache[containerID]; ok && time.Since(c.cachedAt) < 30*time.Second {
+	if c, ok := r.cache[containerID]; ok && c.fresh() {
 		return c.pod, c.namespace, c.container
 	}
 
@@ -55,7 +66,7 @@ func (r *containerResolver) resolve(ctx context.Context, s *Store, containerID s
 	}
 	// Evict expired entries to prevent unbounded cache growth.
 	for id, c := range r.cache {
-		if time.Since(c.cachedAt) >= 30*time.Second {
+		if !c.fresh() {
 			delete(r.cache, id)
 		}
 	}
@@ -97,16 +108,6 @@ func stripCRIPrefix(id string) string {
 		return id[i+2:]
 	}
 	return id
-}
-
-// forgetUnresolved drops the memory of an ID having resolved to nothing, for
-// a container that may have appeared since.
-func (r *containerResolver) forgetUnresolved(containerID string) {
-	r.mu.Lock()
-	if c, ok := r.cache[containerID]; ok && c.pod == "" {
-		delete(r.cache, containerID)
-	}
-	r.mu.Unlock()
 }
 
 func isHexString(s string) bool {

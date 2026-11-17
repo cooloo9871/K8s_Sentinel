@@ -86,14 +86,18 @@ followed (`coreutils` for `sleep`, `dash` for `/bin/sh`), and it discards
 (`flags` contains `procFS`), `procNames` (`internal/k8s/procnames.go`) runs a fixed
 script in the agent's `tetragon` container, which has the node's `/proc`. It takes
 process IDs on stdin and, for each, prints `exe` and the started-by path: `argv[0]`
-when that is an absolute path that exists in the process's root, otherwise the
-first hit for it along the process's own `PATH` in that root. A process whose
-title is no such path keeps Tetragon's name, and so does one whose `exe` no longer
-matches what Tetragon read, which is a process ID that has been reused. This is the
+when that is an absolute path, otherwise the first hit for it along the process's
+own `PATH`. Both are the workload's to write, so a path is believed only when it
+leads, link by link inside the process's own root, to the very file the process
+is running; a process cannot get itself listed under a name that would run
+something else. A process whose title is no such path keeps Tetragon's name, and
+so does one whose `exe` no longer matches what Tetragon read, which is a process
+ID that has been reused. This is the
 one use of `pods/exec`, granted by a Role in Tetragon's namespace; without it the
-names stay as Tetragon read them. The cache is read at startup and again for each
-agent that appears afterwards, so Tetragon installed or restarted later is covered
-too. A script started by its `#!` line is the known gap: its `argv[0]` is the
+names stay as Tetragon read them. The cache is read at startup, again for each
+agent that appears afterwards, and again whenever a stream to an agent connects,
+so Tetragon installed or restarted later is covered, and so is what started while
+a stream was down. A script started by its `#!` line is the known gap: its `argv[0]` is the
 interpreter, where a live exec reports the script.
 
 **Which pod a process is in**: Tetragon says, when it can. It reads the pod from
@@ -115,9 +119,12 @@ exec by exec in a table of exec ID to container ID; entries leave on
 `process_exit`. The agent's process-cache dump seeds the table with what was
 already running. The container ID then resolves to a pod through the API, which
 for a container that started this instant takes a moment: such events wait up to
-about twenty seconds for the pod's status to list it. The runtime's own steps
-(`runc init`, `crun create`) are never placed, and containerd's shim is not
-treated as a runtime, because the ID it carries is the sandbox's. An event
+about twenty seconds for the pod's status to list it. A container that is in no
+pod after that (one podman or docker runs on the node) is remembered as such for
+two minutes, and its events stop waiting. The runtime's own steps (`runc init`,
+`crun create`) are never placed, nor is what `create` or `run` starts directly,
+which are OCI hooks running on the node. containerd's shim is not treated as a
+runtime, because the ID it carries is the sandbox's. An event
 Tetragon did name a pod for is left exactly as it came.
 
 The only subscriber is `security.Store`.
