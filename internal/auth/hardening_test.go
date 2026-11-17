@@ -7,10 +7,10 @@ import (
 
 func TestPasswordMinimumLength(t *testing.T) {
 	s := NewUserStore(t.TempDir() + "/users.json")
-	if err := s.Create("bob", "short", RoleViewer); err != ErrPasswordTooShort {
+	if err := s.Create("bob", "short", RoleViewer, nil); err != ErrPasswordTooShort {
 		t.Errorf("Create with a 5-char password: err = %v, want ErrPasswordTooShort", err)
 	}
-	if err := s.Create("bob", "longenough", RoleViewer); err != nil {
+	if err := s.Create("bob", "longenough", RoleViewer, nil); err != nil {
 		t.Errorf("Create with an 10-char password failed: %v", err)
 	}
 	if err := s.ChangePassword("bob", "tiny"); err != ErrPasswordTooShort {

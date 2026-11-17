@@ -30,6 +30,7 @@ func listPolicies(store *k8s.Store) http.HandlerFunc {
 		if records == nil {
 			records = []k8s.PolicyRecord{}
 		}
+		records = inScope(scopeOf(r), records, func(p k8s.PolicyRecord) string { return p.Namespace })
 		writeJSON(w, http.StatusOK, records)
 	}
 }
@@ -38,6 +39,9 @@ func getPolicy(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
 		namespace := r.URL.Query().Get("namespace")
+		if refuseOutside(w, r, namespace) {
+			return
+		}
 
 		record, err := store.Get(r.Context(), name, namespace)
 		if err != nil {
@@ -56,6 +60,9 @@ func createPolicy(store *k8s.Store) http.HandlerFunc {
 			return
 		}
 
+		if refuseOutside(w, r, policyNamespace(req)) {
+			return
+		}
 		createdBy := claimsFromCtx(r).Username
 		// Creating under a name that is taken used to replace that policy
 		// without a word: Behavior Discovery always proposes the same name for
@@ -118,6 +125,11 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 			if len(v) > 0 {
 				wantNs = v[0]
 			}
+		}
+
+		// Both where it is said to be and where the body would put it.
+		if refuseOutside(w, r, wantNs) || refuseOutside(w, r, policyNamespace(req)) {
+			return
 		}
 
 		// The editor's name rides along so a policy created before the
@@ -190,6 +202,9 @@ func deletePolicy(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
 		namespace := r.URL.Query().Get("namespace")
+		if refuseOutside(w, r, namespace) {
+			return
+		}
 
 		if err := store.Delete(r.Context(), name, namespace); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete policy"})
@@ -203,6 +218,9 @@ func setPolicyMode(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
 		namespace := r.URL.Query().Get("namespace")
+		if refuseOutside(w, r, namespace) {
+			return
+		}
 
 		var req struct {
 			Mode string `json:"mode"`
@@ -253,6 +271,27 @@ func getClusterCIDR(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, store.GetClusterCIDR(r.Context()))
 	}
+}
+
+// policyNamespace is the namespace a create or update would write to, as the
+// store decides it: the one the form or the manifest names, and "" (the whole
+// cluster) when it names none or cannot be read.
+func policyNamespace(req createPolicyRequest) string {
+	if req.Source != "yaml" {
+		if req.Form == nil {
+			return ""
+		}
+		return req.Form.Namespace
+	}
+	var manifest struct {
+		Metadata struct {
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	}
+	if yaml.Unmarshal([]byte(req.RawYAML), &manifest) != nil {
+		return ""
+	}
+	return manifest.Metadata.Namespace
 }
 
 // newPolicyIdentity is the name and namespace a create request would write to

@@ -46,9 +46,12 @@ export function PolicyEditPage() {
   // All hooks must be declared before any conditional return (React Rules of Hooks).
   const [namespaces, setNamespaces] = useState<string[]>([])
   const [policyMode, setPolicyMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
-  const [formValues, setFormValues] = useState<PolicyFormInput>(
-    isNew && prefill ? { ...EMPTY_FORM, ...prefill } : EMPTY_FORM
-  )
+  // An account limited to namespaces starts in one of its own: "default" is
+  // seldom among them, and would be refused on save.
+  const [formValues, setFormValues] = useState<PolicyFormInput>(() => {
+    const empty = user?.namespaces?.length ? { ...EMPTY_FORM, namespace: user.namespaces[0] } : EMPTY_FORM
+    return isNew && prefill ? { ...empty, ...prefill } : empty
+  })
   const [yamlContent, setYamlContent] = useState('')
   const [yamlValid, setYamlValid] = useState(true)
   // Which editor this page opened in. "+ New YAML" on the list asks for the raw

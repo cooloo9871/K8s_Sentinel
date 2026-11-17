@@ -74,7 +74,7 @@ interface IngestSource {
 export function DashboardPage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const { user } = useAuth()
+  const { user, limited } = useAuth()
   const isAdmin = user?.role === 'admin'
   const { events: secEvents } = useSecurityEvents()
   const { events: admissionEvents } = useAdmissionEvents()
@@ -97,16 +97,15 @@ export function DashboardPage() {
 
   const load = (showSpinner = false) => {
     if (showSpinner) setLoading(true)
-    Promise.all([policyApi.list(), modeApi.get()])
+    // The global mode, admission policies and event sources are the cluster's,
+    // and are not asked for by an account limited to namespaces.
+    Promise.all([policyApi.list(), limited ? Promise.resolve('Monitoring') : modeApi.get()])
       .then(([p, m]) => {
         setPolicies(p); setMode(m as Mode)
         hasLoaded.current = true
       })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
-    Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
-      .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
-      .catch(() => {})
     cnpApi.list()
       .then(r => { setCnpAvailable(r.available); setCnps(r.policies ?? []) })
       .catch(() => setCnpAvailable(false))
@@ -115,6 +114,10 @@ export function DashboardPage() {
       .catch(() => {})
     vulnApi.overview()
       .then(setVulns)
+      .catch(() => {})
+    if (limited) return
+    Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
+      .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
     fetch('/api/tetragon/agents')
       .then(r => r.json())
@@ -199,7 +202,7 @@ export function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard
+        {!limited && <StatCard
           icon={<IconServer size={26} />}
           label="Tetragon Agents"
           value={agentTotal === null ? '—' : `${agentReady} / ${agentTotal}`}
@@ -216,7 +219,7 @@ export function DashboardPage() {
               : agentReady === agentTotal && agentTotal > 0 ? '#28a745'
               : '#dc3545'
           }
-        />
+        />}
         <StatCard
           icon={<IconActivity size={26} />}
           label="Security Events"
@@ -231,13 +234,13 @@ export function DashboardPage() {
           sub={`Critical: ${admCritical} / Warning: ${admWarning}`}
           accent="#8b5cf6"
         />
-        <StatCard
+        {!limited && <StatCard
           icon={<IconLock size={26} />}
           label="Global Protect Mode"
           value={mode === 'Protect' ? 'ON' : mode === 'Mixed' ? 'MIXED' : 'OFF'}
           sub={mode === 'Protect' ? 'Actively blocking violations' : mode === 'Mixed' ? 'Policies have mixed modes' : 'Monitoring only'}
           accent={modeAccent}
-        />
+        />}
       </div>
 
       {/* Tracing Policy */}
@@ -293,8 +296,8 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Admission Policy */}
-      <Card>
+      {/* Admission Policy: the cluster's, so not for an account limited to namespaces */}
+      {!limited && <Card>
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-base font-semibold">Admission Policy</h3>
@@ -339,7 +342,7 @@ export function DashboardPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Network Policy — hidden entirely on clusters without Cilium, since the
           feature is unavailable there rather than merely empty */}

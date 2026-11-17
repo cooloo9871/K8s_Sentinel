@@ -31,7 +31,7 @@ const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
 
 export function PolicyListPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, limited } = useAuth()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const hasLoaded = useRef(false)
@@ -65,7 +65,8 @@ export function PolicyListPage() {
 
   useEffect(() => {
     fetchPolicies(!hasLoaded.current)
-    modeApi.get().then(setGlobalMode).catch(() => {})
+    // The global mode is the cluster's.
+    if (!limited) modeApi.get().then(setGlobalMode).catch(() => {})
   }, [])
 
   const handleGlobalModeSwitch = async () => {
@@ -116,7 +117,7 @@ export function PolicyListPage() {
   return (
     <>
       {/* Global Protect Mode banner */}
-      <div className="mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4">
+      <div className={limited ? 'hidden' : 'mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4'}>
         <div className="flex items-center gap-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Global Protect Mode</p>

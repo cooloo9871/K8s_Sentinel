@@ -68,6 +68,9 @@ func streamTetragonEvents(store *k8s.Store) http.HandlerFunc {
 					}
 					return
 				}
+				if !scopeOf(r).allows(evt.Namespace) {
+					continue
+				}
 				data, err := json.Marshal(evt)
 				if err != nil {
 					continue

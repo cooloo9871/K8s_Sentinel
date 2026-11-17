@@ -21,6 +21,10 @@ func selectorPreview(store *k8s.Store) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "bad request")
 			return
 		}
+		// No namespace is every namespace.
+		if refuseOutside(w, r, req.Namespace) {
+			return
+		}
 		total, pods, err := store.SelectPods(r.Context(), req.Namespace, req.MatchLabels)
 		if errors.Is(err, k8s.ErrInvalidSelector) {
 			writeError(w, http.StatusBadRequest, err.Error())

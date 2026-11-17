@@ -616,6 +616,27 @@ middleware never ran, the claims are always nil, and revocation silently does no
 
 There are two roles: `admin` writes, `viewer` reads.
 
+An account may also be limited to a list of namespaces (`namespaces` in
+`users.json`; empty is the whole cluster, which is what every account from
+before the field has). Like the role, the list is read from the account on
+every request and is not in the token, so changing it reaches a session that is
+already open. `internal/handler/scope.go` is the whole mechanism:
+
+- routes about the cluster as a whole (settings, accounts, admission policies,
+  registries, event sources, the audit log, the global mode, template writes)
+  sit behind `clusterWide`, which refuses a limited account;
+- routes about namespaced things filter what they list with `inScope` and
+  refuse a read or write outside the account's namespaces with
+  `refuseOutside`. A thing with no namespace is the cluster's, so a
+  cluster-wide policy is neither listed nor writable. A write is checked
+  against the namespace the store will use (the one in the manifest or form),
+  not only the one in the URL;
+- the event streams drop what is outside as they send;
+- the Network Topology and the Hubble flow stream are not filtered.
+
+Resetting another account's password takes an admin of the whole cluster: an
+admin of some namespaces could otherwise take any account over.
+
 Login hardening (v0.47.0): the default `admin` account must change its password
 on first login before the rest of the console is reachable — enforced on the
 server by a gate that, while the flag is set, allows only `GET /api/auth/me` and

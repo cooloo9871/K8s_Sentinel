@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './layout/AppLayout'
 import { AppToaster } from './layout/AppToaster'
@@ -31,7 +32,7 @@ import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { RegistriesPage } from './pages/RegistriesPage'
 
 function AppRoutes() {
-  const { user, loading, logout, refresh } = useAuth()
+  const { user, loading, limited, logout, refresh } = useAuth()
 
   if (loading) return null
 
@@ -47,6 +48,10 @@ function AppRoutes() {
     return <ForcePasswordChangePage username={user.username} onDone={refresh} />
   }
 
+  // A page about the cluster as a whole has nothing to show an account that is
+  // limited to namespaces; a link to one lands on the dashboard.
+  const cluster = (page: ReactElement) => limited ? <Navigate to="/dashboard" replace /> : page
+
   return (
     <SecurityEventsProvider>
     <AdmissionEventsProvider>
@@ -61,37 +66,37 @@ function AppRoutes() {
           <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
 
           <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
-          <Route path="/cluster/mode" element={<ModePage />} />
+          <Route path="/cluster/mode" element={cluster(<ModePage />)} />
 
-          <Route path="/cluster/tetragon" element={<TetragonStatusPage />} />
+          <Route path="/cluster/tetragon" element={cluster(<TetragonStatusPage />)} />
           <Route path="/security/events" element={<SecurityEventsPage />} />
           <Route path="/security/discovery" element={<DiscoveryPage />} />
-          <Route path="/settings/users" element={<UsersPage />} />
-          <Route path="/settings/users/new" element={<UsersPage />} />
-          <Route path="/security/alerts" element={<AlertsPage />} />
-          <Route path="/security/alerts/new" element={<AlertsPage />} />
-          <Route path="/security/alerts/:id/edit" element={<AlertsPage />} />
-          <Route path="/security/rsyslog" element={<RsyslogPage />} />
-          <Route path="/security/rsyslog/new" element={<RsyslogPage />} />
-          <Route path="/security/rsyslog/:id/edit" element={<RsyslogPage />} />
-          <Route path="/settings/retention" element={<SecurityRetentionPage />} />
-          <Route path="/settings/audit" element={<AuditLogPage />} />
+          <Route path="/settings/users" element={cluster(<UsersPage />)} />
+          <Route path="/settings/users/new" element={cluster(<UsersPage />)} />
+          <Route path="/security/alerts" element={cluster(<AlertsPage />)} />
+          <Route path="/security/alerts/new" element={cluster(<AlertsPage />)} />
+          <Route path="/security/alerts/:id/edit" element={cluster(<AlertsPage />)} />
+          <Route path="/security/rsyslog" element={cluster(<RsyslogPage />)} />
+          <Route path="/security/rsyslog/new" element={cluster(<RsyslogPage />)} />
+          <Route path="/security/rsyslog/:id/edit" element={cluster(<RsyslogPage />)} />
+          <Route path="/settings/retention" element={cluster(<SecurityRetentionPage />)} />
+          <Route path="/settings/audit" element={cluster(<AuditLogPage />)} />
           <Route path="/security/admission" element={<AdmissionEventsPage />} />
-          <Route path="/policies/admission" element={<VAPPage />} />
-          <Route path="/policies/admission/new" element={<VAPPage />} />
-          <Route path="/policies/admission/:name/edit" element={<VAPPage />} />
-          <Route path="/policies/admission/bindings/new" element={<VAPPage />} />
-          <Route path="/policies/admission/bindings/:name/edit" element={<VAPPage />} />
+          <Route path="/policies/admission" element={cluster(<VAPPage />)} />
+          <Route path="/policies/admission/new" element={cluster(<VAPPage />)} />
+          <Route path="/policies/admission/:name/edit" element={cluster(<VAPPage />)} />
+          <Route path="/policies/admission/bindings/new" element={cluster(<VAPPage />)} />
+          <Route path="/policies/admission/bindings/:name/edit" element={cluster(<VAPPage />)} />
           <Route path="/policies/network" element={<CNPPage />} />
           <Route path="/policies/network/new" element={<CNPPage />} />
           <Route path="/policies/network/:name/edit" element={<CNPPage />} />
           <Route path="/policies/quarantine" element={<QuarantinePage />} />
           <Route path="/network/topology" element={<NetworkTopologyPage />} />
           <Route path="/vulnerabilities" element={<VulnerabilitiesPage />} />
-          <Route path="/registries" element={<RegistriesPage />} />
-          <Route path="/registries/new" element={<RegistriesPage />} />
-          <Route path="/registries/:id" element={<RegistriesPage />} />
-          <Route path="/registries/:id/edit" element={<RegistriesPage />} />
+          <Route path="/registries" element={cluster(<RegistriesPage />)} />
+          <Route path="/registries/new" element={cluster(<RegistriesPage />)} />
+          <Route path="/registries/:id" element={cluster(<RegistriesPage />)} />
+          <Route path="/registries/:id/edit" element={cluster(<RegistriesPage />)} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

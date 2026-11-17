@@ -23,6 +23,9 @@ type User struct {
 	Username string `json:"username"`
 	PassHash string `json:"passHash"`
 	Role     Role   `json:"role"`
+	// The namespaces the account is limited to. Empty is the whole cluster,
+	// which is also what every account from before this field has.
+	Namespaces []string `json:"namespaces,omitempty"`
 	// Set on the bootstrapped admin so admin/admin cannot be used for anything
 	// but changing itself; cleared on the first successful password change.
 	MustChangePassword bool   `json:"mustChangePassword,omitempty"`
@@ -202,7 +205,7 @@ func (s *UserStore) List() []User {
 	return users
 }
 
-func (s *UserStore) Create(username, password string, role Role) error {
+func (s *UserStore) Create(username, password string, role Role, namespaces []string) error {
 	if len(password) < MinPasswordLength {
 		return ErrPasswordTooShort
 	}
@@ -216,13 +219,29 @@ func (s *UserStore) Create(username, password string, role Role) error {
 		return err
 	}
 	s.users[username] = User{
-		Username:  username,
-		PassHash:  string(hash),
-		Role:      role,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Username:   username,
+		PassHash:   string(hash),
+		Role:       role,
+		Namespaces: namespaces,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 	s.flush()
 	return nil
+}
+
+// SetNamespaces limits an account to the given namespaces; none is the whole
+// cluster. It takes effect on the account's next request.
+func (s *UserStore) SetNamespaces(username string, namespaces []string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[username]
+	if !ok {
+		return false
+	}
+	u.Namespaces = namespaces
+	s.users[username] = u
+	s.flush()
+	return true
 }
 
 func (s *UserStore) Delete(username string) bool {

@@ -16,6 +16,6 @@ func listNamespaces(store *k8s.Store) http.HandlerFunc {
 		if names == nil {
 			names = []string{}
 		}
-		writeJSON(w, http.StatusOK, names)
+		writeJSON(w, http.StatusOK, inScope(scopeOf(r), names, func(ns string) string { return ns }))
 	}
 }

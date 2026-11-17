@@ -10,7 +10,7 @@ import (
 
 func listSecurityEvents(store *security.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, store.List())
+		writeJSON(w, http.StatusOK, inScope(scopeOf(r), store.List(), func(e security.Event) string { return e.Namespace }))
 	}
 }
 
@@ -31,7 +31,8 @@ func streamSecurityEvents(store *security.Store) http.HandlerFunc {
 		defer unsub()
 
 		// Replay stored events oldest-first so frontend prepend = newest-first.
-		initial := store.List()
+		sc := scopeOf(r)
+		initial := inScope(sc, store.List(), func(e security.Event) string { return e.Namespace })
 		for i := len(initial) - 1; i >= 0; i-- {
 			data, _ := json.Marshal(initial[i])
 			fmt.Fprintf(w, "data: %s\n\n", data)
@@ -45,6 +46,9 @@ func streamSecurityEvents(store *security.Store) http.HandlerFunc {
 			case e, ok := <-ch:
 				if !ok {
 					return
+				}
+				if !sc.allows(e.Namespace) {
+					continue
 				}
 				data, _ := json.Marshal(e)
 				fmt.Fprintf(w, "data: %s\n\n", data)

@@ -126,7 +126,7 @@ func TestForcedFirstChangeSkipsTheCurrentPassword(t *testing.T) {
 // An admin resetting someone else's password does not supply their old one.
 func TestAdminResetsAnotherUserWithoutTheirCurrentPassword(t *testing.T) {
 	users := auth.NewUserStore(filepath.Join(t.TempDir(), "users.json"))
-	if err := users.Create("bob", "bobs-password", auth.RoleViewer); err != nil {
+	if err := users.Create("bob", "bobs-password", auth.RoleViewer, nil); err != nil {
 		t.Fatal(err)
 	}
 	if w := changePwd(users, "admin", auth.RoleAdmin, "bob",

@@ -99,6 +99,8 @@ export interface CustomTemplatePayload {
 export interface AuthUser {
   username: string
   role: 'admin' | 'viewer'
+  // The namespaces the account is limited to; empty is the whole cluster.
+  namespaces?: string[]
   mustChangePassword?: boolean
 }
 
@@ -114,14 +116,17 @@ export const authApi = {
 export interface UserRecord {
   username: string
   role: 'admin' | 'viewer'
+  namespaces: string[]
   createdAt: string
 }
 
 export const userApi = {
   list: (): Promise<UserRecord[]> =>
     api.get('/users').then((r) => r.data),
-  create: (username: string, password: string, role: 'admin' | 'viewer'): Promise<void> =>
-    api.post('/users', { username, password, role }),
+  create: (username: string, password: string, role: 'admin' | 'viewer', namespaces: string[]): Promise<void> =>
+    api.post('/users', { username, password, role, namespaces }),
+  setNamespaces: (username: string, namespaces: string[]): Promise<void> =>
+    api.put(`/users/${encodeURIComponent(username)}/namespaces`, { namespaces }),
   delete: (username: string): Promise<void> =>
     api.delete(`/users/${encodeURIComponent(username)}`),
   // currentPassword is required when changing your own password; an admin

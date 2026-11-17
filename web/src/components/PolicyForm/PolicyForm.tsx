@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { policyApi } from '../../api/client'
 import { NamespaceSelect } from '../NamespaceSelect'
+import { useAuth } from '../../layout/AuthContext'
 import { SelectorPreview } from '../SelectorPreview'
 import { completePairs } from '../../utils/labelPairs'
 import { Input } from '@/components/ui/input'
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function PolicyForm({ namespaces, action, value, onChange }: Props) {
+  const { limited } = useAuth()
   // Rendered by the server, with the same builder that applies the policy.
   // Generating it here as well meant two implementations of one thing, and when
   // they disagreed the YAML shown was not the YAML applied — the form submits
@@ -174,7 +176,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                   value={value.namespace ?? ''}
                   onChange={(v) => onChange({ ...value, namespace: v || undefined })}
                   namespaces={namespaces}
-                  noneLabel="cluster-wide"
+                  noneLabel={limited ? undefined : 'cluster-wide'}
                 />
               </div>
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { selectorApi, type SelectorPreviewResult } from '../api/client'
+import { useAuth } from '../layout/AuthContext'
 
 // The most damaging policy mistake is a selector that matches something other
 // than what the author meant: nothing (a typo selects no pods and the policy
@@ -26,9 +27,13 @@ export function SelectorPreview({ namespace, matchLabels }: {
   // Everything in the cluster needs no query to describe, and asking would
   // list every pod there is on each keystroke.
   const wholeCluster = !hasLabels && namespace === ''
+  // An account limited to namespaces cannot ask about every namespace, and
+  // cannot make a policy for them either: it has a namespace to choose first.
+  const { limited } = useAuth()
+  const needsNamespace = limited && namespace === ''
 
   useEffect(() => {
-    if (wholeCluster) return
+    if (wholeCluster || needsNamespace) return
     let stale = false
     const delay = rendered.current ? 400 : 0
     rendered.current = true
@@ -43,6 +48,13 @@ export function SelectorPreview({ namespace, matchLabels }: {
 
   const where = namespace ? `in ${namespace}` : 'in the cluster'
 
+  if (needsNamespace) {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        Choose a namespace to see which pods this selects.
+      </p>
+    )
+  }
   if (wholeCluster) {
     return (
       <p className="text-[11px] text-amber-600">

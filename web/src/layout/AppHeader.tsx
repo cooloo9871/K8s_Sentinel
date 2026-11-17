@@ -100,13 +100,14 @@ interface Props {
 }
 
 export function AppHeader({ onLogout }: Props) {
-  const { user } = useAuth()
+  const { user, limited } = useAuth()
   const [mode, setMode] = useState<Mode>('Monitoring')
   const breadcrumbs = useBreadcrumbs()
 
   useEffect(() => {
-    modeApi.get().then(setMode).catch(() => {})
-  }, [])
+    // The global mode is the cluster's.
+    if (!limited) modeApi.get().then(setMode).catch(() => {})
+  }, [limited])
 
   const modeVariant =
     mode === 'Protect' ? 'destructive' : mode === 'Mixed' ? 'secondary' : 'outline'
@@ -135,7 +136,7 @@ export function AppHeader({ onLogout }: Props) {
       </Breadcrumb>
 
       <div className="ml-auto flex items-center gap-2">
-        <Badge variant={modeVariant}>{mode.toUpperCase()}</Badge>
+        {!limited && <Badge variant={modeVariant}>{mode.toUpperCase()}</Badge>}
         <span className="text-xs text-muted-foreground">{user?.username}</span>
         <Button variant="ghost" size="sm" className="text-xs h-7" onClick={onLogout}>
           Sign out

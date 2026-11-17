@@ -26,7 +26,7 @@ func listCNP(store *k8s.Store) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"available": true,
-			"policies":  records,
+			"policies":  inScope(scopeOf(r), records, func(p k8s.CNPRecord) string { return p.Namespace }),
 		})
 	}
 }
@@ -40,6 +40,12 @@ func getCNP(store *k8s.Store) http.HandlerFunc {
 		ns := r.URL.Query().Get("namespace")
 		if scope == "namespace" && ns == "" {
 			writeError(w, http.StatusBadRequest, "namespace is required for namespaced policies")
+			return
+		}
+		if scope == "cluster" {
+			ns = ""
+		}
+		if refuseOutside(w, r, ns) {
 			return
 		}
 		rec, err := store.GetCNP(r.Context(), scope, ns, chi.URLParam(r, "name"))
@@ -76,7 +82,19 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 				Namespace string `json:"namespace"`
 			} `json:"metadata"`
 		}
-		if yaml.Unmarshal([]byte(body.RawYaml), &manifest) == nil {
+		parsed := yaml.Unmarshal([]byte(body.RawYaml), &manifest) == nil
+		// An account limited to namespaces writes namespaced policies, in its
+		// namespaces. A manifest that cannot be read names none, and is refused.
+		if !scopeOf(r).cluster() {
+			if !parsed || manifest.Kind != "CiliumNetworkPolicy" {
+				refuseOutside(w, r, "")
+				return
+			}
+			if refuseOutside(w, r, manifest.Metadata.Namespace) {
+				return
+			}
+		}
+		if parsed {
 			if want := r.URL.Query().Get("namespace"); want != "" {
 				if got := manifest.Metadata.Namespace; got != "" && got != want {
 					writeError(w, http.StatusBadRequest, fmt.Sprintf(
@@ -110,6 +128,12 @@ func deleteCNP(store *k8s.Store) http.HandlerFunc {
 		ns := r.URL.Query().Get("namespace")
 		if scope == "namespace" && ns == "" {
 			writeError(w, http.StatusBadRequest, "namespace is required for namespaced policies")
+			return
+		}
+		if scope == "cluster" {
+			ns = ""
+		}
+		if refuseOutside(w, r, ns) {
 			return
 		}
 		// Deleting it from the policy list would lift every quarantine at once

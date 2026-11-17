@@ -16,7 +16,7 @@ func listQuarantined(store *k8s.Store) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, pods)
+		writeJSON(w, http.StatusOK, inScope(scopeOf(r), pods, func(p k8s.QuarantinedPod) string { return p.Namespace }))
 	}
 }
 
@@ -30,6 +30,9 @@ func quarantinePod(store *k8s.Store) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "namespace and pod are required")
 			return
 		}
+		if refuseOutside(w, r, body.Namespace) {
+			return
+		}
 		if err := store.Quarantine(r.Context(), body.Namespace, body.Pod, claimsFromCtx(r).Username); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -41,6 +44,9 @@ func quarantinePod(store *k8s.Store) http.HandlerFunc {
 func releasePod(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ns, pod := chi.URLParam(r, "namespace"), chi.URLParam(r, "pod")
+		if refuseOutside(w, r, ns) {
+			return
+		}
 		if err := store.Release(r.Context(), ns, pod); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return

@@ -9,11 +9,56 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { userApi, settingsApi, type UserRecord } from '../api/client'
+import { Checkbox } from '@/components/ui/checkbox'
+import { userApi, settingsApi, namespaceApi, type UserRecord } from '../api/client'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 
 const MIN_PASSWORD_LENGTH = 8
+
+// What an account may reach: the whole cluster, or some namespaces. Limited to
+// namespaces it sees only what is in them and nothing that is the cluster's
+// (cluster-wide policies, admission policies, settings, other accounts).
+function AccessPicker({ limited, onLimited, chosen, onChosen, namespaces }: {
+  limited: boolean
+  onLimited: (v: boolean) => void
+  chosen: string[]
+  onChosen: (v: string[]) => void
+  namespaces: string[]
+}) {
+  // A namespace the account was given and that has since been deleted is
+  // still listed, so it can be seen and unticked.
+  const all = [...new Set([...namespaces, ...chosen])].sort()
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <Button size="sm" variant={!limited ? 'default' : 'outline'} onClick={() => onLimited(false)}>Whole cluster</Button>
+        <Button size="sm" variant={limited ? 'default' : 'outline'} onClick={() => onLimited(true)}>Selected namespaces</Button>
+      </div>
+      {limited && (
+        <>
+          <div className="max-h-48 overflow-y-auto rounded-md border p-2">
+            {all.length === 0 && <p className="text-xs text-muted-foreground">No namespaces available</p>}
+            {all.map(ns => (
+              <label key={ns} className="flex cursor-pointer items-center gap-2 py-1 text-sm">
+                <Checkbox
+                  checked={chosen.includes(ns)}
+                  onCheckedChange={on => onChosen(on ? [...chosen, ns] : chosen.filter(x => x !== ns))}
+                />
+                <span className="font-mono text-xs">{ns}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Sees and manages only what is in these namespaces. Cluster-wide policies, admission
+            policies, registries, settings and other accounts are hidden. The Network Topology
+            stays whole.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
 
 export function UsersPage() {
   const { user: me } = useAuth()
@@ -26,7 +71,15 @@ export function UsersPage() {
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [newLimited, setNewLimited] = useState(false)
+  const [newNamespaces, setNewNamespaces] = useState<string[]>([])
+  const [namespaces, setNamespaces] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
+
+  // Access dialog: which account, and the choice being made for it.
+  const [accessTarget, setAccessTarget] = useState<string | null>(null)
+  const [accessLimited, setAccessLimited] = useState(false)
+  const [accessNamespaces, setAccessNamespaces] = useState<string[]>([])
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   // Change password dialog
@@ -44,6 +97,7 @@ export function UsersPage() {
 
   useEffect(() => {
     load()
+    namespaceApi.list().then(setNamespaces).catch(() => {})
     settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
       setSessionTTL(ttl)
       setTtlInput(String(ttl))
@@ -64,6 +118,7 @@ export function UsersPage() {
   // cancelling must not leave credentials sitting in component state.
   const closeForm = () => {
     setNewUsername(''); setNewPassword(''); setNewRole('viewer')
+    setNewLimited(false); setNewNamespaces([])
     navigate('/settings/users')
   }
 
@@ -81,7 +136,7 @@ export function UsersPage() {
     }
     setCreating(true)
     try {
-      await userApi.create(newUsername.trim(), newPassword, newRole)
+      await userApi.create(newUsername.trim(), newPassword, newRole, newLimited ? newNamespaces : [])
       toast.success(`User "${newUsername.trim()}" created.`)
       closeForm()
       load()
@@ -96,6 +151,15 @@ export function UsersPage() {
       toast.success(`User "${deleteTarget}" deleted.`)
       setDeleteTarget(null); load()
     } catch { toast.error('Failed to delete user') }
+  }
+
+  const handleSaveAccess = async () => {
+    if (!accessTarget) return
+    try {
+      await userApi.setNamespaces(accessTarget, accessLimited ? accessNamespaces : [])
+      toast.success(`Access of "${accessTarget}" updated.`)
+      setAccessTarget(null); load()
+    } catch { toast.error('Failed to update access') }
   }
 
   // Changing your own password requires the current one; an admin resetting
@@ -150,9 +214,15 @@ export function UsersPage() {
                 ))}
               </div>
             </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Access</Label>
+              <AccessPicker limited={newLimited} onLimited={setNewLimited}
+                chosen={newNamespaces} onChosen={setNewNamespaces} namespaces={namespaces} />
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={closeForm} disabled={creating}>Cancel</Button>
-              <Button size="sm" onClick={handleCreate} disabled={creating || !newUsername.trim() || !newPassword}>
+              <Button size="sm" onClick={handleCreate}
+                disabled={creating || !newUsername.trim() || !newPassword || (newLimited && newNamespaces.length === 0)}>
                 {creating ? 'Creating...' : 'Create'}
               </Button>
             </div>
@@ -184,6 +254,9 @@ export function UsersPage() {
                 {u.username === me?.username && (
                   <Badge variant="outline" className="text-[10px]">You</Badge>
                 )}
+                {u.namespaces.map(ns => (
+                  <Badge key={ns} variant="outline" className="font-mono text-[10px]">{ns}</Badge>
+                ))}
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{new Date(u.createdAt).toLocaleDateString()}</span>
@@ -191,6 +264,16 @@ export function UsersPage() {
                   onClick={() => { setPwTarget(u.username); setNewPw('') }}>
                   Change Password
                 </Button>
+                {me?.role === 'admin' && u.username !== me?.username && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7"
+                    onClick={() => {
+                      setAccessTarget(u.username)
+                      setAccessLimited(u.namespaces.length > 0)
+                      setAccessNamespaces(u.namespaces)
+                    }}>
+                    Access
+                  </Button>
+                )}
                 {me?.role === 'admin' && u.username !== me?.username && (
                   <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive hover:text-destructive"
                     onClick={() => setDeleteTarget(u.username)}>
@@ -242,6 +325,23 @@ export function UsersPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Access dialog */}
+      <AlertDialog open={!!accessTarget} onOpenChange={(open) => !open && setAccessTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Access</AlertDialogTitle>
+            <AlertDialogDescription>What "{accessTarget}" may reach. Takes effect at once.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AccessPicker limited={accessLimited} onLimited={setAccessLimited}
+            chosen={accessNamespaces} onChosen={setAccessNamespaces} namespaces={namespaces} />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveAccess}
+              disabled={accessLimited && accessNamespaces.length === 0}>Save</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -166,7 +166,7 @@ func admissionWebhook(store *admission.Store, token string) http.HandlerFunc {
 
 func listAdmissionEvents(store *admission.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, store.List())
+		writeJSON(w, http.StatusOK, inScope(scopeOf(r), store.List(), func(e admission.Event) string { return e.Namespace }))
 	}
 }
 
@@ -186,7 +186,8 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 		defer unsub()
 
 		// Send oldest-first so the frontend's prepend logic results in newest-first display
-		initial := store.List()
+		sc := scopeOf(r)
+		initial := inScope(sc, store.List(), func(e admission.Event) string { return e.Namespace })
 		for i := len(initial) - 1; i >= 0; i-- {
 			data, _ := json.Marshal(initial[i])
 			fmt.Fprintf(w, "data: %s\n\n", data)
@@ -199,6 +200,9 @@ func streamAdmissionEvents(store *admission.Store) http.HandlerFunc {
 			case e, ok := <-ch:
 				if !ok {
 					return
+				}
+				if !sc.allows(e.Namespace) {
+					continue
 				}
 				data, _ := json.Marshal(e)
 				fmt.Fprintf(w, "data: %s\n\n", data)

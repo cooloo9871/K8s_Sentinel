@@ -59,6 +59,7 @@ func authMiddleware(secret []byte, users *auth.UserStore) func(http.Handler) htt
 				return
 			}
 			claims.Role = u.Role
+			claims.Namespaces = u.Namespaces
 			ctx := context.WithValue(r.Context(), claimsKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -123,6 +124,7 @@ func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimit
 		writeJSON(w, http.StatusOK, map[string]any{
 			"username":           u.Username,
 			"role":               u.Role,
+			"namespaces":         nonNil(u.Namespaces),
 			"mustChangePassword": u.MustChangePassword,
 		})
 	}
@@ -226,6 +228,7 @@ func meHandler(users *auth.UserStore) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"username":           claims.Username,
 			"role":               claims.Role,
+			"namespaces":         nonNil(claims.Namespaces),
 			"mustChangePassword": users.RequiresPasswordChange(claims.Username),
 		})
 	}
@@ -263,13 +266,14 @@ func listUsersHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		all := users.List()
 		type userResp struct {
-			Username  string    `json:"username"`
-			Role      auth.Role `json:"role"`
-			CreatedAt string    `json:"createdAt"`
+			Username   string    `json:"username"`
+			Role       auth.Role `json:"role"`
+			Namespaces []string  `json:"namespaces"`
+			CreatedAt  string    `json:"createdAt"`
 		}
 		resp := make([]userResp, 0, len(all))
 		for _, u := range all {
-			resp = append(resp, userResp{Username: u.Username, Role: u.Role, CreatedAt: u.CreatedAt})
+			resp = append(resp, userResp{Username: u.Username, Role: u.Role, Namespaces: nonNil(u.Namespaces), CreatedAt: u.CreatedAt})
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}
@@ -278,9 +282,10 @@ func listUsersHandler(users *auth.UserStore) http.HandlerFunc {
 func createUserHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Username string    `json:"username"`
-			Password string    `json:"password"`
-			Role     auth.Role `json:"role"`
+			Username   string    `json:"username"`
+			Password   string    `json:"password"`
+			Role       auth.Role `json:"role"`
+			Namespaces []string  `json:"namespaces"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -293,11 +298,47 @@ func createUserHandler(users *auth.UserStore) http.HandlerFunc {
 		if body.Role != auth.RoleAdmin && body.Role != auth.RoleViewer {
 			body.Role = auth.RoleViewer
 		}
-		if err := users.Create(body.Username, body.Password, body.Role); err != nil {
+		namespaces, err := cleanNamespaces(body.Namespaces)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := users.Create(body.Username, body.Password, body.Role, namespaces); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
+	}
+}
+
+// setUserNamespacesHandler limits an account to namespaces, or with none gives
+// it the whole cluster back.
+func setUserNamespacesHandler(users *auth.UserStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		username := chi.URLParam(r, "username")
+		// Whoever is here has the whole cluster, and this keeps it so: there is
+		// always an account left that can manage the others.
+		if claimsFromCtx(r).Username == username {
+			http.Error(w, "cannot limit your own account", http.StatusBadRequest)
+			return
+		}
+		var body struct {
+			Namespaces []string `json:"namespaces"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		namespaces, err := cleanNamespaces(body.Namespaces)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !users.SetNamespaces(username, namespaces) {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -320,7 +361,9 @@ func changePasswordHandler(users *auth.UserStore, secret []byte) http.HandlerFun
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := claimsFromCtx(r)
 		username := chi.URLParam(r, "username")
-		if claims.Role != auth.RoleAdmin && claims.Username != username {
+		// Another account's password is for an admin of the whole cluster to
+		// set: an admin of some namespaces could otherwise take over any account.
+		if claims.Username != username && (claims.Role != auth.RoleAdmin || len(claims.Namespaces) > 0) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -376,4 +419,12 @@ func changePasswordHandler(users *auth.UserStore, secret []byte) http.HandlerFun
 // so that HTTP access (e.g. kubectl port-forward) continues to work.
 func isSecureRequest(r *http.Request) bool {
 	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+// nonNil makes an empty list encode as [] and not null.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

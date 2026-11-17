@@ -39,8 +39,11 @@ function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
 }
 
 export function PolicyTemplatesPage() {
-  const { user } = useAuth()
+  const { user, limited } = useAuth()
   const isAdmin = user?.role === 'admin'
+  // Templates are shared by everyone, so changing them is for an admin of the
+  // whole cluster. An admin of some namespaces still makes policies from them.
+  const canManage = isAdmin && !limited
   const toast = useToast()
   const [customTemplates, setCustomTemplates] = useState<PolicyTemplate[]>([])
 
@@ -251,17 +254,17 @@ export function PolicyTemplatesPage() {
       <>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h4 className="text-xl font-semibold">{isAdmin && editingTemplate?.custom ? 'Edit Template' : 'View Template'}</h4>
+            <h4 className="text-xl font-semibold">{canManage && editingTemplate?.custom ? 'Edit Template' : 'View Template'}</h4>
             <p className="text-sm text-muted-foreground">{editingTemplate.name}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={closeEditor}>Cancel</Button>
-            {isAdmin && editingTemplate?.custom && (
+            {canManage && editingTemplate?.custom && (
               <Button onClick={handleSave} disabled={!editorValid}>Apply</Button>
             )}
           </div>
         </div>
-        <YamlEditor key={editorKey} initialValue={editorYaml} readOnly={!isAdmin || !editingTemplate?.custom}
+        <YamlEditor key={editorKey} initialValue={editorYaml} readOnly={!canManage || !editingTemplate?.custom}
           onValueChange={(v, valid) => { setEditorYaml(v); setEditorValid(valid) }} />
       </>
     )
@@ -302,7 +305,7 @@ export function PolicyTemplatesPage() {
             </SelectContent>
           </Select>
         </div>
-        {isAdmin && (
+        {canManage && (
           <Button size="sm" onClick={() => setShowNewForm(true)}>+ New Template</Button>
         )}
       </div>
@@ -327,8 +330,8 @@ export function PolicyTemplatesPage() {
               {t.description && <p className="text-xs text-muted-foreground mb-3">{t.description}</p>}
               <pre className="rounded bg-muted px-3 py-2 text-[10px] font-mono overflow-x-auto max-h-48">{t.yaml.trim()}</pre>
               <div className="mt-2 flex gap-2">
-                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>{isAdmin && t.custom ? 'Open in Editor' : 'View YAML'}</Button>
-                {isAdmin && t.custom && (
+                <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={() => openEditor(t)}>{canManage && t.custom ? 'Open in Editor' : 'View YAML'}</Button>
+                {canManage && t.custom && (
                   <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>Delete</Button>
                 )}
               </div>

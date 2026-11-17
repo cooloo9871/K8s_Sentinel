@@ -370,7 +370,7 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
 
 export function CNPPage() {
   const toast = useToast()
-  const { user } = useAuth()
+  const { user, limited } = useAuth()
   const isAdmin = user?.role === 'admin'
 
   const [policies, setPolicies] = useState<CNPRecord[]>([])
@@ -633,7 +633,7 @@ export function CNPPage() {
                       <SelectContent>
                         <SelectGroup>
                           <SelectItem value="namespaced">Namespaced</SelectItem>
-                          <SelectItem value="cluster">Cluster-wide</SelectItem>
+                          {!limited && <SelectItem value="cluster">Cluster-wide</SelectItem>}
                         </SelectGroup>
                       </SelectContent>
                     </Select>

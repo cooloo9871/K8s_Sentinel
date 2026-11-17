@@ -55,7 +55,7 @@ func reviewDo(h http.Handler, method, path, body string, c *http.Cookie, hdr map
 // creating users with the cookie they still held.
 func TestADeletedUsersSessionIsRefused(t *testing.T) {
 	h, users, _ := reviewServer(t)
-	if err := users.Create("gone", "password-1234", auth.RoleAdmin); err != nil {
+	if err := users.Create("gone", "password-1234", auth.RoleAdmin, nil); err != nil {
 		t.Fatal(err)
 	}
 	c := reviewToken(t, users, "gone")
@@ -71,7 +71,7 @@ func TestADeletedUsersSessionIsRefused(t *testing.T) {
 // Resetting a password did not end the sessions already open on it.
 func TestAPasswordChangeEndsEarlierSessions(t *testing.T) {
 	h, users, _ := reviewServer(t)
-	if err := users.Create("eve", "password-1234", auth.RoleViewer); err != nil {
+	if err := users.Create("eve", "password-1234", auth.RoleViewer, nil); err != nil {
 		t.Fatal(err)
 	}
 	u, _ := users.Get("eve")
@@ -114,7 +114,7 @@ func TestACrossOriginWriteIsRefused(t *testing.T) {
 // A webhook URL is a credential, and a viewer was handed it.
 func TestAViewerIsNotShownWebhookURLs(t *testing.T) {
 	h, users, alerts := reviewServer(t)
-	if err := users.Create("viewer", "password-1234", auth.RoleViewer); err != nil {
+	if err := users.Create("viewer", "password-1234", auth.RoleViewer, nil); err != nil {
 		t.Fatal(err)
 	}
 	alerts.Create(alert.AlertRule{ID: "a1", Name: "slack", WebhookURL: "https://hooks.slack.com/services/T000/B000/secret"})

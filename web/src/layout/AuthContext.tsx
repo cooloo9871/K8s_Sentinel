@@ -4,12 +4,15 @@ import { authApi, SESSION_CHECK, SESSION_ENDED, type AuthUser } from '../api/cli
 interface AuthState {
   user: AuthUser | null
   loading: boolean
+  // The account is limited to some namespaces: it sees nothing that belongs to
+  // the cluster as a whole. The server enforces it; this hides the dead ends.
+  limited: boolean
   logout: () => Promise<void>
   refresh: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthState>({
-  user: null, loading: true, logout: async () => {}, refresh: async () => {},
+  user: null, loading: true, limited: false, logout: async () => {}, refresh: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -47,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, limited: (user?.namespaces?.length ?? 0) > 0, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   )

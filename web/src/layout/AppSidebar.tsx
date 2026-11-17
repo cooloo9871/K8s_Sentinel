@@ -16,8 +16,10 @@ import {
   SidebarMenuButton,
 } from '@/components/ui/sidebar'
 
-type NavItem = { to: string; label: string; adminOnly?: boolean }
-type NavGroup = { label: string; items: NavItem[]; adminOnly?: boolean }
+// clusterOnly: about the cluster as a whole, so not shown to an account that is
+// limited to namespaces. The server refuses those pages' data either way.
+type NavItem = { to: string; label: string; adminOnly?: boolean; clusterOnly?: boolean }
+type NavGroup = { label: string; items: NavItem[]; adminOnly?: boolean; clusterOnly?: boolean }
 
 // The collapsible groups, as data: the open/closed state is keyed by label, so
 // declaring them here keeps that state and the markup from drifting apart.
@@ -27,7 +29,7 @@ const GROUPS: NavGroup[] = [
     label: 'Vulnerabilities',
     items: [
       { to: '/vulnerabilities', label: 'Workloads' },
-      { to: '/registries', label: 'Registries' },
+      { to: '/registries', label: 'Registries', clusterOnly: true },
     ],
   },
   {
@@ -36,7 +38,7 @@ const GROUPS: NavGroup[] = [
       { to: '/policies/tracing', label: 'Tracing Policy' },
       { to: '/security/discovery', label: 'Behavior Discovery' },
       { to: '/policies/templates', label: 'Templates' },
-      { to: '/policies/admission', label: 'Admission Policy' },
+      { to: '/policies/admission', label: 'Admission Policy', clusterOnly: true },
       { to: '/policies/network', label: 'Network Policy' },
       { to: '/policies/quarantine', label: 'Quarantine' },
     ],
@@ -48,16 +50,18 @@ const GROUPS: NavGroup[] = [
       { to: '/security/admission', label: 'Admission Events' },
       // Read-only records like the events above, not a setting — and admin-only,
       // matching the /api/audit endpoint, so a viewer never sees a dead link.
-      { to: '/settings/audit', label: 'Audit Log', adminOnly: true },
+      { to: '/settings/audit', label: 'Audit Log', adminOnly: true, clusterOnly: true },
     ],
   },
   {
     label: 'Cluster',
+    clusterOnly: true,
     items: [{ to: '/cluster/tetragon', label: 'Event Sources' }],
   },
   {
     label: 'Settings',
     adminOnly: true,
+    clusterOnly: true,
     items: [
       { to: '/settings/users', label: 'Users' },
       { to: '/security/alerts', label: 'Alerts' },
@@ -77,7 +81,9 @@ const GROUP_ITEM_CLASS = 'h-8 text-sm text-sidebar-foreground/70'
 
 export function AppSidebar() {
   const { pathname } = useLocation()
-  const { user } = useAuth()
+  const { user, limited } = useAuth()
+  const shown = (x: { adminOnly?: boolean; clusterOnly?: boolean }) =>
+    (!x.adminOnly || user?.role === 'admin') && (!x.clusterOnly || !limited)
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + '/')
@@ -121,7 +127,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {GROUPS.filter(g => !g.adminOnly || user?.role === 'admin').map(group => {
+        {GROUPS.filter(shown).map(group => {
           const expanded = !!open[group.label]
           return (
             <SidebarGroup key={group.label}>
@@ -150,7 +156,7 @@ export function AppSidebar() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {group.items
-                      .filter(item => !item.adminOnly || user?.role === 'admin')
+                      .filter(shown)
                       .map(item => (
                       <SidebarMenuItem key={item.to}>
                         <SidebarMenuButton asChild isActive={isActive(item.to)} className={GROUP_ITEM_CLASS}>

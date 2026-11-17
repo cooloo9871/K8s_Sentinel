@@ -298,6 +298,13 @@ A ValidatingAdmissionPolicy cannot look anything up while it decides. Sentinel t
 
 - The running version is shown at the bottom of the sidebar, so a `kubectl rollout restart` can be confirmed from the UI
 - **Users** — local accounts with JWT sessions and revocation on logout, Admin / Viewer roles, session timeout. The default admin must change its password on first login; passwords are at least 8 characters, changing your own requires the current one, and failed logins are rate limited per source IP
+- **Access by namespace** — an account can be limited to some namespaces, when it is created or later (**Users → Access**; the change reaches a session already open). Its role still applies inside them: a limited Admin creates and edits there, a limited Viewer reads.
+  - *Sees and manages, in its namespaces only:* namespaced Tracing Policies and Network Policies, Behavior Discovery, Security Events, Admission Events, Vulnerabilities (Workloads), Quarantine
+  - *Sees whole:* the Network Topology, since a connection has two ends and the far one is seldom its own. Quarantine from the topology still works on its own pods only
+  - *Does not see:* cluster-wide Tracing Policies and Network Policies, Admission Policies, Registries, Event Sources, the global Protect mode, the Audit Log and all of Settings. An event caused by a cluster-wide policy on one of its pods is shown, with the policy's name
+  - *Templates:* read, and used to make policies; adding, editing and deleting them is for an Admin of the whole cluster, since they are shared by everyone
+  - An Admin of some namespaces cannot manage accounts or reset another account's password. An account cannot limit itself, so one that manages the others always remains
+  - It is enforced by the server on every request and event stream, not by hiding pages. It is a division of work inside a team, not isolation between tenants: the topology shows the names of every namespace and workload
 - **Event Retention** — Security Events (warning and critical caps, TTL 1–90 days) and Admission Events (cap, TTL 1–365 days)
 - **Alerts** — push Security and Admission events to a Slack incoming webhook, with filters and cooldown. The payload is Slack-formatted: Discord accepts it when `/slack` is appended to the Discord webhook URL, while Microsoft Teams is not supported (it expects its own card format). Deliveries are paced per webhook (about one per second) and retried on HTTP 429 honouring `Retry-After`, so a burst of events does not trip the provider's rate limit or silently drop alerts
 - **Syslog** — forward events to a rsyslog/syslog server over UDP or TCP

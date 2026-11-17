@@ -86,10 +86,23 @@ func (s *DiscoveryProfileStore) SetWorkload(namespace, pod, kind, name string) {
 	}
 }
 
-func (s *DiscoveryProfileStore) Clear() {
+// Clear forgets what was learned in the given namespaces, or everywhere when
+// none is given.
+func (s *DiscoveryProfileStore) Clear(namespaces []string) {
 	s.mu.Lock()
-	s.profiles = make(map[string]*PodProfile)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	if len(namespaces) == 0 {
+		s.profiles = make(map[string]*PodProfile)
+		return
+	}
+	for key, p := range s.profiles {
+		for _, ns := range namespaces {
+			if p.Namespace == ns {
+				delete(s.profiles, key)
+				break
+			}
+		}
+	}
 }
 
 // PruneTerminated removes profiles for pods no longer in the running set.

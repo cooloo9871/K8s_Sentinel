@@ -13,6 +13,8 @@ import (
 type Claims struct {
 	Username string `json:"username"`
 	Role     Role   `json:"role"`
+	// Not in the token: read from the account on every request, as the role is.
+	Namespaces []string `json:"-"`
 	jwt.RegisteredClaims
 }
 
