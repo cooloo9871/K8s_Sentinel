@@ -2,6 +2,7 @@ import { IconChevronDown } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useAuth } from '../layout/AuthContext'
 
 // Tracing Policy, Network Policy and Network Topology all filter by namespace,
 // and all of them used to allow exactly one at a time — so comparing two
@@ -46,11 +47,13 @@ export function ScopeFilter({
   includeCluster?: boolean
   className?: string
 }) {
+  // An account limited to namespaces has nothing of the cluster's to filter for.
+  const { limited } = useAuth()
   const toggle = (key: string) =>
     onChange(value.includes(key) ? value.filter(v => v !== key) : [...value, key])
 
   const entries = [
-    ...(includeCluster ? [{ key: SCOPE_CLUSTER, label: 'Cluster-wide' }] : []),
+    ...(includeCluster && !limited ? [{ key: SCOPE_CLUSTER, label: 'Cluster-wide' }] : []),
     ...namespaces.map(ns => ({ key: ns, label: ns })),
   ]
 

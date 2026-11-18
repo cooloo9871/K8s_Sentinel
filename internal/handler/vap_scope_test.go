@@ -1,16 +1,21 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynfake "k8s.io/client-go/dynamic/fake"
 
+	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
@@ -243,5 +248,48 @@ func TestManages(t *testing.T) {
 	}
 	if !(scope{}).manages(nil) {
 		t.Error("an account with no limit manages everything")
+	}
+}
+
+// A create under a name that is taken is refused for everyone, and an edit of
+// the same name still goes through.
+func TestCreatingUnderATakenNameIsRefused(t *testing.T) {
+	s := vapStore()
+	router := chi.NewRouter()
+	router.Post("/vap", applyVAP(s, func() {}))
+	router.Put("/vap/{name}", applyVAP(s, func() {}))
+	router.Post("/vap-bindings", applyVAPBinding(s))
+	router.Put("/vap-bindings/{name}", applyVAPBinding(s))
+
+	send := func(method, path, raw string, namespaces ...string) (int, string) {
+		body, _ := json.Marshal(map[string]string{"rawYaml": raw})
+		req := httptest.NewRequest(method, path, bytes.NewReader(body))
+		req = req.WithContext(context.WithValue(req.Context(), claimsKey, &auth.Claims{Username: "tester", Role: "admin", Namespaces: namespaces}))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+
+	for _, who := range [][]string{nil, {"team-a"}} {
+		policy, binding := "rule-"+strings.Join(who, ""), "bind-"+strings.Join(who, "")
+		if code, msg := send("POST", "/vap", policyYAML(policy, ""), who...); code != http.StatusOK {
+			t.Fatalf("%v: first create = %d %s", who, code, msg)
+		}
+		if code, msg := send("POST", "/vap", policyYAML(policy, ""), who...); code != http.StatusConflict || !strings.Contains(msg, "already exists. Choose another name.") {
+			t.Errorf("%v: second create = %d %q, want 409 saying it already exists", who, code, msg)
+		}
+		if code, msg := send("PUT", "/vap/"+policy, policyYAML(policy, ""), who...); code != http.StatusOK {
+			t.Errorf("%v: edit = %d %s", who, code, msg)
+		}
+		raw := bindingYAML(binding, policy, only("team-a"))
+		if code, msg := send("POST", "/vap-bindings", raw, who...); code != http.StatusOK {
+			t.Fatalf("%v: first binding = %d %s", who, code, msg)
+		}
+		if code, msg := send("POST", "/vap-bindings", raw, who...); code != http.StatusConflict || !strings.Contains(msg, "already exists. Choose another name.") {
+			t.Errorf("%v: second binding = %d %q, want 409 saying it already exists", who, code, msg)
+		}
+		if code, msg := send("PUT", "/vap-bindings/"+binding, raw, who...); code != http.StatusOK {
+			t.Errorf("%v: binding edit = %d %s", who, code, msg)
+		}
 	}
 }

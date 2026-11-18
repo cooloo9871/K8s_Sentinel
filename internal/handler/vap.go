@@ -6,9 +6,32 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"sigs.k8s.io/yaml"
 
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
+
+// nameTaken answers a create whose name is already in use, and reports whether
+// it did. Creating under a taken name used to replace what was there without a
+// word, which for a policy that is refusing things is a rule swapped unseen.
+func nameTaken(w http.ResponseWriter, r *http.Request, rawYAML, what string, exists func(name string) bool) bool {
+	if chi.URLParam(r, "name") != "" {
+		return false // an edit
+	}
+	var manifest struct {
+		Metadata struct {
+			Name string `json:"name"`
+		} `json:"metadata"`
+	}
+	if err := yaml.Unmarshal([]byte(rawYAML), &manifest); err != nil || manifest.Metadata.Name == "" {
+		return false // let the store report why the YAML is unusable
+	}
+	if !exists(manifest.Metadata.Name) {
+		return false
+	}
+	http.Error(w, fmt.Sprintf("%s named %q already exists. Choose another name.", what, manifest.Metadata.Name), http.StatusConflict)
+	return true
+}
 
 func listVAP(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +77,12 @@ func applyVAP(store *k8s.Store, applied func()) http.HandlerFunc {
 			return
 		}
 		if !checkManifestName(w, r, body.RawYAML) {
+			return
+		}
+		if nameTaken(w, r, body.RawYAML, "An admission policy", func(name string) bool {
+			_, err := store.GetVAP(r.Context(), name)
+			return err == nil
+		}) {
 			return
 		}
 		if sc := scopeOf(r); !sc.cluster() {
@@ -132,6 +161,12 @@ func applyVAPBinding(store *k8s.Store) http.HandlerFunc {
 			return
 		}
 		if !checkManifestName(w, r, body.RawYAML) {
+			return
+		}
+		if nameTaken(w, r, body.RawYAML, "A binding", func(name string) bool {
+			_, err := store.GetVAPBinding(r.Context(), name)
+			return err == nil
+		}) {
 			return
 		}
 		if sc := scopeOf(r); !sc.cluster() {
