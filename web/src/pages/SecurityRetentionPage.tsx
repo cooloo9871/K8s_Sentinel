@@ -14,8 +14,8 @@ import { useSecurityEvents } from '../layout/SecurityEventsProvider'
 import { useAdmissionEvents } from '../layout/AdmissionEventsProvider'
 
 export function SecurityRetentionPage() {
-  const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { can } = useAuth()
+  const isAdmin = can('system', 'manage')
   const toast = useToast()
   const { applyRetention } = useSecurityEvents()
   const { applyRetention: applyAdmissionRetention } = useAdmissionEvents()

@@ -244,6 +244,20 @@ func (s *UserStore) SetNamespaces(username string, namespaces []string) bool {
 	return true
 }
 
+// SetRole gives an account another role.
+func (s *UserStore) SetRole(username string, role Role) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[username]
+	if !ok {
+		return false
+	}
+	u.Role = role
+	s.users[username] = u
+	s.flush()
+	return true
+}
+
 func (s *UserStore) Delete(username string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

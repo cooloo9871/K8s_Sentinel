@@ -26,6 +26,7 @@ import (
 type Config struct {
 	Store           *k8s.Store
 	Users           *auth.UserStore
+	Roles           *auth.RoleStore
 	Secret          []byte
 	Alerts          *alert.Store
 	Dispatcher      *alert.Dispatcher
@@ -46,6 +47,10 @@ type Config struct {
 // New builds the HTTP handler tree.
 func New(cfg Config) http.Handler {
 	r := chi.NewRouter()
+	// A tree built without a role store has the two built-in roles.
+	if cfg.Roles == nil {
+		cfg.Roles = auth.NewRoleStore("")
+	}
 	// Five failed logins per source IP a minute, then a brief block; slows brute
 	// force without letting an attacker lock a real user out.
 	loginLimiter := auth.NewLoginLimiter(5, time.Minute)
@@ -68,107 +73,153 @@ func New(cfg Config) http.Handler {
 
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
-		r.Use(authMiddleware(cfg.Secret, cfg.Users))
+		r.Use(authMiddleware(cfg.Secret, cfg.Users, cfg.Roles))
 		// A user who must change their password can reach only /me and their own
 		// password change until they do.
 		r.Use(mustChangeGate(cfg.Users))
 		// No request a signed-in user sends is anywhere near this size.
 		r.Use(middleware.RequestSize(4 << 20))
 
-		// Viewer + Admin (read-only). Each of these answers with what is in the
-		// account's namespaces; see scope.go.
+		// Records every state-changing request it sits in front of (skips GET).
+		// It goes after the permission check, so what a role refuses is not
+		// written down as something that was attempted on the cluster.
+		audited := auditMiddleware(cfg.Audit)
+		view, manage := auth.LevelView, auth.LevelManage
+
+		// Open to every signed-in account: who it is, its own password, and what
+		// the forms need to offer choices. Each of these answers with what is in
+		// the account's namespaces; see scope.go.
 		r.Get("/api/auth/me", meHandler(cfg.Users))
-		r.Get("/api/policies", listPolicies(cfg.Store))
-		r.Post("/api/policies/preview", previewPolicy)
-		r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+		r.With(audited).Put("/api/users/{username}/password", changePasswordHandler(cfg.Users, cfg.Secret))
 		r.Get("/api/namespaces", listNamespaces(cfg.Store))
-		r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
-		r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
 		r.Get("/api/pods/{namespace}/{pod}/labels", getPodLabels(cfg.Store))
 		r.Post("/api/selector-preview", selectorPreview(cfg.Store))
-		r.Get("/api/templates", listTemplates(cfg.Store))
 		r.Get("/api/cluster/cidr", getClusterCIDR(cfg.Store))
-		// Audited on its own because it lives outside the admin group — a viewer
-		// may change their own password, so it cannot sit under adminOnly, but a
-		// password change (success or failure) is exactly what the log is for.
-		r.With(auditMiddleware(cfg.Audit)).
-			Put("/api/users/{username}/password", changePasswordHandler(cfg.Users, cfg.Secret))
-		r.Get("/api/admission-events", listAdmissionEvents(cfg.Admission))
-		r.Get("/api/admission-events/stream", streamAdmissionEvents(cfg.Admission))
-		r.Get("/api/security-events", listSecurityEvents(cfg.Security))
-		r.Get("/api/security-events/stream", streamSecurityEvents(cfg.Security))
-		// How many events are kept and for how long, which the event pages say.
-		r.Get("/api/security-events/retention", getSecurityRetention(cfg.Security))
-		r.Get("/api/admission-events/retention", getAdmissionRetention(cfg.Admission))
-		// The topology is the one view an account limited to namespaces sees
-		// whole: a connection has two ends, and the far one is seldom its own.
-		r.Get("/api/network-topology", getNetworkTopology(cfg.Store))
-		r.Get("/api/cilium/status", getCiliumStatus(cfg.Store))
-		r.Get("/api/cilium/flows/stream", streamCiliumFlows(cfg.Store))
-		r.Get("/api/cnp", listCNP(cfg.Store))
-		r.Get("/api/cnp/{name}", getCNP(cfg.Store))
-		r.Get("/api/quarantine", listQuarantined(cfg.Store))
-		// Admission policies are the cluster's, but an account limited to
-		// namespaces has those marked for them; see vap_scope.go.
-		r.Get("/api/vap", listVAP(cfg.Store))
-		r.Get("/api/vap/{name}", getVAP(cfg.Store))
-		r.Get("/api/vap-bindings", listVAPBindings(cfg.Store))
-		r.Get("/api/vap-bindings/{name}", getVAPBinding(cfg.Store))
-		r.Get("/api/vulnerabilities", getVulnerabilities(cfg.Store))
-		r.Get("/api/vulnerabilities/{namespace}/{kind}/{name}", getWorkloadVulnerabilities(cfg.Store))
 
-		// Read-only, and of the cluster as a whole.
+		// Tracing Policy, with the templates and the discovery it is written from.
 		r.Group(func(r chi.Router) {
-			r.Use(clusterWide)
-			r.Get("/api/mode", getMode(cfg.Store))
-			r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
-			r.Get("/api/ingestion/health", getIngestionHealth(cfg.Store))
-			r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
-			r.Get("/api/alerts", listAlerts(cfg.Alerts))
-			r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
-			r.Get("/api/registries", listRegistries(cfg.Registries, cfg.RegistryScans))
-			r.Get("/api/registries/{id}/images", registryImages(cfg.Registries, cfg.RegistryScans))
-			r.Get("/api/registries/{id}/findings", registryFindings(cfg.RegistryScans))
+			r.Use(need(auth.AreaTracing, view))
+			r.Get("/api/policies", listPolicies(cfg.Store))
+			r.Post("/api/policies/preview", previewPolicy)
+			r.Get("/api/policies/{name}", getPolicy(cfg.Store))
+			r.Get("/api/discovery/profiles", getDiscoveryProfiles(cfg.Store))
+			r.Get("/api/templates", listTemplates(cfg.Store))
+			r.With(clusterWide).Get("/api/mode", getMode(cfg.Store))
+			r.Group(func(r chi.Router) {
+				r.Use(need(auth.AreaTracing, manage), audited)
+				r.Post("/api/policies", createPolicy(cfg.Store))
+				r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
+				r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
+				r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
+				r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
+				r.Group(func(r chi.Router) {
+					r.Use(clusterWide)
+					r.Put("/api/mode", setMode(cfg.Store))
+					r.Post("/api/templates", createTemplate(cfg.Store))
+					r.Put("/api/templates/{id}", updateTemplate(cfg.Store))
+					r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
+				})
+			})
 		})
 
-		// Admin-only (writes)
+		// Network Policy and the topology it is read against.
 		r.Group(func(r chi.Router) {
-			r.Use(adminOnly)
-			// Records every state-changing admin request (skips GET), so the
-			// audit log covers new write routes without a per-handler call.
-			r.Use(auditMiddleware(cfg.Audit))
+			r.Use(need(auth.AreaNetwork, view))
+			// The topology is the one view an account limited to namespaces sees
+			// whole: a connection has two ends, and the far one is seldom its own.
+			r.Get("/api/network-topology", getNetworkTopology(cfg.Store))
+			r.Get("/api/cilium/status", getCiliumStatus(cfg.Store))
+			r.Get("/api/cilium/flows/stream", streamCiliumFlows(cfg.Store))
+			r.Get("/api/cnp", listCNP(cfg.Store))
+			r.Get("/api/cnp/{name}", getCNP(cfg.Store))
+			r.Group(func(r chi.Router) {
+				r.Use(need(auth.AreaNetwork, manage), audited)
+				r.Post("/api/cnp", applyCNP(cfg.Store))
+				r.Put("/api/cnp/{name}", applyCNP(cfg.Store))
+				r.Delete("/api/cnp/{name}", deleteCNP(cfg.Store))
+			})
+		})
 
-			// What an admin of some namespaces may also do, in those namespaces.
-			r.Post("/api/policies", createPolicy(cfg.Store))
-			r.Put("/api/policies/{name}", updatePolicy(cfg.Store))
-			r.Put("/api/policies/{name}/mode", setPolicyMode(cfg.Store))
-			r.Delete("/api/policies/{name}", deletePolicy(cfg.Store))
-			r.Delete("/api/discovery/profiles", clearDiscoveryProfiles(cfg.Store))
-			r.Post("/api/quarantine", quarantinePod(cfg.Store))
-			r.Delete("/api/quarantine/{namespace}/{pod}", releasePod(cfg.Store))
-			r.Post("/api/cnp", applyCNP(cfg.Store))
-			r.Put("/api/cnp/{name}", applyCNP(cfg.Store))
-			r.Delete("/api/cnp/{name}", deleteCNP(cfg.Store))
-			r.Post("/api/vap", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
-			r.Put("/api/vap/{name}", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
-			r.Delete("/api/vap/{name}", deleteVAP(cfg.Store))
-			r.Post("/api/vap-bindings", applyVAPBinding(cfg.Store))
-			r.Put("/api/vap-bindings/{name}", applyVAPBinding(cfg.Store))
-			r.Delete("/api/vap-bindings/{name}", deleteVAPBinding(cfg.Store))
+		// Admission policies are the cluster's, but an account limited to
+		// namespaces has those marked for them; see vap_scope.go.
+		r.Group(func(r chi.Router) {
+			r.Use(need(auth.AreaAdmission, view))
+			r.Get("/api/vap", listVAP(cfg.Store))
+			r.Get("/api/vap/{name}", getVAP(cfg.Store))
+			r.Get("/api/vap-bindings", listVAPBindings(cfg.Store))
+			r.Get("/api/vap-bindings/{name}", getVAPBinding(cfg.Store))
+			r.Group(func(r chi.Router) {
+				r.Use(need(auth.AreaAdmission, manage), audited)
+				r.Post("/api/vap", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
+				r.Put("/api/vap/{name}", applyVAP(cfg.Store, cfg.VulnGate.Refresh))
+				r.Delete("/api/vap/{name}", deleteVAP(cfg.Store))
+				r.Post("/api/vap-bindings", applyVAPBinding(cfg.Store))
+				r.Put("/api/vap-bindings/{name}", applyVAPBinding(cfg.Store))
+				r.Delete("/api/vap-bindings/{name}", deleteVAPBinding(cfg.Store))
+			})
+		})
 
-			// The rest is the cluster's.
+		// Quarantine.
+		r.Group(func(r chi.Router) {
+			r.Use(need(auth.AreaQuarantine, view))
+			r.Get("/api/quarantine", listQuarantined(cfg.Store))
+			r.Group(func(r chi.Router) {
+				r.Use(need(auth.AreaQuarantine, manage), audited)
+				r.Post("/api/quarantine", quarantinePod(cfg.Store))
+				r.Delete("/api/quarantine/{namespace}/{pod}", releasePod(cfg.Store))
+			})
+		})
+
+		// Events, and whether they are arriving.
+		r.Group(func(r chi.Router) {
+			r.Use(need(auth.AreaEvents, view))
+			r.Get("/api/events/stream", streamTetragonEvents(cfg.Store))
+			r.Get("/api/admission-events", listAdmissionEvents(cfg.Admission))
+			r.Get("/api/admission-events/stream", streamAdmissionEvents(cfg.Admission))
+			r.Get("/api/security-events", listSecurityEvents(cfg.Security))
+			r.Get("/api/security-events/stream", streamSecurityEvents(cfg.Security))
 			r.Group(func(r chi.Router) {
 				r.Use(clusterWide)
-				r.Get("/api/audit", listAudit(cfg.Audit))
-				r.Put("/api/mode", setMode(cfg.Store))
-				r.Post("/api/templates", createTemplate(cfg.Store))
-				r.Put("/api/templates/{id}", updateTemplate(cfg.Store))
-				r.Delete("/api/templates/{id}", deleteTemplate(cfg.Store))
-				r.Get("/api/users", listUsersHandler(cfg.Users))
-				r.Post("/api/users", createUserHandler(cfg.Users))
-				r.Put("/api/users/{username}/namespaces", setUserNamespacesHandler(cfg.Users))
-				r.Delete("/api/users/{username}", deleteUserHandler(cfg.Users))
-				r.Put("/api/settings/session-ttl", setSessionTTLHandler(cfg.Users))
+				r.Get("/api/tetragon/agents", getTetragonAgents(cfg.Store))
+				r.Get("/api/ingestion/health", getIngestionHealth(cfg.Store))
+			})
+		})
+		// How many events are kept and for how long: the event pages say it and
+		// the settings page changes it, so either permission reads it.
+		r.Group(func(r chi.Router) {
+			r.Use(needAny(perm{auth.AreaEvents, view}, perm{auth.AreaSystem, view}))
+			r.Get("/api/security-events/retention", getSecurityRetention(cfg.Security))
+			r.Get("/api/admission-events/retention", getAdmissionRetention(cfg.Admission))
+		})
+
+		// Vulnerabilities, of what runs and of what a registry holds.
+		r.Group(func(r chi.Router) {
+			r.Use(need(auth.AreaVulnerabilities, view))
+			r.Get("/api/vulnerabilities", getVulnerabilities(cfg.Store))
+			r.Get("/api/vulnerabilities/{namespace}/{kind}/{name}", getWorkloadVulnerabilities(cfg.Store))
+			r.Group(func(r chi.Router) {
+				r.Use(clusterWide)
+				r.Get("/api/registries", listRegistries(cfg.Registries, cfg.RegistryScans))
+				r.Get("/api/registries/{id}/images", registryImages(cfg.Registries, cfg.RegistryScans))
+				r.Get("/api/registries/{id}/findings", registryFindings(cfg.RegistryScans))
+				r.Group(func(r chi.Router) {
+					r.Use(need(auth.AreaVulnerabilities, manage), audited)
+					r.Post("/api/registries", createRegistry(cfg.Registries, cfg.RegistryScans))
+					r.Post("/api/registries/test", testRegistry(cfg.Registries))
+					r.Put("/api/registries/{id}", updateRegistry(cfg.Registries, cfg.RegistryScans))
+					r.Delete("/api/registries/{id}", deleteRegistry(cfg.Registries, cfg.RegistryScans))
+					r.Post("/api/registries/{id}/scan", scanRegistry(cfg.RegistryScans))
+				})
+			})
+		})
+
+		// Where events are sent. The cluster's.
+		r.Group(func(r chi.Router) {
+			r.Use(clusterWide, need(auth.AreaNotifications, view))
+			r.Get("/api/alerts", listAlerts(cfg.Alerts))
+			r.Get("/api/rsyslog", listRsyslog(cfg.Rsyslog))
+			r.Group(func(r chi.Router) {
+				r.Use(need(auth.AreaNotifications, manage), audited)
 				r.Post("/api/alerts/test", testAlert(cfg.Dispatcher))
 				r.Post("/api/alerts", createAlert(cfg.Alerts))
 				r.Put("/api/alerts/{id}", updateAlert(cfg.Alerts))
@@ -177,12 +228,27 @@ func New(cfg Config) http.Handler {
 				r.Post("/api/rsyslog", createRsyslog(cfg.Rsyslog))
 				r.Put("/api/rsyslog/{id}", updateRsyslog(cfg.Rsyslog))
 				r.Delete("/api/rsyslog/{id}", deleteRsyslog(cfg.Rsyslog))
+			})
+		})
+
+		// Accounts, roles, the audit log and the settings. The cluster's.
+		r.Group(func(r chi.Router) {
+			r.Use(clusterWide, need(auth.AreaSystem, view))
+			r.Get("/api/audit", listAudit(cfg.Audit))
+			r.Get("/api/users", listUsersHandler(cfg.Users))
+			r.Get("/api/roles", listRolesHandler(cfg.Roles, cfg.Users))
+			r.Get("/api/settings/session-ttl", getSessionTTLHandler(cfg.Users))
+			r.Group(func(r chi.Router) {
+				r.Use(need(auth.AreaSystem, manage), audited)
+				r.Post("/api/users", createUserHandler(cfg.Users, cfg.Roles))
+				r.Put("/api/users/{username}/namespaces", setUserNamespacesHandler(cfg.Users))
+				r.Put("/api/users/{username}/role", setUserRoleHandler(cfg.Users, cfg.Roles))
+				r.Delete("/api/users/{username}", deleteUserHandler(cfg.Users))
+				r.Post("/api/roles", createRoleHandler(cfg.Roles))
+				r.Put("/api/roles/{name}", updateRoleHandler(cfg.Roles))
+				r.Delete("/api/roles/{name}", deleteRoleHandler(cfg.Roles, cfg.Users))
+				r.Put("/api/settings/session-ttl", setSessionTTLHandler(cfg.Users))
 				r.Put("/api/security-events/retention", setSecurityRetention(cfg.Security))
-				r.Post("/api/registries", createRegistry(cfg.Registries, cfg.RegistryScans))
-				r.Post("/api/registries/test", testRegistry(cfg.Registries))
-				r.Put("/api/registries/{id}", updateRegistry(cfg.Registries, cfg.RegistryScans))
-				r.Delete("/api/registries/{id}", deleteRegistry(cfg.Registries, cfg.RegistryScans))
-				r.Post("/api/registries/{id}/scan", scanRegistry(cfg.RegistryScans))
 				r.Put("/api/admission-events/retention", setAdmissionRetention(cfg.Admission))
 			})
 		})

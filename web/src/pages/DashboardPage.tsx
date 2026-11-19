@@ -29,6 +29,7 @@ import { RelativeTime } from '../components/RelativeTime'
 import { isIngestProblem } from '../utils/ingestion'
 import { summarizeWorkloads, workloadKey } from '../utils/vulnerabilities'
 import type { PolicyRecord } from '../api/types'
+import type { Area } from '../api/client'
 
 interface StatProps {
   icon: React.ReactNode
@@ -74,8 +75,8 @@ interface IngestSource {
 export function DashboardPage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const { user, limited } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { limited, can } = useAuth()
+  const isAdmin = can('tracing', 'manage')
   const { events: secEvents } = useSecurityEvents()
   const { events: admissionEvents } = useAdmissionEvents()
   const [policies, setPolicies] = useState<PolicyRecord[]>([])
@@ -96,26 +97,28 @@ export function DashboardPage() {
 
   const load = (showSpinner = false) => {
     if (showSpinner) setLoading(true)
-    policyApi.list()
+    // Each part is asked for only when the account's role shows it.
+    const shows = (area: Area) => can(area, 'view')
+    ;(shows('tracing') ? policyApi.list() : Promise.resolve([]))
       .then((p) => {
         setPolicies(p)
         hasLoaded.current = true
       })
       .catch(() => toast.error('Failed to load dashboard'))
       .finally(() => setLoading(false))
-    cnpApi.list()
+    if (shows('network')) cnpApi.list()
       .then(r => { setCnpAvailable(r.available); setCnps(r.policies ?? []) })
       .catch(() => setCnpAvailable(false))
-    quarantineApi.list()
+    if (shows('quarantine')) quarantineApi.list()
       .then(setQuarantined)
       .catch(() => {})
-    vulnApi.overview()
+    if (shows('vulnerabilities')) vulnApi.overview()
       .then(setVulns)
       .catch(() => {})
-    Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
+    if (shows('admission')) Promise.all([vapApi.listPolicies(), vapApi.listBindings()])
       .then(([vp, vb]) => { setVapPolicies(vp); setVapBindings(vb) })
       .catch(() => {})
-    if (limited) return
+    if (limited || !shows('events')) return
     fetch('/api/tetragon/agents')
       .then(r => r.json())
       .then((d: { agents: { ready: boolean; phase: string; ingestObserved: boolean; ingestConnected: boolean }[] }) => {
@@ -196,7 +199,7 @@ export function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {!limited && <StatCard
+        {!limited && can('events', 'view') && <StatCard
           icon={<IconServer size={26} />}
           label="Tetragon Agents"
           value={agentTotal === null ? '—' : `${agentReady} / ${agentTotal}`}
@@ -214,21 +217,21 @@ export function DashboardPage() {
               : '#dc3545'
           }
         />}
-        <StatCard
+        {can('events', 'view') && <StatCard
           icon={<IconActivity size={26} />}
           label="Security Events"
           value={secEvents.length}
           sub={`Critical: ${secCritical} / Warning: ${secWarning}`}
           accent="#f59e0b"
-        />
-        <StatCard
+        />}
+        {can('events', 'view') && <StatCard
           icon={<IconShieldX size={26} />}
           label="Admission Events"
           value={admissionEvents.length}
           sub={`Critical: ${admCritical} / Warning: ${admWarning}`}
           accent="#8b5cf6"
-        />
-        {!limited && <StatCard
+        />}
+        {!limited && can('tracing', 'view') && <StatCard
           icon={<IconLock size={26} />}
           label="Policies in Protect"
           value={`${enforcing} / ${policies.length}`}
@@ -237,7 +240,7 @@ export function DashboardPage() {
       </div>
 
       {/* Tracing Policy */}
-      <Card>
+      {can('tracing', 'view') && <Card>
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-base font-semibold">Tracing Policy</h3>
@@ -287,10 +290,10 @@ export function DashboardPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Admission Policy */}
-      <Card>
+      {can('admission', 'view') && <Card>
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-base font-semibold">Admission Policy</h3>
@@ -335,11 +338,11 @@ export function DashboardPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Network Policy — hidden entirely on clusters without Cilium, since the
           feature is unavailable there rather than merely empty */}
-      {cnpAvailable && (
+      {cnpAvailable && can('network', 'view') && (
         <Card>
           <div className="flex items-center justify-between border-b px-6 py-4">
             <div>
@@ -414,7 +417,7 @@ export function DashboardPage() {
 
       {/* Vulnerabilities — always shown, and never as an empty table: a cluster
           nothing is scanning must not read the same as a clean one. */}
-      <Card>
+      {can('vulnerabilities', 'view') && <Card>
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-base font-semibold">Vulnerabilities</h3>
@@ -480,13 +483,13 @@ export function DashboardPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Quarantine — always shown, unlike the Network Policy card above, because
           "nothing is contained" is a statement about the cluster worth making
           rather than an absence worth hiding. The count goes red when it is not
           zero: a contained pod is an incident in progress. */}
-      <Card>
+      {can('quarantine', 'view') && <Card>
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h3 className="text-base font-semibold">Quarantine</h3>
@@ -536,7 +539,7 @@ export function DashboardPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   )
 }

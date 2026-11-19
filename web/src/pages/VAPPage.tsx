@@ -1338,8 +1338,8 @@ export function VAPPage() {
   // limited: the account is an admin of some namespaces. Its policies reach
   // namespaced resources only and its bindings name its namespaces; the server
   // refuses anything else, and the form does not offer it.
-  const { user, limited } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { user, limited, can } = useAuth()
+  const isAdmin = can('admission', 'manage')
   const toast = useToast()
 
   const [policies, setPolicies] = useState<VAPRecord[]>([])
@@ -1749,7 +1749,7 @@ export function VAPPage() {
                 <div className="flex flex-col gap-1.5">
                   <Label>Apply To</Label>
                   <Select value={builderApplyTo} onValueChange={v => setBuilderApplyTo(v as LabelApplyTo)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full *:data-[slot=select-value]:block! *:data-[slot=select-value]:truncate"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
                         <SelectItem value="workloads">All Workloads (Pods, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs)</SelectItem>

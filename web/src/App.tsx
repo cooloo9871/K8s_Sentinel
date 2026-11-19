@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react'
+import { Fragment, type ReactElement, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './layout/AppLayout'
 import { AppToaster } from './layout/AppToaster'
@@ -6,6 +6,8 @@ import { SecurityEventsProvider } from './layout/SecurityEventsProvider'
 import { AdmissionEventsProvider } from './layout/AdmissionEventsProvider'
 import { DiscoveryProvider } from './layout/DiscoveryProvider'
 import { AuthProvider, useAuth } from './layout/AuthContext'
+import type { Area } from './api/client'
+import { RolesPage } from './pages/RolesPage'
 import { LoginPage } from './pages/LoginPage'
 import { ForcePasswordChangePage } from './pages/ForcePasswordChangePage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -30,8 +32,16 @@ import { NetworkTopologyPage } from './pages/NetworkTopologyPage'
 import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { RegistriesPage } from './pages/RegistriesPage'
 
+function EventProviders({ children }: { children: ReactNode }) {
+  return (
+    <SecurityEventsProvider>
+      <AdmissionEventsProvider>{children}</AdmissionEventsProvider>
+    </SecurityEventsProvider>
+  )
+}
+
 function AppRoutes() {
-  const { user, loading, limited, logout, refresh } = useAuth()
+  const { user, loading, limited, can, logout, refresh } = useAuth()
 
   if (loading) return null
 
@@ -49,58 +59,66 @@ function AppRoutes() {
 
   // A page about the cluster as a whole has nothing to show an account that is
   // limited to namespaces; a link to one lands on the dashboard.
-  const cluster = (page: ReactElement) => limited ? <Navigate to="/dashboard" replace /> : page
+  // The same goes for a page the account's role does not show it.
+  const page = (area: Area, element: ReactElement, clusterOnly = false) =>
+    !can(area, 'view') || (clusterOnly && limited) ? <Navigate to="/dashboard" replace /> : element
+
+  // Without the permission there is nothing to stream, and asking would only
+  // be refused over and over.
+  const Events = can('events', 'view') ? EventProviders : Fragment
+  const Discovery = can('tracing', 'view') ? DiscoveryProvider : Fragment
 
   return (
-    <SecurityEventsProvider>
-    <AdmissionEventsProvider>
-    <DiscoveryProvider>
+    <Events>
+    <Discovery>
       <Routes>
         <Route element={<AppLayout onLogout={logout} />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/policies" element={<Navigate to="/policies/tracing" replace />} />
-          <Route path="/policies/tracing" element={<PolicyListPage />} />
-          <Route path="/policies/tracing/new" element={<PolicyEditPage />} />
-          <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
+          <Route path="/policies/tracing" element={page('tracing', <PolicyListPage />)} />
+          <Route path="/policies/tracing/new" element={page('tracing', <PolicyEditPage />)} />
+          <Route path="/policies/templates" element={page('tracing', <PolicyTemplatesPage />)} />
 
-          <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
+          <Route path="/policies/tracing/:name/edit" element={page('tracing', <PolicyEditPage />)} />
 
-          <Route path="/cluster/tetragon" element={cluster(<TetragonStatusPage />)} />
-          <Route path="/security/events" element={<SecurityEventsPage />} />
-          <Route path="/security/discovery" element={<DiscoveryPage />} />
-          <Route path="/settings/users" element={cluster(<UsersPage />)} />
-          <Route path="/settings/users/new" element={cluster(<UsersPage />)} />
-          <Route path="/security/alerts" element={cluster(<AlertsPage />)} />
-          <Route path="/security/alerts/new" element={cluster(<AlertsPage />)} />
-          <Route path="/security/alerts/:id/edit" element={cluster(<AlertsPage />)} />
-          <Route path="/security/rsyslog" element={cluster(<RsyslogPage />)} />
-          <Route path="/security/rsyslog/new" element={cluster(<RsyslogPage />)} />
-          <Route path="/security/rsyslog/:id/edit" element={cluster(<RsyslogPage />)} />
-          <Route path="/settings/retention" element={cluster(<SecurityRetentionPage />)} />
-          <Route path="/settings/audit" element={cluster(<AuditLogPage />)} />
-          <Route path="/security/admission" element={<AdmissionEventsPage />} />
-          <Route path="/policies/admission" element={<VAPPage />} />
-          <Route path="/policies/admission/new" element={<VAPPage />} />
-          <Route path="/policies/admission/:name/edit" element={<VAPPage />} />
-          <Route path="/policies/admission/bindings/new" element={<VAPPage />} />
-          <Route path="/policies/admission/bindings/:name/edit" element={<VAPPage />} />
-          <Route path="/policies/network" element={<CNPPage />} />
-          <Route path="/policies/network/new" element={<CNPPage />} />
-          <Route path="/policies/network/:name/edit" element={<CNPPage />} />
-          <Route path="/policies/quarantine" element={<QuarantinePage />} />
-          <Route path="/network/topology" element={<NetworkTopologyPage />} />
-          <Route path="/vulnerabilities" element={<VulnerabilitiesPage />} />
-          <Route path="/registries" element={cluster(<RegistriesPage />)} />
-          <Route path="/registries/new" element={cluster(<RegistriesPage />)} />
-          <Route path="/registries/:id" element={cluster(<RegistriesPage />)} />
-          <Route path="/registries/:id/edit" element={cluster(<RegistriesPage />)} />
+          <Route path="/cluster/tetragon" element={page('events', <TetragonStatusPage />, true)} />
+          <Route path="/security/events" element={page('events', <SecurityEventsPage />)} />
+          <Route path="/security/discovery" element={page('tracing', <DiscoveryPage />)} />
+          <Route path="/settings/users" element={page('system', <UsersPage />, true)} />
+          <Route path="/settings/users/new" element={page('system', <UsersPage />, true)} />
+          <Route path="/settings/roles" element={page('system', <RolesPage />, true)} />
+          <Route path="/settings/roles/new" element={page('system', <RolesPage />, true)} />
+          <Route path="/settings/roles/:name/edit" element={page('system', <RolesPage />, true)} />
+          <Route path="/security/alerts" element={page('notifications', <AlertsPage />, true)} />
+          <Route path="/security/alerts/new" element={page('notifications', <AlertsPage />, true)} />
+          <Route path="/security/alerts/:id/edit" element={page('notifications', <AlertsPage />, true)} />
+          <Route path="/security/rsyslog" element={page('notifications', <RsyslogPage />, true)} />
+          <Route path="/security/rsyslog/new" element={page('notifications', <RsyslogPage />, true)} />
+          <Route path="/security/rsyslog/:id/edit" element={page('notifications', <RsyslogPage />, true)} />
+          <Route path="/settings/retention" element={page('system', <SecurityRetentionPage />, true)} />
+          <Route path="/settings/audit" element={page('system', <AuditLogPage />, true)} />
+          <Route path="/security/admission" element={page('events', <AdmissionEventsPage />)} />
+          <Route path="/policies/admission" element={page('admission', <VAPPage />)} />
+          <Route path="/policies/admission/new" element={page('admission', <VAPPage />)} />
+          <Route path="/policies/admission/:name/edit" element={page('admission', <VAPPage />)} />
+          <Route path="/policies/admission/bindings/new" element={page('admission', <VAPPage />)} />
+          <Route path="/policies/admission/bindings/:name/edit" element={page('admission', <VAPPage />)} />
+          <Route path="/policies/network" element={page('network', <CNPPage />)} />
+          <Route path="/policies/network/new" element={page('network', <CNPPage />)} />
+          <Route path="/policies/network/:name/edit" element={page('network', <CNPPage />)} />
+          <Route path="/policies/quarantine" element={page('quarantine', <QuarantinePage />)} />
+          <Route path="/network/topology" element={page('network', <NetworkTopologyPage />)} />
+          <Route path="/vulnerabilities" element={page('vulnerabilities', <VulnerabilitiesPage />)} />
+          <Route path="/registries" element={page('vulnerabilities', <RegistriesPage />, true)} />
+          <Route path="/registries/new" element={page('vulnerabilities', <RegistriesPage />, true)} />
+          <Route path="/registries/:id" element={page('vulnerabilities', <RegistriesPage />, true)} />
+          <Route path="/registries/:id/edit" element={page('vulnerabilities', <RegistriesPage />, true)} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
-    </DiscoveryProvider>
-    </AdmissionEventsProvider>
-    </SecurityEventsProvider>
+    </Discovery>
+    </Events>
   )
 }
 

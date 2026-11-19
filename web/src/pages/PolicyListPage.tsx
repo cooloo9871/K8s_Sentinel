@@ -31,8 +31,8 @@ const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
 
 export function PolicyListPage() {
   const navigate = useNavigate()
-  const { user, limited } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { limited, can } = useAuth()
+  const isAdmin = can('tracing', 'manage')
   const toast = useToast()
   const hasLoaded = useRef(false)
   const [policies, setPolicies] = useState<PolicyRecord[]>([])

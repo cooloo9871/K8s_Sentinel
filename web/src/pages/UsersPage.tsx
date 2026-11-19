@@ -10,7 +10,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Checkbox } from '@/components/ui/checkbox'
-import { userApi, settingsApi, namespaceApi, type UserRecord } from '../api/client'
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { userApi, roleApi, settingsApi, namespaceApi, type UserRecord } from '../api/client'
 import { useAuth } from '../layout/AuthContext'
 import { useToast } from '../layout/AppToaster'
 
@@ -19,6 +22,25 @@ const MIN_PASSWORD_LENGTH = 8
 // What an account may reach: the whole cluster, or some namespaces. Limited to
 // namespaces it sees only what is in them and nothing that is the cluster's
 // (cluster-wide policies, admission policies, settings, other accounts).
+// The roles are few and their names are the user's own, so a built-in one is
+// shown with a capital and the rest as they were typed.
+const BUILT_IN = ['admin', 'viewer']
+
+function RoleSelect({ value, onChange, roles }: { value: string; onChange: (v: string) => void; roles: string[] }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-8 w-56 text-sm"><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {roles.map(r => (
+            <SelectItem key={r} value={r} className={BUILT_IN.includes(r) ? 'capitalize' : ''}>{r}</SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
+}
+
 function AccessPicker({ limited, onLimited, chosen, onChosen, namespaces }: {
   limited: boolean
   onLimited: (v: boolean) => void
@@ -61,7 +83,8 @@ function AccessPicker({ limited, onLimited, chosen, onChosen, namespaces }: {
 }
 
 export function UsersPage() {
-  const { user: me } = useAuth()
+  const { user: me, can } = useAuth()
+  const canManage = can('system', 'manage')
   const toast = useToast()
   const navigate = useNavigate()
   // The create screen is a route, so Back returns to the list, F5 stays on the
@@ -70,7 +93,8 @@ export function UsersPage() {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
-  const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer')
+  const [newRole, setNewRole] = useState('viewer')
+  const [roles, setRoles] = useState<string[]>(BUILT_IN)
   const [newLimited, setNewLimited] = useState(false)
   const [newNamespaces, setNewNamespaces] = useState<string[]>([])
   const [namespaces, setNamespaces] = useState<string[]>([])
@@ -78,6 +102,7 @@ export function UsersPage() {
 
   // Access dialog: which account, and the choice being made for it.
   const [accessTarget, setAccessTarget] = useState<string | null>(null)
+  const [accessRole, setAccessRole] = useState('viewer')
   const [accessLimited, setAccessLimited] = useState(false)
   const [accessNamespaces, setAccessNamespaces] = useState<string[]>([])
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
@@ -98,6 +123,7 @@ export function UsersPage() {
   useEffect(() => {
     load()
     namespaceApi.list().then(setNamespaces).catch(() => {})
+    roleApi.list().then(rs => setRoles(rs.map(r => r.name))).catch(() => {})
     settingsApi.getSessionTTL().then(({ sessionTTL: ttl }) => {
       setSessionTTL(ttl)
       setTtlInput(String(ttl))
@@ -122,12 +148,12 @@ export function UsersPage() {
     navigate('/settings/users')
   }
 
-  // Only admins create users; a deep link from someone else goes back.
+  // A deep link from an account that cannot create users goes back.
   useEffect(() => {
-    if (showForm && me && me.role !== 'admin') {
+    if (showForm && me && !canManage) {
       navigate('/settings/users', { replace: true })
     }
-  }, [showForm, me, navigate])
+  }, [showForm, me, canManage, navigate])
 
   const handleCreate = async () => {
     if (!newUsername.trim() || !newPassword || creating) return
@@ -150,16 +176,26 @@ export function UsersPage() {
       await userApi.delete(deleteTarget)
       toast.success(`User "${deleteTarget}" deleted.`)
       setDeleteTarget(null); load()
-    } catch { toast.error('Failed to delete user') }
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } }).response?.data
+      toast.error(typeof data === 'string' && data.trim() ? data.trim() : 'Failed to delete user')
+    }
   }
 
   const handleSaveAccess = async () => {
     if (!accessTarget) return
+    const before = users.find(u => u.username === accessTarget)
     try {
+      if (before?.role !== accessRole) await userApi.setRole(accessTarget, accessRole)
       await userApi.setNamespaces(accessTarget, accessLimited ? accessNamespaces : [])
       toast.success(`Access of "${accessTarget}" updated.`)
-      setAccessTarget(null); load()
-    } catch { toast.error('Failed to update access') }
+      setAccessTarget(null)
+    } catch (err: unknown) {
+      // The server says why, for one: the last full admin has to stay one.
+      const data = (err as { response?: { data?: unknown } }).response?.data
+      toast.error(typeof data === 'string' && data.trim() ? data.trim() : 'Failed to update access')
+    }
+    load()
   }
 
   // Changing your own password requires the current one; an admin resetting
@@ -207,12 +243,7 @@ export function UsersPage() {
             </div>
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Role</Label>
-              <div className="flex gap-2">
-                {(['viewer', 'admin'] as const).map(r => (
-                  <Button key={r} size="sm" variant={newRole === r ? 'default' : 'outline'}
-                    onClick={() => setNewRole(r)} className="capitalize">{r}</Button>
-                ))}
-              </div>
+              <RoleSelect value={newRole} onChange={setNewRole} roles={roles} />
             </div>
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Access</Label>
@@ -238,7 +269,7 @@ export function UsersPage() {
         <div>
           <h4 className="text-xl font-semibold">Users</h4>
         </div>
-        {me?.role === 'admin' && (
+        {canManage && (
           <Button onClick={() => navigate('/settings/users/new')}>+ New User</Button>
         )}
       </div>
@@ -249,7 +280,7 @@ export function UsersPage() {
             <CardContent className="flex items-center justify-between py-3">
               <div className="flex items-center gap-3">
                 <span className="font-medium text-sm">{u.username}</span>
-                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="text-[10px] capitalize">{u.role}</Badge>
+                <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className={`text-[10px] ${BUILT_IN.includes(u.role) ? 'capitalize' : ''}`}>{u.role}</Badge>
                 {u.username === me?.username && (
                   <Badge variant="outline" className="text-[10px]">You</Badge>
                 )}
@@ -259,21 +290,24 @@ export function UsersPage() {
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{new Date(u.createdAt).toLocaleDateString()}</span>
-                <Button variant="ghost" size="sm" className="text-xs h-7"
-                  onClick={() => { setPwTarget(u.username); setNewPw('') }}>
-                  Change Password
-                </Button>
-                {me?.role === 'admin' && u.username !== me?.username && (
+                {(canManage || u.username === me?.username) && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7"
+                    onClick={() => { setPwTarget(u.username); setNewPw('') }}>
+                    Change Password
+                  </Button>
+                )}
+                {canManage && u.username !== me?.username && (
                   <Button variant="ghost" size="sm" className="text-xs h-7"
                     onClick={() => {
                       setAccessTarget(u.username)
+                      setAccessRole(u.role)
                       setAccessLimited(u.namespaces.length > 0)
                       setAccessNamespaces(u.namespaces)
                     }}>
                     Access
                   </Button>
                 )}
-                {me?.role === 'admin' && u.username !== me?.username && (
+                {canManage && u.username !== me?.username && (
                   <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive hover:text-destructive"
                     onClick={() => setDeleteTarget(u.username)}>
                     Delete
@@ -299,12 +333,12 @@ export function UsersPage() {
                   className="h-8 text-sm w-32"
                   value={ttlInput}
                   onChange={e => setTtlInput(e.target.value)}
-                  disabled={me?.role !== 'admin'}
+                  disabled={!canManage}
                   onKeyDown={e => e.key === 'Enter' && handleSaveTTL()}
                 />
               </div>
             </div>
-            {me?.role === 'admin' && (
+            {canManage && (
               <Button size="sm" className="mt-4" onClick={handleSaveTTL}>Save</Button>
             )}
           </div>
@@ -335,6 +369,10 @@ export function UsersPage() {
             <AlertDialogTitle>Access</AlertDialogTitle>
             <AlertDialogDescription>What "{accessTarget}" may reach. Takes effect at once.</AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Role</Label>
+            <RoleSelect value={accessRole} onChange={setAccessRole} roles={roles} />
+          </div>
           <AccessPicker limited={accessLimited} onLimited={setAccessLimited}
             chosen={accessNamespaces} onChosen={setAccessNamespaces} namespaces={namespaces} />
           <AlertDialogFooter>

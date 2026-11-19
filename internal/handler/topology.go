@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
@@ -139,7 +140,20 @@ func getNetworkTopology(k8sStore *k8s.Store) http.HandlerFunc {
 		exposures := k8sStore.CachedPodExposures(r.Context())
 		nodeIPMap := k8sStore.CachedNodeIPMap(r.Context())
 
-		writeJSON(w, http.StatusOK, buildCiliumTopology(r.Context(), k8sStore, ipMap, nodeIPMap, exposures, k8sStore.PodVulnCounts(), partialResolution))
+		topo := buildCiliumTopology(r.Context(), k8sStore, ipMap, nodeIPMap, exposures, k8sStore.PodVulnCounts(), partialResolution)
+		// What is quarantined and what is vulnerable are marked only for an
+		// account whose role shows it those things.
+		seesQuarantine := can(r, auth.AreaQuarantine, auth.LevelView)
+		seesVulns := can(r, auth.AreaVulnerabilities, auth.LevelView)
+		for i := range topo.Nodes {
+			if !seesQuarantine {
+				topo.Nodes[i].Quarantined = false
+			}
+			if !seesVulns {
+				topo.Nodes[i].CriticalVulns = 0
+			}
+		}
+		writeJSON(w, http.StatusOK, topo)
 	}
 }
 

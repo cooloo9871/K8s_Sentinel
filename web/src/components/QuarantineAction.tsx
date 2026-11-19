@@ -22,7 +22,7 @@ export function QuarantineAction({ namespace, pod, quarantined, onChanged }: {
   const [busy, setBusy] = useState(false)
   const [asking, setAsking] = useState(false)
   const toast = useToast()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
 
   if (!pod || !namespace) return null
 
@@ -35,9 +35,9 @@ export function QuarantineAction({ namespace, pod, quarantined, onChanged }: {
       </p>
     )
   }
-  if (user?.role !== 'admin') return null
+  if (!can('quarantine', 'manage')) return null
   // An account limited to namespaces quarantines its own pods only.
-  if (user.namespaces?.length && !user.namespaces.includes(namespace)) return null
+  if (user?.namespaces?.length && !user.namespaces.includes(namespace)) return null
 
   const run = async () => {
     setBusy(true)

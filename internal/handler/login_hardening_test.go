@@ -19,7 +19,7 @@ import (
 // would, so handlers and the gate can be exercised in isolation.
 func withClaims(r *http.Request, username string, role auth.Role) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), claimsKey,
-		&auth.Claims{Username: username, Role: role}))
+		&auth.Claims{Username: username, Role: role, Perms: builtInPerms(role)}))
 }
 
 // A user still flagged to change their password may reach only /me and their

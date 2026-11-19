@@ -28,7 +28,7 @@ const EMPTY_FORM: PolicyFormInput = {
 }
 
 export function PolicyEditPage() {
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const { name } = useParams<{ name: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -36,7 +36,7 @@ export function PolicyEditPage() {
   const toast = useToast()
   const namespace = searchParams.get('namespace') || undefined
   const isNew = !name
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = can('tracing', 'manage')
 
   // Pre-fill from Behavior Discovery "Create Policy" navigation.
   // Read prefill once from location.state, then immediately clear the history

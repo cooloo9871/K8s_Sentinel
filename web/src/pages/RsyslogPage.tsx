@@ -126,8 +126,8 @@ function ConfigForm({
 }
 
 export function RsyslogPage() {
-  const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { can } = useAuth()
+  const isAdmin = can('notifications', 'manage')
   const toast = useToast()
 
   const navigate = useNavigate()

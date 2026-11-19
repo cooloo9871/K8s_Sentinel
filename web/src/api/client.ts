@@ -99,9 +99,16 @@ export interface CustomTemplatePayload {
   yaml: string
 }
 
+// The parts of the product a role grants separately, and how much of each.
+export const AREAS = ['tracing', 'network', 'admission', 'quarantine', 'events', 'vulnerabilities', 'notifications', 'system'] as const
+export type Area = typeof AREAS[number]
+export type Level = 'none' | 'view' | 'manage'
+export type Permissions = Record<Area, Level>
+
 export interface AuthUser {
   username: string
-  role: 'admin' | 'viewer'
+  role: string
+  permissions: Permissions
   // The namespaces the account is limited to; empty is the whole cluster.
   namespaces?: string[]
   mustChangePassword?: boolean
@@ -118,7 +125,7 @@ export const authApi = {
 
 export interface UserRecord {
   username: string
-  role: 'admin' | 'viewer'
+  role: string
   namespaces: string[]
   createdAt: string
 }
@@ -126,8 +133,10 @@ export interface UserRecord {
 export const userApi = {
   list: (): Promise<UserRecord[]> =>
     api.get('/users').then((r) => r.data),
-  create: (username: string, password: string, role: 'admin' | 'viewer', namespaces: string[]): Promise<void> =>
+  create: (username: string, password: string, role: string, namespaces: string[]): Promise<void> =>
     api.post('/users', { username, password, role, namespaces }),
+  setRole: (username: string, role: string): Promise<void> =>
+    api.put(`/users/${encodeURIComponent(username)}/role`, { role }),
   setNamespaces: (username: string, namespaces: string[]): Promise<void> =>
     api.put(`/users/${encodeURIComponent(username)}/namespaces`, { namespaces }),
   delete: (username: string): Promise<void> =>
@@ -136,6 +145,24 @@ export const userApi = {
   // resetting another user's may leave it blank.
   changePassword: (username: string, password: string, currentPassword?: string): Promise<void> =>
     api.put(`/users/${encodeURIComponent(username)}/password`, { password, currentPassword }),
+}
+
+export interface RoleRecord {
+  name: string
+  permissions: Permissions
+  builtIn: boolean
+  // How many accounts have the role.
+  users: number
+}
+
+export const roleApi = {
+  list: (): Promise<RoleRecord[]> => api.get('/roles').then((r) => r.data),
+  create: (name: string, permissions: Permissions): Promise<void> =>
+    api.post('/roles', { name, permissions }),
+  update: (name: string, permissions: Permissions): Promise<void> =>
+    api.put(`/roles/${encodeURIComponent(name)}`, { permissions }),
+  delete: (name: string): Promise<void> =>
+    api.delete(`/roles/${encodeURIComponent(name)}`),
 }
 
 export interface AlertRule {

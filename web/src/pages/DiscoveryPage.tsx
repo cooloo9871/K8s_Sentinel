@@ -126,8 +126,8 @@ export function DiscoveryPage() {
   const { profiles, clearProfiles } = useDiscovery()
   const navigate = useNavigate()
   const toast = useToast()
-  const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { can } = useAuth()
+  const isAdmin = can('tracing', 'manage')
   const [nsFilter, setNsFilter] = useState<string[]>([])
   const [podSearch, setPodSearch] = useState('')
   const [groupByNs, setGroupByNs] = useState(false)

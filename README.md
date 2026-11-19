@@ -29,7 +29,7 @@ Each layer does what only it can do:
 - **Security & Admission Events** — persisted, deduplicated, filterable, exportable; webhook alerts (Slack; Discord via its Slack-compatible endpoint) and syslog forwarding fire once per event, paced and retried so a burst does not trip provider rate limits
 - **Audit Log** — every administrative action recorded (who did what, when), filterable, with CSV export
 - **Event Sources** — live ingestion health per source, so a Tetragon agent that is Ready but whose gRPC stream is not actually delivering shows as down rather than falsely healthy; Trivy Operator is listed too, and turns stale when it stops writing reports
-- **Dashboard & Settings** — agent and ingestion health, event counts, quarantine status, critical and high vulnerability totals with the workloads to fix first; local accounts with Admin / Viewer roles (forced first-login password change, per-IP login rate limiting), retention tuning
+- **Dashboard & Settings** — agent and ingestion health, event counts, quarantine status, critical and high vulnerability totals with the workloads to fix first; local accounts with roles that grant each part of the product separately (forced first-login password change, per-IP login rate limiting), retention tuning
 - **Hardened by default** — same-origin Content-Security-Policy and security headers on every response; sessions can survive restarts without persistent storage by injecting `JWT_SECRET` from a Kubernetes Secret
 
 ## Quick start

@@ -16,11 +16,11 @@ import (
 	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
 	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
 	"github.com/cooloo9871/K8s_Sentinel/internal/handler"
+	k8sclient "github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 	"github.com/cooloo9871/K8s_Sentinel/internal/registry"
-	"github.com/cooloo9871/K8s_Sentinel/internal/vulngate"
 	"github.com/cooloo9871/K8s_Sentinel/internal/rsyslog"
 	"github.com/cooloo9871/K8s_Sentinel/internal/security"
-	k8sclient "github.com/cooloo9871/K8s_Sentinel/internal/k8s"
+	"github.com/cooloo9871/K8s_Sentinel/internal/vulngate"
 	sentinelweb "github.com/cooloo9871/K8s_Sentinel/web"
 )
 
@@ -170,6 +170,7 @@ func main() {
 	cfg := handler.Config{
 		Store:           store,
 		Users:           users,
+		Roles:           auth.NewRoleStore(data("roles.json")),
 		Secret:          secret,
 		Alerts:          alerts,
 		Dispatcher:      dispatcher,

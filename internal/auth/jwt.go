@@ -15,6 +15,8 @@ type Claims struct {
 	Role     Role   `json:"role"`
 	// Not in the token: read from the account on every request, as the role is.
 	Namespaces []string `json:"-"`
+	// What the account's role grants, resolved on every request too.
+	Perms Permissions `json:"-"`
 	jwt.RegisteredClaims
 }
 

@@ -614,7 +614,31 @@ itself instead of reading claims from the context — read from the context, the
 middleware never ran, the claims are always nil, and revocation silently does nothing
 (fixed in v0.21.0).
 
-There are two roles: `admin` writes, `viewer` reads.
+A role grants each area of the product at one of three levels: `none`, `view`
+or `manage` (manage includes view). The areas are `tracing` (with templates and
+discovery), `network` (with the topology), `admission`, `quarantine`, `events`
+(with event sources), `vulnerabilities` (with registries), `notifications`
+(alerts and syslog) and `system` (accounts, roles, the audit log, retention and
+the session timeout). `admin` and `viewer` are built in and cannot be changed:
+`admin` manages every area; `viewer` views every area but `notifications` and
+`system`. Other roles are made under **Settings → Roles** and kept in
+`roles.json` in the data directory; an area missing from a stored role is
+`none`, so a release can add an area without touching stored roles.
+
+An account has one role, by name. The auth middleware resolves it on every
+request, so editing a role or giving an account another one reaches a session
+that is already open. A role that no longer exists grants nothing. Every route
+behind the session sits behind `need(area, level)` in
+`internal/handler/handler.go`, reads as well as writes, and a test walks the
+router and fails for a route that declares none
+(`internal/handler/permissions_test.go`). The few routes open to every signed-in
+account are the forms' helpers (namespaces, pod labels, the selector preview,
+the cluster CIDR), `/api/auth/me` and changing one's own password.
+
+Managing `system` includes giving any account any role, so it is the one
+permission that amounts to all of them. There is always an account with the
+`admin` role and the whole cluster: deleting it, giving it another role or
+limiting it is refused while it is the last.
 
 An account may also be limited to a list of namespaces (`namespaces` in
 `users.json`; empty is the whole cluster, which is what every account from

@@ -34,6 +34,7 @@ const ROUTE_LABELS: Record<string, string> = {
   topology: 'Network Topology',
   settings: 'Settings',
   users: 'Users',
+  roles: 'Roles',
   quarantine: 'Quarantine',
   bindings: 'Bindings',
 }
@@ -107,13 +108,13 @@ interface Props {
 }
 
 export function AppHeader({ onLogout }: Props) {
-  const { user, limited } = useAuth()
+  const { user, limited, can } = useAuth()
   const [mode, setMode] = useState<{ protect: number; total: number } | null>(null)
   const breadcrumbs = useBreadcrumbs()
 
   useEffect(() => {
     // The count is of the cluster's policies.
-    if (limited) return
+    if (limited || !can('tracing', 'view')) return
     const read = () => { modeApi.get().then(setMode).catch(() => {}) }
     read()
     window.addEventListener(MODE_CHANGED, read)

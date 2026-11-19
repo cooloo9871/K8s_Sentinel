@@ -118,9 +118,21 @@ func TestAViewerIsNotShownWebhookURLs(t *testing.T) {
 		t.Fatal(err)
 	}
 	alerts.Create(alert.AlertRule{ID: "a1", Name: "slack", WebhookURL: "https://hooks.slack.com/services/T000/B000/secret"})
-	w := reviewDo(h, "GET", "/api/alerts", "", reviewToken(t, users, "viewer"), nil)
+	// The built-in viewer is not shown where events are sent at all.
+	if w := reviewDo(h, "GET", "/api/alerts", "", reviewToken(t, users, "viewer"), nil); w.Code != http.StatusForbidden {
+		t.Errorf("viewer: %d %s", w.Code, w.Body.String())
+	}
+	// A role that may look at them, and not change them, sees no credential.
+	admin := reviewToken(t, users, "admin")
+	if w := reviewDo(h, "POST", "/api/roles", `{"name":"onlooker","permissions":{"notifications":"view"}}`, admin, nil); w.Code != http.StatusCreated {
+		t.Fatalf("create role: %d %s", w.Code, w.Body.String())
+	}
+	if err := users.Create("looker", "password-1234", "onlooker", nil); err != nil {
+		t.Fatal(err)
+	}
+	w := reviewDo(h, "GET", "/api/alerts", "", reviewToken(t, users, "looker"), nil)
 	if strings.Contains(w.Body.String(), "secret") || !strings.Contains(w.Body.String(), "hooks.slack.com") {
-		t.Errorf("viewer sees %s", w.Body.String())
+		t.Errorf("a role with view sees %s", w.Body.String())
 	}
 	w = reviewDo(h, "GET", "/api/alerts", "", reviewToken(t, users, "admin"), nil)
 	if !strings.Contains(w.Body.String(), "secret") {

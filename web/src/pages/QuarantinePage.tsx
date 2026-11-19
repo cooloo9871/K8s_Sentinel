@@ -23,8 +23,8 @@ export function QuarantinePage() {
   // the network.
   const [releasing, setReleasing] = useState<QuarantinedPod | null>(null)
   const toast = useToast()
-  const { user } = useAuth()
-  const canEdit = user?.role === 'admin'
+  const { can } = useAuth()
+  const canEdit = can('quarantine', 'manage')
 
   const load = useCallback(async () => {
     try {

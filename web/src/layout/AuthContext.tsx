@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { authApi, SESSION_CHECK, SESSION_ENDED, type AuthUser } from '../api/client'
+import { authApi, SESSION_CHECK, SESSION_ENDED, type AuthUser, type Area, type Level } from '../api/client'
 
 interface AuthState {
   user: AuthUser | null
@@ -7,12 +7,15 @@ interface AuthState {
   // The account is limited to some namespaces: it sees nothing that belongs to
   // the cluster as a whole. The server enforces it; this hides the dead ends.
   limited: boolean
+  // What the account's role grants on an area. Manage includes view. The
+  // server decides; this keeps the interface from offering what it would refuse.
+  can: (area: Area, level: Exclude<Level, 'none'>) => boolean
   logout: () => Promise<void>
   refresh: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthState>({
-  user: null, loading: true, limited: false, logout: async () => {}, refresh: async () => {},
+  user: null, loading: true, limited: false, can: () => false, logout: async () => {}, refresh: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -49,8 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(await authApi.me().catch(() => null))
   }
 
+  const can = (area: Area, level: Exclude<Level, 'none'>) => {
+    const has = user?.permissions?.[area]
+    return has === 'manage' || (level === 'view' && has === 'view')
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, limited: (user?.namespaces?.length ?? 0) > 0, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, limited: (user?.namespaces?.length ?? 0) > 0, can, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   )

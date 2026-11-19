@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, NavLink } from 'react-router-dom'
 import { IconChevronRight } from '@tabler/icons-react'
 import logoUrl from '../assets/sentinel-logo-black.svg'
+import type { Area } from '../api/client'
 import { useAuth } from './AuthContext'
 import {
   Sidebar,
@@ -18,8 +19,10 @@ import {
 
 // clusterOnly: about the cluster as a whole, so not shown to an account that is
 // limited to namespaces. The server refuses those pages' data either way.
-type NavItem = { to: string; label: string; adminOnly?: boolean; clusterOnly?: boolean }
-type NavGroup = { label: string; items: NavItem[]; adminOnly?: boolean; clusterOnly?: boolean }
+// area: the part of the product the page belongs to. It is listed for an
+// account whose role lets it view that area.
+type NavItem = { to: string; label: string; area: Area; clusterOnly?: boolean }
+type NavGroup = { label: string; items: NavItem[] }
 
 // The collapsible groups, as data: the open/closed state is keyed by label, so
 // declaring them here keeps that state and the markup from drifting apart.
@@ -28,45 +31,42 @@ const GROUPS: NavGroup[] = [
     // Two views of the same question: what is running, and what could be.
     label: 'Vulnerabilities',
     items: [
-      { to: '/vulnerabilities', label: 'Workloads' },
-      { to: '/registries', label: 'Registries', clusterOnly: true },
+      { to: '/vulnerabilities', label: 'Workloads', area: 'vulnerabilities' },
+      { to: '/registries', label: 'Registries', area: 'vulnerabilities', clusterOnly: true },
     ],
   },
   {
     label: 'Policies',
     items: [
-      { to: '/policies/tracing', label: 'Tracing Policy' },
-      { to: '/security/discovery', label: 'Behavior Discovery' },
-      { to: '/policies/templates', label: 'Templates' },
-      { to: '/policies/admission', label: 'Admission Policy' },
-      { to: '/policies/network', label: 'Network Policy' },
-      { to: '/policies/quarantine', label: 'Quarantine' },
+      { to: '/policies/tracing', label: 'Tracing Policy', area: 'tracing' },
+      { to: '/security/discovery', label: 'Behavior Discovery', area: 'tracing' },
+      { to: '/policies/templates', label: 'Templates', area: 'tracing' },
+      { to: '/policies/admission', label: 'Admission Policy', area: 'admission' },
+      { to: '/policies/network', label: 'Network Policy', area: 'network' },
+      { to: '/policies/quarantine', label: 'Quarantine', area: 'quarantine' },
     ],
   },
   {
     label: 'Notifications',
     items: [
-      { to: '/security/events', label: 'Security Events' },
-      { to: '/security/admission', label: 'Admission Events' },
-      // Read-only records like the events above, not a setting — and admin-only,
-      // matching the /api/audit endpoint, so a viewer never sees a dead link.
-      { to: '/settings/audit', label: 'Audit Log', adminOnly: true, clusterOnly: true },
+      { to: '/security/events', label: 'Security Events', area: 'events' },
+      { to: '/security/admission', label: 'Admission Events', area: 'events' },
+      // Read-only records like the events above, not a setting.
+      { to: '/settings/audit', label: 'Audit Log', area: 'system', clusterOnly: true },
     ],
   },
   {
     label: 'Cluster',
-    clusterOnly: true,
-    items: [{ to: '/cluster/tetragon', label: 'Event Sources' }],
+    items: [{ to: '/cluster/tetragon', label: 'Event Sources', area: 'events', clusterOnly: true }],
   },
   {
     label: 'Settings',
-    adminOnly: true,
-    clusterOnly: true,
     items: [
-      { to: '/settings/users', label: 'Users' },
-      { to: '/security/alerts', label: 'Alerts' },
-      { to: '/security/rsyslog', label: 'Syslog' },
-      { to: '/settings/retention', label: 'Event Retention' },
+      { to: '/settings/users', label: 'Users', area: 'system', clusterOnly: true },
+      { to: '/settings/roles', label: 'Roles', area: 'system', clusterOnly: true },
+      { to: '/security/alerts', label: 'Alerts', area: 'notifications', clusterOnly: true },
+      { to: '/security/rsyslog', label: 'Syslog', area: 'notifications', clusterOnly: true },
+      { to: '/settings/retention', label: 'Event Retention', area: 'system', clusterOnly: true },
     ],
   },
 ]
@@ -81,9 +81,8 @@ const GROUP_ITEM_CLASS = 'h-8 text-sm text-sidebar-foreground/70'
 
 export function AppSidebar() {
   const { pathname } = useLocation()
-  const { user, limited } = useAuth()
-  const shown = (x: { adminOnly?: boolean; clusterOnly?: boolean }) =>
-    (!x.adminOnly || user?.role === 'admin') && (!x.clusterOnly || !limited)
+  const { limited, can } = useAuth()
+  const shown = (x: NavItem) => can(x.area, 'view') && (!x.clusterOnly || !limited)
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + '/')
@@ -118,16 +117,18 @@ export function AppSidebar() {
                   <NavLink to="/dashboard">Dashboard</NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/network/topology')} className={TOP_LEVEL_CLASS}>
-                  <NavLink to="/network/topology">Network Topology</NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {can('network', 'view') && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/network/topology')} className={TOP_LEVEL_CLASS}>
+                    <NavLink to="/network/topology">Network Topology</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {GROUPS.filter(shown).map(group => {
+        {GROUPS.filter(g => g.items.some(shown)).map(group => {
           const expanded = !!open[group.label]
           return (
             <SidebarGroup key={group.label}>

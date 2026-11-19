@@ -542,8 +542,8 @@ function RegistryImages({ id, isAdmin }: { id: string; isAdmin: boolean }) {
 // ── List, and the routes ────────────────────────────────────────────────────
 
 export function RegistriesPage() {
-  const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { can } = useAuth()
+  const isAdmin = can('vulnerabilities', 'manage')
   const toast = useToast()
   const navigate = useNavigate()
   // Which screen is up lives in the URL: the list, /new, /:id/edit, or /:id.

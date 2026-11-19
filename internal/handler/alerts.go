@@ -16,8 +16,8 @@ func listAlerts(store *alert.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rules := store.List()
 		// A webhook URL is a credential: whoever holds it can post to the
-		// channel. Only an admin, who can edit it, is shown it.
-		if c := claimsFromCtx(r); c == nil || c.Role != auth.RoleAdmin {
+		// channel. Only an account that can edit it is shown it.
+		if !can(r, auth.AreaNotifications, auth.LevelManage) {
 			for i := range rules {
 				rules[i].WebhookURL = alert.RedactURL(rules[i].WebhookURL)
 			}

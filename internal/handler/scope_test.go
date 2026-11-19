@@ -132,7 +132,7 @@ func TestALimitedAdminCannotSetAnotherPassword(t *testing.T) {
 
 // The limit is the account's as it is now, not as it was at sign-in.
 func TestALimitTakesEffectOnASessionAlreadyOpen(t *testing.T) {
-	h, users, c := scopedSession(t, auth.RoleViewer)
+	h, users, c := scopedSession(t, auth.RoleAdmin)
 	if w := do(h, c, http.MethodGet, "/api/auth/me", ""); !strings.Contains(w.Body.String(), `"namespaces":["team-a"]`) {
 		t.Errorf("me = %s", w.Body.String())
 	}

@@ -231,7 +231,7 @@ Trivy Operator only looks at workloads in the cluster, so here Sentinel starts t
 - **Expand an image** for its findings, in the same layout as the workload list. Search, filter by severity, fix available or scan failed, and export CSV
 - **Credentials** are stored in Sentinel's data directory with the other settings and are never sent back to the browser. A scan pod reads them from a Secret that exists only for that pod, as a login for that one registry host, so they are never written into a Job and never offered to the registry Trivy downloads its database from. Changing a registry's URL asks for the password again, so a saved one cannot be redirected to another host
 - **Results are kept in the data directory**, so they survive a restart when it is on persistent storage. On the default `emptyDir` a restart clears them and the registries, like every other setting
-- Viewers can read the results; adding, editing, deleting and starting scans are for Admins and recorded in the Audit Log
+- A role that views Vulnerabilities can read the results; adding, editing, deleting and starting scans need Manage and are recorded in the Audit Log
 - This does not block deployments, and does not yet mark which registry images are running in the cluster
 
 ### Refusing vulnerable images
@@ -298,8 +298,14 @@ A ValidatingAdmissionPolicy cannot look anything up while it decides. Sentinel t
 ## Settings
 
 - The running version is shown at the bottom of the sidebar, so a `kubectl rollout restart` can be confirmed from the UI
-- **Users** — local accounts with JWT sessions and revocation on logout, Admin / Viewer roles, session timeout. The default admin must change its password on first login; passwords are at least 8 characters, changing your own requires the current one, and failed logins are rate limited per source IP
-- **Access by namespace** — an account can be limited to some namespaces, when it is created or later (**Users → Access**; the change reaches a session already open). Its role still applies inside them: a limited Admin creates and edits there, a limited Viewer reads.
+- **Users** — local accounts with JWT sessions and revocation on logout, roles, session timeout. The default admin must change its password on first login; passwords are at least 8 characters, changing your own requires the current one, and failed logins are rate limited per source IP
+- **Roles** — a role grants each part of the product separately, at None, View or Manage: Tracing Policy (with Templates and Behavior Discovery), Network Policy (with Network Topology), Admission Policy, Quarantine, Events (with Event Sources), Vulnerabilities (with Registries), Notifications (Alerts, Syslog) and System (Users, Roles, Audit Log, Event Retention, Session Timeout)
+  - **Admin** and **Viewer** are built in. Admin manages everything; Viewer views everything except Notifications and System
+  - Make others under **Settings → Roles**, for example one that only views Events, or one that manages Network Policy and views Events. A role's name is fixed once made; what it grants can be edited and reaches sessions already open
+  - A page the role does not show is absent from the sidebar and its data is refused by the API, not only hidden
+  - An account's role is changed from **Users → Access**. A role some account still has cannot be deleted, and the last account with the Admin role and the whole cluster cannot be deleted, re-roled or limited
+  - Managing System includes giving any account any role
+- **Access by namespace** — an account can be limited to some namespaces, when it is created or later (**Users → Access**; the change reaches a session already open). Its role still applies inside them: a limited account creates and edits there what its role manages, and reads what its role views. Notifications and System are the cluster's and stay out of reach of a limited account whatever its role.
   - *Sees and manages, in its namespaces only:* namespaced Tracing Policies and Network Policies, Behavior Discovery, Security Events, Admission Events, Vulnerabilities (Workloads), Quarantine
   - *Sees whole:* the Network Topology, since a connection has two ends and the far one is seldom its own. Quarantine from the topology still works on its own pods only
   - *Does not see:* cluster-wide Tracing Policies and Network Policies, the cluster's Admission Policies, Registries, Event Sources, the switch that sets all policies to Monitoring, the Audit Log and all of Settings. An event caused by a cluster-wide policy on one of its pods is shown, with the policy's name

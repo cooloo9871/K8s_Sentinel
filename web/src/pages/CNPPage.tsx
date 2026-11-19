@@ -370,8 +370,8 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
 
 export function CNPPage() {
   const toast = useToast()
-  const { user, limited } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { limited, can } = useAuth()
+  const isAdmin = can('network', 'manage')
 
   const [policies, setPolicies] = useState<CNPRecord[]>([])
   const [available, setAvailable] = useState<boolean | null>(null)

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -33,7 +34,7 @@ func usernameFromCtx(r *http.Request) string {
 	return ""
 }
 
-func authMiddleware(secret []byte, users *auth.UserStore) func(http.Handler) http.Handler {
+func authMiddleware(secret []byte, users *auth.UserStore, roles *auth.RoleStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("sentinel_token")
@@ -60,20 +61,15 @@ func authMiddleware(secret []byte, users *auth.UserStore) func(http.Handler) htt
 			}
 			claims.Role = u.Role
 			claims.Namespaces = u.Namespaces
+			// A role that is no longer there grants nothing: the account can
+			// sign in and change its password, and that is all.
+			if def, ok := roles.Get(u.Role); ok {
+				claims.Perms = def.Permissions
+			}
 			ctx := context.WithValue(r.Context(), claimsKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func adminOnly(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if claimsFromCtx(r).Role != auth.RoleAdmin {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func loginHandler(users *auth.UserStore, secret []byte, limiter *auth.LoginLimiter, auditStore *audit.Store) http.HandlerFunc {
@@ -228,6 +224,7 @@ func meHandler(users *auth.UserStore) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"username":           claims.Username,
 			"role":               claims.Role,
+			"permissions":        permissionsOf(claims),
 			"namespaces":         nonNil(claims.Namespaces),
 			"mustChangePassword": users.RequiresPasswordChange(claims.Username),
 		})
@@ -262,6 +259,41 @@ func mustChangeGate(users *auth.UserStore) func(http.Handler) http.Handler {
 	}
 }
 
+// permissionsOf spells out every area, so the interface never has to know
+// what an absent one means.
+func permissionsOf(c *auth.Claims) auth.Permissions {
+	out := auth.Permissions{}
+	for _, a := range auth.Areas {
+		out[a] = auth.LevelNone
+		for _, l := range []auth.Level{auth.LevelView, auth.LevelManage} {
+			if c.Perms.Can(a, l) {
+				out[a] = l
+			}
+		}
+	}
+	return out
+}
+
+// lastFullAdmin reports whether the account is the only one left with the admin
+// role and the whole cluster. Whatever would take that from it is refused, so
+// there is always an account that can manage the others.
+func lastFullAdmin(users *auth.UserStore, username string) bool {
+	full := func(u auth.User) bool { return u.Role == auth.RoleAdmin && len(u.Namespaces) == 0 }
+	target, ok := users.Get(username)
+	if !ok || !full(target) {
+		return false
+	}
+	n := 0
+	for _, u := range users.List() {
+		if full(u) {
+			n++
+		}
+	}
+	return n == 1
+}
+
+const lastAdminRefusal = "this is the last account with the admin role and the whole cluster; give another account that first"
+
 func listUsersHandler(users *auth.UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		all := users.List()
@@ -279,7 +311,7 @@ func listUsersHandler(users *auth.UserStore) http.HandlerFunc {
 	}
 }
 
-func createUserHandler(users *auth.UserStore) http.HandlerFunc {
+func createUserHandler(users *auth.UserStore, roles *auth.RoleStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Username   string    `json:"username"`
@@ -295,8 +327,12 @@ func createUserHandler(users *auth.UserStore) http.HandlerFunc {
 			http.Error(w, "username and password required", http.StatusBadRequest)
 			return
 		}
-		if body.Role != auth.RoleAdmin && body.Role != auth.RoleViewer {
+		if body.Role == "" {
 			body.Role = auth.RoleViewer
+		}
+		if _, ok := roles.Get(body.Role); !ok {
+			http.Error(w, fmt.Sprintf("there is no role named %q", body.Role), http.StatusBadRequest)
+			return
 		}
 		namespaces, err := cleanNamespaces(body.Namespaces)
 		if err != nil {
@@ -334,7 +370,42 @@ func setUserNamespacesHandler(users *auth.UserStore) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if len(namespaces) > 0 && lastFullAdmin(users, username) {
+			http.Error(w, lastAdminRefusal, http.StatusConflict)
+			return
+		}
 		if !users.SetNamespaces(username, namespaces) {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// setUserRoleHandler gives an account another role.
+func setUserRoleHandler(users *auth.UserStore, roles *auth.RoleStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		username := chi.URLParam(r, "username")
+		if claimsFromCtx(r).Username == username {
+			http.Error(w, "cannot change your own role", http.StatusBadRequest)
+			return
+		}
+		var body struct {
+			Role auth.Role `json:"role"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if _, ok := roles.Get(body.Role); !ok {
+			http.Error(w, fmt.Sprintf("there is no role named %q", body.Role), http.StatusBadRequest)
+			return
+		}
+		if body.Role != auth.RoleAdmin && lastFullAdmin(users, username) {
+			http.Error(w, lastAdminRefusal, http.StatusConflict)
+			return
+		}
+		if !users.SetRole(username, body.Role) {
 			http.Error(w, "user not found", http.StatusNotFound)
 			return
 		}
@@ -349,6 +420,10 @@ func deleteUserHandler(users *auth.UserStore) http.HandlerFunc {
 			http.Error(w, "cannot delete yourself", http.StatusBadRequest)
 			return
 		}
+		if lastFullAdmin(users, username) {
+			http.Error(w, lastAdminRefusal, http.StatusConflict)
+			return
+		}
 		if !users.Delete(username) {
 			http.Error(w, "user not found", http.StatusNotFound)
 			return
@@ -361,9 +436,9 @@ func changePasswordHandler(users *auth.UserStore, secret []byte) http.HandlerFun
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := claimsFromCtx(r)
 		username := chi.URLParam(r, "username")
-		// Another account's password is for an admin of the whole cluster to
-		// set: an admin of some namespaces could otherwise take over any account.
-		if claims.Username != username && (claims.Role != auth.RoleAdmin || len(claims.Namespaces) > 0) {
+		// Another account's password is for whoever manages the accounts of the
+		// whole cluster to set: anyone else could otherwise take over any account.
+		if claims.Username != username && (!can(r, auth.AreaSystem, auth.LevelManage) || len(claims.Namespaces) > 0) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

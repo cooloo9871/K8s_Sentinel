@@ -39,8 +39,8 @@ function apiToTemplate(t: CustomTemplatePayload): PolicyTemplate {
 }
 
 export function PolicyTemplatesPage() {
-  const { user, limited } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const { limited, can } = useAuth()
+  const isAdmin = can('tracing', 'manage')
   // Templates are shared by everyone, so changing them is for an admin of the
   // whole cluster. An admin of some namespaces still makes policies from them.
   const canManage = isAdmin && !limited
