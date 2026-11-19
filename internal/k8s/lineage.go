@@ -28,6 +28,14 @@ import (
 type containerLineage struct {
 	mu  sync.Mutex
 	ids map[string]string // exec ID → container ID
+	// exec ID → parent's exec ID, for processes nothing has placed yet. A
+	// process that forks without executing anything (a subshell, the shell
+	// behind "$(...)") is the subject of no event, only the parent in its
+	// children's, so the way up the tree through it is kept from those.
+	parents map[string]string
+	// Processes that have exited, oldest first, and when. They are forgotten
+	// a while after, not at once: see exited.
+	gone []goneProcess
 	// Containers that turned out to belong to no pod, and when that was found.
 	stray map[string]time.Time
 	// Agents whose process cache should be read again.
@@ -40,9 +48,10 @@ const lineageMax = 200_000
 
 func newContainerLineage() *containerLineage {
 	return &containerLineage{
-		ids:    make(map[string]string),
-		stray:  make(map[string]time.Time),
-		reseed: make(map[podEndpoint]bool),
+		ids:     make(map[string]string),
+		parents: make(map[string]string),
+		stray:   make(map[string]time.Time),
+		reseed:  make(map[podEndpoint]bool),
 	}
 }
 
@@ -75,10 +84,83 @@ func (l *containerLineage) put(execID, containerID string) {
 	l.ids[execID] = containerID
 }
 
-func (l *containerLineage) forget(execID string) {
+type goneProcess struct {
+	execID string
+	at     time.Time
+}
+
+// orphanFor is how long an exited process stays on the way up the tree. What
+// it started may outlive it without having executed anything yet: a shell that
+// forks into the background and exits, "( (work) & )". The first thing that
+// fork runs is then the child of a process whose own parent is gone, and for
+// this long it is still found.
+const orphanFor = time.Minute
+
+// exited takes a process that has ended out of the table, a while from now.
+// Its exit is also the one event a fork that executed nothing is the subject
+// of, and so the one place its own parent is named.
+func (l *containerLineage) exited(proc, parent *tetragon.Process, now time.Time) {
+	if proc.GetExecId() == "" {
+		return
+	}
+	parentID := proc.GetParentExecId()
+	if parentID == "" {
+		parentID = parent.GetExecId()
+	}
+	l.link(proc.GetExecId(), parentID)
+	l.climb(proc.GetExecId())
 	l.mu.Lock()
-	delete(l.ids, execID)
-	l.mu.Unlock()
+	defer l.mu.Unlock()
+	l.gone = append(l.gone, goneProcess{proc.GetExecId(), now})
+	n := 0
+	for n < len(l.gone) && now.Sub(l.gone[n].at) >= orphanFor {
+		delete(l.ids, l.gone[n].execID)
+		delete(l.parents, l.gone[n].execID)
+		n++
+	}
+	l.gone = l.gone[n:]
+}
+
+// link records that a process was started by another.
+func (l *containerLineage) link(execID, parentExecID string) {
+	if execID == "" || parentExecID == "" || execID == parentExecID {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.parents) >= lineageMax {
+		n := lineageMax / 10
+		for id := range l.parents {
+			delete(l.parents, id)
+			if n--; n == 0 {
+				break
+			}
+		}
+	}
+	l.parents[execID] = parentExecID
+}
+
+// lineageDepth bounds the climb up the tree, for parents that loop.
+const lineageDepth = 32
+
+// climb follows the recorded parents up from a process to the first one whose
+// container is known, and marks everything it passed as in that container.
+func (l *containerLineage) climb(execID string) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var passed []string
+	for cur, depth := execID, 0; cur != "" && depth < lineageDepth; depth++ {
+		if id := l.ids[cur]; id != "" {
+			for _, p := range passed {
+				l.ids[p] = id
+				delete(l.parents, p)
+			}
+			return id
+		}
+		passed = append(passed, cur)
+		cur = l.parents[cur]
+	}
+	return ""
 }
 
 // strayFor is how long a container found in no pod is taken to be in none.
@@ -129,7 +211,12 @@ func (l *containerLineage) place(proc, parent *tetragon.Process) string {
 	if id := l.get(proc.GetExecId()); id != "" {
 		return id
 	}
-	id := l.get(proc.GetParentExecId())
+	// A process is in the container of whatever started it, however many
+	// forks up that is. The event names the parent and the parent's own
+	// parent; the rest of the way is what earlier events said.
+	l.link(proc.GetExecId(), proc.GetParentExecId())
+	l.link(parent.GetExecId(), parent.GetParentExecId())
+	id := l.climb(proc.GetParentExecId())
 	// The runtime's own steps, "runc init" or a monitor starting "crun
 	// create", are on the node and not what the workload runs.
 	if id == "" && parent != nil && !isContainerRuntime(proc.GetBinary()) {

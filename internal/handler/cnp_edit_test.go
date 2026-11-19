@@ -102,3 +102,39 @@ func TestCreatingANetworkPolicyUnderATakenNameIsRefused(t *testing.T) {
 		t.Errorf("edit = %d %s", w.Code, w.Body.String())
 	}
 }
+
+// The policy that isolates quarantined pods is not written from the policy
+// list: edited there it would let them all back on the network while every page
+// still called them quarantined, and an account that manages network policy
+// could do with it what only quarantine's own permission allows.
+func TestTheQuarantinePolicyIsNotWrittenFromThePolicyList(t *testing.T) {
+	client := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		{Group: "cilium.io", Version: "v2", Resource: "ciliumnetworkpolicies"}:            "CiliumNetworkPolicyList",
+		{Group: "cilium.io", Version: "v2", Resource: "ciliumclusterwidenetworkpolicies"}: "CiliumClusterwideNetworkPolicyList",
+	})
+	store := k8s.NewStore(client, nil, nil, "")
+	open := "apiVersion: cilium.io/v2\nkind: CiliumClusterwideNetworkPolicy\nmetadata:\n  name: " + k8s.QuarantinePolicyName + "\nspec:\n  endpointSelector:\n    matchLabels:\n      nobody: here\n"
+
+	// Made under that name it would stand in for the real one.
+	body, _ := json.Marshal(map[string]string{"rawYaml": open})
+	w := httptest.NewRecorder()
+	applyCNP(store)(w, withClaims(httptest.NewRequest(http.MethodPost, "/api/cnp", bytes.NewReader(body)), "admin", auth.RoleAdmin))
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "Quarantine page") {
+		t.Errorf("create = %d %s, want 409 pointing at the Quarantine page", w.Code, w.Body.String())
+	}
+	w, r := putCNP(k8s.QuarantinePolicyName, "", "cluster", open)
+	applyCNP(store)(w, withClaims(r, "admin", auth.RoleAdmin))
+	if w.Code != http.StatusConflict {
+		t.Errorf("edit = %d %s, want 409", w.Code, w.Body.String())
+	}
+	if _, err := store.GetCNP(context.Background(), "cluster", "", k8s.QuarantinePolicyName); err == nil {
+		t.Error("a policy was written under the quarantine policy's name")
+	}
+	// A namespaced policy that happens to share the name is an ordinary policy.
+	body, _ = json.Marshal(map[string]string{"rawYaml": "apiVersion: cilium.io/v2\nkind: CiliumNetworkPolicy\nmetadata:\n  name: " + k8s.QuarantinePolicyName + "\n  namespace: net-lab\nspec:\n  endpointSelector: {}\n"})
+	w = httptest.NewRecorder()
+	applyCNP(store)(w, withClaims(httptest.NewRequest(http.MethodPost, "/api/cnp", bytes.NewReader(body)), "admin", auth.RoleAdmin))
+	if w.Code != http.StatusNoContent {
+		t.Errorf("a namespaced policy of the same name = %d %s", w.Code, w.Body.String())
+	}
+}

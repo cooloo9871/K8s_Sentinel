@@ -127,6 +127,40 @@ which are OCI hooks running on the node. containerd's shim is not treated as a
 runtime, because the ID it carries is the sandbox's. An event
 Tetragon did name a pod for is left exactly as it came.
 
+A shell forks without executing anything for `$(...)` and for a subshell, and a
+fork is the subject of no event: it shows only as the parent of what it starts.
+So the table also keeps exec ID to parent exec ID for everything not yet placed,
+filled from each event's process and from its parent (which carries its own
+parent's ID), and a process is placed by climbing that as far as a known
+container. Two forks down, the link that completes the climb is in a sibling's
+event, so a hook event that still has no container waits 300 ms and is tried
+once more before it is delivered without a pod. Before this, every command in a
+substituted pipeline on CRI-O was listed with no pod.
+
+A fork that executed nothing is the subject of one event after all, its exit,
+which names its parent; the link is taken from there too. And an exited process
+stays in the table for a minute instead of leaving at once, because what it
+started may not have run anything yet: `( (work) & )` forks, forks again into
+the background and exits, and the first thing the second fork runs is the child
+of a process whose own parent is already gone.
+
+What the runtime does to itself on the way into a container (`runc exec`
+starting its sealed copy, `/proc/self/fd/N`) is dropped from hook events as it
+is from exec events; the entrypoint it then becomes is kept.
+
+What still arrives without a pod on a node where Tetragon names none: a hook
+event in the first seconds after Sentinel starts or a stream reconnects, until
+the agent's process cache has been read (the 30-second pass); what a fork runs
+more than a minute after its parent exited without ever executing anything; and
+a runtime this does not know by name (the list is `runc`, `crun`, `youki`,
+`conmon`). Measured on CRI-O 1.37 with crun and with runc, Tetragon 1.8.0,
+cgroup v2.
+
+The script Sentinel runs in the agent's container to learn what each process
+was started by is not the agent's activity: its commands are dropped from every
+kind of event, told by the mark on the script's command line and only in the
+agent's own namespace, where nothing else could have chosen to carry it.
+
 The only subscriber is `security.Store`.
 
 **Alerts and rsyslog do not subscribe to this raw stream.** They subscribe to

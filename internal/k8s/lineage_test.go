@@ -3,6 +3,7 @@ package k8s
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tetragon "github.com/cilium/tetragon/api/v1/tetragon"
 )
@@ -98,9 +99,32 @@ func TestAProcessOfTheNodeIsNotPlaced(t *testing.T) {
 func TestAnExitedProcessIsForgotten(t *testing.T) {
 	l := newContainerLineage()
 	l.place(entry, conmon)
-	l.forget("entry")
+	start := time.Now()
+	l.exited(entry, conmon, start)
+	// Not at once: what it started may not have run anything yet.
+	if got := l.place(proc("entry", "", "/bin/sh", ""), nil); got != cidA {
+		t.Errorf("a moment after it exited: %q, want %q", got, cidA)
+	}
+	// The next exit past the wait takes it out.
+	l.exited(proc("other", "", "/bin/true", ""), nil, start.Add(orphanFor))
 	if got := l.place(proc("entry", "", "/bin/sh", ""), nil); got != "" {
 		t.Errorf("still placed in %q", got)
+	}
+}
+
+// "( (work) & )": the shell forks, the fork forks into the background and
+// exits, and only then does the second fork run anything. Its parent is gone
+// and was the subject of no event but its own exit, which is where the way up
+// the tree is learned.
+func TestWhatAnExitedForkLeftRunningIsPlaced(t *testing.T) {
+	l := newContainerLineage()
+	shell := proc("shell", "conmon", "/bin/sh", "-c loop")
+	l.place(shell, conmon)
+	first := proc("first", "shell", "/bin/sh", "-c loop")
+	second := proc("second", "first", "/bin/sh", "-c loop")
+	l.exited(first, shell, time.Now())
+	if got := l.place(proc("work", "second", "/bin/sh", "-c loop"), second); got != cidA {
+		t.Errorf("what the background fork ran = %q, want %q", got, cidA)
 	}
 }
 
@@ -209,5 +233,45 @@ func TestStrayContainersAndSeedRequests(t *testing.T) {
 	l.askSeed(agent)
 	if !l.takeSeed(agent) || l.takeSeed(agent) {
 		t.Fatal("a seed request is taken once")
+	}
+}
+
+// A shell forks for "$(...)" and for a subshell without executing anything, so
+// those forks are the subject of no event. What they start is still in the
+// container, and was reported with no pod at all: on CRI-O every command in a
+// substituted pipeline, Sentinel's own script in the agent among them.
+func TestAProcessStartedThroughForksIsPlaced(t *testing.T) {
+	l := newContainerLineage()
+	monitor := proc("conmon", "", "/usr/bin/conmon", "-b /run/x -c "+cidA+" -u "+cidA)
+	shell := proc("shell", "conmon", "/bin/sh", "-c loop")
+	if got := l.place(shell, monitor); got != cidA {
+		t.Fatalf("the container's shell = %q", got)
+	}
+	// x=$(cat f | wc -c): the shell forks, and the fork starts both.
+	fork := proc("fork", "shell", "/bin/sh", "-c loop")
+	if got := l.place(proc("cat", "fork", "/bin/sh", "-c loop"), fork); got != cidA {
+		t.Errorf("a command one fork down = %q, want %q", got, cidA)
+	}
+	// $( (hostname | tr a-z A-Z) | md5sum ): a fork of a fork. The inner one is
+	// reached once anything names the outer one's parent, in either order.
+	outer := proc("outer", "shell", "/bin/sh", "-c loop")
+	inner := proc("inner", "outer", "/bin/sh", "-c loop")
+	hostname := proc("hostname", "inner", "/bin/sh", "-c loop")
+	if got := l.place(hostname, inner); got != "" {
+		t.Fatalf("two forks down with nothing yet said of the outer = %q", got)
+	}
+	if got := l.place(proc("md5sum", "outer", "/bin/sh", "-c loop"), outer); got != cidA {
+		t.Errorf("a sibling of the inner fork = %q, want %q", got, cidA)
+	}
+	if got := l.place(proc("tr", "inner", "/bin/sh", "-c loop"), inner); got != cidA {
+		t.Errorf("two forks down = %q, want %q", got, cidA)
+	}
+	if got := l.place(hostname, inner); got != cidA {
+		t.Errorf("the one that came too early, asked again = %q, want %q", got, cidA)
+	}
+	// What was never under a container stays unplaced, loops included.
+	a, b := proc("a", "b", "/bin/sh", ""), proc("b", "a", "/bin/sh", "")
+	if got := l.place(a, b); got != "" {
+		t.Errorf("parents that loop = %q", got)
 	}
 }

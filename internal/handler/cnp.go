@@ -84,6 +84,14 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 			} `json:"metadata"`
 		}
 		parsed := yaml.Unmarshal([]byte(body.RawYaml), &manifest) == nil
+		// The policy that isolates quarantined pods is Sentinel's to write. Edited
+		// here it could let them all back on the network while every page still
+		// called them quarantined, by an account whose role has no say over
+		// quarantine; made here under that name it would stand in for the real one.
+		if parsed && manifest.Kind == "CiliumClusterwideNetworkPolicy" && manifest.Metadata.Name == k8s.QuarantinePolicyName {
+			writeError(w, http.StatusConflict, "this policy is what isolates quarantined pods and is not edited; release them on the Quarantine page instead")
+			return
+		}
 		// An account limited to namespaces writes namespaced policies, in its
 		// namespaces. A manifest that cannot be read names none, and is refused.
 		if !scopeOf(r).cluster() {

@@ -368,6 +368,10 @@ function RuleSection({ direction, section, onChange, clusterNamespaces }: {
   )
 }
 
+// The policy that isolates quarantined pods is Sentinel's to write: it is shown
+// and not edited or deleted here. The server refuses both.
+const managed = (p: { name: string; scope: string }) => p.scope === 'cluster' && p.name === 'sentinel-quarantine'
+
 export function CNPPage() {
   const toast = useToast()
   const { limited, can } = useAuth()
@@ -584,14 +588,18 @@ export function CNPPage() {
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h4 className="text-xl font-semibold">
-              {editing ? `Edit ${editing.name}` : 'New Network Policy'}
+              {editing ? `${managed(editing) ? 'View' : 'Edit'} ${editing.name}` : 'New Network Policy'}
             </h4>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate('/policies/network')}>Cancel</Button>
-            <Button size="sm" onClick={save} disabled={saving || !canApply}>
-              {saving ? 'Applying...' : 'Apply'}
+            <Button variant="outline" size="sm" onClick={() => navigate('/policies/network')}>
+              {editing && managed(editing) ? 'Back' : 'Cancel'}
             </Button>
+            {!(editing && managed(editing)) && (
+              <Button size="sm" onClick={save} disabled={saving || !canApply}>
+                {saving ? 'Applying...' : 'Apply'}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -761,6 +769,7 @@ export function CNPPage() {
             key={editing?.name ?? 'new'}
             initialValue={yamlText}
             onValueChange={(v, valid) => { setYamlText(v); setYamlValid(valid) }}
+            readOnly={!!editing && managed(editing)}
           />
         )}
       </>
@@ -857,9 +866,9 @@ export function CNPPage() {
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm"
                             onClick={() => navigate(`/policies/network/${p.name}/edit?scope=${p.scope}&namespace=${encodeURIComponent(p.namespace)}`)}>
-                            Edit
+                            {managed(p) ? 'View' : 'Edit'}
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(p)}>Delete</Button>
+                          {!managed(p) && <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(p)}>Delete</Button>}
                         </div>
                       </TableCell>
                     )}

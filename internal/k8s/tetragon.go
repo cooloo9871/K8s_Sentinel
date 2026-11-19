@@ -221,7 +221,7 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 		s.ingestion.MarkTetragonEvent(pod.Node)
 		proc, parent, exited := eventProcesses(resp)
 		if exited {
-			s.lineage.forget(proc.GetExecId())
+			s.lineage.exited(proc, parent, time.Now())
 			continue
 		}
 		// The gRPC message is bridged through the same parser the CLI JSON used,
@@ -249,10 +249,22 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 				if cid == "" && parent != nil && isContainerRuntime(proc.GetBinary()) {
 					cid = runtimeContainerID(parent.GetBinary(), parent.GetArguments())
 				}
+				// What the runtime does to itself on the way in, starting its
+				// own sealed copy or reading its own files, is not the
+				// workload's. Only what it becomes is: the entrypoint.
+				if cid != "" && isContainerRuntime(evt.Binary) {
+					continue
+				}
 			}
 			if cid == "" {
 				if evt.Type == "exec" {
 					continue // a process of the node
+				}
+				// Several forks down, the way up the tree may be in events that
+				// have not arrived yet: those of the process's siblings.
+				if proc.GetParentExecId() != "" {
+					s.deliverOnceTraced(ctx, evt, proc, parent, out, placing)
+					continue
 				}
 			} else if !s.placeInPod(ctx, &evt, cid) {
 				if s.lineage.isNoPods(cid) {
@@ -266,12 +278,17 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 					continue
 				}
 			}
-		} else if evt.Type == "exec" && isRuntimeInItsContainer(proc) {
+		} else if isRuntimeInItsContainer(proc) && (evt.Type == "exec" || isContainerRuntime(evt.Binary)) {
+			// The runtime entering the container, and under a policy that
+			// watches every exec, the runtime starting its own sealed copy on
+			// the way in. What it starts next, the workload's command, is kept.
 			continue
 		}
 		// Only in the agent's own namespace: anywhere else the mark is just
-		// something a process chose to have on its command line.
-		if evt.Type == "exec" && evt.Namespace == tetragonNamespace() && isOwnProcNames(proc, parent) {
+		// something a process chose to have on its command line. Whatever kind
+		// of event it is: under a policy that watches every exec or every file,
+		// the script's commands were listed as the agent's security events.
+		if evt.Namespace == tetragonNamespace() && isOwnProcNames(proc, parent) {
 			continue
 		}
 		select {
@@ -339,6 +356,45 @@ func (s *Store) deliverOncePlaced(ctx context.Context, evt TetragonEvent, contai
 		if evt.Type != "exec" {
 			send()
 		}
+	}()
+}
+
+// tracedAfter is how long an event waits for the rest of its process's way up
+// the tree. The siblings that complete it are started in the same breath.
+const tracedAfter = 300 * time.Millisecond
+
+// deliverOnceTraced holds an event from a hook whose process nothing places
+// yet, asks the process tree once more, and delivers it either way: placed in
+// its pod, or as it is. A process of the node comes this way too and loses only
+// the wait.
+func (s *Store) deliverOnceTraced(ctx context.Context, evt TetragonEvent, proc, parent *tetragon.Process, out chan<- TetragonEvent, placing *sync.WaitGroup) {
+	send := func() {
+		select {
+		case out <- evt:
+		case <-ctx.Done():
+		}
+	}
+	select {
+	case pendingPlacements <- struct{}{}:
+	default:
+		send()
+		return
+	}
+	placing.Add(1)
+	go func() {
+		defer placing.Done()
+		defer func() { <-pendingPlacements }()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(tracedAfter):
+		}
+		if cid := s.lineage.place(proc, parent); cid != "" && s.placeInPod(ctx, &evt, cid) {
+			if evt.Namespace == tetragonNamespace() && isOwnProcNames(proc, parent) {
+				return
+			}
+		}
+		send()
 	}()
 }
 
