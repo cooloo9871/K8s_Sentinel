@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -234,6 +235,10 @@ func setPolicyMode(store *k8s.Store) http.HandlerFunc {
 			return
 		}
 		if err := store.SetPolicyMode(r.Context(), name, namespace, req.Mode); err != nil {
+			if errors.Is(err, k8s.ErrUnconditional) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "This policy has no conditions, so it matches every call it watches and stays in Monitoring. Protect would kill every process it sees."})
+				return
+			}
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

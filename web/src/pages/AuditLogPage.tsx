@@ -76,9 +76,6 @@ export function AuditLogPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Audit Log</h4>
-          <p className="text-sm text-muted-foreground">
-            A record of every operation performed in Sentinel.
-          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>

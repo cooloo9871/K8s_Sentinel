@@ -12,7 +12,8 @@ getting it running, see [install.md](install.md).
 - Filter the list by namespace and scope
 - **Process Rules** — control which binaries may execute (whitelist / blacklist). **Absolute paths, matched exactly.** A bare program name is refused: it would have to be matched as a suffix, and a whitelist of suffixes is walked straight past by a binary at a path ending in an allowed one — `/tmp/usr/sbin/nginx` satisfies a rule meant for `/usr/sbin/nginx`. Behavior Discovery lists the paths each workload actually runs, so the exact value does not have to be guessed
 - **File Rules** — control which paths may be accessed (whitelist / blacklist). A blacklist blocks the listed paths, each rule with its own read/write scope and process exceptions; a whitelist monitors everything **except** one excluded set of paths, with one access scope and one list of exception processes for the whole set (Tetragon OR-s separate selectors, so a whitelist is necessarily a single exclusion set). Paths are absolute, prefix-matched
-- Switch each policy between **Monitoring** (observe) and **Protect** (block) mode, or flip every policy at once with **Global Protect Mode**
+- Switch each policy between **Monitoring** (observe) and **Protect** (block) mode. **Set all to Monitoring** turns enforcement off for every policy at once; Protect is turned on one policy at a time
+  - A selector with no conditions (the shape of **Monitor All Process Executions**: report every call) stays in Monitoring under Protect, because killing on every call would stop every process in the pods it selects
 - **Created By** records who created each policy; resources applied with `kubectl` show as `k8s-apply`
 - **+ New Policy** opens the form builder; **+ New YAML** starts from a manifest. Editing reopens the form when the policy can be represented in it, and the YAML editor otherwise — a policy carrying network kprobes opens as YAML so a save cannot drop those rules
 - **Policy Templates** — built-in and custom, searchable and filterable by scope:
@@ -290,7 +291,7 @@ A ValidatingAdmissionPolicy cannot look anything up while it decides. Sentinel t
 
 - **Tetragon Agents** — per-node health (ready / total), red when an agent is not ready or its gRPC stream is not actually delivering events; a banner appears when any source (Tetragon or Hubble) has failed. Full per-source ingestion detail is on the **Event Sources** page
 - **Vulnerabilities** — critical and high totals from Trivy Operator's reports and the five workloads to fix first. Always shown: without a scanner it says scanning is not enabled, never an empty table that could pass for a clean cluster
-- Security and Admission event counts by severity, updating live, plus Global Protect Mode status
+- Security and Admission event counts by severity, updating live, plus how many Tracing Policies are in Protect
 - Recent Tracing Policy, Admission Policy and Network Policy lists
 - **Quarantine** — what is currently contained, with who asked and when. The count turns red when it is not zero, because a contained pod is an incident in progress
 
@@ -301,7 +302,7 @@ A ValidatingAdmissionPolicy cannot look anything up while it decides. Sentinel t
 - **Access by namespace** — an account can be limited to some namespaces, when it is created or later (**Users → Access**; the change reaches a session already open). Its role still applies inside them: a limited Admin creates and edits there, a limited Viewer reads.
   - *Sees and manages, in its namespaces only:* namespaced Tracing Policies and Network Policies, Behavior Discovery, Security Events, Admission Events, Vulnerabilities (Workloads), Quarantine
   - *Sees whole:* the Network Topology, since a connection has two ends and the far one is seldom its own. Quarantine from the topology still works on its own pods only
-  - *Does not see:* cluster-wide Tracing Policies and Network Policies, the cluster's Admission Policies, Registries, Event Sources, the global Protect mode, the Audit Log and all of Settings. An event caused by a cluster-wide policy on one of its pods is shown, with the policy's name
+  - *Does not see:* cluster-wide Tracing Policies and Network Policies, the cluster's Admission Policies, Registries, Event Sources, the switch that sets all policies to Monitoring, the Audit Log and all of Settings. An event caused by a cluster-wide policy on one of its pods is shown, with the policy's name
   - *Admission Policy:* a limited Admin makes policies and bindings for its own namespaces, and sees those only. Kubernetes has no namespaced admission policy, so Sentinel marks each one with the namespaces it is for (`sentinel.io/namespaces`) and holds it to them:
     - the policy matches namespaced resources only (`scope: Namespaced` is set on every rule), because a binding's namespace selector does not keep a policy off nodes, cluster roles or namespaces themselves
     - the binding must be **Only these namespaces**, among the account's own and those its policy is for. All namespaces, All except, and selecting by any other label are refused
@@ -330,5 +331,5 @@ Each of these is a real way to cause an outage or to think you are protected whe
 
 - **Deny rules are L3/L4 only.** Cilium rejects an HTTP rule inside `ingressDeny`/`egressDeny`, which is why the form disables the L7 fields under Blacklist. "Deny POST /admin" has to be expressed as a whitelist of what *is* allowed
 - **A drop is not always attributable.** Default-deny drops are caused by the *absence* of an allow rule, so Hubble has no rule to report. Sentinel resolves those by asking which of your policies govern the pod in that direction, and stays silent when none do — the Policy column never shows something that is not in the cluster
-- **Global Protect Mode is a switch on live enforcement.** Flipping every Tracing Policy to Monitoring stops them killing anything. The change is recorded in the Audit Log, like every other admin action
+- **Set all to Monitoring is a switch on live enforcement.** It stops every Tracing Policy killing anything. The change is recorded in the Audit Log, like every other admin action
 - **Tetragon cannot see pre-SNAT inbound addresses.** Its `tcp_connect` kprobe fires after the kernel has rewritten the source, which is why network observation is Cilium's job here and the network templates were removed from Tracing Policy

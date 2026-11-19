@@ -18,7 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { policyApi, modeApi, vapApi, cnpApi, type VAPRecord, type VAPBindingRecord, type CNPRecord, quarantineApi,
+import { policyApi, vapApi, cnpApi, type VAPRecord, type VAPBindingRecord, type CNPRecord, quarantineApi,
   type QuarantinedPod, vulnApi, type VulnOverview,
 } from '../api/client'
 import { useToast } from '../layout/AppToaster'
@@ -28,7 +28,7 @@ import { useAdmissionEvents } from '../layout/AdmissionEventsProvider'
 import { RelativeTime } from '../components/RelativeTime'
 import { isIngestProblem } from '../utils/ingestion'
 import { summarizeWorkloads, workloadKey } from '../utils/vulnerabilities'
-import type { PolicyRecord, Mode } from '../api/types'
+import type { PolicyRecord } from '../api/types'
 
 interface StatProps {
   icon: React.ReactNode
@@ -87,7 +87,6 @@ export function DashboardPage() {
   // null until the first fetch; false on clusters without Cilium, where the
   // card is hidden rather than shown permanently empty.
   const [cnpAvailable, setCnpAvailable] = useState<boolean | null>(null)
-  const [mode, setMode] = useState<Mode>('Monitoring')
   const [agentTotal, setAgentTotal] = useState<number | null>(null)
   const [agentReady, setAgentReady] = useState<number | null>(null)
   const [agentStreamDown, setAgentStreamDown] = useState(0)
@@ -97,11 +96,9 @@ export function DashboardPage() {
 
   const load = (showSpinner = false) => {
     if (showSpinner) setLoading(true)
-    // The global mode and event sources are the cluster's,
-    // and are not asked for by an account limited to namespaces.
-    Promise.all([policyApi.list(), limited ? Promise.resolve('Monitoring') : modeApi.get()])
-      .then(([p, m]) => {
-        setPolicies(p); setMode(m as Mode)
+    policyApi.list()
+      .then((p) => {
+        setPolicies(p)
         hasLoaded.current = true
       })
       .catch(() => toast.error('Failed to load dashboard'))
@@ -155,7 +152,7 @@ export function DashboardPage() {
     .filter(w => w.counts.critical > 0 || w.counts.high > 0)
     .slice(0, 5)
 
-  const modeAccent = mode === 'Protect' ? '#dc3545' : mode === 'Mixed' ? '#fd7e14' : '#28a745'
+  const enforcing = policies.filter(p => p.mode !== 'Monitoring').length
 
   if (loading) {
     return (
@@ -175,9 +172,6 @@ export function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Overview</h2>
-          <p className="mt-1 text-base text-muted-foreground">
-            Kubernetes security management
-          </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => load(true)}>
           <IconRefresh className="mr-2 size-4" />
@@ -236,10 +230,9 @@ export function DashboardPage() {
         />
         {!limited && <StatCard
           icon={<IconLock size={26} />}
-          label="Global Protect Mode"
-          value={mode === 'Protect' ? 'ON' : mode === 'Mixed' ? 'MIXED' : 'OFF'}
-          sub={mode === 'Protect' ? 'Actively blocking violations' : mode === 'Mixed' ? 'Policies have mixed modes' : 'Monitoring only'}
-          accent={modeAccent}
+          label="Policies in Protect"
+          value={`${enforcing} / ${policies.length}`}
+          accent={enforcing > 0 ? '#dc3545' : '#28a745'}
         />}
       </div>
 

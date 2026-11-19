@@ -162,21 +162,21 @@ function kbToBytes(kb: string): number {
 
 // Module-level constant — single source of truth for both the dropdown and
 // the readonly display. Avoids the two lists drifting when a new rule type is added.
-const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; desc: string; readonlyLabel: string }[] = [
-  { value: 'label',           icon: <IconTag size={14} />,         desc: 'Require or deny resources with specific label key=value',      readonlyLabel: 'Label Check' },
-  { value: 'annotation',      icon: <IconNotes size={14} />,       desc: 'Require or deny resources with specific annotation key=value', readonlyLabel: 'Annotation Check' },
-  { value: 'image',           icon: <IconBrandDocker size={14} />, desc: 'Enforce image registry source and tag format',                readonlyLabel: 'Image Policy' },
-  { value: 'replica',         icon: <IconCopy size={14} />,        desc: 'Limit maximum replica count for Deployments or StatefulSets', readonlyLabel: 'Replica Limit' },
-  { value: 'resource-limits', icon: <IconCpu size={14} />,         desc: 'Require containers to set CPU and/or memory limits',          readonlyLabel: 'Resource Limits' },
-  { value: 'security-context',icon: <IconShieldLock size={14} />,  desc: 'Deny privileged containers or require runAsNonRoot',          readonlyLabel: 'Security Context' },
-  { value: 'host-access',     icon: <IconServer size={14} />,      desc: 'Deny hostNetwork, hostPID, and/or hostIPC access',            readonlyLabel: 'Host Access' },
-  { value: 'configmap-size',  icon: <IconFileDescription size={14} />, desc: 'Limit the size of each ConfigMap key and the whole object', readonlyLabel: 'ConfigMap Size Limit' },
-  { value: 'secret-size',     icon: <IconLock size={14} />,            desc: 'Limit the size of each Secret key and the whole object',    readonlyLabel: 'Secret Size Limit' },
-  { value: 'vulnerability',   icon: <IconBug size={14} />,             desc: 'Refuse images K8s Sentinel scanned and found over a vulnerability limit', readonlyLabel: 'Vulnerability Limit' },
-  { value: 'cve',             icon: <IconBugOff size={14} />,          desc: 'Refuse images K8s Sentinel scanned and found to have the vulnerabilities named', readonlyLabel: 'Blocked CVEs' },
-  { value: 'scanned',         icon: <IconScan size={14} />,            desc: 'Refuse images K8s Sentinel has no scan result for', readonlyLabel: 'Scanned Images' },
-  { value: 'volumes',         icon: <IconFolder size={14} />,          desc: 'Deny hostPath volumes, all of them or those under given paths', readonlyLabel: 'Host Path Volumes' },
-  { value: 'env',             icon: <IconVariable size={14} />,        desc: 'Require environment variables in every container, or forbid them', readonlyLabel: 'Environment Variables' },
+const RULE_TYPE_CARDS: { value: PolicyRuleType; icon: React.ReactElement; readonlyLabel: string }[] = [
+  { value: 'label',           icon: <IconTag size={14} />, readonlyLabel: 'Label Check' },
+  { value: 'annotation',      icon: <IconNotes size={14} />, readonlyLabel: 'Annotation Check' },
+  { value: 'image',           icon: <IconBrandDocker size={14} />, readonlyLabel: 'Image Policy' },
+  { value: 'replica',         icon: <IconCopy size={14} />, readonlyLabel: 'Replica Limit' },
+  { value: 'resource-limits', icon: <IconCpu size={14} />, readonlyLabel: 'Resource Limits' },
+  { value: 'security-context',icon: <IconShieldLock size={14} />, readonlyLabel: 'Security Context' },
+  { value: 'host-access',     icon: <IconServer size={14} />, readonlyLabel: 'Host Access' },
+  { value: 'configmap-size',  icon: <IconFileDescription size={14} />, readonlyLabel: 'ConfigMap Size Limit' },
+  { value: 'secret-size',     icon: <IconLock size={14} />, readonlyLabel: 'Secret Size Limit' },
+  { value: 'vulnerability',   icon: <IconBug size={14} />, readonlyLabel: 'Vulnerability Limit' },
+  { value: 'cve',             icon: <IconBugOff size={14} />, readonlyLabel: 'Blocked CVEs' },
+  { value: 'scanned',         icon: <IconScan size={14} />, readonlyLabel: 'Scanned Images' },
+  { value: 'volumes',         icon: <IconFolder size={14} />, readonlyLabel: 'Host Path Volumes' },
+  { value: 'env',             icon: <IconVariable size={14} />, readonlyLabel: 'Environment Variables' },
 ]
 
 // Policy builder ---------------------------------------------------------------
@@ -1740,9 +1740,6 @@ export function VAPPage() {
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {RULE_TYPE_CARDS.find(t => t.value === builderRuleType)?.desc}
-                    </p>
                   </>
                 )}
               </div>
@@ -1890,9 +1887,6 @@ export function VAPPage() {
                             placeholder="e.g. registry.example.com/"
                             className="h-8 text-sm"
                           />
-                          <span className="text-[11px] text-muted-foreground">
-                            Only images from this registry are allowed. Images from any other registry will be denied.
-                          </span>
                         </div>
                       )}
 
@@ -1950,9 +1944,6 @@ export function VAPPage() {
                           placeholder={autoReplicaMessage(rule)} className="h-8 text-sm" />
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Applies to <span className="font-medium">apps/v1</span> Deployments and StatefulSets (CREATE/UPDATE) and their scale subresources (UPDATE).
-                    </p>
                   </div>
                 )
               })()}
@@ -1997,7 +1988,6 @@ export function VAPPage() {
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
                       A maximum is written as Kubernetes writes quantities: 2, 500m, 4Gi. With one given, that limit has to be set.
                     </p>
                   </div>
@@ -2034,9 +2024,6 @@ export function VAPPage() {
                       />
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
-                  </p>
                 </div>
               )}
 
@@ -2069,9 +2056,6 @@ export function VAPPage() {
                       />
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
-                  </p>
                 </div>
               )}
 
@@ -2170,9 +2154,6 @@ export function VAPPage() {
                       />
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Applies to all workloads: pods, deployments, statefulsets, daemonsets, jobs, and cronjobs.
-                  </p>
                 </div>
               )}
 
@@ -2273,9 +2254,6 @@ export function VAPPage() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h4 className="text-xl font-semibold">{bindingEditName ? `Edit ${bindingEditName}` : 'New Binding'}</h4>
-            {!bindingEditName && (
-              <p className="text-sm text-muted-foreground">Bind a policy to a scope and choose validation actions.</p>
-            )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate('/policies/admission')}>Cancel</Button>
@@ -2398,15 +2376,12 @@ export function VAPPage() {
   // ── YAML editor view ───────────────────────────────────────────────────────
   if (editor) {
     const title = editor.name
-      ? `${isAdmin ? 'Edit' : 'View'} ${editor.kind === 'policy' ? 'Policy' : 'Binding'}`
+      ? `${isAdmin ? 'Edit' : 'View'} ${editor.name}`
       : `New ${editor.kind === 'policy' ? 'Policy' : 'Binding'}`
     return (
       <>
         <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h4 className="text-xl font-semibold">{title}</h4>
-            {editor.name && <p className="text-sm text-muted-foreground">{editor.name}</p>}
-          </div>
+          <h4 className="text-xl font-semibold">{title}</h4>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => navigate('/policies/admission')}>Cancel</Button>
             {isAdmin && (
@@ -2431,7 +2406,6 @@ export function VAPPage() {
     <>
       <div className="mb-6">
         <h4 className="text-xl font-semibold">Admission Policy</h4>
-        <p className="text-sm text-muted-foreground">Manage Kubernetes ValidatingAdmissionPolicies and Bindings.</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'policies' | 'bindings')}>

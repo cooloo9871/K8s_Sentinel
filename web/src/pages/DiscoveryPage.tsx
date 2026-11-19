@@ -180,9 +180,6 @@ export function DiscoveryPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Behavior Discovery</h4>
-          <p className="text-sm text-muted-foreground">
-            Process behaviors learned from the Tetragon base sensor.
-          </p>
         </div>
         {isAdmin && (
           <Button variant="outline" size="sm" onClick={() => setClearDialog(true)}>

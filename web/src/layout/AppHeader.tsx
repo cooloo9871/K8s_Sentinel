@@ -11,15 +11,14 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
-import { modeApi } from '../api/client'
+import { modeApi, MODE_CHANGED } from '../api/client'
 import { useAuth } from './AuthContext'
-import type { Mode } from '../api/types'
 
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   policies: 'Policies',
   tracing: 'Tracing Policy',
-  new: 'New Policy',
+  new: 'New',
   edit: 'Edit',
   templates: 'Templates',
   discovery: 'Behavior Discovery',
@@ -28,12 +27,15 @@ const ROUTE_LABELS: Record<string, string> = {
   events: 'Security Events',
   alerts: 'Alerts',
   cluster: 'Cluster',
-  mode: 'Mode Control',
   namespaces: 'Namespaces',
   tetragon: 'Event Sources',
   retention: 'Event Retention',
   network: 'Network',
   topology: 'Network Topology',
+  settings: 'Settings',
+  users: 'Users',
+  quarantine: 'Quarantine',
+  bindings: 'Bindings',
 }
 
 // Override the full breadcrumb trail for paths whose URL segments don't match
@@ -87,8 +89,13 @@ function useBreadcrumbs() {
     return [{ label: 'Home', to: '/dashboard' }, { label: 'Vulnerabilities' }, { label: 'Registries' }]
   }
 
-  const segments = pathname.split('/').filter(Boolean)
-  const crumbs: { label: string; to?: string }[] = [{ label: 'Home', to: '/dashboard' }]
+  // A page under one of the overridden paths (its "new" or "edit" form) keeps
+  // that trail, and the rest of the path follows it.
+  const parent = Object.keys(PATH_OVERRIDES).find(p => pathname.startsWith(p + '/'))
+  const segments = (parent ? pathname.slice(parent.length) : pathname).split('/').filter(Boolean)
+  const crumbs: { label: string; to?: string }[] = [
+    { label: 'Home', to: '/dashboard' }, ...(parent ? PATH_OVERRIDES[parent] : []),
+  ]
   segments.forEach((seg) => {
     crumbs.push({ label: ROUTE_LABELS[seg] ?? seg })
   })
@@ -101,16 +108,17 @@ interface Props {
 
 export function AppHeader({ onLogout }: Props) {
   const { user, limited } = useAuth()
-  const [mode, setMode] = useState<Mode>('Monitoring')
+  const [mode, setMode] = useState<{ protect: number; total: number } | null>(null)
   const breadcrumbs = useBreadcrumbs()
 
   useEffect(() => {
-    // The global mode is the cluster's.
-    if (!limited) modeApi.get().then(setMode).catch(() => {})
+    // The count is of the cluster's policies.
+    if (limited) return
+    const read = () => { modeApi.get().then(setMode).catch(() => {}) }
+    read()
+    window.addEventListener(MODE_CHANGED, read)
+    return () => window.removeEventListener(MODE_CHANGED, read)
   }, [limited])
-
-  const modeVariant =
-    mode === 'Protect' ? 'destructive' : mode === 'Mixed' ? 'secondary' : 'outline'
 
   return (
     <header className="sticky top-0 z-50 flex h-14 w-full shrink-0 items-center gap-2 border-b bg-background px-4">
@@ -136,7 +144,9 @@ export function AppHeader({ onLogout }: Props) {
       </Breadcrumb>
 
       <div className="ml-auto flex items-center gap-2">
-        {!limited && <Badge variant={modeVariant}>{mode.toUpperCase()}</Badge>}
+        {!limited && mode && (
+          <Badge variant={mode.protect > 0 ? 'destructive' : 'outline'}>{mode.protect} / {mode.total} in Protect</Badge>
+        )}
         <span className="text-xs text-muted-foreground">{user?.username}</span>
         <Button variant="ghost" size="sm" className="text-xs h-7" onClick={onLogout}>
           Sign out

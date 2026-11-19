@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { PolicyRecord, CreatePolicyPayload, Mode, PolicyFormInput } from './types'
+import type { PolicyRecord, CreatePolicyPayload, PolicyFormInput } from './types'
 
 const api = axios.create({ baseURL: '/api', withCredentials: true })
 
@@ -9,6 +9,8 @@ export const SESSION_ENDED = 'sentinel:session-ended'
 // looks to an EventSource: it cannot see the status code, so the session is
 // asked about instead.
 export const SESSION_CHECK = 'sentinel:session-check'
+// The global mode was switched: the header shows it and has to hear.
+export const MODE_CHANGED = 'sentinel:mode-changed'
 
 api.interceptors.response.use(
   (res) => res,
@@ -63,9 +65,10 @@ export const policyApi = {
 }
 
 export const modeApi = {
-  get: (): Promise<Mode> => api.get('/mode').then((r) => r.data.mode),
-  set: (mode: 'Monitoring' | 'Protect'): Promise<void> =>
-    api.put('/mode', { mode }),
+  // How many tracing policies are in Protect, out of how many.
+  get: (): Promise<{ protect: number; total: number }> => api.get('/mode').then((r) => r.data),
+  // Sets every tracing policy to Monitoring.
+  stop: (): Promise<void> => api.put('/mode', { mode: 'Monitoring' }),
 }
 
 export const namespaceApi = {

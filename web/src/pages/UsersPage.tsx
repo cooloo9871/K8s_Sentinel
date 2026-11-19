@@ -237,7 +237,6 @@ export function UsersPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Users</h4>
-          <p className="text-sm text-muted-foreground">Local dashboard user accounts.</p>
         </div>
         {me?.role === 'admin' && (
           <Button onClick={() => navigate('/settings/users/new')}>+ New User</Button>

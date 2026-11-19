@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -16,6 +17,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -30,11 +32,14 @@ const annotationCreatedBy = "sentinel.io/created-by"
 type PolicyRecord struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"`
-	Scope     string `json:"scope"`     // "cluster" or "namespaced"
-	Mode      string `json:"mode"`      // "Monitoring", "Protect", or "Mixed"
-	CreatedBy string `json:"createdBy"` // sentinel username or "k8s-apply"
-	CreatedAt string `json:"createdAt"`
-	RawYAML   string `json:"rawYaml"`
+	Scope     string `json:"scope"` // "cluster" or "namespaced"
+	Mode      string `json:"mode"`  // "Monitoring", "Protect", or "Mixed"
+	// True when a selector that reports has no condition at all, so it matches
+	// every call to its hook. Protect leaves such a selector reporting.
+	Unconditional bool   `json:"unconditional,omitempty"`
+	CreatedBy     string `json:"createdBy"` // sentinel username or "k8s-apply"
+	CreatedAt     string `json:"createdAt"`
+	RawYAML       string `json:"rawYaml"`
 }
 
 // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
@@ -44,12 +49,6 @@ type Store struct {
 	// CoreV1/AppsV1/NetworkingV1 are used, all of which it covers.
 	typed      kubernetes.Interface
 	restCfg    *rest.Config // for procNames only
-	modeMu     sync.RWMutex
-	globalMode string // explicitly set by user; never auto-derived from policies
-	// False until SetMode has run in this process. The switch is not stored
-	// anywhere, so after a restart it is read back from the policies instead
-	// of being reported as Monitoring while every policy still kills.
-	modeSet    bool
 	Discovery  *DiscoveryProfileStore
 	Templates  *TemplateStore
 	containers *containerResolver
@@ -125,7 +124,6 @@ func NewStore(client dynamic.Interface, typed kubernetes.Interface, restCfg *res
 		client:       client,
 		typed:        typed,
 		restCfg:      restCfg,
-		globalMode:   "Monitoring",
 		Discovery:    NewDiscoveryProfileStore(),
 		Templates:    NewTemplateStore(templatesFile),
 		containers:   newContainerResolver(),
@@ -853,47 +851,35 @@ func IPInCIDRs(ip string, cidrs []string) bool {
 	return false
 }
 
-// GetMode returns the explicitly set global enforcement mode.
-// It never auto-derives the mode from policy actions.
-func (s *Store) GetMode(ctx context.Context) (string, error) {
-	s.modeMu.RLock()
-	mode, set := s.globalMode, s.modeSet
-	s.modeMu.RUnlock()
-	if set {
-		return mode, nil
-	}
+// Enforcing counts the policies that kill, among all of them. A policy that
+// kills on some selectors and reports on others counts: it is enforcing.
+func (s *Store) Enforcing(ctx context.Context) (enforcing, total int, err error) {
 	records, err := s.List(ctx)
-	if err != nil || len(records) == 0 {
-		return mode, nil
+	if err != nil {
+		return 0, 0, err
 	}
 	for _, r := range records {
-		if r.Mode != "Protect" {
-			return mode, nil
+		if r.Mode != "Monitoring" {
+			enforcing++
 		}
 	}
-	return "Protect", nil
+	return enforcing, len(records), nil
 }
 
-// SetMode applies the enforcement mode to all policies first, then updates the
-// cached globalMode. If any policy apply fails the cache is not updated, so
-// the displayed mode stays consistent with what was actually applied.
-func (s *Store) SetMode(ctx context.Context, mode string) error {
+// StopEnforcing sets every policy to Monitoring: the one switch that is worth
+// having for all policies at once, for when enforcement is what is hurting.
+// The other direction is made one policy at a time, each after it has been
+// watched, and is not offered wholesale.
+func (s *Store) StopEnforcing(ctx context.Context) error {
 	records, err := s.List(ctx)
 	if err != nil {
 		return err
 	}
-	action := modeAction(mode)
 	for _, r := range records {
-		if err := s.setPolicyAction(ctx, r.Name, r.Namespace, action); err != nil {
-			return fmt.Errorf("apply policy %q: %w", r.Name, err)
+		if err := s.setPolicyAction(ctx, r.Name, r.Namespace, policy.ActionPost); err != nil {
+			return fmt.Errorf("policy %q: %w", r.Name, err)
 		}
 	}
-
-	// Only update cached mode after all policies are successfully applied.
-	s.modeMu.Lock()
-	s.globalMode = mode
-	s.modeSet = true
-	s.modeMu.Unlock()
 	return nil
 }
 
@@ -927,25 +913,53 @@ func (s *Store) setPolicyAction(ctx context.Context, name, namespace, action str
 	if err != nil {
 		return err
 	}
-	if rewriteActions(obj.Object, action) == 0 {
+	changed, held := rewriteActions(obj.Object, action)
+	if changed == 0 {
+		if held > 0 {
+			return ErrUnconditional
+		}
 		return nil // nothing to switch — leave the object untouched
 	}
 	_, err = ri.Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
 
+// ErrUnconditional says a policy was asked to enforce and has nothing that can:
+// every selector it reports from matches every call to its hook.
+var ErrUnconditional = errors.New("policy has no conditions to enforce on")
+
+// unconditional reports whether a selector names nothing to match on. Such a
+// selector fires on every call to its hook, which is what a policy that only
+// observes is made of: "report every exec". Turned to Sigkill it kills every
+// process in every pod the policy selects, so a switch to Protect leaves it be.
+func unconditional(sel map[string]any) bool {
+	for k, v := range sel {
+		if k == "matchActions" {
+			continue
+		}
+		if list, ok := v.([]any); ok && len(list) == 0 {
+			continue
+		}
+		if v != nil {
+			return false
+		}
+	}
+	return true
+}
+
 // rewriteActions sets every enforcement action in the object to action, in place,
-// and reports how many it changed.
+// and reports how many it changed and how many it held back: going to Sigkill,
+// the Post of a selector with no conditions stays as it is. Going back to Post
+// has no such exception, so a policy already killing everything can be undone.
 //
 // Only actions that are already Post or Sigkill are touched. The others —
 // Override, Signal, FollowFD, NoPost — say something a mode switch has no
 // business rewriting, and the previous code overwrote them all indiscriminately.
-func rewriteActions(obj map[string]any, action string) int {
+func rewriteActions(obj map[string]any, action string) (changed, held int) {
 	spec, ok := obj["spec"].(map[string]any)
 	if !ok {
-		return 0
+		return 0, 0
 	}
-	changed := 0
 	for _, field := range probeFields {
 		probes, _ := spec[field].([]any)
 		for _, p := range probes {
@@ -965,7 +979,15 @@ func rewriteActions(obj map[string]any, action string) int {
 					if !ok {
 						continue
 					}
-					if cur, _ := am["action"].(string); cur == policy.ActionPost || cur == policy.ActionSigkill {
+					cur, _ := am["action"].(string)
+					if cur != policy.ActionPost && cur != policy.ActionSigkill {
+						continue
+					}
+					if action == policy.ActionSigkill && cur == policy.ActionPost && unconditional(sm) {
+						held++
+						continue
+					}
+					if cur != action {
 						am["action"] = action
 						changed++
 					}
@@ -973,7 +995,14 @@ func rewriteActions(obj map[string]any, action string) int {
 			}
 		}
 	}
-	return changed
+	return changed, held
+}
+
+// hasUnconditional reports whether a switch to Protect would hold anything back.
+func hasUnconditional(obj map[string]any) bool {
+	probe, _ := runtime.DeepCopyJSONValue(obj).(map[string]any)
+	_, held := rewriteActions(probe, policy.ActionSigkill)
+	return held > 0
 }
 
 func setCreatedByAnnotation(obj *unstructured.Unstructured, createdBy string) {
@@ -1055,13 +1084,14 @@ func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error
 		createdBy = v
 	}
 	return PolicyRecord{
-		Name:      item.GetName(),
-		Namespace: item.GetNamespace(),
-		Scope:     scope,
-		Mode:      detectMode(item.Object),
-		CreatedBy: createdBy,
-		CreatedAt: createdAt,
-		RawYAML:   string(rawYAML),
+		Name:          item.GetName(),
+		Namespace:     item.GetNamespace(),
+		Scope:         scope,
+		Mode:          detectMode(item.Object),
+		Unconditional: hasUnconditional(item.Object),
+		CreatedBy:     createdBy,
+		CreatedAt:     createdAt,
+		RawYAML:       string(rawYAML),
 	}, nil
 }
 

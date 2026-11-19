@@ -236,7 +236,6 @@ export function AlertsPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Alerts</h4>
-          <p className="text-sm text-muted-foreground">Send webhook notifications for Security Events and Admission Events.</p>
         </div>
         {isAdmin && (
           <Button onClick={() => navigate('/security/alerts/new')}>+ New Rule</Button>

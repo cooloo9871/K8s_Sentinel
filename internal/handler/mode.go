@@ -7,17 +7,20 @@ import (
 	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
+// getMode says how many tracing policies are enforcing, out of how many.
 func getMode(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mode, err := store.GetMode(r.Context())
+		enforcing, total, err := store.Enforcing(r.Context())
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get mode"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read policies"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"mode": mode})
+		writeJSON(w, http.StatusOK, map[string]int{"protect": enforcing, "total": total})
 	}
 }
 
+// setMode sets every tracing policy to Monitoring. Protect is not accepted
+// here: a policy is made to enforce on its own, at /api/policies/{name}/mode.
 func setMode(store *k8s.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -27,11 +30,11 @@ func setMode(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 			return
 		}
-		if req.Mode != "Monitoring" && req.Mode != "Protect" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mode must be Monitoring or Protect"})
+		if req.Mode != "Monitoring" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Only Monitoring can be set for all policies at once. Set Protect on each policy."})
 			return
 		}
-		if err := store.SetMode(r.Context(), req.Mode); err != nil {
+		if err := store.StopEnforcing(r.Context()); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to set mode"})
 			return
 		}

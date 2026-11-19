@@ -1,13 +1,21 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynfake "k8s.io/client-go/dynamic/fake"
+
+	"github.com/cooloo9871/K8s_Sentinel/internal/auth"
+	"github.com/cooloo9871/K8s_Sentinel/internal/k8s"
 )
 
 // putCNP builds the PUT the UI sends when saving an edit: the name in the URL,
@@ -57,5 +65,40 @@ func TestEditingRejectsAKindChange(t *testing.T) {
 	applyCNP(nil)(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400 — the edit changed the policy's kind", w.Code)
+	}
+}
+
+// A create under a name that is taken is refused; the same manifest sent as an
+// edit still saves.
+func TestCreatingANetworkPolicyUnderATakenNameIsRefused(t *testing.T) {
+	client := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		{Group: "cilium.io", Version: "v2", Resource: "ciliumnetworkpolicies"}:            "CiliumNetworkPolicyList",
+		{Group: "cilium.io", Version: "v2", Resource: "ciliumclusterwidenetworkpolicies"}: "CiliumClusterwideNetworkPolicyList",
+	})
+	store := k8s.NewStore(client, nil, nil, "")
+	post := func(raw string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{"rawYaml": raw})
+		w := httptest.NewRecorder()
+		applyCNP(store)(w, withClaims(httptest.NewRequest(http.MethodPost, "/api/cnp", bytes.NewReader(body)), "admin", auth.RoleAdmin))
+		return w
+	}
+	namespaced := "apiVersion: cilium.io/v2\nkind: CiliumNetworkPolicy\nmetadata:\n  name: deny-egress\n  namespace: net-lab\nspec:\n  endpointSelector: {}\n"
+	clusterwide := "apiVersion: cilium.io/v2\nkind: CiliumClusterwideNetworkPolicy\nmetadata:\n  name: deny-egress\nspec:\n  endpointSelector: {}\n"
+	for _, raw := range []string{namespaced, clusterwide} {
+		if w := post(raw); w.Code != http.StatusNoContent {
+			t.Fatalf("first create = %d %s", w.Code, w.Body.String())
+		}
+		if w := post(raw); w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "already exists") {
+			t.Errorf("second create = %d %s, want 409 saying it already exists", w.Code, w.Body.String())
+		}
+	}
+	// The same name in another namespace is another policy.
+	if w := post(strings.Replace(namespaced, "net-lab", "other", 1)); w.Code != http.StatusNoContent {
+		t.Errorf("same name elsewhere = %d %s", w.Code, w.Body.String())
+	}
+	w, r := putCNP("deny-egress", "net-lab", "namespace", namespaced)
+	applyCNP(store)(w, withClaims(r, "admin", auth.RoleAdmin))
+	if w.Code != http.StatusNoContent {
+		t.Errorf("edit = %d %s", w.Code, w.Body.String())
 	}
 }

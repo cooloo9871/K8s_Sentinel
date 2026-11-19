@@ -49,11 +49,7 @@ export function SelectorPreview({ namespace, matchLabels }: {
   const where = namespace ? `in ${namespace}` : 'in the cluster'
 
   if (needsNamespace) {
-    return (
-      <p className="text-[11px] text-muted-foreground">
-        Choose a namespace to see which pods this selects.
-      </p>
-    )
+    return null
   }
   if (wholeCluster) {
     return (

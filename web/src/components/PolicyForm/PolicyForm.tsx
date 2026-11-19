@@ -189,9 +189,6 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <CardTitle className="text-sm font-medium">Pod Selector</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <p className="mb-3 text-xs text-muted-foreground">
-              Target specific pods by label. Leave empty to apply to all pods in the namespace.
-            </p>
             {/* Captioned above rather than joined by "=", matching the label
                 rows on Network Policy. */}
             <div className="flex flex-col gap-2">

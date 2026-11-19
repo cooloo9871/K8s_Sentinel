@@ -118,9 +118,6 @@ export function TetragonStatusPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Event Sources</h4>
-          <p className="text-sm text-muted-foreground">
-            Whether Sentinel is actually ingesting from each source: Tetragon agents per node, Hubble, and the vulnerability scanner
-          </p>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (

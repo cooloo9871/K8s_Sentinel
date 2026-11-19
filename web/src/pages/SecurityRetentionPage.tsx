@@ -70,9 +70,6 @@ export function SecurityRetentionPage() {
     <>
       <div className="mb-6">
         <h4 className="text-xl font-semibold">Event Retention</h4>
-        <p className="text-sm text-muted-foreground">
-          Configure how many events are kept for Security Events and Admission Events.
-        </p>
       </div>
 
       <Tabs defaultValue="security" className="max-w-xl">
@@ -135,7 +132,6 @@ export function SecurityRetentionPage() {
                     />
                     <span className="text-xs text-muted-foreground">1 – 90 days</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Events older than this are removed automatically.</p>
                 </div>
 
                 <div className="rounded-md bg-muted/40 px-4 py-3 text-sm">
@@ -197,7 +193,6 @@ export function SecurityRetentionPage() {
                     />
                     <span className="text-xs text-muted-foreground">1 – 365 days</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Events older than this are removed automatically.</p>
                 </div>
 
                 <div className="rounded-md bg-muted/40 px-4 py-3 text-sm">

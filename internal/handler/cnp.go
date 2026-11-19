@@ -79,6 +79,7 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 		var manifest struct {
 			Kind     string `json:"kind"`
 			Metadata struct {
+				Name      string `json:"name"`
 				Namespace string `json:"namespace"`
 			} `json:"metadata"`
 		}
@@ -109,6 +110,19 @@ func applyCNP(store *k8s.Store) http.HandlerFunc {
 						"manifest kind %s does not match the policy being edited; changing it would leave the original in place. Create a new policy instead", manifest.Kind))
 					return
 				}
+			}
+		}
+		// A create under a name that is taken replaced that policy without a
+		// word, which for one that is enforcing is a rule swapped unseen.
+		if parsed && chi.URLParam(r, "name") == "" && manifest.Metadata.Name != "" {
+			scope := "namespace"
+			if manifest.Kind == "CiliumClusterwideNetworkPolicy" {
+				scope = "cluster"
+			}
+			if _, err := store.GetCNP(r.Context(), scope, manifest.Metadata.Namespace, manifest.Metadata.Name); err == nil {
+				writeError(w, http.StatusConflict, fmt.Sprintf(
+					"A network policy named %q already exists. Choose another name.", manifest.Metadata.Name))
+				return
 			}
 		}
 		if err := store.ApplyCNPRaw(r.Context(), body.RawYaml, claimsFromCtx(r).Username); err != nil {

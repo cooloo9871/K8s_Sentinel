@@ -67,16 +67,6 @@ export function QuarantinePage() {
             A quarantined pod is cut off from the network but keeps running: its process,
             memory and open files stay intact for investigation.
           </p>
-          <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-muted-foreground">
-            <li>All traffic in and out is blocked, except the kubelet's health probes;
-              without those the pod would be restarted and replaced by a fresh, uncontained one.</li>
-            <li>The state is the pod's <code className="font-mono">sentinel.io/quarantine=true</code>{' '}
-              label, so it survives a Sentinel restart.</li>
-            <li>One cluster-wide policy, <code className="font-mono">sentinel-quarantine</code>,
-              selects that label. Created the first time it is needed.</li>
-            <li>A pod that is deleted and recreated comes back without the label, and so
-              without the quarantine.</li>
-          </ul>
         </CardContent>
       </Card>
 

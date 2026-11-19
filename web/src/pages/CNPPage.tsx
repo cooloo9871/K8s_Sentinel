@@ -553,7 +553,6 @@ export function CNPPage() {
       <>
         <div className="mb-6">
           <h4 className="text-xl font-semibold">Network Policy</h4>
-          <p className="text-sm text-muted-foreground">Manage Cilium Network Policy.</p>
         </div>
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex items-start gap-3 p-5">
@@ -691,11 +690,7 @@ export function CNPPage() {
                   // preview: the policy can only ever govern one namespace,
                   // and querying with "" would endorse a cluster-wide set.
                   if (form.scope === 'namespaced' && !form.namespace) {
-                    return (
-                      <p className="text-[11px] text-muted-foreground">
-                        Choose a namespace above to preview what this selects.
-                      </p>
-                    )
+                    return null
                   }
                   if (form.scope === 'namespaced' && nsLabel && nsLabel !== form.namespace) {
                     return (
@@ -778,7 +773,6 @@ export function CNPPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Network Policy</h4>
-          <p className="text-sm text-muted-foreground">Manage Cilium Network Policy.</p>
         </div>
       </div>
 

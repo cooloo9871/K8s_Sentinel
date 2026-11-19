@@ -43,7 +43,7 @@ export function QuarantineAction({ namespace, pod, quarantined, onChanged }: {
     setBusy(true)
     try {
       await quarantineApi.add(namespace, pod)
-      toast.success(`${pod} quarantined. Network cut off, container left running.`)
+      toast.success(`${pod} quarantined. Network access stops shortly; the container keeps running.`)
       onChanged()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Could not quarantine ${pod}`)

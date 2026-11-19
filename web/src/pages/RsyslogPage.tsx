@@ -243,7 +243,6 @@ export function RsyslogPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Syslog</h4>
-          <p className="text-sm text-muted-foreground">Forward Security Events and Admission Events to syslog servers.</p>
         </div>
         {isAdmin && (
           <Button onClick={() => navigate('/security/rsyslog/new')}>+ New Config</Button>

@@ -276,7 +276,6 @@ export function PolicyTemplatesPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h4 className="text-xl font-semibold">Policy Templates</h4>
-          <p className="text-sm text-muted-foreground">Pre-built and custom Tracing Policy templates.</p>
         </div>
       </div>
 

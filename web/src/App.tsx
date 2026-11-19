@@ -11,7 +11,6 @@ import { ForcePasswordChangePage } from './pages/ForcePasswordChangePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { PolicyListPage } from './pages/PolicyListPage'
 import { PolicyEditPage } from './pages/PolicyEditPage'
-import { ModePage } from './pages/ModePage'
 
 import { SecurityEventsPage } from './pages/SecurityEventsPage'
 import { DiscoveryPage } from './pages/DiscoveryPage'
@@ -66,7 +65,6 @@ function AppRoutes() {
           <Route path="/policies/templates" element={<PolicyTemplatesPage />} />
 
           <Route path="/policies/tracing/:name/edit" element={<PolicyEditPage />} />
-          <Route path="/cluster/mode" element={cluster(<ModePage />)} />
 
           <Route path="/cluster/tetragon" element={cluster(<TetragonStatusPage />)} />
           <Route path="/security/events" element={<SecurityEventsPage />} />

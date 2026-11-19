@@ -18,10 +18,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { policyApi, modeApi } from '../api/client'
+import { policyApi, modeApi, MODE_CHANGED } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
-import type { PolicyRecord, Mode } from '../api/types'
+import type { PolicyRecord } from '../api/types'
 
 const MODE_VARIANT: Record<string, 'destructive' | 'secondary' | 'outline'> = {
   Protect: 'destructive',
@@ -45,11 +45,7 @@ export function PolicyListPage() {
     mode: 'Monitoring' | 'Protect'
   } | null>(null)
 
-  // Global mode state
-  const [globalMode, setGlobalMode] = useState<Mode>('Monitoring')
   const [modeModal, setModeModal] = useState(false)
-  const nextGlobalMode: 'Monitoring' | 'Protect' =
-    globalMode === 'Protect' ? 'Monitoring' : 'Protect'
 
   const fetchPolicies = async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
@@ -65,19 +61,19 @@ export function PolicyListPage() {
 
   useEffect(() => {
     fetchPolicies(!hasLoaded.current)
-    // The global mode is the cluster's.
-    if (!limited) modeApi.get().then(setGlobalMode).catch(() => {})
   }, [])
 
-  const handleGlobalModeSwitch = async () => {
+  const enforcing = policies.filter(p => p.mode !== 'Monitoring').length
+
+  const handleStopEnforcing = async () => {
     try {
-      await modeApi.set(nextGlobalMode)
-      setGlobalMode(nextGlobalMode)
-      toast.success(`Global mode switched to ${nextGlobalMode}`)
-      fetchPolicies() // refresh per-policy modes
+      await modeApi.stop()
+      window.dispatchEvent(new Event(MODE_CHANGED))
+      toast.success('All policies set to Monitoring')
     } catch {
-      toast.error('Failed to switch global mode')
+      toast.error('Failed to set all policies to Monitoring')
     }
+    fetchPolicies()
   }
 
   const handleDelete = async () => {
@@ -99,9 +95,11 @@ export function PolicyListPage() {
     )
     try {
       await policyApi.setMode(p.name, p.namespace, mode)
+      window.dispatchEvent(new Event(MODE_CHANGED))
       toast.success(`${p.name}: mode set to ${mode}`)
-    } catch {
-      toast.error(`Failed to update mode for ${p.name}`)
+    } catch (e) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast.error(msg || `Failed to update mode for ${p.name}`)
       fetchPolicies()
     }
   }
@@ -116,44 +114,10 @@ export function PolicyListPage() {
 
   return (
     <>
-      {/* Global Protect Mode banner */}
-      <div className={limited ? 'hidden' : 'mb-6 flex items-center justify-between rounded-xl border bg-card px-5 py-4'}>
-        <div className="flex items-center gap-4">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Global Protect Mode</p>
-            <p className="text-xs text-muted-foreground/70">Turn on to enforce all policies; turn off to monitor only</p>
-            <div className="mt-1 flex items-center gap-2">
-              <Badge
-                variant={globalMode === 'Protect' ? 'destructive' : globalMode === 'Mixed' ? 'outline' : 'secondary'}
-                className="text-sm px-3 py-0.5"
-              >
-                {globalMode === 'Protect' ? 'ON' : globalMode === 'Mixed' ? 'MIXED' : 'OFF'}
-              </Badge>
-              <span className="text-sm text-muted-foreground">
-                {globalMode === 'Protect'
-                  ? 'Protect mode is on: actively blocking violations on all policies'
-                  : globalMode === 'Mixed'
-                  ? 'Policies have mixed modes'
-                  : 'Protect mode is off: monitoring only, no blocking'}
-              </span>
-            </div>
-          </div>
-        </div>
-        {isAdmin && (
-          <Button
-            variant={nextGlobalMode === 'Protect' ? 'destructive' : 'outline'}
-            onClick={() => setModeModal(true)}
-          >
-            {nextGlobalMode === 'Protect' ? 'Turn On' : 'Turn Off'}
-          </Button>
-        )}
-      </div>
-
       {/* Page header */}
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h4 className="text-xl font-semibold">Tracing Policy</h4>
-          <p className="text-sm text-muted-foreground">Manage Tracing Policy.</p>
         </div>
       </div>
 
@@ -172,6 +136,11 @@ export function PolicyListPage() {
             <IconRefresh size={14} className="mr-1.5" />
             Refresh
           </Button>
+          {isAdmin && !limited && enforcing > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setModeModal(true)}>
+              Set all to Monitoring
+            </Button>
+          )}
           {isAdmin && (
             <>
               <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
@@ -290,39 +259,23 @@ export function PolicyListPage() {
         </CardContent>
       </Card>
 
-      {/* Global mode switch dialog */}
+      {/* Every policy back to Monitoring */}
       <AlertDialog open={modeModal} onOpenChange={setModeModal}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {nextGlobalMode === 'Protect' ? 'Turn On Global Protect Mode' : 'Turn Off Global Protect Mode'}
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div>
-                {nextGlobalMode === 'Protect'
-                  ? 'Apply Protect mode to all TracingPolicies? Violations will be actively blocked (Sigkill).'
-                  : 'Apply Monitoring mode to all TracingPolicies? Violations will be logged but not blocked.'}
-                {nextGlobalMode === 'Protect' && (
-                  <p className="mt-2 text-destructive">
-                    ⚠ Warning: This will actively kill violating processes on all policies.
-                  </p>
-                )}
-              </div>
+            <AlertDialogTitle>Set all policies to Monitoring?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {enforcing} polic{enforcing === 1 ? 'y stops' : 'ies stop'} blocking. Violations are still recorded.
+              Protect is turned back on one policy at a time.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant={nextGlobalMode === 'Protect' ? 'destructive' : 'default'}
-              onClick={handleGlobalModeSwitch}
-            >
-              {nextGlobalMode === 'Protect' ? 'Turn On' : 'Turn Off'}
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleStopEnforcing}>Set all to Monitoring</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Per-policy mode change confirmation */}
       <AlertDialog
         open={!!pendingModeChange}
         onOpenChange={(open) => { if (!open) setPendingModeChange(null) }}

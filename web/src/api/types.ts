@@ -29,12 +29,11 @@ export interface PolicyRecord {
   namespace?: string
   scope: 'cluster' | 'namespaced'
   mode: 'Monitoring' | 'Protect' | 'Mixed'
+  unconditional?: boolean
   createdBy: string
   createdAt: string
   rawYaml: string
 }
-
-export type Mode = 'Monitoring' | 'Protect' | 'Mixed'
 
 export interface TetragonEvent {
   type: 'exec' | 'exit' | 'kprobe'

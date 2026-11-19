@@ -104,7 +104,10 @@ func TestSwitchingModeKeepsFieldsSentinelDoesNotModel(t *testing.T) {
 
 // The mode has to reach every section that can enforce, not just kprobes.
 func TestSwitchingModeReachesTracepoints(t *testing.T) {
-	store := modeStore(tracingPolicy("watch-exec"))
+	pol := tracingPolicy("watch-exec")
+	tpSel := pol.Object["spec"].(map[string]any)["tracepoints"].([]any)[0].(map[string]any)["selectors"].([]any)[0].(map[string]any)
+	tpSel["matchArgs"] = []any{map[string]any{"index": int64(4), "operator": "Equal", "values": []any{"59"}}}
+	store := modeStore(pol)
 	if err := store.SetPolicyMode(context.Background(), "watch-exec", "", "Protect"); err != nil {
 		t.Fatalf("SetPolicyMode: %v", err)
 	}
@@ -188,5 +191,103 @@ func TestSwitchingModeSkipsAPolicyWithNoActions(t *testing.T) {
 	after, _ := store.client.Resource(tracingPolicyGVR).Get(context.Background(), "empty", metav1.GetOptions{})
 	if before.GetResourceVersion() != after.GetResourceVersion() {
 		t.Error("a policy with no actions was written back anyway")
+	}
+}
+
+func actionsOf(t *testing.T, store *Store, name, field string) []string {
+	t.Helper()
+	got, err := store.client.Resource(tracingPolicyGVR).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get %s: %v", name, err)
+	}
+	var out []string
+	for _, p := range got.Object["spec"].(map[string]any)[field].([]any) {
+		for _, sel := range p.(map[string]any)["selectors"].([]any) {
+			for _, a := range sel.(map[string]any)["matchActions"].([]any) {
+				out = append(out, a.(map[string]any)["action"].(string))
+			}
+		}
+	}
+	return out
+}
+
+// observeAll is the shape of "report every exec": a selector with an action and
+// nothing to match on. As Sigkill it kills every process in every pod selected.
+func observeAll(name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "cilium.io/v1alpha1",
+		"kind":       "TracingPolicy",
+		"metadata":   map[string]any{"name": name},
+		"spec": map[string]any{"kprobes": []any{map[string]any{
+			"call": "sys_execve", "syscall": true,
+			"selectors": []any{map[string]any{
+				"matchActions": []any{map[string]any{"action": "Post"}},
+			}},
+		}}},
+	}}
+}
+
+func TestProtectLeavesASelectorWithNoConditionsReporting(t *testing.T) {
+	ctx := context.Background()
+	store := modeStore(observeAll("monitor-all-exec"), tracingPolicy("watch-exec"))
+
+	if err := store.SetPolicyMode(ctx, "watch-exec", "", "Protect"); err != nil {
+		t.Fatalf("SetPolicyMode: %v", err)
+	}
+	// In one policy the selectors are judged one by one.
+	if got := actionsOf(t, store, "watch-exec", "kprobes"); got[0] != "Sigkill" {
+		t.Errorf("a selector with conditions = %v, want Sigkill", got)
+	}
+	if got := actionsOf(t, store, "watch-exec", "tracepoints"); got[0] != "Post" {
+		t.Errorf("a selector with no conditions = %v, want Post", got)
+	}
+
+	// The same holds when one policy is switched on its own, and it is said.
+	if err := store.SetPolicyMode(ctx, "monitor-all-exec", "", "Protect"); err != ErrUnconditional {
+		t.Errorf("SetPolicyMode = %v, want ErrUnconditional", err)
+	}
+
+	records, _ := store.List(ctx)
+	for _, r := range records {
+		if !r.Unconditional {
+			t.Errorf("%s is not marked as holding a selector with no conditions", r.Name)
+		}
+	}
+}
+
+// A policy somebody wrote to kill on every call can still be turned back.
+func TestMonitoringUndoesAKillWithNoConditions(t *testing.T) {
+	pol := observeAll("kill-all")
+	sel := pol.Object["spec"].(map[string]any)["kprobes"].([]any)[0].(map[string]any)["selectors"].([]any)[0].(map[string]any)
+	sel["matchActions"] = []any{map[string]any{"action": "Sigkill"}}
+	store := modeStore(pol)
+
+	if err := store.SetPolicyMode(context.Background(), "kill-all", "", "Monitoring"); err != nil {
+		t.Fatalf("SetPolicyMode: %v", err)
+	}
+	if got := actionsOf(t, store, "kill-all", "kprobes"); got[0] != "Post" {
+		t.Errorf("action = %v, want Post", got)
+	}
+}
+
+// The one switch over all policies turns enforcement off, and the count of
+// enforcing policies is read from the policies, so it cannot disagree with them.
+func TestStopEnforcingSetsEveryPolicyToMonitoring(t *testing.T) {
+	ctx := context.Background()
+	a, b := tracingPolicy("a"), tracingPolicy("b")
+	store := modeStore(a, b, observeAll("c"))
+	for _, n := range []string{"a", "b"} {
+		if err := store.SetPolicyMode(ctx, n, "", "Protect"); err != nil {
+			t.Fatalf("SetPolicyMode %s: %v", n, err)
+		}
+	}
+	if n, total, _ := store.Enforcing(ctx); n != 2 || total != 3 {
+		t.Fatalf("Enforcing = %d of %d, want 2 of 3", n, total)
+	}
+	if err := store.StopEnforcing(ctx); err != nil {
+		t.Fatalf("StopEnforcing: %v", err)
+	}
+	if n, total, _ := store.Enforcing(ctx); n != 0 || total != 3 {
+		t.Errorf("Enforcing = %d of %d after stopping, want 0 of 3", n, total)
 	}
 }
