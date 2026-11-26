@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import {
   Breadcrumb,
@@ -8,10 +8,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
-import { modeApi, MODE_CHANGED } from '../api/client'
 import { useAuth } from './AuthContext'
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -108,18 +106,8 @@ interface Props {
 }
 
 export function AppHeader({ onLogout }: Props) {
-  const { user, limited, can } = useAuth()
-  const [mode, setMode] = useState<{ protect: number; total: number } | null>(null)
+  const { user } = useAuth()
   const breadcrumbs = useBreadcrumbs()
-
-  useEffect(() => {
-    // The count is of the cluster's policies.
-    if (limited || !can('tracing', 'view')) return
-    const read = () => { modeApi.get().then(setMode).catch(() => {}) }
-    read()
-    window.addEventListener(MODE_CHANGED, read)
-    return () => window.removeEventListener(MODE_CHANGED, read)
-  }, [limited])
 
   return (
     <header className="sticky top-0 z-50 flex h-14 w-full shrink-0 items-center gap-2 border-b bg-background px-4">
@@ -145,9 +133,6 @@ export function AppHeader({ onLogout }: Props) {
       </Breadcrumb>
 
       <div className="ml-auto flex items-center gap-2">
-        {!limited && mode && (
-          <Badge variant={mode.protect > 0 ? 'destructive' : 'outline'}>{mode.protect} / {mode.total} in Protect</Badge>
-        )}
         <span className="text-xs text-muted-foreground">{user?.username}</span>
         <Button variant="ghost" size="sm" className="text-xs h-7" onClick={onLogout}>
           Sign out

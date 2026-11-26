@@ -30,6 +30,8 @@ export interface PolicyRecord {
   scope: 'cluster' | 'namespaced'
   mode: 'Monitoring' | 'Protect' | 'Mixed'
   unconditional?: boolean
+  /** Why Tetragon is not applying the policy, when it failed to load it. */
+  inactive?: string
   /** The workload ("Kind/name") an image lock was made for. */
   imageLock?: string
   createdBy: string

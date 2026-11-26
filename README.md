@@ -18,7 +18,7 @@ Each layer does what only it can do:
 ## Features
 
 - **Tracing Policy** — process and file whitelist/blacklist rules through a form builder (file rules with read/write scoping and per-process exceptions), with Monitoring / Protect modes per policy and one switch that sets them all back to Monitoring
-- **Lock to Image** — one switch per workload, nothing to fill in: its containers run only the files their images came with, started by their own processes, so a downloaded tool or a `kubectl exec` is stopped
+- **Image Lockdown** — one switch per workload, nothing to fill in: its containers run only the files their images came with, started by their own processes, so a downloaded tool or a `kubectl exec` is stopped
 - **Network Policy** — CiliumNetworkPolicy builder with ingress and egress in one policy, whitelist/blacklist per direction, cross-namespace peers and L7 HTTP rules
 - **Admission Policy** — a CEL builder covering fourteen rule types (labels, annotations, images, replicas, resource limits, security context, host access, hostPath volumes, environment variables, ConfigMap and Secret size, vulnerability limits, blocked CVEs and scanned images), plus bindings
 - **Quarantine** — cut a suspect pod off from the network without killing it, so the evidence survives; one click from a Security Event or from a pod on the Network Topology, one to release
@@ -32,6 +32,10 @@ Each layer does what only it can do:
 - **Event Sources** — live ingestion health per source, so a Tetragon agent that is Ready but whose gRPC stream is not actually delivering shows as down rather than falsely healthy; Trivy Operator is listed too, and turns stale when it stops writing reports
 - **Dashboard & Settings** — agent and ingestion health, event counts, quarantine status, critical and high vulnerability totals with the workloads to fix first; local accounts with roles that grant each part of the product separately (forced first-login password change, per-IP login rate limiting), retention tuning
 - **Hardened by default** — same-origin Content-Security-Policy and security headers on every response; sessions can survive restarts without persistent storage by injecting `JWT_SECRET` from a Kubernetes Secret
+
+## Limits
+
+- **At most 127 Tracing Policies in a cluster.** Tetragon holds 128 policies on a node, one of which it keeps for itself, and loads every policy on every node. The count is of all of them together: policies written by hand, policies made from Behavior Discovery and each **Image Lockdown**. A policy past the limit is created and does nothing; the Tracing Policy list marks it **Not active**, and creating it says so. Deleting other policies does not bring it to life: delete it and create it again. Measured on Tetragon 1.8.0. The number is fixed in Tetragon ([cilium/tetragon#4191](https://github.com/cilium/tetragon/issues/4191)) and is raised here when Tetragon raises it.
 
 ## Quick start
 

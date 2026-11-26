@@ -9,8 +9,6 @@ export const SESSION_ENDED = 'sentinel:session-ended'
 // looks to an EventSource: it cannot see the status code, so the session is
 // asked about instead.
 export const SESSION_CHECK = 'sentinel:session-check'
-// The global mode was switched: the header shows it and has to hear.
-export const MODE_CHANGED = 'sentinel:mode-changed'
 
 api.interceptors.response.use(
   (res) => res,
@@ -40,8 +38,9 @@ export const policyApi = {
   get: (name: string, namespace?: string): Promise<PolicyRecord> =>
     api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
 
-  create: (payload: CreatePolicyPayload): Promise<void> =>
-    api.post('/policies', payload),
+  // `inactive` is set when the policy was written and Tetragon did not load it.
+  create: (payload: CreatePolicyPayload): Promise<{ inactive?: string }> =>
+    api.post('/policies', payload).then((r) => r.data ?? {}),
 
   // The namespace the policy opened from is pinned on the request ("" for a
   // cluster-scoped one), so the server can refuse an edit that renames the
@@ -58,7 +57,7 @@ export const policyApi = {
 
   // Limits a workload to the files its images came with. Reading them takes a
   // moment on a large image.
-  lockToImage: (namespace: string, kind: string, name: string, mode: 'Monitoring' | 'Protect'): Promise<{ name: string; blocksOutside: boolean }> =>
+  lockToImage: (namespace: string, kind: string, name: string, mode: 'Monitoring' | 'Protect'): Promise<{ name: string; blocksOutside: boolean; inactive?: string }> =>
     api.post('/policies/image-lock', { namespace, kind, name, mode }, { timeout: 90_000 }).then((r) => r.data),
 
   workloads: (namespace: string): Promise<{ kind: string; name: string }[]> =>
@@ -73,8 +72,6 @@ export const policyApi = {
 }
 
 export const modeApi = {
-  // How many tracing policies are in Protect, out of how many.
-  get: (): Promise<{ protect: number; total: number }> => api.get('/mode').then((r) => r.data),
   // Sets every tracing policy to Monitoring.
   stop: (): Promise<void> => api.put('/mode', { mode: 'Monitoring' }),
 }

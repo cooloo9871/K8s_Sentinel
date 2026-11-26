@@ -32,6 +32,7 @@ func listPolicies(store *k8s.Store) http.HandlerFunc {
 			records = []k8s.PolicyRecord{}
 		}
 		records = inScope(scopeOf(r), records, func(p k8s.PolicyRecord) string { return p.Namespace })
+		store.MarkInactive(r.Context(), records)
 		writeJSON(w, http.StatusOK, records)
 	}
 }
@@ -81,7 +82,7 @@ func createPolicy(store *k8s.Store) http.HandlerFunc {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusCreated, map[string]string{"status": "created"})
+			writeJSON(w, http.StatusCreated, created(r, store, req))
 			return
 		}
 
@@ -102,8 +103,19 @@ func createPolicy(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to apply policy"})
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]string{"status": "created"})
+		writeJSON(w, http.StatusCreated, created(r, store, req))
 	}
+}
+
+// created answers a create, saying so when Tetragon did not take the policy.
+func created(r *http.Request, store *k8s.Store, req createPolicyRequest) map[string]string {
+	out := map[string]string{"status": "created"}
+	if name, ns, ok := newPolicyIdentity(req); ok {
+		if why := store.AwaitPolicyLoad(r.Context(), name, ns); why != "" {
+			out["inactive"] = why
+		}
+	}
+	return out
 }
 
 func updatePolicy(store *k8s.Store) http.HandlerFunc {

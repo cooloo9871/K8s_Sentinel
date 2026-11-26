@@ -87,7 +87,7 @@ func describeAction(r *http.Request) string {
 
 var actionLabels = map[string]string{
 	"POST /api/policies":                       "Create tracing policy",
-	"POST /api/policies/image-lock":            "Lock workload to its image",
+	"POST /api/policies/image-lock":            "Image Lockdown",
 	"PUT /api/policies/{name}":                 "Update tracing policy",
 	"PUT /api/policies/{name}/mode":            "Set tracing policy mode",
 	"DELETE /api/policies/{name}":              "Delete tracing policy",

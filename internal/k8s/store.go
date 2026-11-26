@@ -37,6 +37,8 @@ type PolicyRecord struct {
 	// True when a selector that reports has no condition at all, so it matches
 	// every call to its hook. Protect leaves such a selector reporting.
 	Unconditional bool `json:"unconditional,omitempty"`
+	// Why Tetragon is not applying the policy, when an agent failed to load it.
+	Inactive string `json:"inactive,omitempty"`
 	// The workload ("Kind/name") an image lock was made for. Sentinel writes
 	// such a policy's list itself, so it is not edited by hand.
 	ImageLock string `json:"imageLock,omitempty"`
@@ -56,6 +58,8 @@ type Store struct {
 	Templates  *TemplateStore
 	containers *containerResolver
 	lineage    *containerLineage
+
+	policyLoads policyLoads
 
 	// Tetragon fan-out broadcast — single stream shared by all consumers
 	tetragonMu   sync.RWMutex

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { IconFolder, IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
+import { IconSearch, IconShieldCheck, IconTrash } from '@tabler/icons-react'
 import { Card, CardHeader, CardTitle, CardContent, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,6 +37,8 @@ function WorkloadCard({ wl, creatingFor, onCreatePolicy, isAdmin }: {
   isAdmin: boolean
 }) {
   const binaries = wl.binaries ?? []
+  const [expanded, setExpanded] = useState(false)
+  const shown = expanded ? binaries : binaries.slice(0, 8)
   return (
     <Card>
       <CardHeader className="border-b pb-3">
@@ -46,7 +48,7 @@ function WorkloadCard({ wl, creatingFor, onCreatePolicy, isAdmin }: {
             <CardTitle className="text-sm font-semibold">{wl.workloadName}</CardTitle>
           </div>
           <p className="text-xs text-muted-foreground">
-            {wl.namespace} · {wl.pods.length} pod{wl.pods.length !== 1 ? 's' : ''}
+            {wl.pods.length} pod{wl.pods.length !== 1 ? 's' : ''}
           </p>
         </div>
         {isAdmin && (
@@ -68,13 +70,19 @@ function WorkloadCard({ wl, creatingFor, onCreatePolicy, isAdmin }: {
         </div>
         {binaries.length > 0 ? (
           <div className="flex flex-wrap gap-1">
-            {binaries.slice(0, 8).map(b => (
+            {shown.map(b => (
               <span key={b} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]" title={b}>
                 {b.split('/').pop()}
               </span>
             ))}
             {binaries.length > 8 && (
-              <span className="text-muted-foreground">+{binaries.length - 8} more</span>
+              <button
+                type="button"
+                className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                onClick={() => setExpanded(v => !v)}
+              >
+                {expanded ? 'Show less' : `+${binaries.length - 8} more`}
+              </button>
             )}
           </div>
         ) : <span className="text-muted-foreground">—</span>}
@@ -130,7 +138,6 @@ export function DiscoveryPage() {
   const isAdmin = can('tracing', 'manage')
   const [nsFilter, setNsFilter] = useState<string[]>([])
   const [podSearch, setPodSearch] = useState('')
-  const [groupByNs, setGroupByNs] = useState(false)
   const [clearDialog, setClearDialog] = useState(false)
   const [creatingFor, setCreatingFor] = useState<string | null>(null)
 
@@ -206,15 +213,6 @@ export function DiscoveryPage() {
             className="h-9 w-44 pl-8"
           />
         </div>
-        <Button
-          variant={groupByNs ? 'default' : 'outline'}
-          size="sm"
-          className="h-9 w-9 p-0"
-          title={groupByNs ? 'Grouped by namespace' : 'Group by namespace'}
-          onClick={() => setGroupByNs(v => !v)}
-        >
-          <IconFolder size={16} />
-        </Button>
         <span className="ml-auto text-sm text-muted-foreground">
           {workloadGroups.length} workload{workloadGroups.length !== 1 ? 's' : ''} · {profiles.length} pods total
         </span>
@@ -228,8 +226,7 @@ export function DiscoveryPage() {
             Pod behaviors appear automatically as processes run across the cluster.
           </p>
         </div>
-      ) : groupByNs ? (
-        // ── Namespace-grouped view ──────────────────────────────────────────
+      ) : (
         (() => {
           const byNs = workloadGroups.reduce<Record<string, typeof workloadGroups>>((acc, wl) => {
             ;(acc[wl.namespace] ??= []).push(wl)
@@ -253,18 +250,6 @@ export function DiscoveryPage() {
             </div>
           )
         })()
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {workloadGroups.map(wl => (
-            <WorkloadCard
-              key={wl.key}
-              wl={wl}
-              creatingFor={creatingFor}
-              onCreatePolicy={handleCreatePolicy}
-              isAdmin={isAdmin}
-            />
-          ))}
-        </div>
       )}
 
       <AlertDialog open={clearDialog} onOpenChange={setClearDialog}>

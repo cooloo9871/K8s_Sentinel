@@ -70,7 +70,10 @@ func createImageLock(store *k8s.Store) http.HandlerFunc {
 		case err != nil:
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		default:
-			writeJSON(w, http.StatusCreated, map[string]any{"name": name, "blocksOutside": blocksOutside})
+			writeJSON(w, http.StatusCreated, map[string]any{
+				"name": name, "blocksOutside": blocksOutside,
+				"inactive": store.AwaitPolicyLoad(r.Context(), name, req.Namespace),
+			})
 		}
 	}
 }

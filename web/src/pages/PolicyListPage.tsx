@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
 import { NamespaceSelect } from '../components/NamespaceSelect'
-import { policyApi, modeApi, namespaceApi, MODE_CHANGED } from '../api/client'
+import { policyApi, modeApi, namespaceApi } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import type { PolicyRecord } from '../api/types'
@@ -49,7 +49,7 @@ export function PolicyListPage() {
 
   const [modeModal, setModeModal] = useState(false)
 
-  // Lock to Image
+  // Image Lockdown
   const [lockOpen, setLockOpen] = useState(false)
   const [lockNamespaces, setLockNamespaces] = useState<string[]>([])
   const [lockNs, setLockNs] = useState('')
@@ -79,8 +79,8 @@ export function PolicyListPage() {
     setLocking(true)
     try {
       const r = await policyApi.lockToImage(lockNs, kind, name, lockMode)
-      window.dispatchEvent(new Event(MODE_CHANGED))
-      toast.success(r.blocksOutside
+      if (r.inactive) toast.error(`${r.name} was created but is not active`)
+      else toast.success(r.blocksOutside
         ? `${name} locked to its image`
         : `${name} locked to its image. kubectl exec is not stopped for this workload.`)
       setLockOpen(false)
@@ -113,7 +113,6 @@ export function PolicyListPage() {
   const handleStopEnforcing = async () => {
     try {
       await modeApi.stop()
-      window.dispatchEvent(new Event(MODE_CHANGED))
       toast.success('All policies set to Monitoring')
     } catch {
       toast.error('Failed to set all policies to Monitoring')
@@ -140,7 +139,6 @@ export function PolicyListPage() {
     )
     try {
       await policyApi.setMode(p.name, p.namespace, mode)
-      window.dispatchEvent(new Event(MODE_CHANGED))
       toast.success(`${p.name}: mode set to ${mode}`)
     } catch (e) {
       const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -193,7 +191,7 @@ export function PolicyListPage() {
                 + New YAML
               </Button>
               <Button size="sm" variant="outline" onClick={openLock}>
-                + Lock to Image
+                + Image Lockdown
               </Button>
             </>
           )}
@@ -229,7 +227,12 @@ export function PolicyListPage() {
                 ) : (
                   filtered.map((p) => (
                     <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {p.name}
+                        {p.inactive && (
+                          <Badge variant="destructive" className="ml-2" title={p.inactive}>Not active</Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>
                           {p.scope}
@@ -310,12 +313,9 @@ export function PolicyListPage() {
       <AlertDialog open={lockOpen} onOpenChange={(open) => { if (!locking) setLockOpen(open) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Lock to Image</AlertDialogTitle>
-            <AlertDialogDescription>
-              The workload may run only the files its image came with, started by its own processes.
-            </AlertDialogDescription>
+            <AlertDialogTitle>Image Lockdown</AlertDialogTitle>
           </AlertDialogHeader>
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">Namespace</Label>
               <NamespaceSelect value={lockNs} onChange={chooseLockNs} namespaces={lockNamespaces} />
@@ -323,10 +323,10 @@ export function PolicyListPage() {
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">Workload</Label>
               <Select value={lockWorkload} onValueChange={setLockWorkload} disabled={!lockNs}>
-                <SelectTrigger className="h-9 w-full">
+                <SelectTrigger className="h-9 w-full *:data-[slot=select-value]:block *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate">
                   <SelectValue placeholder={lockNs && lockWorkloads.length === 0 ? 'No workloads' : 'Select a workload'} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[calc(100vw-2rem)]">
                   <SelectGroup>
                     {lockWorkloads.map(w => (
                       <SelectItem key={`${w.kind}/${w.name}`} value={`${w.kind}/${w.name}`}>
