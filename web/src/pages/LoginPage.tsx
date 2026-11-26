@@ -45,6 +45,7 @@ export function LoginPage({ onLogin }: Props) {
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
+                autoComplete="username"
                 autoFocus
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -56,6 +57,7 @@ export function LoginPage({ onLogin }: Props) {
               <Input
                 id="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}

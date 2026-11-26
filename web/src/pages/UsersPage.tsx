@@ -237,7 +237,7 @@ export function UsersPage() {
               </div>
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Password <span className="text-destructive">*</span></Label>
-                <Input className="h-8 text-sm" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                <Input className="h-8 text-sm" type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
                 <p className="text-[11px] text-muted-foreground">At least {MIN_PASSWORD_LENGTH} characters.</p>
               </div>
             </div>
@@ -393,12 +393,12 @@ export function UsersPage() {
           {changingOwn && (
             <div className="flex flex-col gap-1.5 py-2">
               <Label>Current Password</Label>
-              <Input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+              <Input type="password" autoComplete="current-password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
             </div>
           )}
           <div className="flex flex-col gap-1.5 py-2">
             <Label>New Password</Label>
-            <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+            <Input type="password" autoComplete="new-password" value={newPw} onChange={e => setNewPw(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleChangePassword()} />
             <p className="text-xs text-muted-foreground">At least {MIN_PASSWORD_LENGTH} characters.</p>
           </div>

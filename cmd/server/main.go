@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/cooloo9871/K8s_Sentinel/internal/admission"
 	"github.com/cooloo9871/K8s_Sentinel/internal/alert"
 	"github.com/cooloo9871/K8s_Sentinel/internal/audit"
@@ -239,15 +241,24 @@ func ownNamespace() string {
 	return envOr("POD_NAMESPACE", "sentinel-system")
 }
 
+// spaHandler serves the built UI, compressed. The build puts a hash of the
+// content in the name of everything under /assets, so such a file never
+// changes and a browser keeps it; the page that names them is asked for again
+// every time, which is how a new release is picked up.
 func spaHandler(fsys http.FileSystem) http.Handler {
 	fileServer := http.FileServer(fsys)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return middleware.Compress(5)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cache := "no-cache"
 		f, err := fsys.Open(r.URL.Path)
 		if err != nil {
 			r.URL.Path = "/"
 		} else {
 			f.Close()
+			if strings.HasPrefix(r.URL.Path, "/assets/") {
+				cache = "public, max-age=31536000, immutable"
+			}
 		}
+		w.Header().Set("Cache-Control", cache)
 		fileServer.ServeHTTP(w, r)
-	})
+	}))
 }

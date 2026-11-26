@@ -62,6 +62,7 @@ export function ForcePasswordChangePage({ username, onDone }: Props) {
               <Input
                 id="new"
                 type="password"
+                autoComplete="new-password"
                 autoFocus
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -76,6 +77,7 @@ export function ForcePasswordChangePage({ username, onDone }: Props) {
               <Input
                 id="confirm"
                 type="password"
+                autoComplete="new-password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 disabled={saving}
