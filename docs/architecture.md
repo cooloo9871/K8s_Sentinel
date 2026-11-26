@@ -474,9 +474,12 @@ filesystem.
   empty list is a policy that stops everything.
 
 **Keeping it current.** Every 15 seconds each image lock's workload is looked
-at: the set of running container names and image IDs is compared with the
-`sentinel.io/image-lock-built-from` annotation, and the list is read again only
-when it differs. During a rollout both images are running and both are listed.
+at: the set of running container names and image IDs, the workload's selector
+and whether the kubelet runs commands in it are compared with the
+`sentinel.io/image-lock-built-from` annotation, and the policy is built again
+only when one differs. The last two matter with the images unchanged: an exec
+probe added to a locked workload would otherwise be killed as a command from
+outside. During a rollout both images are running and both are listed.
 The rebuild keeps the mode and the author, and is written against the version
 that was read, so a mode switched in the meantime wins.
 

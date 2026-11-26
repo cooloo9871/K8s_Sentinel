@@ -428,8 +428,15 @@ func (s *Store) buildImageLock(ctx context.Context, namespace string, w Workload
 		return nil, false, err
 	}
 	outside := startedFromOutside(spec)
-	obj, err := imageLockObject(namespace, w, selector, containers, paths, built, action, outside)
+	obj, err := imageLockObject(namespace, w, selector, containers, paths, lockBuilt(built, selector, outside), action, outside)
 	return obj, outside, err
+}
+
+// lockBuilt is everything a policy was made from. Not only the images: a
+// probe added to the workload, or the workload made again under another
+// selector, changes the policy with the same images running.
+func lockBuilt(targets string, selector *metav1.LabelSelector, outside bool) string {
+	return fmt.Sprintf("%s|%s|%t", targets, metav1.FormatLabelSelector(selector), outside)
 }
 
 // StartImageLockLoop keeps every image lock's list in step with the images its
@@ -470,7 +477,7 @@ func (s *Store) syncImageLocks(ctx context.Context) {
 
 func (s *Store) syncImageLock(ctx context.Context, item *unstructured.Unstructured, w Workload) error {
 	ns := item.GetNamespace()
-	selector, _, err := s.workloadSpec(ctx, ns, w.Kind, w.Name)
+	selector, spec, err := s.workloadSpec(ctx, ns, w.Kind, w.Name)
 	if errors.Is(err, ErrWorkloadNotFound) {
 		return nil // the policy outlives its workload until someone deletes it
 	}
@@ -484,7 +491,7 @@ func (s *Store) syncImageLock(ctx context.Context, item *unstructured.Unstructur
 	if err != nil {
 		return err
 	}
-	if built == item.GetAnnotations()[annotationImageLockBuilt] {
+	if lockBuilt(built, selector, startedFromOutside(spec)) == item.GetAnnotations()[annotationImageLockBuilt] {
 		return nil
 	}
 	action := policy.ActionPost

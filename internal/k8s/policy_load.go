@@ -20,8 +20,6 @@ const policyLoadTTL = 10 * time.Second
 type policyLoads struct {
 	mu      sync.Mutex
 	failed  map[string]string // "namespace/name" → why
-	loaded  map[string]int    // "namespace/name" → agents that have it in force
-	agents  int
 	expires time.Time
 }
 
@@ -44,14 +42,14 @@ var tracingPoliciesOn = func(ctx context.Context, agent podEndpoint) ([]*tetrago
 
 // readPolicyLoads asks every agent, at once. An agent that does not answer
 // says nothing about any policy.
-func (s *Store) readPolicyLoads(ctx context.Context) (failed map[string]string, loaded map[string]int, agents int) {
-	failed, loaded = map[string]string{}, map[string]int{}
+func (s *Store) readPolicyLoads(ctx context.Context) map[string]string {
+	failed := map[string]string{}
 	if s.typed == nil {
-		return failed, loaded, 0
+		return failed
 	}
 	pods, err := s.findAllTetragonPods(ctx)
 	if err != nil {
-		return failed, loaded, 0
+		return failed
 	}
 	answers := make([][]*tetragon.TracingPolicyStatus, len(pods))
 	var wg sync.WaitGroup
@@ -64,10 +62,6 @@ func (s *Store) readPolicyLoads(ctx context.Context) (failed map[string]string, 
 	}
 	wg.Wait()
 	for _, policies := range answers {
-		if policies == nil {
-			continue
-		}
-		agents++
 		for _, p := range policies {
 			key := p.GetNamespace() + "/" + p.GetName()
 			switch p.GetState() {
@@ -78,12 +72,10 @@ func (s *Store) readPolicyLoads(ctx context.Context) (failed map[string]string, 
 						failed[key] = "Tetragon did not load this policy"
 					}
 				}
-			case tetragon.TracingPolicyState_TP_STATE_ENABLED:
-				loaded[key]++
 			}
 		}
 	}
-	return failed, loaded, agents
+	return failed
 }
 
 // MarkInactive fills in, for each policy an agent failed to load, why. One
@@ -92,8 +84,12 @@ func (s *Store) MarkInactive(ctx context.Context, records []PolicyRecord) {
 	l := &s.policyLoads
 	l.mu.Lock()
 	if time.Now().After(l.expires) {
-		l.failed, l.loaded, l.agents = s.readPolicyLoads(ctx)
-		l.expires = time.Now().Add(policyLoadTTL)
+		l.failed = s.readPolicyLoads(ctx)
+		// A request that was given up on was not answered, and what it did
+		// not hear is not kept for the next one.
+		if ctx.Err() == nil {
+			l.expires = time.Now().Add(policyLoadTTL)
+		}
 	}
 	failed := l.failed
 	l.mu.Unlock()

@@ -74,3 +74,27 @@ func TestNoAgentMarksNothing(t *testing.T) {
 		t.Error("a policy was called inactive with no agent to say so")
 	}
 }
+
+// A request that was given up on learns nothing, and what it did not learn is
+// not what the next one is told.
+func TestAnAbandonedRequestDoesNotHideAFailure(t *testing.T) {
+	s := loadStore(t, map[string][]*tetragon.TracingPolicyStatus{
+		"m1": {status("shop", "full", tetragon.TracingPolicyState_TP_STATE_LOAD_ERROR, "no room")},
+	})
+	inner := tracingPoliciesOn
+	tracingPoliciesOn = func(ctx context.Context, a podEndpoint) ([]*tetragon.TracingPolicyStatus, error) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return inner(ctx, a)
+	}
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	s.MarkInactive(gone, []PolicyRecord{{Name: "full", Namespace: "shop"}})
+
+	records := []PolicyRecord{{Name: "full", Namespace: "shop"}}
+	s.MarkInactive(context.Background(), records)
+	if records[0].Inactive != "no room" {
+		t.Error("the failure was hidden by an earlier request that was cancelled")
+	}
+}

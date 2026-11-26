@@ -234,3 +234,29 @@ func TestARolloutAddsTheNewImageAndKeepsTheMode(t *testing.T) {
 		t.Errorf("mode = %s, paths = %v", detectMode(o.Object), lockPaths(t, o.Object))
 	}
 }
+
+// A probe added to a locked workload is a command the kubelet sends in from
+// outside. The images are the same, and the rule that stops such commands has
+// to go all the same, or the probe is killed and the pods restart for ever.
+func TestAProbeAddedLaterTakesTheOutsideRuleAway(t *testing.T) {
+	s := imageLockStore(t, map[string][]string{"c1": {"/bin/sh"}},
+		webDeployment(nil), lockedPod("web-1", "sha256:one", "c1"))
+	ctx := context.Background()
+	if _, err := s.CreateImageLock(ctx, "shop", Workload{"Deployment", "web"}, "Protect", ""); err != nil {
+		t.Fatal(err)
+	}
+	probed := webDeployment(func(p *corev1.PodSpec) {
+		p.Containers[0].LivenessProbe = &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"true"}}}}
+	})
+	if _, err := s.typed.AppsV1().Deployments("shop").Update(ctx, probed, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s.syncImageLocks(ctx)
+	o, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("shop").Get(ctx, "image-lock-web", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(lockSelectors(t, o.Object)); n != 1 {
+		t.Errorf("selectors = %d: the kubelet's probe would be stopped", n)
+	}
+}
