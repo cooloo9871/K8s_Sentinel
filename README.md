@@ -18,6 +18,7 @@ Each layer does what only it can do:
 ## Features
 
 - **Tracing Policy** — process and file whitelist/blacklist rules through a form builder (file rules with read/write scoping and per-process exceptions), with Monitoring / Protect modes per policy and one switch that sets them all back to Monitoring
+- **Lock to Image** — one switch per workload, nothing to fill in: its containers run only the files their images came with, started by their own processes, so a downloaded tool or a `kubectl exec` is stopped
 - **Network Policy** — CiliumNetworkPolicy builder with ingress and egress in one policy, whitelist/blacklist per direction, cross-namespace peers and L7 HTTP rules
 - **Admission Policy** — a CEL builder covering fourteen rule types (labels, annotations, images, replicas, resource limits, security context, host access, hostPath volumes, environment variables, ConfigMap and Secret size, vulnerability limits, blocked CVEs and scanned images), plus bindings
 - **Quarantine** — cut a suspect pod off from the network without killing it, so the evidence survives; one click from a Security Event or from a pod on the Network Topology, one to release

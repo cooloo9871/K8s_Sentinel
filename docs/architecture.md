@@ -413,6 +413,77 @@ Deployment in seconds.
 
 ---
 
+## 6.55 Lock to Image
+
+`internal/k8s/imagelock.go`. A `TracingPolicyNamespaced` named
+`image-lock-<workload>` that Sentinel writes whole, marked with the annotation
+`sentinel.io/image-lock: <Kind>/<name>`.
+
+**What it says.** One kprobe on `security_bprm_check` with two selectors, either
+of which fires:
+
+| Selector | Fires when | Stops |
+|---|---|---|
+| `matchPIDs` `NotIn` PID 1 of the container's PID namespace, `followForks` | the process is not descended from the container's first process | `kubectl exec`, anything started from the node |
+| `matchArgs` `NotEqual` the list | the file about to run is not on the list | a file added after the container started |
+
+`podSelector` is the workload's own selector. `containerSelector` names the
+containers that were read, which leaves init containers out: they have exited
+and there is nothing to read their image from.
+
+**Why that hook.** At `sys_execve` the argument is the path as the caller gave
+it. A shell looking a command up tries `execve` in each directory of `PATH`, and
+every failed attempt is a path that is not on the list: `dash` had its own
+commands killed. `security_bprm_check` runs once the kernel has opened the file,
+so the path is the resolved one, and `/bin/sh` and `/usr/bin/sh` are one entry.
+
+**Where the list comes from.** Tetragon has no condition for "this file came
+with the image", so the list is read on the node, with the same exec into the
+Tetragon container that reads process names (section 3.1): the script takes
+container IDs and prints every executable regular file on each container's root
+filesystem.
+
+- The container is found by its ID in `/proc/<pid>/cgroup`. CRI-O keeps conmon
+  in a cgroup that carries the same ID, and conmon's root is the node's: only a
+  process whose root is not the node's is read from. Without that the list was
+  the node's 7,000 executables.
+- A file that is in the overlay's upper directory was written after the
+  container started and is left out, so a tool already dropped in does not
+  become allowed by being there when the list is made. On a root that is not an
+  overlay nothing can be told apart and everything is listed.
+- `find -xdev`, so volumes are not listed.
+- A container that is not found, or lists nothing, fails the whole build: an
+  empty list is a policy that stops everything.
+
+**Keeping it current.** Every 15 seconds each image lock's workload is looked
+at: the set of running container names and image IDs is compared with the
+`sentinel.io/image-lock-built-from` annotation, and the list is read again only
+when it differs. During a rollout both images are running and both are listed.
+The rebuild keeps the mode and the author, and is written against the version
+that was read, so a mode switched in the meantime wins.
+
+**When commands from outside are left alone.** Exec probes, exec lifecycle
+hooks, `shareProcessNamespace` and `hostPID` each make "descended from PID 1"
+the wrong rule: the kubelet's commands arrive exactly as `kubectl exec` does,
+and in a shared namespace PID 1 is not the container's. For those the first
+selector is left out and the API says so (`blocksOutside: false`).
+
+**Known limits.**
+
+- Paths, not contents: a listed file overwritten in place still runs. An
+  interpreter or the dynamic loader of the image runs whatever it is handed.
+- The seconds between a new image starting and the next pass.
+- A container's first seconds: Tetragon learns of a new container, and puts it
+  under the policies that select it, shortly after its first process started
+  (the same delay that keeps a pod-selecting policy from seeing the entrypoint,
+  section 3.1). A file written and run in that time runs.
+- 20,000 paths loaded on a 6.8 kernel; the build stops at 1 MB of paths, which
+  is what one object can hold. Kernels before 5.11 limit the length of a string
+  Tetragon matches and have not been tried.
+- Jobs, bare pods and workloads of other controllers are not offered.
+
+---
+
 ## 6.6 Vulnerabilities
 
 Sentinel does not scan images. Trivy Operator does, and writes one

@@ -53,6 +53,7 @@ func main() {
 
 	store := k8sclient.NewStore(dynClient, typedClient, restCfg, data("templates.json"))
 	store.StartDiscoveryLoop(ctx)
+	store.StartImageLockLoop(ctx)
 	// Single Tetragon broadcast — security store, alert and rsyslog
 	// dispatchers all subscribe to this rather than opening independent streams.
 	store.StartTetragonBroadcast(ctx)

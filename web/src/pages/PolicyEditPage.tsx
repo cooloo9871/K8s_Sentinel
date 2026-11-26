@@ -65,6 +65,8 @@ export function PolicyEditPage() {
   // Whether the YAML on screen could open in the form — decides if the header
   // offers the switch.
   const [formCapable, setFormCapable] = useState(false)
+  // An image lock's list is written by Sentinel, so it opens to be read.
+  const [managed, setManaged] = useState(false)
   const action = policyMode === 'Protect' ? 'Sigkill' : 'Post'
 
   // Clear the prefill from browser history after consuming it once.
@@ -89,6 +91,7 @@ export function PolicyEditPage() {
         policyApi.get(name, namespace).then((r) => {
           setYamlContent(r.rawYaml)
           setPolicyMode(r.mode === 'Protect' ? 'Protect' : 'Monitoring')
+          setManaged(!!r.imageLock)
           // A manifest applied with kubectl opens as the YAML its author wrote,
           // the same way Admission Policy and Network Policy treat anything not
           // built here — even when the form could show it, a save from the form
@@ -177,7 +180,7 @@ export function PolicyEditPage() {
   }
 
   // Viewer: read-only YAML view
-  if (!isAdmin) {
+  if (!isAdmin || managed) {
     return (
       <>
         <div className="mb-6 flex items-start justify-between">

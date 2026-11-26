@@ -160,6 +160,9 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 					return
 				}
 			}
+			if refuseImageLock(w, r, store, urlName, wantNs) {
+				return
+			}
 			if err := store.ApplyRaw(r.Context(), req.RawYAML, editor); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 				return
@@ -191,12 +194,25 @@ func updatePolicy(store *k8s.Store) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		if refuseImageLock(w, r, store, urlName, wantNs) {
+			return
+		}
 		if err := store.Apply(r.Context(), tp, editor); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to apply policy"})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	}
+}
+
+// refuseImageLock answers for an edit of a policy whose list Sentinel writes.
+func refuseImageLock(w http.ResponseWriter, r *http.Request, store *k8s.Store, name, namespace string) bool {
+	rec, err := store.Get(r.Context(), name, namespace)
+	if err != nil || rec.ImageLock == "" {
+		return false
+	}
+	writeJSON(w, http.StatusConflict, map[string]string{"error": "this policy's list is read from the workload's images and is not edited; switch its mode, or delete it"})
+	return true
 }
 
 func deletePolicy(store *k8s.Store) http.HandlerFunc {

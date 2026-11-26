@@ -230,3 +230,19 @@ func TestTheAgentsOwnExportWritesAreNotEvents(t *testing.T) {
 		}
 	}
 }
+
+// At security_bprm_check the process is still the one doing the starting. The
+// event is about the file in the argument, and reads as that file being run.
+func TestABlockedStartNamesTheFileThatWasStarted(t *testing.T) {
+	evt, ok := parseTetragonLog(`{"process_kprobe":{"process":{"binary":"/bin/sh",` +
+		`"pod":{"namespace":"demo","name":"web-1","container":{"name":"app"}}},` +
+		`"function_name":"security_bprm_check",` +
+		`"args":[{"linux_binprm_arg":{"path":"/tmp/evil","permission":"-rwxr-xr-x"}}],` +
+		`"policy_name":"image-lock-web","action":"KPROBE_ACTION_SIGKILL"},"node_name":"n1"}`)
+	if !ok {
+		t.Fatal("dropped")
+	}
+	if evt.Binary != "/tmp/evil" || evt.ParentBin != "/bin/sh" || evt.Action != "kill" {
+		t.Errorf("binary = %q, parent = %q, action = %q", evt.Binary, evt.ParentBin, evt.Action)
+	}
+}

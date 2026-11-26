@@ -56,6 +56,14 @@ export const policyApi = {
   setMode: (name: string, namespace: string | undefined, mode: 'Monitoring' | 'Protect'): Promise<void> =>
     api.put(`/policies/${name}/mode`, { mode }, { params: { namespace } }),
 
+  // Limits a workload to the files its images came with. Reading them takes a
+  // moment on a large image.
+  lockToImage: (namespace: string, kind: string, name: string, mode: 'Monitoring' | 'Protect'): Promise<{ name: string; blocksOutside: boolean }> =>
+    api.post('/policies/image-lock', { namespace, kind, name, mode }, { timeout: 90_000 }).then((r) => r.data),
+
+  workloads: (namespace: string): Promise<{ kind: string; name: string }[]> =>
+    api.get('/workloads', { params: { namespace } }).then((r) => r.data),
+
   // Renders the YAML the server would apply, using the same builder that applies
   // it. The body shape has to match the handler, which reads {form, action} —
   // this posted the form at the top level and nothing called it, so nothing

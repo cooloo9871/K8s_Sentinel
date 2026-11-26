@@ -150,11 +150,27 @@ func (s *Store) procNames(ctx context.Context, agent podEndpoint, procs []*tetra
 	if stdin.Len() == 0 {
 		return nil, nil
 	}
+	out, err := s.execInAgent(ctx, agent.Name, procNamesScript, &stdin)
+	if err != nil {
+		// What was answered before it failed still stands: one workload that
+		// makes the lookup slow does not cost the node's other pods theirs.
+		// The last line may be cut short, and is left out.
+		out = out[:bytes.LastIndexByte(out, '\n')+1]
+	}
+	return parseProcNames(out), err
+}
+
+// execInAgent runs a fixed script in one Tetragon agent's container, which has
+// the node's /proc, and returns what it printed.
+func (s *Store) execInAgent(ctx context.Context, agent, script string, stdin *bytes.Buffer) ([]byte, error) {
+	if s.restCfg == nil || s.typed == nil {
+		return nil, fmt.Errorf("no cluster connection")
+	}
 	url := s.typed.CoreV1().RESTClient().Post().Resource("pods").
-		Namespace(tetragonNamespace()).Name(agent.Name).SubResource("exec").
+		Namespace(tetragonNamespace()).Name(agent).SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: "tetragon",
-			Command:   []string{"sh", "-c", procNamesScript},
+			Command:   []string{"sh", "-c", script},
 			Stdin:     true,
 			Stdout:    true,
 			Stderr:    true,
@@ -178,19 +194,14 @@ func (s *Store) procNames(ctx context.Context, agent podEndpoint, procs []*tetra
 	defer cancel()
 	var stdout, stderr bytes.Buffer
 	if err := exec.StreamWithContext(execCtx, remotecommand.StreamOptions{
-		Stdin: &stdin, Stdout: &stdout, Stderr: &stderr,
+		Stdin: stdin, Stdout: &stdout, Stderr: &stderr,
 	}); err != nil {
-		// What was answered before it failed still stands: one workload that
-		// makes the lookup slow does not cost the node's other pods theirs.
-		// The last line may be cut short, and is left out.
-		out := stdout.Bytes()
-		out = out[:bytes.LastIndexByte(out, '\n')+1]
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
 			err = fmt.Errorf("%w: %s", err, firstLine(msg))
 		}
-		return parseProcNames(out), err
+		return stdout.Bytes(), err
 	}
-	return parseProcNames(stdout.Bytes()), nil
+	return stdout.Bytes(), nil
 }
 
 func firstLine(s string) string {

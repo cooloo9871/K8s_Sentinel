@@ -575,6 +575,21 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 		}
 	}
 
+	// At security_bprm_check the file about to be run is the argument, and the
+	// process is still the one starting it.
+	if evt.Function == "security_bprm_check" {
+		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
+			if arg0, ok := args[0].(map[string]any); ok {
+				if b := anyMap(arg0, "linux_binprm_arg", "linuxBinprmArg"); b != nil {
+					if execBin := anyStr(b, "path"); execBin != "" {
+						evt.ParentBin = evt.Binary
+						evt.Binary = execBin
+					}
+				}
+			}
+		}
+	}
+
 	return evt, true
 }
 

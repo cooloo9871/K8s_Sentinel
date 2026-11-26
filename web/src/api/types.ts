@@ -30,6 +30,8 @@ export interface PolicyRecord {
   scope: 'cluster' | 'namespaced'
   mode: 'Monitoring' | 'Protect' | 'Mixed'
   unconditional?: boolean
+  /** The workload ("Kind/name") an image lock was made for. */
+  imageLock?: string
   createdBy: string
   createdAt: string
   rawYaml: string

@@ -36,10 +36,13 @@ type PolicyRecord struct {
 	Mode      string `json:"mode"`  // "Monitoring", "Protect", or "Mixed"
 	// True when a selector that reports has no condition at all, so it matches
 	// every call to its hook. Protect leaves such a selector reporting.
-	Unconditional bool   `json:"unconditional,omitempty"`
-	CreatedBy     string `json:"createdBy"` // sentinel username or "k8s-apply"
-	CreatedAt     string `json:"createdAt"`
-	RawYAML       string `json:"rawYaml"`
+	Unconditional bool `json:"unconditional,omitempty"`
+	// The workload ("Kind/name") an image lock was made for. Sentinel writes
+	// such a policy's list itself, so it is not edited by hand.
+	ImageLock string `json:"imageLock,omitempty"`
+	CreatedBy string `json:"createdBy"` // sentinel username or "k8s-apply"
+	CreatedAt string `json:"createdAt"`
+	RawYAML   string `json:"rawYaml"`
 }
 
 // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
@@ -1089,6 +1092,7 @@ func toRecord(item unstructured.Unstructured, scope string) (PolicyRecord, error
 		Scope:         scope,
 		Mode:          detectMode(item.Object),
 		Unconditional: hasUnconditional(item.Object),
+		ImageLock:     item.GetAnnotations()[annotationImageLock],
 		CreatedBy:     createdBy,
 		CreatedAt:     createdAt,
 		RawYAML:       string(rawYAML),

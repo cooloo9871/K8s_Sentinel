@@ -18,7 +18,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { policyApi, modeApi, MODE_CHANGED } from '../api/client'
+import { Label } from '@/components/ui/label'
+import { NamespaceSelect } from '../components/NamespaceSelect'
+import { policyApi, modeApi, namespaceApi, MODE_CHANGED } from '../api/client'
 import { useToast } from '../layout/AppToaster'
 import { useAuth } from '../layout/AuthContext'
 import type { PolicyRecord } from '../api/types'
@@ -46,6 +48,49 @@ export function PolicyListPage() {
   } | null>(null)
 
   const [modeModal, setModeModal] = useState(false)
+
+  // Lock to Image
+  const [lockOpen, setLockOpen] = useState(false)
+  const [lockNamespaces, setLockNamespaces] = useState<string[]>([])
+  const [lockNs, setLockNs] = useState('')
+  const [lockWorkloads, setLockWorkloads] = useState<{ kind: string; name: string }[]>([])
+  const [lockWorkload, setLockWorkload] = useState('')
+  const [lockMode, setLockMode] = useState<'Monitoring' | 'Protect'>('Monitoring')
+  const [locking, setLocking] = useState(false)
+
+  const openLock = () => {
+    setLockNs('')
+    setLockWorkloads([])
+    setLockWorkload('')
+    setLockMode('Monitoring')
+    setLockOpen(true)
+    namespaceApi.list().then(setLockNamespaces).catch(() => setLockNamespaces([]))
+  }
+
+  const chooseLockNs = (ns: string) => {
+    setLockNs(ns)
+    setLockWorkload('')
+    setLockWorkloads([])
+    policyApi.workloads(ns).then(setLockWorkloads).catch(() => toast.error('Failed to load workloads'))
+  }
+
+  const handleLock = async () => {
+    const [kind, name] = lockWorkload.split('/')
+    setLocking(true)
+    try {
+      const r = await policyApi.lockToImage(lockNs, kind, name, lockMode)
+      window.dispatchEvent(new Event(MODE_CHANGED))
+      toast.success(r.blocksOutside
+        ? `${name} locked to its image`
+        : `${name} locked to its image. kubectl exec is not stopped for this workload.`)
+      setLockOpen(false)
+      fetchPolicies()
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : 'Failed to lock the workload')
+    } finally {
+      setLocking(false)
+    }
+  }
 
   const fetchPolicies = async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
@@ -121,7 +166,7 @@ export function PolicyListPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Input
             placeholder="Search by name..."
@@ -131,7 +176,7 @@ export function PolicyListPage() {
           />
           <ScopeFilter value={nsFilter} onChange={setNsFilter} namespaces={namespaces} />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => fetchPolicies(true)} disabled={loading}>
             <IconRefresh size={14} className="mr-1.5" />
             Refresh
@@ -146,6 +191,9 @@ export function PolicyListPage() {
               <Button size="sm" onClick={() => navigate('/policies/tracing/new')}>+ New Policy</Button>
               <Button size="sm" variant="outline" onClick={() => navigate('/policies/tracing/new?mode=yaml')}>
                 + New YAML
+              </Button>
+              <Button size="sm" variant="outline" onClick={openLock}>
+                + Lock to Image
               </Button>
             </>
           )}
@@ -228,7 +276,7 @@ export function PolicyListPage() {
                                 navigate(`/policies/tracing/${p.name}/edit?namespace=${p.namespace ?? ''}`)
                               }
                             >
-                              Edit
+                              {p.imageLock ? 'View' : 'Edit'}
                             </Button>
                             <Button
                               variant="destructive"
@@ -258,6 +306,60 @@ export function PolicyListPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={lockOpen} onOpenChange={(open) => { if (!locking) setLockOpen(open) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Lock to Image</AlertDialogTitle>
+            <AlertDialogDescription>
+              The workload may run only the files its image came with, started by its own processes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Namespace</Label>
+              <NamespaceSelect value={lockNs} onChange={chooseLockNs} namespaces={lockNamespaces} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Workload</Label>
+              <Select value={lockWorkload} onValueChange={setLockWorkload} disabled={!lockNs}>
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue placeholder={lockNs && lockWorkloads.length === 0 ? 'No workloads' : 'Select a workload'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {lockWorkloads.map(w => (
+                      <SelectItem key={`${w.kind}/${w.name}`} value={`${w.kind}/${w.name}`}>
+                        {w.name} <span className="text-muted-foreground">{w.kind}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Mode</Label>
+              <Select value={lockMode} onValueChange={(v) => setLockMode(v as 'Monitoring' | 'Protect')}>
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="Monitoring">Monitoring</SelectItem>
+                    <SelectItem value="Protect">Protect</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={locking}>Cancel</AlertDialogCancel>
+            <Button onClick={handleLock} disabled={!lockWorkload || locking}>
+              {locking ? 'Reading the image...' : 'Lock'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Every policy back to Monitoring */}
       <AlertDialog open={modeModal} onOpenChange={setModeModal}>
