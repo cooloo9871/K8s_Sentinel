@@ -11,7 +11,7 @@ export function AppLayout({ onLogout }: Props) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <AppHeader onLogout={onLogout} />
         <main className="flex-1 min-w-0 px-8 py-6">
           <Outlet />

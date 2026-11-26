@@ -101,28 +101,3 @@ func (s *Store) MarkInactive(ctx context.Context, records []PolicyRecord) {
 		records[i].Inactive = failed[records[i].Namespace+"/"+records[i].Name]
 	}
 }
-
-// AwaitPolicyLoad waits, briefly, for the agents to take a policy that was
-// just written, and returns why one did not. It returns "" once every agent
-// has it in force, and also when the wait runs out without a failure.
-func (s *Store) AwaitPolicyLoad(ctx context.Context, name, namespace string) string {
-	key := namespace + "/" + name
-	deadline := time.Now().Add(6 * time.Second)
-	for {
-		failed, loaded, agents := s.readPolicyLoads(ctx)
-		if why, ok := failed[key]; ok {
-			s.policyLoads.mu.Lock()
-			s.policyLoads.expires = time.Time{} // the list shows it at once
-			s.policyLoads.mu.Unlock()
-			return why
-		}
-		if agents == 0 || loaded[key] >= agents || time.Now().After(deadline) {
-			return ""
-		}
-		select {
-		case <-ctx.Done():
-			return ""
-		case <-time.After(time.Second):
-		}
-	}
-}

@@ -125,9 +125,8 @@ export function PolicyTemplatesPage() {
     }
     setCreating(true)
     try {
-      const r = await policyApi.create({ source: 'yaml', rawYaml: yaml })
-      if (r.inactive) toast.error(`${policyName.trim()} was created but is not active`)
-      else toast.success(`Policy "${policyName.trim()}" created.`)
+      await policyApi.create({ source: 'yaml', rawYaml: yaml })
+      toast.success(`Policy "${policyName.trim()}" created.`)
       setSelected(null)
     } catch {
       toast.error('Failed to create policy')

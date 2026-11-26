@@ -65,26 +65,12 @@ func TestAPolicyAnAgentFailedToLoadIsMarked(t *testing.T) {
 	}
 }
 
-func TestACreateSaysWhenThePolicyWasNotTaken(t *testing.T) {
-	enabled := tetragon.TracingPolicyState_TP_STATE_ENABLED
-	s := loadStore(t, map[string][]*tetragon.TracingPolicyStatus{
-		"m1": {status("shop", "ok", enabled, ""), status("shop", "full", tetragon.TracingPolicyState_TP_STATE_LOAD_ERROR, "no room")},
-		"w1": {status("shop", "ok", enabled, "")},
-	})
-	if why := s.AwaitPolicyLoad(context.Background(), "ok", "shop"); why != "" {
-		t.Errorf("loaded everywhere: %q", why)
-	}
-	if why := s.AwaitPolicyLoad(context.Background(), "full", "shop"); why != "no room" {
-		t.Errorf("failed on one node: %q", why)
-	}
-}
-
 // With no agent to ask, nothing is known and nothing is claimed.
 func TestNoAgentMarksNothing(t *testing.T) {
 	s := NewStore(emptyPolicyClient(), k8sfake.NewSimpleClientset(), nil, "")
 	records := []PolicyRecord{{Name: "p", Namespace: "shop"}}
 	s.MarkInactive(context.Background(), records)
-	if records[0].Inactive != "" || s.AwaitPolicyLoad(context.Background(), "p", "shop") != "" {
+	if records[0].Inactive != "" {
 		t.Error("a policy was called inactive with no agent to say so")
 	}
 }

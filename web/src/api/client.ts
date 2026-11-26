@@ -38,9 +38,8 @@ export const policyApi = {
   get: (name: string, namespace?: string): Promise<PolicyRecord> =>
     api.get(`/policies/${name}`, { params: { namespace } }).then((r) => r.data),
 
-  // `inactive` is set when the policy was written and Tetragon did not load it.
-  create: (payload: CreatePolicyPayload): Promise<{ inactive?: string }> =>
-    api.post('/policies', payload).then((r) => r.data ?? {}),
+  create: (payload: CreatePolicyPayload): Promise<void> =>
+    api.post('/policies', payload),
 
   // The namespace the policy opened from is pinned on the request ("" for a
   // cluster-scoped one), so the server can refuse an edit that renames the
@@ -57,7 +56,7 @@ export const policyApi = {
 
   // Limits a workload to the files its images came with. Reading them takes a
   // moment on a large image.
-  lockToImage: (namespace: string, kind: string, name: string, mode: 'Monitoring' | 'Protect'): Promise<{ name: string; blocksOutside: boolean; inactive?: string }> =>
+  lockToImage: (namespace: string, kind: string, name: string, mode: 'Monitoring' | 'Protect'): Promise<{ name: string; blocksOutside: boolean }> =>
     api.post('/policies/image-lock', { namespace, kind, name, mode }, { timeout: 90_000 }).then((r) => r.data),
 
   workloads: (namespace: string): Promise<{ kind: string; name: string }[]> =>

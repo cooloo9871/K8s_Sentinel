@@ -35,7 +35,7 @@ Each layer does what only it can do:
 
 ## Limits
 
-- **At most 127 Tracing Policies in a cluster.** Tetragon holds 128 policies on a node, one of which it keeps for itself, and loads every policy on every node. The count is of all of them together: policies written by hand, policies made from Behavior Discovery and each **Image Lockdown**. A policy past the limit is created and does nothing; the Tracing Policy list marks it **Not active**, and creating it says so. Deleting other policies does not bring it to life: delete it and create it again. Measured on Tetragon 1.8.0. The number is fixed in Tetragon ([cilium/tetragon#4191](https://github.com/cilium/tetragon/issues/4191)) and is raised here when Tetragon raises it.
+- **At most 127 Tracing Policies in a cluster.** Tetragon holds 128 policies on a node, one of which it keeps for itself, and loads every policy on every node. The count is of all of them together: policies written by hand, policies made from Behavior Discovery and each **Image Lockdown**. A policy past the limit is created and does nothing; the Tracing Policy list marks it **Not active**. Deleting other policies does not bring it to life: delete it and create it again. Measured on Tetragon 1.8.0. The number is fixed in Tetragon ([cilium/tetragon#4191](https://github.com/cilium/tetragon/issues/4191)) and is raised here when Tetragon raises it.
 
 ## Quick start
 

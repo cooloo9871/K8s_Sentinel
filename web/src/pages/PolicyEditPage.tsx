@@ -132,9 +132,9 @@ export function PolicyEditPage() {
       setLoading(true)
       try {
         const payload = { source: 'form' as const, form: formValues, action }
-        const r = isNew ? await policyApi.create(payload) : (await policyApi.update(name!, payload, namespace), undefined)
-        if (r?.inactive) toast.error(`${formValues.name.trim()} was created but is not active`)
-        else toast.success('Policy applied')
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload, namespace)
+        toast.success('Policy applied')
         navigate('/policies/tracing')
       } catch (e) {
         // The builder refuses some forms — no rules, a relative binary path —
@@ -158,9 +158,9 @@ export function PolicyEditPage() {
       setLoading(true)
       try {
         const payload = { source: 'yaml' as const, rawYaml: yamlContent }
-        const r = isNew ? await policyApi.create(payload) : (await policyApi.update(name!, payload, namespace), undefined)
-        if (r?.inactive) toast.error('The policy was created but is not active')
-        else toast.success('Policy applied')
+        if (isNew) await policyApi.create(payload)
+        else await policyApi.update(name!, payload, namespace)
+        toast.success('Policy applied')
         navigate('/policies/tracing')
       } catch (e) {
         toast.error(e instanceof Error && e.message ? e.message : 'Failed to apply YAML')

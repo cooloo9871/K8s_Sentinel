@@ -79,8 +79,7 @@ export function PolicyListPage() {
     setLocking(true)
     try {
       const r = await policyApi.lockToImage(lockNs, kind, name, lockMode)
-      if (r.inactive) toast.error(`${r.name} was created but is not active`)
-      else toast.success(r.blocksOutside
+      toast.success(r.blocksOutside
         ? `${name} locked to its image`
         : `${name} locked to its image. kubectl exec is not stopped for this workload.`)
       setLockOpen(false)
@@ -227,11 +226,13 @@ export function PolicyListPage() {
                 ) : (
                   filtered.map((p) => (
                     <TableRow key={`${p.scope}-${p.namespace ?? ''}-${p.name}`}>
-                      <TableCell className="font-medium">
-                        {p.name}
-                        {p.inactive && (
-                          <Badge variant="destructive" className="ml-2" title={p.inactive}>Not active</Badge>
-                        )}
+                      <TableCell className="w-full max-w-0 min-w-56 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate" title={p.name}>{p.name}</span>
+                          {p.inactive && (
+                            <Badge variant="destructive" className="shrink-0" title={p.inactive}>Not active</Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>

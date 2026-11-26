@@ -419,15 +419,14 @@ Deployment in seconds.
 Tetragon loaded it: its status is empty, and a policy past Tetragon's limit of
 128 a node (`POLICY_FILTER_MAX_POLICIES`, one kept by Tetragon) looks like any
 other. So the agents are asked, over the gRPC connection events already come
-by: `ListTracingPolicies` on every agent at once, when the policy list is read
-and after a create, reused for 10 seconds. Nothing runs in the background.
+by: `ListTracingPolicies` on every agent at once, when the policy list is read,
+reused for 10 seconds. Nothing runs in the background.
 
 A policy is marked when any agent reports `LOAD_ERROR` or `ERROR` for it. One
 an agent does not list yet, or is still loading, is not marked; nor is anything
-when no agent answers. After a create the answer is waited for up to six
-seconds, which is enough unless Tetragon has a queue: it loads policies one at
-a time, about a second each, and a create behind a hundred others is answered
-before Tetragon reaches it. The list shows it once it has.
+when no agent answers. A create does not wait for the agents: Tetragon loads
+policies one at a time, about a second each, so the answer would hold every
+create for seconds. The list shows a failure once Tetragon has reached it.
 
 A policy that failed for want of room is not tried again when room is made
 (measured: six deleted, the five that had failed stayed failed).
