@@ -28,10 +28,13 @@ jobs:
           npm test
           npm run build
 
-      # The Go build embeds web/dist, so it comes after the frontend.
+      # The Go build embeds web/dist, so it comes after the frontend. The
+      # newest patch release, as the image is built: go.mod names the oldest
+      # that will do, whose standard library has known vulnerabilities.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: '1.26'
+          check-latest: true
 
       - name: Format
         run: test -z "$(gofmt -l cmd internal)"
