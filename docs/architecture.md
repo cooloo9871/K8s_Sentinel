@@ -77,9 +77,8 @@ same `parseTetragonLog` the CLI output used. The careful parsing, dedup and
 attribution logic is reused unchanged; a bridge test pins that the protobuf still
 reproduces the CLI shape.
 
-**What a process is called**: the path it was started by, which is what
-`sys_execve` is given and so what a process rule compares. Tetragon reports that
-for every exec it sees. A process that was running before the agent started it
+**What a process is called**: the path it was started by, which is what a
+process rule compares. Tetragon reports that for every exec it sees. A process that was running before the agent started it
 reads from `/proc` instead, where `exe` is the file the kernel loaded with links
 followed (`coreutils` for `sleep`, `dash` for `/bin/sh`), and it discards
 `argv[0]`, the one place the started-by name is left. For those processes
@@ -456,6 +455,17 @@ it. A shell looking a command up tries `execve` in each directory of `PATH`, and
 every failed attempt is a path that is not on the list: `dash` had its own
 commands killed. `security_bprm_check` runs once the kernel has opened the file,
 so the path is the resolved one, and `/bin/sh` and `/usr/bin/sh` are one entry.
+
+**Process rules written in the form** are on the same hook since v0.84.6, for
+the same reason, and read something else there: `resolve: filename` on the
+argument takes the `filename` of the `linux_binprm`, the path `execve` was
+given with links not followed. A whitelist therefore still holds the paths
+programs are started by, which is what Behavior Discovery learns, and on an
+image of links to one multi-call binary each command stays its own entry. Before
+that they were on `sys_execve`, and `env ls` with `/usr/bin/ls` on the whitelist
+was killed for trying `/usr/local/sbin/ls` first. The form still reads a policy
+on `sys_execve`, and saves it on the new hook. `resolve` needs the kernel's BTF,
+which Tetragon needs too.
 
 **Where the list comes from.** Tetragon has no condition for "this file came
 with the image", so the list is read on the node, with the same exec into the

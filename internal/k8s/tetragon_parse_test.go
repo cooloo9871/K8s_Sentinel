@@ -246,3 +246,19 @@ func TestABlockedStartNamesTheFileThatWasStarted(t *testing.T) {
 		t.Errorf("binary = %q, parent = %q, action = %q", evt.Binary, evt.ParentBin, evt.Action)
 	}
 }
+
+// A process rule reads the path at the same hook as a string: what the program
+// was started by, the name its whitelist holds.
+func TestAProcessRuleNamesThePathThatWasStarted(t *testing.T) {
+	evt, ok := parseTetragonLog(`{"process_kprobe":{"process":{"binary":"/usr/bin/env",` +
+		`"pod":{"namespace":"demo","name":"web-1","container":{"name":"app"}}},` +
+		`"function_name":"security_bprm_check",` +
+		`"args":[{"string_arg":"/bin/cat"}],` +
+		`"policy_name":"only-nginx","action":"KPROBE_ACTION_SIGKILL"},"node_name":"n1"}`)
+	if !ok {
+		t.Fatal("dropped")
+	}
+	if evt.Binary != "/bin/cat" || evt.ParentBin != "/usr/bin/env" || evt.Action != "kill" {
+		t.Errorf("binary = %q, parent = %q, action = %q", evt.Binary, evt.ParentBin, evt.Action)
+	}
+}

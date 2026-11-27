@@ -469,3 +469,38 @@ ${spec}`
     expect(yamlToForm(policy(`  kprobes:\n${kprobe('Post')}${kprobe('Sigkill')}`))).toBeNull()
   })
 })
+
+describe('process rules at security_bprm_check', () => {
+  const policy = (arg: string) => `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: p
+spec:
+  kprobes:
+    - call: security_bprm_check
+      syscall: false
+      args:
+        - index: 0
+${arg}
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: NotEqual
+              values:
+                - /usr/sbin/nginx
+          matchActions:
+            - action: Sigkill
+`
+
+  it('reads what the builder writes', () => {
+    const form = yamlToForm(policy('          type: string\n          resolve: filename'))
+    expect(form?.processMode).toBe('whitelist')
+    expect(form?.process).toEqual([{ binaries: ['/usr/sbin/nginx'] }])
+  })
+
+  // The file itself is another path than the one a process rule holds: saved
+  // from the form it would be compared with the started-by path instead.
+  it('leaves a policy that reads the file to the YAML editor', () => {
+    expect(yamlToForm(policy('          type: linux_binprm'))).toBeNull()
+  })
+})

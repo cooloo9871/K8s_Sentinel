@@ -87,6 +87,8 @@ export const podApi = {
 export interface SelectorPreviewResult {
   total: number
   pods: { namespace: string; name: string }[]
+  // Of every pod matched, init containers among them.
+  containers: string[]
 }
 
 export const selectorApi = {

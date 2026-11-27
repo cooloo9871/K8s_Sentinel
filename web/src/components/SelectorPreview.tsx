@@ -7,10 +7,12 @@ import { useAuth } from '../layout/AuthContext'
 // silently governs nothing) or everything. This line answers "which pods would
 // this govern, right now" while the selector is being typed, which is the
 // cheapest place to catch either.
-export function SelectorPreview({ namespace, matchLabels }: {
+export function SelectorPreview({ namespace, matchLabels, onContainers }: {
   // "" means every namespace.
   namespace: string
   matchLabels: Record<string, string>
+  // Told the containers of the pods selected, and none when they are not known.
+  onContainers?: (names: string[]) => void
 }) {
   // The result is keyed by the request that produced it, so an answer for an
   // earlier selector is never rendered under the current one. Warnings here
@@ -33,14 +35,14 @@ export function SelectorPreview({ namespace, matchLabels }: {
   const needsNamespace = limited && namespace === ''
 
   useEffect(() => {
-    if (wholeCluster || needsNamespace) return
+    if (wholeCluster || needsNamespace) { onContainers?.([]); return }
     let stale = false
     const delay = rendered.current ? 400 : 0
     rendered.current = true
     const t = setTimeout(() => {
       selectorApi.preview(namespace, matchLabels)
-        .then(r => { if (!stale) setResult({ key, data: r }) })
-        .catch(() => { if (!stale) setFailedKey(key) })
+        .then(r => { if (!stale) { setResult({ key, data: r }); onContainers?.(r.containers ?? []) } })
+        .catch(() => { if (!stale) { setFailedKey(key); onContainers?.([]) } })
     }, delay)
     return () => { stale = true; clearTimeout(t) }
   // eslint-disable-next-line react-hooks/exhaustive-deps

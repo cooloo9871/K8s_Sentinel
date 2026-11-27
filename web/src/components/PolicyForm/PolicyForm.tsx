@@ -95,6 +95,8 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   }, [JSON.stringify(Object.fromEntries(Object.entries(value.podSelector ?? {}).sort(([a], [b]) => a.localeCompare(b))))])
 
   const containers = value.containers ?? []
+  // Those of the pods the selector matches now. With none known, a name is typed.
+  const [podContainers, setPodContainers] = useState<string[]>([])
   const setContainers = (names: string[]) =>
     onChange({ ...value, containers: names.length > 0 ? names : undefined })
 
@@ -227,6 +229,7 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
               <SelectorPreview
                 namespace={value.namespace ?? ''}
                 matchLabels={completePairs(localLabels)}
+                onContainers={setPodContainers}
               />
               <div>
                 <Button variant="outline" size="sm" onClick={addLabel}>
@@ -245,12 +248,33 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
             <div className="flex flex-col gap-2">
               {containers.map((name, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <Input
-                    aria-label="Container name"
-                    value={name}
-                    onChange={(e) => setContainers(containers.map((c, j) => (j === i ? e.target.value : c)))}
-                    className="h-8 font-mono text-sm"
-                  />
+                  {podContainers.length > 0 ? (
+                    <Select
+                      value={name}
+                      onValueChange={(v) => setContainers(containers.map((c, j) => (j === i ? (v ?? '') : c)))}
+                    >
+                      <SelectTrigger aria-label="Container name" className="h-8 w-full font-mono text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {/* A name already in the policy stays, whether a pod has it now or not. */}
+                          {[...new Set([...(name ? [name] : []), ...podContainers])]
+                            .filter((c) => c === name || !containers.includes(c))
+                            .map((c) => (
+                              <SelectItem key={c} value={c} className="font-mono">{c}</SelectItem>
+                            ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      aria-label="Container name"
+                      value={name}
+                      onChange={(e) => setContainers(containers.map((c, j) => (j === i ? e.target.value : c)))}
+                      className="h-8 font-mono text-sm"
+                    />
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"

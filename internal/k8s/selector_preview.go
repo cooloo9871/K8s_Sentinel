@@ -30,28 +30,40 @@ const previewCap = 15
 // namespaces. This exists because the most damaging policy mistake is a
 // selector that matches something other than what the author meant — nothing,
 // or everything — and the cheapest place to catch that is before Apply.
-func (s *Store) SelectPods(ctx context.Context, namespace string, matchLabels map[string]string) (int, []SelectedPod, error) {
+//
+// It also names the containers of every pod matched, init containers among
+// them, for the form to offer: a policy can be kept to some of them.
+func (s *Store) SelectPods(ctx context.Context, namespace string, matchLabels map[string]string) (int, []SelectedPod, []string, error) {
 	if s.typed == nil {
-		return 0, nil, fmt.Errorf("kubernetes client not initialised")
+		return 0, nil, nil, fmt.Errorf("kubernetes client not initialised")
 	}
 	// Validated, not just joined: a value containing a comma would otherwise
 	// splice extra conditions into the selector string, and an invalid
 	// character would surface as an apiserver error blamed on the cluster.
 	sel, err := labels.ValidatedSelectorFromSet(matchLabels)
 	if err != nil {
-		return 0, nil, fmt.Errorf("%w: %v", ErrInvalidSelector, err)
+		return 0, nil, nil, fmt.Errorf("%w: %v", ErrInvalidSelector, err)
 	}
 	list, err := s.typed.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector:   sel.String(),
 		ResourceVersion: fromCache.ResourceVersion,
 	})
 	if err != nil {
-		return 0, nil, fmt.Errorf("list pods: %w", err)
+		return 0, nil, nil, fmt.Errorf("list pods: %w", err)
 	}
 	pods := make([]SelectedPod, 0, len(list.Items))
+	seen := map[string]bool{}
+	containers := []string{}
 	for _, p := range list.Items {
 		pods = append(pods, SelectedPod{Namespace: p.Namespace, Name: p.Name})
+		for _, c := range append(p.Spec.InitContainers, p.Spec.Containers...) {
+			if !seen[c.Name] {
+				seen[c.Name] = true
+				containers = append(containers, c.Name)
+			}
+		}
 	}
+	sort.Strings(containers)
 	// Deterministic order, so the preview does not reshuffle between polls.
 	sort.Slice(pods, func(i, j int) bool {
 		if pods[i].Namespace != pods[j].Namespace {
@@ -63,5 +75,5 @@ func (s *Store) SelectPods(ctx context.Context, namespace string, matchLabels ma
 	if len(pods) > previewCap {
 		pods = pods[:previewCap]
 	}
-	return total, pods, nil
+	return total, pods, containers, nil
 }

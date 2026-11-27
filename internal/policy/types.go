@@ -79,6 +79,8 @@ type KProbeSpec struct {
 type KProbeArg struct {
 	Index int    `yaml:"index" json:"index"`
 	Type  string `yaml:"type"  json:"type"`
+	// A member of the struct the argument points to, read in its place.
+	Resolve string `yaml:"resolve,omitempty" json:"resolve,omitempty"`
 }
 
 type KProbeSelector struct {

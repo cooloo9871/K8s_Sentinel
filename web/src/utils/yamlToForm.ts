@@ -118,8 +118,14 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     const call: string = kp.call ?? ''
     const selectors: any[] = kp.selectors ?? []
 
-    // Match sys_execve and any arch-prefixed variant (__x64_sys_execve, __arm64_sys_execve…)
-    if (call === 'sys_execve' || call.includes('sys_execve')) {
+    // What the builder writes: security_bprm_check, reading the path the program
+    // was started by. The same hook reading anything else (the file itself, as
+    // an Image Lockdown does) compares other paths, and is not a process rule.
+    const startedBy = call === 'security_bprm_check'
+      && kp.args?.length === 1 && kp.args[0].type === 'string' && kp.args[0].resolve === 'filename'
+    // Policies saved before that are on sys_execve, or an arch-prefixed variant
+    // (__x64_sys_execve, __arm64_sys_execve…). They are read, and saved the new way.
+    if (startedBy || call.includes('sys_execve')) {
       if (!representable(kp, PROCESS_OPERATORS)) return null
       for (const sel of selectors) {
         // The builder writes exactly one index-0 arg per selector. A second one

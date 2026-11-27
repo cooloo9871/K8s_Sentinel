@@ -576,15 +576,18 @@ func parseTetragonLog(line string) (TetragonEvent, bool) {
 	}
 
 	// At security_bprm_check the file about to be run is the argument, and the
-	// process is still the one starting it.
+	// process is still the one starting it. An Image Lockdown reads the file
+	// itself; a process rule reads the path it was started by, as a string.
 	if evt.Function == "security_bprm_check" {
 		if args, ok := kp["args"].([]any); ok && len(args) > 0 {
 			if arg0, ok := args[0].(map[string]any); ok {
+				execBin := anyStr(arg0, "string_arg", "stringArg")
 				if b := anyMap(arg0, "linux_binprm_arg", "linuxBinprmArg"); b != nil {
-					if execBin := anyStr(b, "path"); execBin != "" {
-						evt.ParentBin = evt.Binary
-						evt.Binary = execBin
-					}
+					execBin = anyStr(b, "path")
+				}
+				if execBin != "" {
+					evt.ParentBin = evt.Binary
+					evt.Binary = execBin
 				}
 			}
 		}

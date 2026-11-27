@@ -25,11 +25,13 @@ func TestBuildProcessPolicy(t *testing.T) {
 		t.Fatalf("kprobes len = %d, want 1", len(got.Spec.KProbes))
 	}
 	kp := got.Spec.KProbes[0]
-	if kp.Call != "sys_execve" {
-		t.Errorf("call = %q, want sys_execve", kp.Call)
+	// Where the kernel has the file open: a path tried and not found along PATH
+	// never gets here. What is compared is still the path it was started by.
+	if kp.Call != "security_bprm_check" || kp.Syscall {
+		t.Errorf("call = %q, syscall = %v, want security_bprm_check, not a syscall", kp.Call, kp.Syscall)
 	}
-	if !kp.Syscall {
-		t.Error("syscall should be true for process rule")
+	if len(kp.Args) != 1 || kp.Args[0].Type != "string" || kp.Args[0].Resolve != "filename" {
+		t.Errorf("args = %+v, want the filename of the binprm as a string", kp.Args)
 	}
 }
 
@@ -228,12 +230,12 @@ func TestBuildMultipleRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	// One kprobe for sys_execve, one for security_file_permission
+	// One kprobe for the process rules, one for security_file_permission
 	if len(got.Spec.KProbes) != 2 {
 		t.Errorf("kprobes len = %d, want 2", len(got.Spec.KProbes))
 	}
-	if got.Spec.KProbes[0].Call != "sys_execve" {
-		t.Errorf("kprobes[0].call = %q, want sys_execve", got.Spec.KProbes[0].Call)
+	if got.Spec.KProbes[0].Call != "security_bprm_check" {
+		t.Errorf("kprobes[0].call = %q, want security_bprm_check", got.Spec.KProbes[0].Call)
 	}
 	if got.Spec.KProbes[1].Call != "security_file_permission" {
 		t.Errorf("kprobes[1].call = %q, want security_file_permission", got.Spec.KProbes[1].Call)

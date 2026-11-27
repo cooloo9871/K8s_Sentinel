@@ -25,7 +25,7 @@ func selectorPreview(store *k8s.Store) http.HandlerFunc {
 		if refuseOutside(w, r, req.Namespace) {
 			return
 		}
-		total, pods, err := store.SelectPods(r.Context(), req.Namespace, req.MatchLabels)
+		total, pods, containers, err := store.SelectPods(r.Context(), req.Namespace, req.MatchLabels)
 		if errors.Is(err, k8s.ErrInvalidSelector) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -34,6 +34,6 @@ func selectorPreview(store *k8s.Store) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"total": total, "pods": pods})
+		writeJSON(w, http.StatusOK, map[string]any{"total": total, "pods": pods, "containers": containers})
 	}
 }

@@ -40,8 +40,20 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		}}
 	}
 
-	// Process rules: ONE sys_execve kprobe with all values combined, matched
-	// exactly against the absolute path.
+	// Process rules: ONE kprobe with all values combined, matched exactly against
+	// the path the program is started by.
+	//
+	// The hook is security_bprm_check, and what is compared there is the
+	// filename of the linux_binprm: the path as execve was given it, links not
+	// followed. That is the path sys_execve has too, and sys_execve is where
+	// these rules used to be. But a program that looks a command up with
+	// execvp (env, nice, xargs, timeout, a subprocess call with a bare name)
+	// calls execve once for each directory of PATH until one is there, and at
+	// sys_execve every one of those calls is seen: with /usr/bin/ls on a
+	// whitelist, "env ls" was killed asking for /usr/local/sbin/ls, a file that
+	// does not exist. The kernel gets to security_bprm_check only with a file
+	// it has opened, so a path that is not there is never compared. It is also
+	// reached from execveat, which sys_execve is not.
 	//
 	// Suffix matching was the previous design, so that a binary invoked by a
 	// relative path still matched. It also meant a whitelist could be walked
@@ -75,9 +87,8 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 			processOp = "Equal"
 		}
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
-			Call:    "sys_execve",
-			Syscall: true,
-			Args:    []KProbeArg{{Index: 0, Type: "string"}},
+			Call: "security_bprm_check",
+			Args: []KProbeArg{{Index: 0, Type: "string", Resolve: "filename"}},
 			Selectors: []KProbeSelector{{
 				MatchArgs:    []ArgSelector{{Index: 0, Operator: processOp, Values: allBinaries}},
 				MatchActions: []ActionSelector{{Action: action}},

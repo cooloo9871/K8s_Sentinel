@@ -3,10 +3,13 @@ package k8s
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -27,7 +30,7 @@ func TestSelectPods(t *testing.T) {
 	s := NewStore(nil, typed, nil, "")
 	ctx := context.Background()
 
-	total, pods, err := s.SelectPods(ctx, "demo", map[string]string{"app": "web"})
+	total, pods, _, err := s.SelectPods(ctx, "demo", map[string]string{"app": "web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +38,7 @@ func TestSelectPods(t *testing.T) {
 		t.Errorf("namespaced: total=%d pods=%v", total, pods)
 	}
 
-	total, _, err = s.SelectPods(ctx, "", map[string]string{"app": "web"})
+	total, _, _, err = s.SelectPods(ctx, "", map[string]string{"app": "web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +48,7 @@ func TestSelectPods(t *testing.T) {
 
 	// An empty selector selects everything, which is what makes it the mistake
 	// worth previewing.
-	total, _, err = s.SelectPods(ctx, "", nil)
+	total, _, _, err = s.SelectPods(ctx, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +56,7 @@ func TestSelectPods(t *testing.T) {
 		t.Errorf("empty selector: total=%d, want 4", total)
 	}
 
-	total, _, err = s.SelectPods(ctx, "demo", map[string]string{"app": "nothing"})
+	total, _, _, err = s.SelectPods(ctx, "demo", map[string]string{"app": "nothing"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,9 +73,37 @@ func TestSelectPodsRefusesAnInvalidSelector(t *testing.T) {
 		{"app": "web,run=db"},
 		{"bad key!": "x"},
 	} {
-		_, _, err := s.SelectPods(context.Background(), "", labels)
+		_, _, _, err := s.SelectPods(context.Background(), "", labels)
 		if !errors.Is(err, ErrInvalidSelector) {
 			t.Errorf("labels %v: err = %v, want ErrInvalidSelector", labels, err)
 		}
+	}
+}
+
+// The form offers these to choose from, so they are those of every pod matched,
+// past the names the preview is cut to, each once.
+func TestSelectPodsNamesTheirContainers(t *testing.T) {
+	pod := func(name string, init []string, containers ...string) *corev1.Pod {
+		p := previewPod("demo", name, map[string]string{"app": "web"})
+		for _, c := range init {
+			p.Spec.InitContainers = append(p.Spec.InitContainers, corev1.Container{Name: c})
+		}
+		for _, c := range containers {
+			p.Spec.Containers = append(p.Spec.Containers, corev1.Container{Name: c})
+		}
+		return p
+	}
+	objs := []runtime.Object{pod("web-00", []string{"setup"}, "nginx", "proxy")}
+	for i := 1; i <= previewCap; i++ {
+		objs = append(objs, pod(fmt.Sprintf("web-%02d", i), nil, "nginx"))
+	}
+	objs = append(objs, pod("web-99", nil, "nginx", "late"), previewPod("demo", "db", map[string]string{"app": "db"}))
+	s := NewStore(nil, k8sfake.NewSimpleClientset(objs...), nil, "")
+	_, _, got, err := s.SelectPods(context.Background(), "demo", map[string]string{"app": "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"late", "nginx", "proxy", "setup"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("containers = %v, want %v", got, want)
 	}
 }
