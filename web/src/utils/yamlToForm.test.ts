@@ -504,3 +504,61 @@ ${arg}
     expect(yamlToForm(policy('          type: linux_binprm'))).toBeNull()
   })
 })
+
+describe('the spacer before file rules with exceptions', () => {
+  const policy = `apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: p
+  namespace: default
+spec:
+  kprobes:
+    - call: security_bprm_check
+      syscall: false
+      args:
+        - index: 0
+          type: string
+          resolve: filename
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: NotEqual
+              values:
+                - /usr/sbin/nginx
+          matchActions:
+            - action: Sigkill
+    - call: security_file_permission
+      syscall: false
+      args:
+        - index: 0
+          type: file
+        - index: 1
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /sentinel/none
+          matchActions:
+            - action: Sigkill
+        - matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /etc/passwd
+          matchBinaries:
+            - operator: NotIn
+              values:
+                - /usr/local/sbin/runc
+          matchActions:
+            - action: Sigkill
+`
+
+  it('is not read as a rule', () => {
+    const form = yamlToForm(policy)
+    expect(form?.process).toEqual([{ binaries: ['/usr/sbin/nginx'] }])
+    expect(form?.file).toEqual([{ paths: ['/etc/passwd'], exceptBinaries: ['/usr/local/sbin/runc'] }])
+    expect(form?.fileMode).toBe('blacklist')
+  })
+})

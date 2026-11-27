@@ -468,3 +468,42 @@ func TestBuildNamesTheContainersOrNone(t *testing.T) {
 		t.Errorf("expression = %+v, want name In [web proxy]", e)
 	}
 }
+
+// Tetragon 1.8.0 applies the exceptions of the first file selector to the
+// process rule, which is the first selector of its own kprobe. So the first
+// place of the file kprobe is given to a selector that matches nothing, when
+// there is a process rule for the exceptions to reach.
+func TestExceptionsAreKeptOutOfTheProcessRulesPlace(t *testing.T) {
+	file := []policy.FileRule{{Paths: []string{"/etc/passwd"}, ExceptBinaries: []string{"/usr/local/sbin/runc"}}}
+	process := []policy.ProcessRule{{Binaries: []string{"/usr/sbin/nginx"}}}
+
+	both, err := policy.Build(policy.PolicyFormInput{Name: "p", Process: process, File: file}, policy.ActionSigkill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sels := both.Spec.KProbes[1].Selectors
+	if len(sels) != 2 {
+		t.Fatalf("file selectors = %d, want the spacer and the rule", len(sels))
+	}
+	if len(sels[0].MatchBinaries) != 0 || sels[0].MatchArgs[0].Values[0] != policy.SpacerPath ||
+		sels[0].MatchActions[0].Action != policy.ActionSigkill {
+		t.Errorf("first selector = %+v, want the spacer, with the policy's action", sels[0])
+	}
+	if len(sels[1].MatchBinaries) != 1 || sels[1].MatchArgs[0].Values[0] != "/etc/passwd" {
+		t.Errorf("second selector = %+v, want the rule with its exception", sels[1])
+	}
+
+	// Nothing to reach, or nothing to be reached with: the policy is as it was.
+	for name, in := range map[string]policy.PolicyFormInput{
+		"no process rule": {Name: "p", File: file},
+		"no exceptions":   {Name: "p", Process: process, File: []policy.FileRule{{Paths: []string{"/etc/passwd"}}}},
+	} {
+		got, err := policy.Build(in, policy.ActionSigkill)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := len(got.Spec.KProbes[len(got.Spec.KProbes)-1].Selectors); n != 1 {
+			t.Errorf("%s: file selectors = %d, want 1", name, n)
+		}
+	}
+}

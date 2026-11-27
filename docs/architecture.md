@@ -467,6 +467,25 @@ was killed for trying `/usr/local/sbin/ls` first. The form still reads a policy
 on `sys_execve`, and saves it on the new hook. `resolve` needs the kernel's BTF,
 which Tetragon needs too.
 
+**The spacer before file exceptions.** With Tetragon 1.8.0, the binaries a
+selector names in `matchBinaries` are also applied to the selector in the same
+place of every other kprobe of the policy. Measured, not read from its source:
+a policy with `sys_execve` killing `/usr/bin/id` in its first selector, and a
+second kprobe whose first selector has `matchBinaries` `NotIn` `/usr/bin/dash`,
+lets `sh -c id` run; without the `matchBinaries`, or with that selector second,
+it is killed. In a form-built policy the process rule is the first selector of
+its kprobe, so the exceptions of the first file rule became exceptions to the
+process whitelist: whatever an exception process started was not checked. With
+`runc` an exception, which a rule on `/etc/passwd` needs for `kubectl exec` to
+work at all, that was every command sent in. From v0.84.8 the builder gives the
+first place of the file kprobe to a selector for `/sentinel/none`, which no file
+is under, whenever the policy has process rules and file exceptions both
+(`SpacerPath` in `internal/policy/builder.go`). It carries the policy's action
+so that the mode reads the same from every selector. Taking it out of the YAML
+brings the hole back. Policies saved before are as they were until opened and
+applied again; two policies, one for the process rules and one for the file
+rules, were never affected.
+
 **Where the list comes from.** Tetragon has no condition for "this file came
 with the image", so the list is read on the node, with the same exec into the
 Tetragon container that reads process names (section 3.1): the script takes

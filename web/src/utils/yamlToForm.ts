@@ -51,6 +51,15 @@ function representable(kp: any, argOperators: string[]): boolean {
   return true
 }
 
+// The selector that only takes up the first place of a file kprobe: one path,
+// under which no file is, and nothing else. See Build in internal/policy.
+const SPACER_PATH = '/sentinel/none'
+function isSpacer(sel: any): boolean {
+  const args = sel.matchArgs ?? []
+  return !sel.matchBinaries && args.length === 1 && args[0].index === 0
+    && args[0].values?.length === 1 && args[0].values[0] === SPACER_PATH
+}
+
 export function yamlToForm(rawYaml: string): PolicyFormInput | null {
   if (!rawYaml.trim()) return null
 
@@ -188,6 +197,9 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     ) {
       if (!representable(kp, FILE_OPERATORS)) return null
       for (const sel of selectors) {
+        // The builder puts this selector first when the policy has process
+        // rules and exceptions both. It matches no file, and is not a rule.
+        if (isSpacer(sel)) continue
         const exceptBins: string[] = (sel.matchBinaries ?? [])
           .filter((mb: any) => mb.operator === 'NotIn')
           .flatMap((mb: any) => mb.values ?? [])

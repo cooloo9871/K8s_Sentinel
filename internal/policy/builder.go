@@ -196,6 +196,22 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 			fileSelectors = append(fileSelectors, sel)
 		}
 	}
+	// With Tetragon 1.8.0, the binaries of a selector's matchBinaries are also
+	// applied to the selector in the same place of every other kprobe of the
+	// policy. The process rule is one selector, the first of its kprobe, so the
+	// exceptions of the first file selector became exceptions to it: whatever an
+	// exception process started was past the process whitelist. With runc among
+	// them, as it has to be for a rule on /etc/passwd to leave kubectl exec
+	// alone, that was every command sent in. So when both are in the policy the
+	// first place of the file kprobe is taken by a selector that matches no
+	// file, and the ones with exceptions come after it, where the process
+	// kprobe has nothing.
+	if len(allBinaries) > 0 && hasExceptions(fileSelectors) {
+		fileSelectors = append([]KProbeSelector{{
+			MatchArgs:    []ArgSelector{{Index: 0, Operator: "Prefix", Values: []string{SpacerPath}}},
+			MatchActions: []ActionSelector{{Action: action}},
+		}}, fileSelectors...)
+	}
 	if len(fileSelectors) > 0 {
 		tp.Spec.KProbes = append(tp.Spec.KProbes, KProbeSpec{
 			Call:      "security_file_permission",
@@ -229,4 +245,17 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		return TracingPolicy{}, fmt.Errorf("a policy needs at least one process or file rule")
 	}
 	return tp, nil
+}
+
+// SpacerPath is the path of the selector that only takes up the first place of
+// a file kprobe. No file is under it.
+const SpacerPath = "/sentinel/none"
+
+func hasExceptions(selectors []KProbeSelector) bool {
+	for _, sel := range selectors {
+		if len(sel.MatchBinaries) > 0 {
+			return true
+		}
+	}
+	return false
 }
