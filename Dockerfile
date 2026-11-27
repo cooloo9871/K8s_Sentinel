@@ -1,5 +1,5 @@
 # Stage 1: build React
-FROM docker.io/library/node:20-alpine AS frontend
+FROM docker.io/library/node:24-alpine AS frontend
 # Stamped into the UI. Defaults to "dev" so a build without it says so rather
 # than claiming a version it is not.
 ARG VERSION=dev

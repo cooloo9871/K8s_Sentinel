@@ -26,10 +26,10 @@ type Event struct {
 	Namespace    string `json:"namespace"`
 	InvolvedKind string `json:"involvedKind"` // from K8s Events watcher
 	InvolvedName string `json:"involvedName"`
-	Resource     string `json:"resource"`   // from webhook
-	Name         string `json:"name"`        // from webhook
-	Operation    string `json:"operation"`   // from webhook
-	Username     string `json:"username"`    // from webhook
+	Resource     string `json:"resource"`  // from webhook
+	Name         string `json:"name"`      // from webhook
+	Operation    string `json:"operation"` // from webhook
+	Username     string `json:"username"`  // from webhook
 	PolicyName   string `json:"policyName"`
 	BindingName  string `json:"bindingName"`
 	Message      string `json:"message"`
@@ -86,9 +86,9 @@ func DefaultRetentionConfig() RetentionConfig {
 type Store struct {
 	mu       sync.RWMutex
 	events   []Event
-	seen     map[string]struct{}    // deduplicate by event ID
+	seen     map[string]struct{}     // deduplicate by event ID
 	subs     map[chan Event]struct{} // per-subscriber channels for fanout
-	path     string                 // file path for persistence
+	path     string                  // file path for persistence
 	cfg      RetentionConfig
 	flushGen uint64     // incremented each flush; goroutine skips write if stale
 	flushMu  sync.Mutex // serialises stale-check + rename to eliminate TOCTOU

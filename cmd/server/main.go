@@ -192,6 +192,11 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", handler.New(cfg))
+	// What the kubelet asks: that the process answers. It says nothing of the
+	// cluster behind it, which a restart would not mend.
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	staticFS, err := fs.Sub(sentinelweb.StaticFiles, "dist")
 	if err != nil {
