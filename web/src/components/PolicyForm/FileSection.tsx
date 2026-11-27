@@ -126,7 +126,7 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
         <PermissionSelect label="Monitored access" value={permission} onChange={(v) => write({ permission: v })} />
         <PathList
           label="Exception processes"
-          hint="(optional: their access is not monitored)"
+          hint="(optional: their access is not monitored. The file itself, not a link to it)"
           values={except}
           onChange={(v) => write({ exceptBinaries: v })}
         />
@@ -169,7 +169,7 @@ export function FileSection({ rules, onChange, fileMode }: Props) {
           <PermissionSelect value={r.permission} onChange={(v) => updateRule(i, { permission: v })} />
           <PathList
             label="Exceptions"
-            hint="(optional: these processes bypass this rule)"
+            hint="(optional: these processes bypass this rule. The file itself, not a link to it)"
             values={r.exceptBinaries ?? []}
             onChange={(v) => updateRule(i, { exceptBinaries: v })}
           />

@@ -275,3 +275,23 @@ func TestAProcessStartedThroughForksIsPlaced(t *testing.T) {
 		t.Errorf("parents that loop = %q", got)
 	}
 }
+
+// The runtime reading its own files on the way into a container is not what
+// the workload did. A policy that killed it for that is why the container
+// would not start, and is told.
+func TestARuntimeThePolicyStoppedIsNotLeftOut(t *testing.T) {
+	for _, c := range []struct {
+		binary, action string
+		own            bool
+	}{
+		{"/usr/local/sbin/runc", "monitor", true},
+		{"/usr/local/sbin/runc", "kill", false},
+		{"/usr/bin/crun", "deny", false},
+		{"/bin/cat", "monitor", false},
+		{"/bin/cat", "kill", false},
+	} {
+		if got := runtimesOwn(TetragonEvent{Binary: c.binary, Action: c.action}); got != c.own {
+			t.Errorf("%s, %s: own = %v, want %v", c.binary, c.action, got, c.own)
+		}
+	}
+}

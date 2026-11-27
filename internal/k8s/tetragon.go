@@ -252,7 +252,7 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 				// What the runtime does to itself on the way in, starting its
 				// own sealed copy or reading its own files, is not the
 				// workload's. Only what it becomes is: the entrypoint.
-				if cid != "" && isContainerRuntime(evt.Binary) {
+				if cid != "" && runtimesOwn(evt) {
 					continue
 				}
 			}
@@ -278,7 +278,7 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 					continue
 				}
 			}
-		} else if isRuntimeInItsContainer(proc) && (evt.Type == "exec" || isContainerRuntime(evt.Binary)) {
+		} else if isRuntimeInItsContainer(proc) && (evt.Type == "exec" || runtimesOwn(evt)) {
 			// The runtime entering the container, and under a policy that
 			// watches every exec, the runtime starting its own sealed copy on
 			// the way in. What it starts next, the workload's command, is kept.
@@ -297,6 +297,16 @@ func (s *Store) streamFromPod(ctx context.Context, pod podEndpoint, out chan<- T
 			return nil
 		}
 	}
+}
+
+// runtimesOwn reports whether a hook fired on the runtime going about its own
+// business, which is left out of what the workload did. Not when the policy
+// stopped it there: a file rule in Protect on a file the runtime reads on its
+// way in (/etc/passwd, for the user to run as) kills every exec into the
+// container and every start of it, and with the event left out nothing said
+// why.
+func runtimesOwn(evt TetragonEvent) bool {
+	return isContainerRuntime(evt.Binary) && evt.Action != "kill" && evt.Action != "deny"
 }
 
 // placeInPod fills in the pod a container belongs to, and reports whether it
