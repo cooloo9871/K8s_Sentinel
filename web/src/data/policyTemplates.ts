@@ -21,11 +21,12 @@ metadata:
 spec:
   podSelector: {}
   kprobes:
-    - call: sys_execve
-      syscall: true
+    - call: security_bprm_check
+      syscall: false
       args:
         - index: 0
           type: string
+          resolve: filename
       selectors:
         - matchActions:
             - action: Post

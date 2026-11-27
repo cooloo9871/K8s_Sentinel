@@ -286,7 +286,13 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                 </div>
               ))}
               <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" onClick={() => setContainers([...containers, ''])}>
+                {/* With every container of the pods chosen, another row would have nothing to offer. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={podContainers.length > 0 && podContainers.every((c) => containers.includes(c))}
+                  onClick={() => setContainers([...containers, ''])}
+                >
                   + Add Container
                 </Button>
                 {containers.length === 0 && <span className="text-sm text-muted-foreground">All containers</span>}

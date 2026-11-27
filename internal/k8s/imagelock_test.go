@@ -307,6 +307,28 @@ func TestAnImageTheLockKeepsFromStartingIsMarkedAndTheModeLeftAlone(t *testing.T
 		t.Fatalf("mode = %s, paths = %s, blocked = %q: want the lock untouched and marked", mode, paths, blocked)
 	}
 
+	// The workload is deleted with its pods, and the lock left: it is keeping
+	// nothing from starting. Put back, it is marked again.
+	deploy, err := s.typed.AppsV1().Deployments("shop").Get(ctx, "web", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.typed.AppsV1().Deployments("shop").Delete(ctx, "web", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s.syncImageLocks(ctx)
+	if _, _, blocked := state(); blocked != "" {
+		t.Errorf("blocked = %q with the workload gone", blocked)
+	}
+	deploy.ResourceVersion = ""
+	if _, err := s.typed.AppsV1().Deployments("shop").Create(ctx, deploy, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s.syncImageLocks(ctx)
+	if _, _, blocked := state(); blocked != "sha256:two" {
+		t.Fatalf("blocked = %q with the workload back", blocked)
+	}
+
 	// Set to Monitoring by hand: the mark goes, the container runs and is read.
 	if err := s.SetPolicyMode(ctx, "image-lock-web", "shop", "Monitoring"); err != nil {
 		t.Fatal(err)
@@ -383,5 +405,37 @@ func TestAnExecProbeOnAnInjectedContainerIsSeen(t *testing.T) {
 	o, _ = s.client.Resource(tracingPolicyNamespacedGVR).Namespace("shop").Get(ctx, "image-lock-web", metav1.GetOptions{})
 	if o.GetResourceVersion() != before {
 		t.Error("an unchanged workload was rebuilt")
+	}
+}
+
+// What a deleted lock kept from starting is not said of a lock made later
+// under the same name.
+func TestADeletedLockLeavesNoMarkBehind(t *testing.T) {
+	s := imageLockStore(t, map[string][]string{"c1": {"/old"}}, webDeployment(nil), lockedPod("web-1", "sha256:one", "c1"))
+	ctx := context.Background()
+	if _, err := s.CreateImageLock(ctx, "shop", Workload{"Deployment", "web"}, "Protect", "andy"); err != nil {
+		t.Fatal(err)
+	}
+	p := lockedPod("web-2", "sha256:two", "c2")
+	p.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}
+	_ = s.typed.CoreV1().Pods("shop").Delete(ctx, "web-1", metav1.DeleteOptions{})
+	if _, err := s.typed.CoreV1().Pods("shop").Create(ctx, p, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s.syncImageLocks(ctx)
+	marked := func() string {
+		records := []PolicyRecord{{Name: "image-lock-web", Namespace: "shop", ImageLock: "Deployment/web", Mode: "Protect"}}
+		s.MarkImageBlocked(records)
+		return records[0].ImageBlocked
+	}
+	if marked() != "sha256:two" {
+		t.Fatalf("blocked = %q, want the new image", marked())
+	}
+	if err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("shop").Delete(ctx, "image-lock-web", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s.syncImageLocks(ctx)
+	if marked() != "" {
+		t.Errorf("blocked = %q after the lock was deleted", marked())
 	}
 }

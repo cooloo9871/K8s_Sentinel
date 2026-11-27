@@ -562,3 +562,15 @@ spec:
     expect(form?.fileMode).toBe('blacklist')
   })
 })
+
+// The Monitor All Process Executions template as it is now written: the same
+// hook as a process rule, with nothing to match on. It stays in the YAML editor
+// like the one on sys_execve before it.
+describe('the monitor-all-exec template on security_bprm_check', () => {
+  it('is not opened in the form', async () => {
+    const { POLICY_TEMPLATES } = await import('../data/policyTemplates')
+    const t = POLICY_TEMPLATES.find(x => x.id === 'monitor-all-exec')!
+    expect(t.yaml).toContain('security_bprm_check')
+    expect(yamlToForm(t.yaml)).toBeNull()
+  })
+})

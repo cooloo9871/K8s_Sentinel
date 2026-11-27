@@ -531,23 +531,37 @@ func (s *Store) syncImageLocks(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	locks := map[string]bool{}
 	for i := range list.Items {
 		item := &list.Items[i]
 		kind, name, ok := strings.Cut(item.GetAnnotations()[annotationImageLock], "/")
 		if !ok {
 			continue
 		}
+		locks[item.GetNamespace()+"/"+item.GetName()] = true
 		if err := s.syncImageLock(ctx, item, Workload{kind, name}); err != nil {
 			log.Printf("image-lock: %s/%s: %v", item.GetNamespace(), item.GetName(), err)
 		}
 	}
+	// A lock that was deleted is not blocking anything, and one made later
+	// under its name is not the one that was.
+	s.imageBlocked.Range(func(key, _ any) bool {
+		if !locks[key.(string)] {
+			s.imageBlocked.Delete(key)
+		}
+		return true
+	})
 }
 
 func (s *Store) syncImageLock(ctx context.Context, item *unstructured.Unstructured, w Workload) error {
 	ns := item.GetNamespace()
+	key := ns + "/" + item.GetName()
 	selector, spec, err := s.workloadSpec(ctx, ns, w.Kind, w.Name)
 	if errors.Is(err, ErrWorkloadNotFound) {
-		return nil // the policy outlives its workload until someone deletes it
+		// The policy outlives its workload until someone deletes it. It has
+		// no container left to keep from starting.
+		s.imageBlocked.Delete(key)
+		return nil
 	}
 	if err != nil {
 		return err
@@ -559,7 +573,6 @@ func (s *Store) syncImageLock(ctx context.Context, item *unstructured.Unstructur
 	}
 	was := item.GetAnnotations()[annotationImageLockBuilt]
 	enforcing := detectMode(item.Object) != "Monitoring"
-	key := ns + "/" + item.GetName()
 	if image := unreadImage(stopped, was); image != "" && enforcing {
 		s.imageBlocked.Store(key, image)
 	} else {
