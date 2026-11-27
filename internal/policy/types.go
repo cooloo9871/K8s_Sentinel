@@ -10,6 +10,7 @@ type PolicyFormInput struct {
 	Name         string            `json:"name"`
 	Namespace    string            `json:"namespace,omitempty"`
 	PodSelector  map[string]string `json:"podSelector,omitempty"`
+	Containers   []string          `json:"containers,omitempty"`  // container names the policy applies to; none means every container
 	ProcessMode  string            `json:"processMode,omitempty"` // "whitelist" (NotPostfix) or "blacklist" (Postfix); default whitelist
 	Process      []ProcessRule     `json:"process,omitempty"`
 	FileMode     string            `json:"fileMode,omitempty"` // "whitelist" (NotPrefix) or "blacklist" (Prefix); default blacklist
@@ -47,12 +48,25 @@ type ObjectMeta struct {
 }
 
 type TracingPolicySpec struct {
-	PodSelector *LabelSelector `yaml:"podSelector,omitempty" json:"podSelector,omitempty"`
-	KProbes     []KProbeSpec   `yaml:"kprobes,omitempty"     json:"kprobes,omitempty"`
+	PodSelector       *LabelSelector     `yaml:"podSelector,omitempty" json:"podSelector,omitempty"`
+	ContainerSelector *ContainerSelector `yaml:"containerSelector,omitempty" json:"containerSelector,omitempty"`
+	KProbes           []KProbeSpec       `yaml:"kprobes,omitempty"     json:"kprobes,omitempty"`
 }
 
 type LabelSelector struct {
 	MatchLabels map[string]string `yaml:"matchLabels,omitempty" json:"matchLabels,omitempty"`
+}
+
+// ContainerSelector narrows a policy to some of the containers of the pods it
+// selects. Tetragon matches a container by "name" here.
+type ContainerSelector struct {
+	MatchExpressions []SelectorExpression `yaml:"matchExpressions" json:"matchExpressions"`
+}
+
+type SelectorExpression struct {
+	Key      string   `yaml:"key"      json:"key"`
+	Operator string   `yaml:"operator" json:"operator"`
+	Values   []string `yaml:"values"   json:"values"`
 }
 
 type KProbeSpec struct {

@@ -432,3 +432,37 @@ func TestBuildRejectsNetworkRules(t *testing.T) {
 		t.Error("network port was accepted")
 	}
 }
+
+// No container named is every container: nothing is written, which is how a
+// policy says so.
+func TestBuildNamesTheContainersOrNone(t *testing.T) {
+	input := policy.PolicyFormInput{
+		Name:    "p",
+		Process: []policy.ProcessRule{{Binaries: []string{"/bin/sh"}}},
+	}
+	got, err := policy.Build(input, policy.ActionPost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Spec.ContainerSelector != nil {
+		t.Errorf("containerSelector = %+v with no container named", got.Spec.ContainerSelector)
+	}
+	out, _ := yaml.Marshal(got)
+	if strings.Contains(string(out), "containerSelector") {
+		t.Errorf("containerSelector written with no container named:\n%s", out)
+	}
+
+	input.Containers = []string{" web ", "", "proxy"}
+	got, err = policy.Build(input, policy.ActionPost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sel := got.Spec.ContainerSelector
+	if sel == nil || len(sel.MatchExpressions) != 1 {
+		t.Fatalf("containerSelector = %+v", sel)
+	}
+	e := sel.MatchExpressions[0]
+	if e.Key != "name" || e.Operator != "In" || strings.Join(e.Values, ",") != "web,proxy" {
+		t.Errorf("expression = %+v, want name In [web proxy]", e)
+	}
+}

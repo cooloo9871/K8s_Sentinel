@@ -233,6 +233,9 @@ export function PolicyListPage() {
                             <Badge variant="destructive" className="shrink-0" title={p.inactive}>Not active</Badge>
                           )}
                         </div>
+                        {p.imageBlocked && (
+                          <Badge variant="destructive" className="mt-1" title={p.imageBlocked}>New image blocked, set to Monitoring</Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={p.scope === 'cluster' ? 'destructive' : 'secondary'}>

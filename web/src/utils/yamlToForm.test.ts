@@ -452,6 +452,16 @@ ${spec}`
   it('refuses a selector with matchExpressions', () => {
     expect(yamlToForm(policy(`  podSelector:\n    matchLabels:\n      app: web\n    matchExpressions:\n      - key: tier\n        operator: In\n        values: [a]\n  kprobes:\n${kprobe('Post')}`))).toBeNull()
   })
+  it('reads the containers the builder names', () => {
+    const form = yamlToForm(policy(`  containerSelector:\n    matchExpressions:\n      - key: name\n        operator: In\n        values:\n          - web\n          - proxy\n  kprobes:\n${kprobe('Post')}`))
+    expect(form?.containers).toEqual(['web', 'proxy'])
+    expect(yamlToForm(policy(`  kprobes:\n${kprobe('Post')}`))?.containers).toBeUndefined()
+  })
+  it('refuses a container selector the form cannot show', () => {
+    const cs = (key: string, op: string) => policy(`  containerSelector:\n    matchExpressions:\n      - key: ${key}\n        operator: ${op}\n        values:\n          - web\n  kprobes:\n${kprobe('Post')}`)
+    expect(yamlToForm(cs('repo', 'In'))).toBeNull()
+    expect(yamlToForm(cs('name', 'NotIn'))).toBeNull()
+  })
   it('refuses a policy with tracepoints', () => {
     expect(yamlToForm(policy(`  tracepoints:\n    - subsystem: raw_syscalls\n      event: sys_exit\n  kprobes:\n${kprobe('Post')}`))).toBeNull()
   })

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -195,7 +196,7 @@ func startedFromOutside(spec *corev1.PodSpec) bool {
 	if spec.HostPID || (spec.ShareProcessNamespace != nil && *spec.ShareProcessNamespace) {
 		return true
 	}
-	for _, c := range spec.Containers {
+	for _, c := range longRunning(spec) {
 		for _, p := range []*corev1.Probe{c.LivenessProbe, c.ReadinessProbe, c.StartupProbe} {
 			if p != nil && p.Exec != nil {
 				return true
@@ -210,6 +211,18 @@ func startedFromOutside(spec *corev1.PodSpec) bool {
 	return false
 }
 
+// longRunning is the containers that stay: the pod's own and its sidecars,
+// which are written among the init containers and restarted like the others.
+func longRunning(spec *corev1.PodSpec) []corev1.Container {
+	out := append([]corev1.Container{}, spec.Containers...)
+	for _, c := range spec.InitContainers {
+		if c.RestartPolicy != nil && *c.RestartPolicy == corev1.ContainerRestartPolicyAlways {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // lockSource is one running container to read an image's files from.
 type lockSource struct {
 	node, containerID string
@@ -217,15 +230,18 @@ type lockSource struct {
 
 // lockTargets looks at the workload's running pods: the containers the policy
 // is to cover, one running container of each image among them, and a string
-// that changes when either does.
-func (s *Store) lockTargets(ctx context.Context, namespace string, selector *metav1.LabelSelector) (containers []string, sources map[string]lockSource, built string, err error) {
+// that changes when either does. Beside them, the images of the containers
+// that are not running, which are returned with ErrNoRunningPod too, and
+// whether any pod is one the kubelet runs commands in: a container a webhook
+// put in is in the pod and not in the workload it was made from.
+func (s *Store) lockTargets(ctx context.Context, namespace string, selector *metav1.LabelSelector) (containers []string, sources map[string]lockSource, built string, stopped []string, outside bool, err error) {
 	sel, err := metav1.LabelSelectorAsSelector(selector)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", nil, false, err
 	}
 	pods, err := s.typed.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: sel.String()})
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", nil, false, err
 	}
 	names := map[string]bool{}
 	sources = map[string]lockSource{}
@@ -233,9 +249,22 @@ func (s *Store) lockTargets(ctx context.Context, namespace string, selector *met
 		if p.DeletionTimestamp != nil {
 			continue
 		}
-		for _, cs := range p.Status.ContainerStatuses {
+		outside = outside || startedFromOutside(&p.Spec)
+		// A sidecar's status is kept with the init containers'.
+		statuses := append([]corev1.ContainerStatus{}, p.Status.ContainerStatuses...)
+		for _, c := range longRunning(&p.Spec)[len(p.Spec.Containers):] {
+			for _, cs := range p.Status.InitContainerStatuses {
+				if cs.Name == c.Name {
+					statuses = append(statuses, cs)
+				}
+			}
+		}
+		for _, cs := range statuses {
 			_, id, ok := strings.Cut(cs.ContainerID, "://")
 			if cs.State.Running == nil || !ok || id == "" {
+				if cs.ImageID != "" {
+					stopped = append(stopped, cs.ImageID)
+				}
 				continue
 			}
 			image := cs.ImageID
@@ -249,7 +278,7 @@ func (s *Store) lockTargets(ctx context.Context, namespace string, selector *met
 		}
 	}
 	if len(sources) == 0 {
-		return nil, nil, "", ErrNoRunningPod
+		return nil, nil, "", stopped, outside, ErrNoRunningPod
 	}
 	images := make([]string, 0, len(sources))
 	for image := range sources {
@@ -260,7 +289,7 @@ func (s *Store) lockTargets(ctx context.Context, namespace string, selector *met
 	}
 	sort.Strings(images)
 	sort.Strings(containers)
-	return containers, sources, strings.Join(containers, ",") + "|" + strings.Join(images, ","), nil
+	return containers, sources, strings.Join(containers, ",") + "|" + strings.Join(images, ","), stopped, outside, nil
 }
 
 // imageFilesOn runs the script on one node. A variable so that a test can
@@ -374,8 +403,8 @@ func imageLockObject(namespace string, w Workload, selector *metav1.LabelSelecto
 		},
 		"spec": map[string]any{
 			"podSelector": podSelector,
-			// Not the init containers: they have run and gone, so there is
-			// nothing to read their images from.
+			// Not the init containers that run once: they have gone, so there
+			// is nothing to read their images from.
 			"containerSelector": map[string]any{
 				"matchExpressions": []any{map[string]any{
 					"key":      "name",
@@ -419,7 +448,7 @@ func (s *Store) buildImageLock(ctx context.Context, namespace string, w Workload
 	if err != nil {
 		return nil, false, err
 	}
-	containers, sources, built, err := s.lockTargets(ctx, namespace, selector)
+	containers, sources, built, _, inPods, err := s.lockTargets(ctx, namespace, selector)
 	if err != nil {
 		return nil, false, err
 	}
@@ -427,7 +456,7 @@ func (s *Store) buildImageLock(ctx context.Context, namespace string, w Workload
 	if err != nil {
 		return nil, false, err
 	}
-	outside := startedFromOutside(spec)
+	outside := startedFromOutside(spec) || inPods
 	obj, err := imageLockObject(namespace, w, selector, containers, paths, lockBuilt(built, selector, outside), action, outside)
 	return obj, outside, err
 }
@@ -443,6 +472,12 @@ func lockBuilt(targets string, selector *metav1.LabelSelector, outside bool) str
 // workload runs. A rollout brings an image whose files are not on the list
 // yet; they can only be read once a container of it is running, so until the
 // next pass what is new in that image is treated as not belonging.
+//
+// Where that stops the new container from starting at all, there is never a
+// running container to read from, and the workload stays down. Sentinel does
+// not take a lock out of Protect on its own to mend that: whoever can make a
+// pod could then switch a lock off. It says so on the list, and the mode is
+// for the administrator to change.
 func (s *Store) StartImageLockLoop(ctx context.Context) {
 	go func() {
 		t := time.NewTicker(15 * time.Second)
@@ -456,6 +491,39 @@ func (s *Store) StartImageLockLoop(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// unreadImage is the image of a container that is not running and that the
+// list was not read from, or nothing. A container of an image already read
+// that keeps stopping has some other trouble.
+func unreadImage(stopped []string, built string) string {
+	parts := strings.Split(built, "|")
+	if len(parts) < 2 {
+		return ""
+	}
+	read := strings.Split(parts[1], ",")
+	for _, image := range stopped {
+		if !slices.Contains(read, image) {
+			return image
+		}
+	}
+	return ""
+}
+
+// MarkImageBlocked sets, on each image lock in Protect whose workload has a
+// container of an image not yet read that is not running, that image: the lock
+// is what keeps it from starting.
+func (s *Store) MarkImageBlocked(records []PolicyRecord) {
+	for i := range records {
+		// The mode as it is now: one just set to Monitoring stops nothing,
+		// whatever the last pass found.
+		if records[i].ImageLock == "" || records[i].Mode == "Monitoring" {
+			continue
+		}
+		if image, ok := s.imageBlocked.Load(records[i].Namespace + "/" + records[i].Name); ok {
+			records[i].ImageBlocked = image.(string)
+		}
+	}
 }
 
 func (s *Store) syncImageLocks(ctx context.Context) {
@@ -484,18 +552,24 @@ func (s *Store) syncImageLock(ctx context.Context, item *unstructured.Unstructur
 	if err != nil {
 		return err
 	}
-	_, _, built, err := s.lockTargets(ctx, ns, selector)
-	if errors.Is(err, ErrNoRunningPod) {
-		return nil
-	}
-	if err != nil {
+	_, _, built, stopped, inPods, err := s.lockTargets(ctx, ns, selector)
+	noPod := errors.Is(err, ErrNoRunningPod)
+	if err != nil && !noPod {
 		return err
 	}
-	if lockBuilt(built, selector, startedFromOutside(spec)) == item.GetAnnotations()[annotationImageLockBuilt] {
+	was := item.GetAnnotations()[annotationImageLockBuilt]
+	enforcing := detectMode(item.Object) != "Monitoring"
+	key := ns + "/" + item.GetName()
+	if image := unreadImage(stopped, was); image != "" && enforcing {
+		s.imageBlocked.Store(key, image)
+	} else {
+		s.imageBlocked.Delete(key)
+	}
+	if noPod || lockBuilt(built, selector, startedFromOutside(spec) || inPods) == was {
 		return nil
 	}
 	action := policy.ActionPost
-	if detectMode(item.Object) != "Monitoring" {
+	if enforcing {
 		action = policy.ActionSigkill
 	}
 	obj, _, err := s.buildImageLock(ctx, ns, w, action)

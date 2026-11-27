@@ -70,8 +70,20 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
   // rewritten to whichever the form's single mode says.
   const spec = doc.spec ?? {}
   if (typeof spec !== 'object') return null
-  if (Object.keys(spec).some(k => k !== 'podSelector' && k !== 'kprobes')) return null
+  if (Object.keys(spec).some(k => k !== 'podSelector' && k !== 'containerSelector' && k !== 'kprobes')) return null
   if (Object.keys(spec.podSelector ?? {}).some(k => k !== 'matchLabels')) return null
+  // Containers by name, the one thing the form writes there. A selector by
+  // repo, or by NotIn, would be shown as nothing and saved as every container.
+  let containers: string[] | undefined
+  if (spec.containerSelector != null) {
+    const cs = spec.containerSelector
+    const exprs = cs?.matchExpressions
+    if (typeof cs !== 'object' || Object.keys(cs).some(k => k !== 'matchExpressions')) return null
+    if (!Array.isArray(exprs) || exprs.length !== 1) return null
+    const e = exprs[0]
+    if (e?.key !== 'name' || e?.operator !== 'In' || !Array.isArray(e?.values) || e.values.length === 0) return null
+    containers = e.values.map((v: unknown) => String(v))
+  }
   const actions = new Set<string>((spec.kprobes ?? []).flatMap((kp: any) =>
     (kp?.selectors ?? []).flatMap((sel: any) => (sel?.matchActions ?? []).map((a: any) => String(a?.action)))))
   if (actions.size > 1 || [...actions].some(a => a !== 'Post' && a !== 'Sigkill')) return null
@@ -83,6 +95,7 @@ export function yamlToForm(rawYaml: string): PolicyFormInput | null {
     podSelector: matchLabels && typeof matchLabels === 'object' && Object.keys(matchLabels).length > 0
       ? matchLabels as Record<string, string>
       : undefined,
+    containers,
     processMode: 'whitelist',
     process: [],
     file: [],

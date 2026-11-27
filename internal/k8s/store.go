@@ -42,9 +42,12 @@ type PolicyRecord struct {
 	// The workload ("Kind/name") an image lock was made for. Sentinel writes
 	// such a policy's list itself, so it is not edited by hand.
 	ImageLock string `json:"imageLock,omitempty"`
-	CreatedBy string `json:"createdBy"` // sentinel username or "k8s-apply"
-	CreatedAt string `json:"createdAt"`
-	RawYAML   string `json:"rawYaml"`
+	// The image an image lock in Protect keeps from starting: its files are
+	// not on the list, and are only read once a container of it runs.
+	ImageBlocked string `json:"imageBlocked,omitempty"`
+	CreatedBy    string `json:"createdBy"` // sentinel username or "k8s-apply"
+	CreatedAt    string `json:"createdAt"`
+	RawYAML      string `json:"rawYaml"`
 }
 
 // Store manages TracingPolicy and TracingPolicyNamespaced CRDs.
@@ -116,6 +119,9 @@ type Store struct {
 	vulnExpiry  time.Time
 	vulnPods    map[string]VulnCounts
 	vulnBg      atomic.Bool
+
+	// Image locks that keep a new image from starting — see MarkImageBlocked.
+	imageBlocked sync.Map
 	// Read and written only under vulnRefresh.
 	vulnReports       []reportSummary
 	vulnReportsExpiry time.Time

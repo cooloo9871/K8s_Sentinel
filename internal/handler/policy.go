@@ -33,6 +33,7 @@ func listPolicies(store *k8s.Store) http.HandlerFunc {
 		}
 		records = inScope(scopeOf(r), records, func(p k8s.PolicyRecord) string { return p.Namespace })
 		store.MarkInactive(r.Context(), records)
+		store.MarkImageBlocked(records)
 		writeJSON(w, http.StatusOK, records)
 	}
 }

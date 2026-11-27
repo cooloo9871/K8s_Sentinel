@@ -446,7 +446,9 @@ of which fires:
 | `matchArgs` `NotEqual` the list | the file about to run is not on the list | a file added after the container started |
 
 `podSelector` is the workload's own selector. `containerSelector` names the
-containers that were read, which leaves init containers out: they have exited
+containers that were read. A sidecar (an init container with
+`restartPolicy: Always`) is one of them, its status being kept with the init
+containers'. That leaves the init containers that run once out: they have exited
 and there is nothing to read their image from.
 
 **Why that hook.** At `sys_execve` the argument is the path as the caller gave
@@ -484,16 +486,29 @@ The rebuild keeps the mode and the author, and is written against the version
 that was read, so a mode switched in the meantime wins.
 
 **When commands from outside are left alone.** Exec probes, exec lifecycle
-hooks, `shareProcessNamespace` and `hostPID` each make "descended from PID 1"
+hooks (of a sidecar too), `shareProcessNamespace` and `hostPID` each make "descended from PID 1"
 the wrong rule: the kubelet's commands arrive exactly as `kubectl exec` does,
 and in a shared namespace PID 1 is not the container's. For those the first
-selector is left out and the API says so (`blocksOutside: false`).
+selector is left out and the API says so (`blocksOutside: false`). The
+workload's template is looked at and so is every pod it has: a container a
+webhook injects is only in the pod, and its exec probe would be killed.
 
 **Known limits.**
 
 - Paths, not contents: a listed file overwritten in place still runs. An
   interpreter or the dynamic loader of the image runs whatever it is handed.
 - The seconds between a new image starting and the next pass.
+- A new image that cannot start. If its first process is a file the list does
+  not have, Protect kills it before the container is ever running, and a list
+  is only read from a running container: the lock never learns the image and
+  the workload stays down. The pass finds this (a container that is not
+  running, whose image ID is not in `built-from`, under a lock that enforces)
+  and keeps it in memory; the policy list returns it as `imageBlocked` and the
+  UI marks the lock. The mode is not changed. Setting such a lock to Monitoring
+  automatically was built and taken out again: pods are matched by label, so
+  whoever may create a pod with the workload's labels and an image that does
+  not start could take a lock out of Protect without any right to the policy.
+  Lowering protection is an administrator's decision.
 - A container's first seconds: Tetragon learns of a new container, and puts it
   under the policies that select it, shortly after its first process started
   (the same delay that keeps a pod-selecting policy from seeing the entrypoint,

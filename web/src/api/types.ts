@@ -18,6 +18,8 @@ export interface PolicyFormInput {
   name: string
   namespace?: string
   podSelector?: Record<string, string>
+  /** Container names the policy applies to. None is every container. */
+  containers?: string[]
   processMode?: 'whitelist' | 'blacklist'  // whitelist = NotPostfix (default), blacklist = Postfix
   process?: ProcessRule[]
   fileMode?: 'whitelist' | 'blacklist'     // whitelist = NotPrefix, blacklist = Prefix (default)
@@ -34,6 +36,8 @@ export interface PolicyRecord {
   inactive?: string
   /** The workload ("Kind/name") an image lock was made for. */
   imageLock?: string
+  /** The image an image lock in Protect keeps from starting. */
+  imageBlocked?: string
   createdBy: string
   createdAt: string
   rawYaml: string

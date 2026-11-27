@@ -94,6 +94,10 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
   // identical strings and don't trigger unnecessary resets mid-input.
   }, [JSON.stringify(Object.fromEntries(Object.entries(value.podSelector ?? {}).sort(([a], [b]) => a.localeCompare(b))))])
 
+  const containers = value.containers ?? []
+  const setContainers = (names: string[]) =>
+    onChange({ ...value, containers: names.length > 0 ? names : undefined })
+
   const setProcessBinaries = (binaries: string[]) =>
     onChange({ ...value, process: binaries.map((b) => ({ binaries: [b] })) })
 
@@ -228,6 +232,40 @@ export function PolicyForm({ namespaces, action, value, onChange }: Props) {
                 <Button variant="outline" size="sm" onClick={addLabel}>
                   + Add Label
                 </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b pb-3">
+            <CardTitle className="text-sm font-medium">Containers</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="flex flex-col gap-2">
+              {containers.map((name, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    aria-label="Container name"
+                    value={name}
+                    onChange={(e) => setContainers(containers.map((c, j) => (j === i ? e.target.value : c)))}
+                    className="h-8 font-mono text-sm"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setContainers(containers.filter((_, j) => j !== i))}
+                    className="h-8 shrink-0 px-2 text-xs text-destructive hover:text-destructive"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="sm" onClick={() => setContainers([...containers, ''])}>
+                  + Add Container
+                </Button>
+                {containers.length === 0 && <span className="text-sm text-muted-foreground">All containers</span>}
               </div>
             </div>
           </CardContent>

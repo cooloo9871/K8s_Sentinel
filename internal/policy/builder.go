@@ -26,6 +26,20 @@ func Build(input PolicyFormInput, action string) (TracingPolicy, error) {
 		tp.Spec.PodSelector = &LabelSelector{MatchLabels: input.PodSelector}
 	}
 
+	// No container named is every container, sidecars and init containers
+	// among them, which is what a policy with no containerSelector says.
+	var containers []string
+	for _, c := range input.Containers {
+		if c = strings.TrimSpace(c); c != "" {
+			containers = append(containers, c)
+		}
+	}
+	if len(containers) > 0 {
+		tp.Spec.ContainerSelector = &ContainerSelector{MatchExpressions: []SelectorExpression{
+			{Key: "name", Operator: "In", Values: containers},
+		}}
+	}
+
 	// Process rules: ONE sys_execve kprobe with all values combined, matched
 	// exactly against the absolute path.
 	//

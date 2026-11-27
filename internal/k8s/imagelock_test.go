@@ -260,3 +260,128 @@ func TestAProbeAddedLaterTakesTheOutsideRuleAway(t *testing.T) {
 		t.Errorf("selectors = %d: the kubelet's probe would be stopped", n)
 	}
 }
+
+// The new image starts with a file the list does not have, so in Protect its
+// container is killed before it is ever running, and a list is only read from
+// a running container. The lock stays as it is and says so: taking it out of
+// Protect is for whoever looks after it.
+func TestAnImageTheLockKeepsFromStartingIsMarkedAndTheModeLeftAlone(t *testing.T) {
+	files := map[string][]string{"c1": {"/old"}}
+	s := imageLockStore(t, files, webDeployment(nil), lockedPod("web-1", "sha256:one", "c1"))
+	ctx := context.Background()
+	if _, err := s.CreateImageLock(ctx, "shop", Workload{"Deployment", "web"}, "Protect", "andy"); err != nil {
+		t.Fatal(err)
+	}
+	state := func() (mode, paths, blocked string) {
+		o, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("shop").Get(ctx, "image-lock-web", metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		records := []PolicyRecord{{Name: "image-lock-web", Namespace: "shop", ImageLock: "Deployment/web", Mode: detectMode(o.Object)}}
+		s.MarkImageBlocked(records)
+		return detectMode(o.Object), strings.Join(lockPaths(t, o.Object), ","), records[0].ImageBlocked
+	}
+	pods := s.typed.CoreV1().Pods("shop")
+	replace := func(old string, p *corev1.Pod) {
+		_ = pods.Delete(ctx, old, metav1.DeleteOptions{})
+		if _, err := pods.Create(ctx, p, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		s.syncImageLocks(ctx)
+	}
+	killed := func(name, image string) *corev1.Pod {
+		p := lockedPod(name, image, "c2")
+		p.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}
+		return p
+	}
+
+	// A container of the image already read that keeps stopping: not the lock's doing.
+	replace("web-1", killed("web-1", "sha256:one"))
+	if _, _, blocked := state(); blocked != "" {
+		t.Fatalf("blocked = %q for an image already read", blocked)
+	}
+
+	// The image is changed, and its container is killed as it starts.
+	replace("web-1", killed("web-2", "sha256:two"))
+	if mode, paths, blocked := state(); mode != "Protect" || paths != "/old" || blocked != "sha256:two" {
+		t.Fatalf("mode = %s, paths = %s, blocked = %q: want the lock untouched and marked", mode, paths, blocked)
+	}
+
+	// Set to Monitoring by hand: the mark goes, the container runs and is read.
+	if err := s.SetPolicyMode(ctx, "image-lock-web", "shop", "Monitoring"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, blocked := state(); blocked != "" {
+		t.Errorf("blocked = %q in Monitoring, where nothing is stopped", blocked)
+	}
+	files["c2"] = []string{"/new"}
+	replace("web-2", lockedPod("web-2", "sha256:two", "c2"))
+	if mode, paths, blocked := state(); mode != "Monitoring" || paths != "/new" || blocked != "" {
+		t.Errorf("mode = %s, paths = %s, blocked = %q: want the new list, still in Monitoring", mode, paths, blocked)
+	}
+}
+
+// A sidecar is written among the init containers and runs as long as the pod.
+func TestASidecarAmongTheInitContainersIsCovered(t *testing.T) {
+	always := corev1.ContainerRestartPolicyAlways
+	p := lockedPod("web-1", "sha256:one", "c1")
+	p.Spec.InitContainers = []corev1.Container{{Name: "setup"}, {Name: "proxy", RestartPolicy: &always}}
+	p.Status.InitContainerStatuses = []corev1.ContainerStatus{
+		{Name: "setup", ImageID: "sha256:setup", ContainerID: "containerd://c8",
+			State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{}}},
+		{Name: "proxy", ImageID: "sha256:proxy", ContainerID: "containerd://c9",
+			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+	}
+	s := imageLockStore(t, map[string][]string{"c1": {"/app"}, "c9": {"/proxy"}}, webDeployment(nil), p)
+	ctx := context.Background()
+	if _, err := s.CreateImageLock(ctx, "shop", Workload{"Deployment", "web"}, "Protect", "andy"); err != nil {
+		t.Fatal(err)
+	}
+	o, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("shop").Get(ctx, "image-lock-web", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(lockPaths(t, o.Object), ","); got != "/app,/proxy" {
+		t.Errorf("paths = %s, want the sidecar's files too", got)
+	}
+	names, _, _ := unstructured.NestedSlice(o.Object, "spec", "containerSelector", "matchExpressions")
+	if got := names[0].(map[string]any)["values"]; len(got.([]any)) != 2 || got.([]any)[0] != "proxy" || got.([]any)[1] != "web" {
+		t.Errorf("containers = %v, want proxy and web, and not the one that ran once", got)
+	}
+	// The one that ran once has an image nobody read, and stopped: that is
+	// how it ends, not the lock keeping it from starting.
+	s.syncImageLocks(ctx)
+	records := []PolicyRecord{{Name: "image-lock-web", Namespace: "shop", ImageLock: "Deployment/web", Mode: "Protect"}}
+	s.MarkImageBlocked(records)
+	if records[0].ImageBlocked != "" {
+		t.Errorf("blocked = %q for an init container that finished", records[0].ImageBlocked)
+	}
+}
+
+// A container a webhook adds is in the pod, not in the workload's template.
+// Its exec probe is a command from outside all the same.
+func TestAnExecProbeOnAnInjectedContainerIsSeen(t *testing.T) {
+	p := lockedPod("web-1", "sha256:one", "c1")
+	p.Spec.Containers = []corev1.Container{{Name: "web"}, {Name: "injected",
+		ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"ready"}}}}}}
+	s := imageLockStore(t, map[string][]string{"c1": {"/app"}}, webDeployment(nil), p)
+	ctx := context.Background()
+	blocks, err := s.CreateImageLock(ctx, "shop", Workload{"Deployment", "web"}, "Protect", "andy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, err := s.client.Resource(tracingPolicyNamespacedGVR).Namespace("shop").Get(ctx, "image-lock-web", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blocks || len(lockSelectors(t, o.Object)) != 1 {
+		t.Errorf("blocksOutside = %v, selectors = %d: the probe would be killed", blocks, len(lockSelectors(t, o.Object)))
+	}
+	// And nothing is rebuilt for it on the next pass.
+	before := o.GetResourceVersion()
+	s.syncImageLocks(ctx)
+	o, _ = s.client.Resource(tracingPolicyNamespacedGVR).Namespace("shop").Get(ctx, "image-lock-web", metav1.GetOptions{})
+	if o.GetResourceVersion() != before {
+		t.Error("an unchanged workload was rebuilt")
+	}
+}
